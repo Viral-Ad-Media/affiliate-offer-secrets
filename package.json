@@ -10,8 +10,10 @@
     "import-csv": "tsx scripts/import-csv.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.114.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
+    "cheerio": "^1.2.0",
     "lucide-react": "^0.475.0",
     "marked": "^12.0.2",
     "next": "^14.2.28",
