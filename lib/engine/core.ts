@@ -3,7 +3,20 @@
 // diverge on upsert/dedupe semantics.
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const db = createAdminClient();
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+// Lazy singleton — constructed on first real use, not at module-import time. Next.js dev server
+// can evaluate a route's module graph during an early analysis pass before its networking is
+// fully live; a client built then can end up with a broken fetch/DNS path for its lifetime.
+// lib/supabase/server.ts sidesteps this by building fresh per-request, which is reliable —
+// this Proxy gets the same effect without touching every db.from()/db.rpc() call site.
+let _db: AdminClient | null = null;
+export const db: AdminClient = new Proxy({} as AdminClient, {
+  get(_target, prop, receiver) {
+    if (!_db) _db = createAdminClient();
+    return Reflect.get(_db as object, prop, receiver);
+  },
+});
 
 export const PRODUCT_FIELDS = [
   "vendor_id",
@@ -42,46 +55,21 @@ export const CAMPAIGN_FIELDS = [
   "notes",
 ] as const;
 
+// Atomic INSERT ... ON CONFLICT via the upsert_product() RPC (supabase/migrations/
+// 0004_atomic_product_upsert.sql) — a client-side check-then-insert-or-update here would race
+// under conditions the automated worker genuinely hits (the same vendor_id appearing twice in
+// one marketplace response, a retried job re-processing hits an earlier attempt already saved).
 export async function upsertProduct(userId: string, meta: any): Promise<string> {
   if (!meta.vendor_id || !meta.product_title) {
     throw new Error("product meta must include at least {vendor_id, product_title}");
   }
-  const values: Record<string, unknown> = { user_id: userId };
-  for (const f of PRODUCT_FIELDS) values[f] = meta[f] ?? null;
-  values.niche = values.niche ?? "unknown";
-  values.date_added = values.date_added ?? new Date().toISOString().slice(0, 10);
-
-  const { data: existing } = await db
-    .from("products")
-    .select("id, gravity, initial_sale, avg_sale, recurring, commission_pct, status, notes")
-    .eq("user_id", userId)
-    .ilike("vendor_id", meta.vendor_id)
-    .maybeSingle();
-
-  if (existing) {
-    // Fresh marketplace stats always win; other fields only fill gaps left null before.
-    const overwrite = ["gravity", "initial_sale", "avg_sale", "recurring", "commission_pct"];
-    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    for (const f of PRODUCT_FIELDS) {
-      const incoming = values[f];
-      if (overwrite.includes(f)) {
-        if (incoming != null) patch[f] = incoming;
-      } else if ((existing as any)[f] == null && incoming != null) {
-        patch[f] = incoming;
-      }
-    }
-    const { error } = await db.from("products").update(patch).eq("id", existing.id);
-    if (error) throw new Error(error.message);
-    return existing.id as string;
+  const payload: Record<string, unknown> = {};
+  for (const f of PRODUCT_FIELDS) {
+    if (meta[f] !== undefined && meta[f] !== null) payload[f] = meta[f];
   }
-
-  const { data: created, error } = await db
-    .from("products")
-    .insert(values)
-    .select("id")
-    .single();
+  const { data, error } = await db.rpc("upsert_product", { p_user_id: userId, p_meta: payload });
   if (error) throw new Error(error.message);
-  return created!.id as string;
+  return (data as { id: string }).id;
 }
 
 export async function upsertCampaign(

@@ -18,7 +18,10 @@ type JobRow = {
 
 async function claimJob(): Promise<JobRow | null> {
   const { data, error } = await db.rpc("claim_job");
-  if (error) throw new Error(`claim_job failed: ${error.message}`);
+  if (error) {
+    console.error("claim_job raw error:", JSON.stringify(error, null, 2));
+    throw new Error(`claim_job failed: ${error.message}`);
+  }
   return (data as JobRow) ?? null;
 }
 
@@ -58,7 +61,12 @@ async function failJob(job: JobRow, message: string) {
 
 async function processDiscover(job: JobRow) {
   const nickname = await getNickname(job.user_id);
-  const result = await runDiscoverProducts(job.user_id, nickname, job.payload as DiscoverJobPayload);
+  const result = await runDiscoverProducts(
+    job.user_id,
+    job.id,
+    nickname,
+    job.payload as DiscoverJobPayload
+  );
   await markDone(job.id, `${result.saved} products saved`);
 }
 
@@ -85,7 +93,8 @@ async function processBuildCampaignStage(job: JobRow): Promise<{ done: boolean; 
     job.stage,
     product as any,
     nickname,
-    job.stage_data ?? {}
+    job.stage_data ?? {},
+    { userId: job.user_id, jobId: job.id }
   );
 
   if (campaignPatch && Object.keys(campaignPatch).length > 0) {

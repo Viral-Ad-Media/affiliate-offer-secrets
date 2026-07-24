@@ -1,4 +1,4 @@
-import { completeJSON, COMPLIANCE_SYSTEM } from "./anthropic";
+import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { fetchSalesPage, type ImageCandidate } from "./salespage";
 import { pickProductImage, fetchImageAsDataUrl } from "./images";
 
@@ -203,9 +203,14 @@ async function stageContext(product: ProductRow, nickname: string): Promise<Stag
   };
 }
 
-async function stageImage(_product: ProductRow, prior: Record<string, unknown>): Promise<StageOutput> {
+async function stageImage(
+  _product: ProductRow,
+  prior: Record<string, unknown>,
+  usage: UsageContext
+): Promise<StageOutput> {
   const candidates = (prior.image_candidates as ImageCandidate[]) ?? [];
-  const picked = candidates.length > 0 ? await pickProductImage(candidates, _product.product_title) : null;
+  const picked =
+    candidates.length > 0 ? await pickProductImage(candidates, _product.product_title, usage) : null;
   const dataUrl = picked ? await fetchImageAsDataUrl(picked.url) : null;
   return {
     stageData: { ...prior, image_data_url: dataUrl },
@@ -213,7 +218,11 @@ async function stageImage(_product: ProductRow, prior: Record<string, unknown>):
   };
 }
 
-async function stageAds(product: ProductRow, prior: Record<string, unknown>): Promise<StageOutput> {
+async function stageAds(
+  product: ProductRow,
+  prior: Record<string, unknown>,
+  usage: UsageContext
+): Promise<StageOutput> {
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
   const result = await completeJSON<{ fb_ads_md: string; tiktok_md: string }>({
     system: COMPLIANCE_SYSTEM,
@@ -227,11 +236,16 @@ async function stageAds(product: ProductRow, prior: Record<string, unknown>): Pr
       required: ["fb_ads_md", "tiktok_md"],
     },
     maxTokens: 3000,
+    usage,
   });
   return { stageData: prior, campaignPatch: result };
 }
 
-async function stagePages(product: ProductRow, prior: Record<string, unknown>): Promise<StageOutput> {
+async function stagePages(
+  product: ProductRow,
+  prior: Record<string, unknown>,
+  usage: UsageContext
+): Promise<StageOutput> {
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
   const copy = await completeJSON<PageCopy>({
     system: COMPLIANCE_SYSTEM,
@@ -258,6 +272,7 @@ async function stagePages(product: ProductRow, prior: Record<string, unknown>): 
       required: ["headline", "lead", "mechanism", "benefits", "proof", "faq", "cta", "landing_md"],
     },
     maxTokens: 3000,
+    usage,
   });
 
   const byChannel = (prior.hoplink_by_channel as Record<string, string>) ?? {};
@@ -272,7 +287,11 @@ async function stagePages(product: ProductRow, prior: Record<string, unknown>): 
   };
 }
 
-async function stageContent(product: ProductRow, prior: Record<string, unknown>): Promise<StageOutput> {
+async function stageContent(
+  product: ProductRow,
+  prior: Record<string, unknown>,
+  usage: UsageContext
+): Promise<StageOutput> {
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
   const result = await completeJSON<{ blog_md: string }>({
     system: COMPLIANCE_SYSTEM,
@@ -283,11 +302,16 @@ async function stageContent(product: ProductRow, prior: Record<string, unknown>)
       required: ["blog_md"],
     },
     maxTokens: 6000,
+    usage,
   });
   return { stageData: prior, campaignPatch: result };
 }
 
-async function stageSocial(product: ProductRow, prior: Record<string, unknown>): Promise<StageOutput> {
+async function stageSocial(
+  product: ProductRow,
+  prior: Record<string, unknown>,
+  usage: UsageContext
+): Promise<StageOutput> {
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
   const result = await completeJSON<{ social_md: string; email_md: string }>({
     system: COMPLIANCE_SYSTEM,
@@ -301,6 +325,7 @@ async function stageSocial(product: ProductRow, prior: Record<string, unknown>):
       required: ["social_md", "email_md"],
     },
     maxTokens: 3000,
+    usage,
   });
   return { stageData: prior, campaignPatch: result };
 }
@@ -309,22 +334,24 @@ export async function runBuildCampaignStage(
   stageIndex: number,
   product: ProductRow,
   nickname: string,
-  priorStageData: Record<string, unknown>
+  priorStageData: Record<string, unknown>,
+  usageCtx: { userId: string; jobId: string }
 ): Promise<StageOutput> {
   const stage = BUILD_CAMPAIGN_STAGES[stageIndex];
+  const usage: UsageContext = { ...usageCtx, jobType: "build_campaign", stage };
   switch (stage) {
     case "context":
       return stageContext(product, nickname);
     case "image":
-      return stageImage(product, priorStageData);
+      return stageImage(product, priorStageData, usage);
     case "ads":
-      return stageAds(product, priorStageData);
+      return stageAds(product, priorStageData, usage);
     case "pages":
-      return stagePages(product, priorStageData);
+      return stagePages(product, priorStageData, usage);
     case "content":
-      return stageContent(product, priorStageData);
+      return stageContent(product, priorStageData, usage);
     case "social":
-      return stageSocial(product, priorStageData);
+      return stageSocial(product, priorStageData, usage);
     default:
       throw new Error(`Unknown build_campaign stage index ${stageIndex}`);
   }

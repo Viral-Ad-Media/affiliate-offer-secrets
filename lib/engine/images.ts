@@ -1,4 +1,4 @@
-import { completeJSON } from "./anthropic";
+import { completeJSON, type UsageContext } from "./anthropic";
 import { BROWSER_UA } from "./clickbank";
 import type { ImageCandidate } from "./salespage";
 
@@ -9,7 +9,8 @@ const MAX_IMAGE_BYTES = 200 * 1024; // keep pages well under 200KB per content r
 // qualifies. See CLAUDE.md content rule 9.
 export async function pickProductImage(
   candidates: ImageCandidate[],
-  productTitle: string
+  productTitle: string,
+  usage?: UsageContext
 ): Promise<ImageCandidate | null> {
   if (candidates.length === 0) return null;
 
@@ -27,6 +28,7 @@ export async function pickProductImage(
       required: ["index"],
     },
     maxTokens: 200,
+    usage,
   });
 
   if (result.index == null) return null;

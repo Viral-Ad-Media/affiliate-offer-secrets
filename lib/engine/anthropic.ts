@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { db } from "./core";
 
 let _client: Anthropic | null = null;
 
@@ -12,6 +13,51 @@ export function getAnthropic(): Anthropic {
 }
 
 export const ENGINE_MODEL = "claude-sonnet-5";
+
+// Introductory Sonnet 5 pricing, per million tokens, in effect through 2026-08-31 — revisit
+// after that date. Cache writes carry the standard ~25% premium over base input; cache reads
+// are billed at ~10% of base input. https://docs.anthropic.com/en/docs/about-claude/pricing
+const PRICE_PER_MTOK_USD = {
+  input: 2.0,
+  output: 10.0,
+  cacheWrite: 2.5,
+  cacheRead: 0.2,
+};
+
+export type UsageContext = {
+  userId: string;
+  jobId: string;
+  jobType: string;
+  stage: string;
+};
+
+async function recordUsage(ctx: UsageContext, model: string, usage: Anthropic.Usage) {
+  const inputTokens = usage.input_tokens ?? 0;
+  const outputTokens = usage.output_tokens ?? 0;
+  const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0;
+  const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
+
+  const costUsd =
+    (inputTokens / 1_000_000) * PRICE_PER_MTOK_USD.input +
+    (outputTokens / 1_000_000) * PRICE_PER_MTOK_USD.output +
+    (cacheWriteTokens / 1_000_000) * PRICE_PER_MTOK_USD.cacheWrite +
+    (cacheReadTokens / 1_000_000) * PRICE_PER_MTOK_USD.cacheRead;
+
+  const { error } = await db.from("usage_ledger").insert({
+    user_id: ctx.userId,
+    job_id: ctx.jobId,
+    job_type: ctx.jobType,
+    stage: ctx.stage,
+    model,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cache_write_tokens: cacheWriteTokens,
+    cache_read_tokens: cacheReadTokens,
+    cost_usd: costUsd,
+  });
+  // Never let a logging failure fail the actual job — the content was already generated.
+  if (error) console.error("usage_ledger insert failed:", error.message);
+}
 
 // Frozen, tenant-agnostic compliance rules — real money runs against real ad-review systems.
 // See CLAUDE.md "Content rules" for the source of truth; keep these in sync.
@@ -33,6 +79,7 @@ export async function completeJSON<T>(opts: {
   schema: Record<string, unknown>;
   maxTokens?: number;
   toolName?: string;
+  usage?: UsageContext;
 }): Promise<T> {
   const anthropic = getAnthropic();
   const toolName = opts.toolName ?? "emit_result";
@@ -50,6 +97,9 @@ export async function completeJSON<T>(opts: {
     tool_choice: { type: "tool", name: toolName },
     messages: [{ role: "user", content: opts.prompt }],
   });
+
+  // Log real cost even on a refusal/malformed response — tokens were genuinely spent.
+  if (opts.usage) await recordUsage(opts.usage, msg.model, msg.usage);
 
   if (msg.stop_reason === "refusal") {
     throw new Error("Model refused to generate this content");

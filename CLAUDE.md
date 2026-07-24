@@ -132,6 +132,13 @@ must never be lost. Read-only Supabase queries (via the `mcp__supabase__execute_
   letting users `UPDATE` their own `profiles` row directly** — an earlier broad policy allowed
   self-granting `access_granted` via a raw PATCH to `/rest/v1/profiles`, which this migration
   closed. Do not re-add a general profiles update policy; add narrowly-scoped RPCs instead.
+- **Usage/cost audit trail**: every Anthropic call the worker makes writes a row to
+  `usage_ledger` (`supabase/migrations/0005_usage_ledger.sql`) with exact token counts and a
+  computed dollar cost (`recordUsage()` in `lib/engine/anthropic.ts`, using the introductory
+  Sonnet 5 per-MTok rates — revisit `PRICE_PER_MTOK_USD` after 2026-08-31). Logged even on a
+  refused/malformed response, since tokens were genuinely spent either way. RLS lets a client
+  read only their own rows (`app/billing/page.tsx` renders it via `components/UsageLedger.tsx`);
+  only the service-role worker writes here, same trust boundary as `credits_ledger`/`payments`.
 
 ## Dev
 

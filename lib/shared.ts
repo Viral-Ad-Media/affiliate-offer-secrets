@@ -65,6 +65,20 @@ export type Profile = {
   trial_ends_at: string | null;
 };
 
+export type UsageEntry = {
+  id: string;
+  job_id: string | null;
+  job_type: string;
+  stage: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_write_tokens: number;
+  cache_read_tokens: number;
+  cost_usd: number;
+  created_at: string;
+};
+
 export function hasAppAccess(profile: Pick<Profile, "access_granted" | "trial_ends_at"> | null | undefined) {
   if (!profile) return false;
   if (profile.access_granted) return true;

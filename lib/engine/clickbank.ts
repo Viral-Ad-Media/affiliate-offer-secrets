@@ -48,8 +48,8 @@ export type MarketplaceHit = {
     initialDollarsPerSale: number | null;
     averageDollarsPerSale: number | null;
     gravity: number | null;
-    totalRebill: number | null;
-    rebill: number | null;
+    totalRebill: number | null; // avg rebill $ amount
+    rebill: boolean | null; // whether the product has recurring billing at all
     upsell: boolean | null;
   } | null;
   affiliateToolsUrl: string | null;

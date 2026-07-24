@@ -10,6 +10,7 @@ export type DiscoverJobPayload = DiscoverPayload & { niche: string };
 // one LLM call rather than per-product agentic browsing.
 export async function runDiscoverProducts(
   userId: string,
+  jobId: string,
   nickname: string,
   payload: DiscoverJobPayload
 ): Promise<{ saved: number }> {
@@ -27,7 +28,7 @@ export async function runDiscoverProducts(
       gravity: hit.marketplaceStats?.gravity ?? null,
       initial_sale: hit.marketplaceStats?.initialDollarsPerSale ?? null,
       avg_sale: hit.marketplaceStats?.averageDollarsPerSale ?? null,
-      recurring: hit.marketplaceStats?.rebill ?? null,
+      recurring: hit.marketplaceStats?.totalRebill ?? null,
       sales_page_url: hit.url,
       affiliate_page_url: hit.affiliateToolsUrl,
       hoplink,
@@ -80,6 +81,7 @@ export async function runDiscoverProducts(
       required: ["items"],
     },
     maxTokens: 4000,
+    usage: { userId, jobId, jobType: "discover_products", stage: "score" },
   });
 
   for (const item of scored.items) {
