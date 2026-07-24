@@ -163,8 +163,8 @@ export default function ProductPage({ params }: { params: { id: string } }) {
 
         {!campaign ? (
           <p className="px-4 py-10 text-center text-sm text-zinc-500">
-            No campaign kit yet. Hit <strong>Promote</strong> on the dashboard, then run{" "}
-            <code>/run-engine</code> in Claude Code.
+            No campaign kit yet. Hit <strong>Promote</strong> on the dashboard to queue one — it
+            builds automatically.
           </p>
         ) : (
           <>

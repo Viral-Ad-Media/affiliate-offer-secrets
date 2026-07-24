@@ -14,6 +14,7 @@ import {
   Flame,
   ListChecks,
   Hourglass,
+  Inbox,
 } from "lucide-react";
 import type { Job, Product } from "@/lib/shared";
 import { STATUS_COLORS } from "@/lib/shared";
@@ -34,13 +35,15 @@ function StatTile({
   sub?: string;
 }) {
   return (
-    <div className="card flex items-center gap-3 p-4">
-      <div className="rounded-lg bg-ink-700 p-2 text-emerald-400">{icon}</div>
+    <div className="stat-tile">
+      <div className="rounded-lg border border-ink-700 bg-ink-800 p-2.5 text-emerald-400">
+        {icon}
+      </div>
       <div>
-        <div className="text-xl font-semibold text-zinc-100">{value}</div>
-        <div className="text-xs text-zinc-400">
+        <div className="stat-tile-value">{value}</div>
+        <div className="stat-tile-label">
           {label}
-          {sub ? <span className="text-zinc-500"> · {sub}</span> : null}
+          {sub ? <span className="text-zinc-600"> · {sub}</span> : null}
         </div>
       </div>
     </div>
@@ -138,11 +141,8 @@ export default function Dashboard() {
           ClickBank <span className="text-emerald-400">Studio</span>
         </h1>
         <p className="text-sm text-zinc-400">
-          Product discovery → campaign kits. Queue a job here, then run{" "}
-          <code className="rounded bg-ink-800 px-1.5 py-0.5 text-xs text-emerald-300">
-            /run-engine
-          </code>{" "}
-          in Claude Code to drain it.
+          Product discovery → campaign kits. Queue a job below and it starts processing
+          automatically — usually within seconds.
         </p>
       </header>
 
@@ -276,22 +276,22 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="data-table w-full text-sm">
             <thead>
-              <tr className="border-b border-ink-700 text-left text-xs uppercase tracking-wide text-zinc-500">
-                <th className="px-4 py-2">Product</th>
-                <th className="px-2 py-2">Niche</th>
-                <th className="px-2 py-2 text-right">Gravity</th>
-                <th className="px-2 py-2 text-right">Avg $/sale</th>
-                <th className="px-2 py-2 text-right">Rebill</th>
-                <th className="px-2 py-2 text-center">Score</th>
-                <th className="px-2 py-2">Status</th>
-                <th className="px-4 py-2 text-right">Actions</th>
+              <tr>
+                <th>Product</th>
+                <th>Niche</th>
+                <th className="text-right">Gravity</th>
+                <th className="text-right">Avg $/sale</th>
+                <th className="text-right">Rebill</th>
+                <th className="text-center">Score</th>
+                <th>Status</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((p) => (
-                <tr key={p.id} className="border-b border-ink-800 hover:bg-ink-800/50">
+                <tr key={p.id}>
                   <td className="max-w-xs px-4 py-2.5">
                     <Link
                       href={`/product/${p.id}`}
@@ -384,9 +384,16 @@ export default function Dashboard() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-zinc-500">
-                    No products yet — queue a discovery run above, then run{" "}
-                    <code>/run-engine</code> in Claude Code.
+                  <td colSpan={8} className="px-4 py-14 text-center">
+                    <Inbox className="mx-auto mb-2.5 h-7 w-7 text-zinc-600" />
+                    <p className="text-sm text-zinc-400">
+                      {statusFilter === "All" ? "No products yet" : `No ${statusFilter.toLowerCase()} products`}
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-600">
+                      {statusFilter === "All"
+                        ? "Queue a discovery run above to get started."
+                        : "Try a different status filter."}
+                    </p>
                   </td>
                 </tr>
               )}
@@ -416,7 +423,7 @@ export default function Dashboard() {
                           ? "border-sky-500/30 bg-sky-500/15 text-sky-300"
                           : j.status === "error"
                             ? "border-red-500/30 bg-red-500/15 text-red-300"
-                            : "border-zinc-500/30 bg-zinc-500/15 text-zinc-300"
+                            : "border-amber-500/30 bg-amber-500/15 text-amber-300"
                     }`}
                   >
                     {j.status}
@@ -444,7 +451,13 @@ export default function Dashboard() {
             );
           })}
           {jobs.length === 0 && (
-            <li className="px-4 py-6 text-center text-sm text-zinc-500">No jobs yet.</li>
+            <li className="flex flex-col items-center px-4 py-8 text-center">
+              <Hourglass className="mb-2 h-6 w-6 text-zinc-600" />
+              <p className="text-sm text-zinc-400">No jobs yet</p>
+              <p className="mt-1 text-xs text-zinc-600">
+                Queued discovery and campaign jobs will show up here.
+              </p>
+            </li>
           )}
         </ul>
       </section>
