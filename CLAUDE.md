@@ -8,6 +8,22 @@ tenants (via a service-role key that bypasses RLS), triggered automatically the 
 queued (no human runs anything). The Google Drive `clickbank-engine/` folder is a legacy cloud
 mirror from the pre-multi-tenant version — optional now, not required.
 
+## Site structure
+
+`/` is the public marketing site, not the app — `app/(marketing)/*` (route group, no URL
+segment) covers Home, About, Pricing, FAQ, Contact, Terms, and Privacy, wrapped in
+`app/(marketing)/layout.tsx` with `components/MarketingNav.tsx`/`MarketingFooter.tsx`. The
+authenticated app lives at `/dashboard`, `/connections`, `/product/[id]`, `/billing` —
+`app/(app)/layout.tsx` is the paywall/auth gate (redirects to `/login` with no session, `/billing`
+without access) and owns the `mx-auto max-w-7xl px-4 py-6` content wrapper for everything under
+it. The root `app/layout.tsx` intentionally has **no** content wrapper (just fonts + `<body>`) so
+the marketing route group can render full-bleed sections (hero backgrounds, full-width
+nav/footer) — `/login` and `/billing` are standalone pages outside both route groups and each
+carry their own wrapper. `middleware.ts`'s `PUBLIC_EXACT_PATHS` (exact match: `/`, `/login`,
+`/about`, `/pricing`, `/faq`, `/contact`, `/terms`, `/privacy`) and `PUBLIC_PREFIX_PATHS` (prefix
+match: Stripe/engine/Meta webhooks, `/p/`) gate everything else behind auth — never add `/` as a
+prefix entry, it would match every path and disable the gate entirely.
+
 Clients pay a one-time access fee (Stripe) to unlock the dashboard, then buy **credits** (1
 credit ≈ $1) that authorize the platform to launch ads on the client's *own* connected Meta ad
 account — Meta bills the client directly; the platform never holds ad-spend money. See
