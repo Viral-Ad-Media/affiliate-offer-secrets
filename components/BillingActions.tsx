@@ -47,7 +47,7 @@ export function StartTrialButton() {
           const { error } = await createClient().rpc("start_trial");
           setBusy(false);
           if (error) return setError(error.message);
-          router.push("/");
+          router.push("/dashboard");
           router.refresh();
         }}
       >

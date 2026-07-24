@@ -36,7 +36,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div>
       <div className="border-b border-ink-700 bg-ink-900/60">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 text-xs text-zinc-400">
-          <span>{user.email}</span>
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard" className="font-heading font-semibold text-zinc-200 hover:text-white">
+              ClickBank <span className="text-emerald-400">Studio</span>
+            </Link>
+            <span className="text-zinc-600">·</span>
+            <span>{user.email}</span>
+          </div>
           <div className="flex items-center gap-3">
             {onTrial && (
               <Link
@@ -65,7 +71,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       </div>
-      {children}
+      <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
     </div>
   );
 }

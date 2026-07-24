@@ -24,9 +24,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${lexend.variable} ${sourceSans.variable}`}>
-      <body>
-        <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

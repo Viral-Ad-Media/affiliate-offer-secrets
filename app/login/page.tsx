@@ -32,7 +32,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (error) return setError(error.message);
-    router.push("/");
+    router.push("/dashboard");
     router.refresh();
   }
 

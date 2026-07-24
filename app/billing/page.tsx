@@ -69,7 +69,7 @@ export default async function BillingPage({
             <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
               <Clock className="h-4 w-4" /> Free trial active — {trialDaysLeft}{" "}
               {trialDaysLeft === 1 ? "day" : "days"} left.{" "}
-              <Link href="/" className="underline">
+              <Link href="/dashboard" className="underline">
                 Go to dashboard
               </Link>
             </div>
@@ -110,7 +110,7 @@ export default async function BillingPage({
             </p>
             <BuyCreditsGrid />
           </div>
-          <Link href="/" className="btn-ghost block text-center">
+          <Link href="/dashboard" className="btn-ghost block text-center">
             Back to dashboard
           </Link>
         </div>

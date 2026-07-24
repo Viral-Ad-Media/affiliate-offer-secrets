@@ -65,7 +65,10 @@ export default function ProductPage({ params }: { params: { id: string } }) {
 
   return (
     <main className="space-y-5">
-      <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200">
+      <Link
+        href="/dashboard"
+        className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200"
+      >
         <ArrowLeft className="h-4 w-4" /> Back to dashboard
       </Link>
 
