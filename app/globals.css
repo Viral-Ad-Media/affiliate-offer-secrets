@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-ink-950 text-zinc-200 antialiased;
+}
+
+.card {
+  @apply rounded-xl border border-ink-700 bg-ink-900;
+}
+
+.chip {
+  @apply inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium;
+}
+
+.btn {
+  @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-primary {
+  @apply btn bg-emerald-600 text-white hover:bg-emerald-500;
+}
+
+.btn-ghost {
+  @apply btn border border-ink-600 text-zinc-300 hover:bg-ink-700;
+}
+
+.prose-dark {
+  @apply text-sm leading-relaxed text-zinc-300;
+}
+.prose-dark h1, .prose-dark h2, .prose-dark h3 {
+  @apply mt-4 mb-2 font-semibold text-zinc-100;
+}
+.prose-dark h1 { @apply text-lg; }
+.prose-dark h2 { @apply text-base; }
+.prose-dark p { @apply my-2; }
+.prose-dark ul, .prose-dark ol { @apply my-2 ml-5 list-disc; }
+.prose-dark ol { @apply list-decimal; }
+.prose-dark a { @apply text-sky-400 underline; }
+.prose-dark code { @apply rounded bg-ink-800 px-1 py-0.5 text-xs; }
+.prose-dark pre { @apply my-2 overflow-x-auto rounded-lg bg-ink-800 p-3 text-xs; }
+.prose-dark blockquote { @apply my-2 border-l-2 border-ink-600 pl-3 text-zinc-400; }
+.prose-dark hr { @apply my-3 border-ink-700; }
+.prose-dark strong { @apply text-zinc-100; }

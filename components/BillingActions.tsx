@@ -1,0 +1,52 @@
+"use client";
+
+import { useState } from "react";
+import { CREDIT_PACKS } from "@/lib/pricing";
+
+async function startCheckout(body: object) {
+  const res = await fetch("/api/billing/checkout", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (data.url) window.location.href = data.url;
+}
+
+export function BuyAccessButton() {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      className="btn-primary w-full justify-center"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        await startCheckout({ type: "access" });
+      }}
+    >
+      {busy ? "Redirecting…" : "Unlock ClickBank Studio — $97 one-time"}
+    </button>
+  );
+}
+
+export function BuyCreditsGrid() {
+  const [busy, setBusy] = useState<number | null>(null);
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      {CREDIT_PACKS.map((pack) => (
+        <button
+          key={pack.credits}
+          disabled={busy !== null}
+          onClick={async () => {
+            setBusy(pack.credits);
+            await startCheckout({ type: "credits", credits: pack.credits });
+          }}
+          className="card p-4 text-center hover:border-emerald-500 disabled:opacity-50"
+        >
+          <div className="text-lg font-bold text-zinc-100">{pack.credits} credits</div>
+          <div className="text-xs text-zinc-500">${pack.cents / 100}</div>
+        </button>
+      ))}
+    </div>
+  );
+}

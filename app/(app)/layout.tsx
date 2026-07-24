@@ -1,0 +1,50 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { LogOut, Coins } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import LogoutButton from "@/components/LogoutButton";
+
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("access_granted, nickname")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile?.access_granted) redirect("/billing");
+
+  const { data: creditRows } = await supabase
+    .from("credits_ledger")
+    .select("delta")
+    .eq("user_id", user.id);
+  const creditBalance = (creditRows ?? []).reduce((sum, r) => sum + r.delta, 0);
+
+  return (
+    <div>
+      <div className="border-b border-ink-700 bg-ink-900/60">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 text-xs text-zinc-400">
+          <span>{user.email}</span>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/billing"
+              className="flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-1 text-emerald-300 hover:border-emerald-500"
+            >
+              <Coins className="h-3.5 w-3.5" /> {creditBalance} credits
+            </Link>
+            <LogoutButton>
+              <LogOut className="h-3.5 w-3.5" /> Log out
+            </LogoutButton>
+          </div>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
