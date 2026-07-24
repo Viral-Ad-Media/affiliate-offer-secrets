@@ -6,6 +6,7 @@ import { marked } from "marked";
 import { ArrowLeft, Copy, CheckCircle2, ExternalLink, Download } from "lucide-react";
 import type { Campaign, Product } from "@/lib/shared";
 import { STATUS_COLORS } from "@/lib/shared";
+import PostToFacebook from "@/components/PostToFacebook";
 
 const TABS = [
   { key: "fb_ads_md", label: "FB/IG Ads" },
@@ -210,10 +211,21 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   {content}
                 </pre>
               ) : (
-                <div
-                  className="prose-dark"
-                  dangerouslySetInnerHTML={{ __html: marked.parse(content) as string }}
-                />
+                <>
+                  <div
+                    className="prose-dark"
+                    dangerouslySetInnerHTML={{ __html: marked.parse(content) as string }}
+                  />
+                  {tab === "social_md" && (
+                    <div className="mt-4">
+                      <PostToFacebook
+                        campaignId={campaign!.id}
+                        defaultMessage={content}
+                        imageUrl={campaign?.images_json?.source_images?.[0] ?? null}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </>

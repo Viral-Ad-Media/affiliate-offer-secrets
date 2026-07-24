@@ -140,11 +140,58 @@ must never be lost. Read-only Supabase queries (via the `mcp__supabase__execute_
   read only their own rows (`app/billing/page.tsx` renders it via `components/UsageLedger.tsx`);
   only the service-role worker writes here, same trust boundary as `credits_ledger`/`payments`.
 
+## Meta (Facebook) connections and posting
+
+Phase B — OAuth + real posting to a client's own Page, no ad spend involved (that's Phase C,
+separate/later). Schema in `supabase/migrations/0006_meta_connections.sql` +
+`0007_meta_secret_helper.sql`; client code in `lib/meta/*`, routes under `app/api/meta/*`.
+
+- **Tokens are never stored as plaintext columns.** `meta_connections.user_token_secret_id` /
+  `meta_pages.page_token_secret_id` point into Supabase Vault (`vault.create_secret`, via the
+  `store_meta_secret()` wrapper — `vault` isn't exposed to PostgREST directly). Retrieval is a
+  single `service_role`-only RPC, `get_meta_secret(secret_id)`. This is the first per-row Vault
+  use in this codebase (the engine's webhook secret is a static named secret) — reuse this exact
+  pattern for any future per-tenant token (Phase C's ad-account tokens, TikTok in Phase D).
+- **`meta_connections`/`meta_pages` have no RLS policy at all** (default-deny) plus an explicit
+  `revoke all ... from anon, authenticated` at the GRANT layer — belt-and-suspenders beyond RLS,
+  since these rows hold live bearer secrets, unlike `credits_ledger`/`payments`/`usage_ledger`
+  which safely expose a plain owner-`select` policy. All reads go through narrow
+  `SECURITY DEFINER` RPCs that return only sanitized fields: `get_meta_connection_status()`
+  (status + page list, no tokens).
+- **`assert_owns_meta_page(p_page_id)` must run before anything touches the admin client** in
+  `app/api/meta/post/route.ts`. Facebook Page IDs are not secret — without this check, any
+  authenticated user could pass another tenant's `page_id` and post to their Page using that
+  tenant's stored token. This is the same self-scoping pattern as `start_trial()`, applied to
+  authorization instead of idempotency — never skip it when adding a new Meta-writing route.
+- **OAuth CSRF**: `app/api/meta/connect/route.ts` sets a random `state` in an httpOnly,
+  `SameSite=Lax` cookie (must be `Lax`, not `Strict` — Meta's redirect back is a top-level
+  cross-site GET) before redirecting to Meta; `app/api/meta/callback/route.ts` verifies it matches
+  and always clears the cookie (single-use), regardless of outcome. The writing `user_id` always
+  comes from the live session at write time, never from `state`.
+- **Reconnect, not silent refresh**: Meta doesn't reliably support silent refresh for these token
+  types. A connection/page flips to `needs_reconnect` two ways — `token_expires_at` read as
+  stale, or (more common in practice) a Graph API call failing with an OAuth error code (190, or
+  permission subcodes — `isTokenError()` in `lib/meta/client.ts`) — checked reactively in
+  `app/api/meta/post/route.ts`, and proactively via `app/api/meta/deauthorize/route.ts`, which
+  Meta calls directly (registered as the app's Deauthorize Callback URL) when a user revokes
+  access from their own Facebook settings — verifies Meta's `signed_request` HMAC before writing,
+  same fail-closed shape as the Stripe webhook.
+- **Idempotency**: `meta_posts` has a `unique (user_id, idempotency_key)` constraint; the client
+  generates one key per compose session (`components/PostToFacebook.tsx`) and only rotates it
+  after a successful publish, so a retry of a failed/in-flight request can't double-post.
+- **Env vars**: `FB_CLIENT_ID`/`FB_CLIENT_SECRET` (developers.facebook.com → App Dashboard).
+  Register `${NEXT_PUBLIC_APP_URL}/api/meta/callback` as a valid OAuth Redirect URI and
+  `${NEXT_PUBLIC_APP_URL}/api/meta/deauthorize` as the Deauthorize Callback URL in the Meta App
+  Dashboard. Apps in Meta's **Development Mode** work immediately for Admins/Developers/Testers
+  on the app with no App Review needed — sufficient for testing before deciding whether/when to
+  submit `pages_show_list`/`pages_manage_posts`/`pages_read_engagement` for public App Review
+  (separate from the already-approved `ads_management`).
+
 ## Dev
 
 ```bash
 npm run dev        # app on http://localhost:3400
-cp .env.local.example .env.local   # fill in Supabase + Stripe + Anthropic keys first
+cp .env.local.example .env.local   # fill in Supabase + Stripe + Anthropic + Meta keys first
 ```
 
 No ClickBank API key needed (see "The automated engine" above). Supabase, Stripe, and

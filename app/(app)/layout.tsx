@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogOut, Coins, Clock } from "lucide-react";
+import { LogOut, Coins, Clock, Link2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasAppAccess } from "@/lib/shared";
 import LogoutButton from "@/components/LogoutButton";
@@ -52,6 +52,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               className="flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-1 text-emerald-300 hover:border-emerald-500"
             >
               <Coins className="h-3.5 w-3.5" /> {creditBalance} credits
+            </Link>
+            <Link
+              href="/connections"
+              className="flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-1 text-zinc-300 hover:border-ink-500 hover:text-zinc-100"
+            >
+              <Link2 className="h-3.5 w-3.5" /> Connections
             </Link>
             <LogoutButton>
               <LogOut className="h-3.5 w-3.5" /> Log out

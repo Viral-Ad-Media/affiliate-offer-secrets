@@ -42,7 +42,7 @@ export type Campaign = {
   blog_md: string | null;
   social_md: string | null;
   email_md: string | null;
-  images_json: string[] | null;
+  images_json: { source_images: string[] } | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
