@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { BuyAccessButton, BuyCreditsGrid } from "@/components/BillingActions";
+import { hasAppAccess } from "@/lib/shared";
+import { BuyAccessButton, BuyCreditsGrid, StartTrialButton } from "@/components/BillingActions";
 import LogoutButton from "@/components/LogoutButton";
 
 export default async function BillingPage({
@@ -18,9 +19,15 @@ export default async function BillingPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("access_granted")
+    .select("access_granted, trial_ends_at")
     .eq("id", user.id)
     .single();
+
+  const onTrial = hasAppAccess(profile) && !profile?.access_granted;
+  const trialEligible = !profile?.access_granted && !profile?.trial_ends_at;
+  const trialDaysLeft = onTrial
+    ? Math.max(0, Math.ceil((new Date(profile!.trial_ends_at!).getTime() - Date.now()) / 86_400_000))
+    : 0;
 
   const { data: creditRows } = await supabase
     .from("credits_ledger")
@@ -48,13 +55,36 @@ export default async function BillingPage({
       )}
 
       {!profile?.access_granted ? (
-        <div className="card p-5">
-          <h2 className="mb-1 text-sm font-semibold text-zinc-100">Unlock ClickBank Studio</h2>
-          <p className="mb-4 text-sm text-zinc-400">
-            One-time payment for full access — discovery, campaign kits, and (once connected)
-            posting and ad launches on your own accounts.
-          </p>
-          <BuyAccessButton />
+        <div className="space-y-4">
+          {onTrial && (
+            <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+              <Clock className="h-4 w-4" /> Free trial active — {trialDaysLeft}{" "}
+              {trialDaysLeft === 1 ? "day" : "days"} left.{" "}
+              <Link href="/" className="underline">
+                Go to dashboard
+              </Link>
+            </div>
+          )}
+          {trialEligible && (
+            <div className="card p-5">
+              <h2 className="mb-1 text-sm font-semibold text-zinc-100">Try it free for 30 days</h2>
+              <p className="mb-4 text-sm text-zinc-400">
+                Full access to discovery and campaign kit generation, no payment required. One
+                trial per account.
+              </p>
+              <StartTrialButton />
+            </div>
+          )}
+          <div className="card p-5">
+            <h2 className="mb-1 text-sm font-semibold text-zinc-100">
+              {onTrial ? "Unlock permanently" : "Unlock ClickBank Studio"}
+            </h2>
+            <p className="mb-4 text-sm text-zinc-400">
+              One-time payment for full access — discovery, campaign kits, and (once connected)
+              posting and ad launches on your own accounts.
+            </p>
+            <BuyAccessButton />
+          </div>
         </div>
       ) : (
         <div className="space-y-5">

@@ -62,7 +62,14 @@ export type Profile = {
   id: string;
   nickname: string | null;
   access_granted: boolean;
+  trial_ends_at: string | null;
 };
+
+export function hasAppAccess(profile: Pick<Profile, "access_granted" | "trial_ends_at"> | null | undefined) {
+  if (!profile) return false;
+  if (profile.access_granted) return true;
+  return !!profile.trial_ends_at && new Date(profile.trial_ends_at) > new Date();
+}
 
 export const PRODUCT_STATUSES = ["New", "Selected", "Promoting", "Paused", "Dead"] as const;
 export type ProductStatus = (typeof PRODUCT_STATUSES)[number];

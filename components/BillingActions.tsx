@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CREDIT_PACKS } from "@/lib/pricing";
+import { createClient } from "@/lib/supabase/client";
 
 async function startCheckout(body: object) {
   const res = await fetch("/api/billing/checkout", {
@@ -26,6 +28,33 @@ export function BuyAccessButton() {
     >
       {busy ? "Redirecting…" : "Unlock ClickBank Studio — $97 one-time"}
     </button>
+  );
+}
+
+export function StartTrialButton() {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div>
+      <button
+        className="btn-primary w-full justify-center"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          const { error } = await createClient().rpc("start_trial");
+          setBusy(false);
+          if (error) return setError(error.message);
+          router.push("/");
+          router.refresh();
+        }}
+      >
+        {busy ? "Starting…" : "Start free 30-day trial"}
+      </button>
+      {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+    </div>
   );
 }
 

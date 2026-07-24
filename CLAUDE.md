@@ -91,8 +91,18 @@ itself — only `pending` and `add-product` need an explicit `--user`. Read-only
   webhook (`app/api/billing/webhook/route.ts`), which verifies the Stripe signature and uses the
   service-role client. Never grant access or add credits from anywhere else, including the
   engine CLI.
-- `app/(app)/layout.tsx` is the paywall: redirects to `/billing` if `access_granted` is false.
+- Access = `access_granted OR trial_ends_at > now()` — see `hasAppAccess()` in `lib/shared.ts`,
+  used by both the paywall gate and the billing page.
+- `app/(app)/layout.tsx` is the paywall: redirects to `/billing` if `hasAppAccess()` is false.
   `middleware.ts` redirects to `/login` if there's no session at all.
+- **30-day free trial**: `profiles.trial_ends_at`, set once via the `start_trial()` Postgres RPC
+  (`supabase/migrations/0002_trial.sql`) — `SECURITY DEFINER`, callable only by `authenticated`,
+  self-limiting (no-ops if `access_granted` is already true or a trial was already started, so
+  it can't be replayed). Client calls it via `supabase.rpc("start_trial")` in
+  `StartTrialButton` (`components/BillingActions.tsx`). **There is deliberately no RLS policy
+  letting users `UPDATE` their own `profiles` row directly** — an earlier broad policy allowed
+  self-granting `access_granted` via a raw PATCH to `/rest/v1/profiles`, which this migration
+  closed. Do not re-add a general profiles update policy; add narrowly-scoped RPCs instead.
 
 ## Dev
 
