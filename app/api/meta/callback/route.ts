@@ -5,6 +5,7 @@ import {
   debugToken,
   exchangeCodeForToken,
   exchangeForLongLivedToken,
+  getAdAccounts,
   getMe,
   getUserPages,
 } from "@/lib/meta/client";
@@ -55,11 +56,17 @@ export async function GET(req: Request) {
   try {
     const { access_token: shortLived } = await exchangeCodeForToken(code);
     const { access_token: longLived } = await exchangeForLongLivedToken(shortLived);
-    const [me, pages, tokenInfo] = await Promise.all([
+    const [me, pages, tokenInfo, adAccounts] = await Promise.all([
       getMe(longLived),
       getUserPages(longLived),
       debugToken(longLived),
+      getAdAccounts(longLived),
     ]);
+
+    // Meta's consent dialog allows declining individual permissions — a successful token
+    // exchange never guarantees a requested scope was actually granted. Checked explicitly so
+    // the UI can gate "Launch Ad" proactively instead of failing deep inside a job stage later.
+    const adsManagementGranted = tokenInfo.scopes.includes("ads_management");
 
     const admin = createAdminClient();
 
@@ -83,6 +90,7 @@ export async function GET(req: Request) {
           fb_user_id: me.id,
           user_token_secret_id: userSecretId,
           token_expires_at: toExpiryIso(tokenInfo.expires_at),
+          ads_management_granted: adsManagementGranted,
           status: "connected",
           updated_at: new Date().toISOString(),
         })
@@ -97,6 +105,7 @@ export async function GET(req: Request) {
           fb_user_id: me.id,
           user_token_secret_id: userSecretId,
           token_expires_at: toExpiryIso(tokenInfo.expires_at),
+          ads_management_granted: adsManagementGranted,
         })
         .select("id")
         .single();
@@ -142,6 +151,37 @@ export async function GET(req: Request) {
           page_name: page.name,
           page_token_secret_id: pageSecretId,
           token_expires_at: toExpiryIso(pageTokenInfo.expires_at),
+          is_active: isActive,
+        });
+      }
+    }
+
+    // No separate per-ad-account token — Marketing API calls reuse the connection's own user
+    // token (with ads_management), unlike Pages which get their own token via /me/accounts.
+    let anyActiveAccount = false;
+    for (const account of adAccounts) {
+      const { data: existingAccount } = await admin
+        .from("meta_ad_accounts")
+        .select("id, is_active")
+        .eq("user_id", user.id)
+        .eq("ad_account_id", account.id)
+        .maybeSingle();
+
+      const isActive = existingAccount?.is_active ?? !anyActiveAccount;
+      if (isActive) anyActiveAccount = true;
+
+      if (existingAccount) {
+        await admin
+          .from("meta_ad_accounts")
+          .update({ ad_account_name: account.name, currency: account.currency })
+          .eq("id", existingAccount.id);
+      } else {
+        await admin.from("meta_ad_accounts").insert({
+          user_id: user.id,
+          connection_id: connectionId,
+          ad_account_id: account.id,
+          ad_account_name: account.name,
+          currency: account.currency,
           is_active: isActive,
         });
       }

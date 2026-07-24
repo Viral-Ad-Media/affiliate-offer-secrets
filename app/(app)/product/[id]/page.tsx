@@ -7,6 +7,7 @@ import { ArrowLeft, Copy, CheckCircle2, ExternalLink, Download } from "lucide-re
 import type { Campaign, Product } from "@/lib/shared";
 import { STATUS_COLORS } from "@/lib/shared";
 import PostToFacebook from "@/components/PostToFacebook";
+import LaunchAd from "@/components/LaunchAd";
 
 const TABS = [
   { key: "fb_ads_md", label: "FB/IG Ads" },
@@ -222,6 +223,16 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                         campaignId={campaign!.id}
                         defaultMessage={content}
                         imageUrl={campaign?.images_json?.source_images?.[0] ?? null}
+                      />
+                    </div>
+                  )}
+                  {tab === "fb_ads_md" && campaign?.presell_html && (
+                    <div className="mt-4">
+                      <LaunchAd
+                        campaignId={campaign!.id}
+                        defaultHeadline={product.product_title}
+                        defaultPrimaryText=""
+                        destination="presell"
                       />
                     </div>
                   )}

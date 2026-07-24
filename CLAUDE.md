@@ -142,9 +142,9 @@ must never be lost. Read-only Supabase queries (via the `mcp__supabase__execute_
 
 ## Meta (Facebook) connections and posting
 
-Phase B — OAuth + real posting to a client's own Page, no ad spend involved (that's Phase C,
-separate/later). Schema in `supabase/migrations/0006_meta_connections.sql` +
-`0007_meta_secret_helper.sql`; client code in `lib/meta/*`, routes under `app/api/meta/*`.
+Phase B — OAuth + real posting to a client's own Page, no ad spend involved (real ad launches
+are Phase C, documented separately below). Schema in `supabase/migrations/0006_meta_connections.sql`
++ `0007_meta_secret_helper.sql`; client code in `lib/meta/*`, routes under `app/api/meta/*`.
 
 - **Tokens are never stored as plaintext columns.** `meta_connections.user_token_secret_id` /
   `meta_pages.page_token_secret_id` point into Supabase Vault (`vault.create_secret`, via the
@@ -186,6 +186,73 @@ separate/later). Schema in `supabase/migrations/0006_meta_connections.sql` +
   on the app with no App Review needed — sufficient for testing before deciding whether/when to
   submit `pages_show_list`/`pages_manage_posts`/`pages_read_engagement` for public App Review
   (separate from the already-approved `ads_management`).
+
+## Real ad campaign launches (Phase C)
+
+Clients launch real Meta ad campaigns against their own ad account, gated by their credit
+balance (1 credit ≈ $1 of authorized daily budget). Builds directly on Phase B's OAuth/token
+infrastructure. Schema in `supabase/migrations/0008_ad_launches.sql`; stage handlers in
+`lib/engine/adlaunch.ts` (same shape as `lib/engine/build.ts`); routes under `app/api/meta/ads/*`.
+A design-review pass before writing any code found a real structural gap and a real race
+condition — both fixed, not deferred, since this phase moves real money:
+
+- **The worker re-verifies ownership, not just the API route.** `jobs`' own RLS policy
+  (`for all using (auth.uid() = user_id)`) only validates the *row's* `user_id` — nothing stops
+  an authenticated client from inserting a `launch_ad` job whose `payload` references another
+  tenant's `campaign_id`/`page_id`/`ad_account_id` directly via `supabase-js`, bypassing
+  `app/api/meta/ads/create/route.ts` entirely. Since the worker runs as `service_role` (bypasses
+  RLS), it must re-check ownership itself — `lib/engine/adlaunch.ts`'s `verify` stage (always
+  stage 0) is the actual security boundary; the route's own checks are a UX nicety for a fast
+  error, not the enforcement. Never add a new job type that trusts `payload` without an
+  equivalent re-check inside its own stage-0 handler.
+- **No public URL existed for presell/bridge pages before this phase** — they only ever rendered
+  in an authenticated `<iframe srcDoc>`. A real ad's `link_url` needs one:
+  `app/p/[campaignId]/presell|bridge/route.ts` are Route Handlers (not React pages, so the root
+  layout never wraps the self-contained HTML) using the admin client scoped to one campaign UUID
+  + `status = 'ready'` (the UUID is unguessable — that's the access control, not RLS).
+- **Ad creative images are uploaded, never hotlinked.** `images_json.source_images[0]` is the raw
+  vendor URL — the same reason CLAUDE.md's content rule 9 already bans hotlinking for presell
+  pages applies to an ad creative too. `uploadAdImage()` (`lib/meta/client.ts`) fetches real bytes
+  via the existing `fetchImageAsDataUrl()` and uploads to `POST /act_{id}/adimages` for a stable
+  `image_hash`. The same fix was retrofitted into Phase B's Page photo posting —
+  `publishPhotoBytes()` replaced the old `url`-param `publishPhoto()`.
+- **Credit reservation is atomic against concurrent activations, on purpose, in two independent
+  ways.** A plain `select sum(delta) ... if ... insert` inside one `SECURITY DEFINER` function is
+  NOT safe against two concurrent calls under Postgres's default `READ COMMITTED` isolation —
+  both transactions can read the same starting balance before either commits. `reserve_ad_credits()`
+  opens with `pg_advisory_xact_lock(hashtextextended('credits:' || auth.uid()::text, 0))`, which
+  serializes concurrent calls for the same user (auto-releases at transaction end). That closes
+  the *cross-launch* balance race; a **second, independent** guard in
+  `app/api/meta/ads/activate/route.ts` — an optimistic `ad_launches` status transition
+  (`paused_review → activating`, 0 rows affected = reject) run *before* `reserve_ad_credits` is
+  ever called — closes the *same-launch* replay race (double-click/retry). Both are required;
+  neither alone is sufficient.
+- **OAuth scope grants are verified, not assumed.** Meta's consent dialog lets a user decline
+  individual permissions — a successful token exchange never guarantees `ads_management` was
+  actually granted. `app/api/meta/callback/route.ts` checks `/debug_token`'s `scopes` field and
+  stores `meta_connections.ads_management_granted`; the "Launch Ad" UI
+  (`components/LaunchAd.tsx`) gates on it proactively instead of discovering the gap via a 403
+  deep inside a job stage.
+- **Deduct at activate, not at create.** `POST /api/meta/ads/create` queues the `launch_ad` job
+  and touches no credits — a client can build and compare a few paused drafts for free. Meta
+  creates Campaign/Ad Set/Ad objects `PAUSED` by default (confirmed directly from Meta's own API
+  behavior), which is what makes "paused until confirmed" free instead of something this app had
+  to invent — the only new state is the explicit `POST /api/meta/ads/activate` step.
+- **Partial-activation failure re-pauses what succeeded, then refunds — in that order.** If
+  campaign-level activation succeeds but ad-set activation fails (Meta requires *every* level
+  active to actually deliver, so no spend occurs either way), `activate/route.ts` explicitly
+  re-issues `status=PAUSED` on whichever level(s) did go live *before* writing the compensating
+  `refund_ad_credits()` entry — so the ledger and Meta's actual object state never disagree about
+  whether anything is live. Per-level outcomes persist into `ad_launches.activation_state` as
+  they happen, so a retry only re-attempts what didn't succeed.
+- **Scoped, not full, Marketing API surface** (deliberate MVP choice, confirmed with the user):
+  single objective (`OUTCOME_TRAFFIC` / `LINK_CLICKS`), campaign-level budget only (CBO — no
+  ad-set-level budgets), broad country-only targeting (no interest IDs, which need a separate
+  audience-research step), single image creative. Expandable later; not a structural limitation.
+- **Deferred, explicitly, not blocking**: a soft cap on non-activated paused drafts and a TTL
+  sweep for abandoned ones (an API-quota/ad-account-object-count concern, not a credit/security
+  one — same call already made for engine usage caps while it's just the user testing solo); a
+  `Content-Security-Policy` on the public `/p/` route as extra defense-in-depth.
 
 ## Dev
 

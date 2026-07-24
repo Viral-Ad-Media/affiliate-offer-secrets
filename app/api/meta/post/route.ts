@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isTokenError, publishPhoto, publishToFeed } from "@/lib/meta/client";
+import { isTokenError, publishPhotoBytes, publishToFeed } from "@/lib/meta/client";
+import { fetchImageAsDataUrl } from "@/lib/engine/images";
 
 export const dynamic = "force-dynamic";
 
@@ -66,8 +67,12 @@ export async function POST(req: Request) {
 
   try {
     let fbPostId: string;
-    if (imageUrl) {
-      const result = await publishPhoto(pageId, pageToken, imageUrl, message);
+    // Never hotlink the vendor's raw image URL into a live post — fetch real bytes server-side
+    // first (same helper the presell page embed already uses), same reasoning as CLAUDE.md
+    // content rule 9. Falls back to a text-only post if the fetch fails rather than erroring out.
+    const imageDataUrl = imageUrl ? await fetchImageAsDataUrl(imageUrl) : null;
+    if (imageDataUrl) {
+      const result = await publishPhotoBytes(pageId, pageToken, imageDataUrl, message);
       fbPostId = result.post_id ?? result.id;
     } else {
       const result = await publishToFeed(pageId, pageToken, message);

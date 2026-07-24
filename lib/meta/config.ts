@@ -1,9 +1,15 @@
 export const FB_API_VERSION = "v21.0";
 export const FB_GRAPH_BASE = `https://graph.facebook.com/${FB_API_VERSION}`;
 
-// Minimal scope for Phase B (posting only) — ads_management (already approved) is intentionally
-// not requested here; Phase C requests it separately when ad-launch is built.
-export const FB_OAUTH_SCOPES = ["pages_show_list", "pages_manage_posts", "pages_read_engagement"];
+// ads_management is already App-Review-approved (per the user). Requesting it here means every
+// new/re-run connect flow grants it; existing Phase-B-only connections need one re-auth to add
+// it (Meta supports incremental auth — re-running the dialog keeps already-granted permissions).
+export const FB_OAUTH_SCOPES = [
+  "pages_show_list",
+  "pages_manage_posts",
+  "pages_read_engagement",
+  "ads_management",
+];
 
 export function getFbClientId(): string {
   const id = process.env.FB_CLIENT_ID;
