@@ -1,9 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogOut, Coins, Clock, Link2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasAppAccess } from "@/lib/shared";
-import LogoutButton from "@/components/LogoutButton";
+import Sidebar from "@/components/Sidebar";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
@@ -33,45 +31,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const creditBalance = (creditRows ?? []).reduce((sum, r) => sum + r.delta, 0);
 
   return (
-    <div>
-      <div className="border-b border-ink-700 bg-ink-900/60">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 text-xs text-zinc-400">
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="font-heading font-semibold text-zinc-200 hover:text-white">
-              ClickBank <span className="text-emerald-400">Studio</span>
-            </Link>
-            <span className="text-zinc-600">·</span>
-            <span>{user.email}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            {onTrial && (
-              <Link
-                href="/billing"
-                className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300 hover:border-amber-500"
-              >
-                <Clock className="h-3.5 w-3.5" /> Trial: {trialDaysLeft}{" "}
-                {trialDaysLeft === 1 ? "day" : "days"} left
-              </Link>
-            )}
-            <Link
-              href="/billing"
-              className="flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-1 text-emerald-300 hover:border-emerald-500"
-            >
-              <Coins className="h-3.5 w-3.5" /> {creditBalance} credits
-            </Link>
-            <Link
-              href="/connections"
-              className="flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-1 text-zinc-300 hover:border-ink-500 hover:text-zinc-100"
-            >
-              <Link2 className="h-3.5 w-3.5" /> Connections
-            </Link>
-            <LogoutButton>
-              <LogOut className="h-3.5 w-3.5" /> Log out
-            </LogoutButton>
-          </div>
-        </div>
+    <div className="flex min-h-screen flex-col sm:flex-row">
+      <Sidebar
+        email={user.email ?? ""}
+        onTrial={onTrial}
+        trialDaysLeft={trialDaysLeft}
+        creditBalance={creditBalance}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
       </div>
-      <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
     </div>
   );
 }

@@ -13,9 +13,11 @@ mirror from the pre-multi-tenant version — optional now, not required.
 `/` is the public marketing site, not the app — `app/(marketing)/*` (route group, no URL
 segment) covers Home, About, Pricing, FAQ, Contact, Terms, and Privacy, wrapped in
 `app/(marketing)/layout.tsx` with `components/MarketingNav.tsx`/`MarketingFooter.tsx`. The
-authenticated app lives at `/dashboard`, `/connections`, `/product/[id]`, `/billing` —
+authenticated app lives at `/dashboard`, `/connections`, `/domains`, `/product/[id]`, `/billing` —
 `app/(app)/layout.tsx` is the paywall/auth gate (redirects to `/login` with no session, `/billing`
-without access) and owns the `mx-auto max-w-7xl px-4 py-6` content wrapper for everything under
+without access), renders `components/Sidebar.tsx` (left nav: Dashboard/Connections/Domains/
+Billing, active-link highlighting via `usePathname`, collapses to a horizontal icon bar below the
+`sm` breakpoint), and owns the `mx-auto max-w-7xl px-4 py-6` content wrapper for everything under
 it. The root `app/layout.tsx` intentionally has **no** content wrapper (just fonts + `<body>`) so
 the marketing route group can render full-bleed sections (hero backgrounds, full-width
 nav/footer) — `/login` and `/billing` are standalone pages outside both route groups and each
@@ -269,6 +271,98 @@ condition — both fixed, not deferred, since this phase moves real money:
   sweep for abandoned ones (an API-quota/ad-account-object-count concern, not a credit/security
   one — same call already made for engine usage caps while it's just the user testing solo); a
   `Content-Security-Policy` on the public `/p/` route as extra defense-in-depth.
+
+## No-code page editor
+
+`presell_html`/`bridge_html` are no longer edit-only-by-regenerating. `renderPresellHtml`/
+`renderBridgeHtml` (+ the `PageCopy` type, `escapeHtml`, `buildHoplink`, `renderLandingMd`) live in
+`lib/engine/renderPages.ts` — pure, isomorphic functions with zero server-only imports, imported
+by **both** the campaign build pipeline (`lib/engine/build.ts`'s `stagePages`, which now also
+persists the structured `page_copy jsonb` alongside the rendered HTML) and the client-side editor
+(`components/PageEditor.tsx`), so live preview and what actually gets published are always the
+literal same function call — never two copies that can drift apart.
+
+- **The editor is structured-field, not drag-and-drop, on purpose**: headline/lead/mechanism/
+  benefits/proof/FAQ/CTA/image are editable; the affiliate disclosure, the hoplink, and the bridge
+  page's `LEAD_CAPTURE_ENDPOINT` placeholder marker are not exposed as fields at all, so they can
+  never be edited out.
+- **`campaigns`' RLS is select-only for `authenticated`** (tightened in
+  `supabase/migrations/0009_page_domains.sql`, dropping the original Phase-A `for all` policy).
+  This table's HTML fields are served completely raw to real, unauthenticated ad traffic
+  (`servePublicCampaignPage`) — the only legitimate writer is `app/api/campaigns/[id]/page-copy/
+  route.ts`, via `createAdminClient()`, after validating everything server-side. Never re-add a
+  general client-write policy to this table; if a new legitimate client write is ever needed, add
+  a narrow `SECURITY DEFINER` RPC instead (same fix already applied once for `profiles` in Phase
+  A, and now again here — same table class, same shape).
+- **`image_data_url` is validated with a single fully-anchored regex** (`^data:image\/(png|jpe?g
+  |webp|gif);base64,[A-Za-z0-9+/]+=*$`) against a hard length cap *before* the regex ever runs
+  (avoids ReDoS on a huge string) — the load-bearing defense, since the render templates
+  interpolate this value into an unescaped-by-convention `src="..."` attribute (now also routed
+  through `escapeHtml()` as defense-in-depth). Never loosen this to a `.startsWith(...)` check —
+  that's exactly the gap a crafted value could use to break out of the attribute and stored-XSS
+  real ad visitors.
+- The editor rebuilds `landing_md` deterministically from the edited structured fields
+  (`renderLandingMd()`) rather than calling the LLM again — faster, free, and keeps the "Landing
+  copy" tab in sync with what was actually edited; only first-generation `landing_md` is
+  LLM-written prose.
+- Campaigns generated before this shipped have `page_copy = null` and can't be edited until
+  regenerated — `PageEditor` shows a clear message rather than a broken form in that case.
+
+## Custom domains
+
+Clients can connect their own domain(s) — bring-your-own only, no in-app domain purchase — and
+publish presell/bridge pages under them. **One domain can host many campaigns**, each at its own
+path (e.g. `yourdomain.com/eat-stop-eat`, `yourdomain.com/smoothie-diet`, or the bare root).
+Schema in `supabase/migrations/0009_page_domains.sql`; Vercel API wrapper in
+`lib/vercel/client.ts`; routes under `app/api/domains/*`; UI at `app/(app)/domains/page.tsx` +
+`components/DomainsPanel.tsx`.
+
+- **`custom_domains`/`custom_domain_routes` have owner-`select` RLS but no client write access**
+  (`revoke insert, update, delete ... from anon, authenticated`) — every write is paired 1:1 with
+  a real Vercel API call (adding/removing a domain from the project), so it must go through a
+  server route using `createAdminClient()`, or through the two narrow `SECURITY DEFINER` RPCs
+  below for path-mapping writes specifically.
+- **Domain-claim uniqueness is a *partial* unique index, not a blanket one**:
+  `create unique index ... on custom_domains(domain) where status = 'verified'`. Anyone
+  authenticated can type in a domain they don't own and create a `pending` claim — expected,
+  ownership is proven later via Vercel's own verification. A blanket `unique(domain)` would let an
+  abandoned, never-verified claim permanently block the real owner from ever connecting it here;
+  the partial index means multiple tenants can each hold a harmless `pending` claim on the same
+  string, but only one can ever actually reach `verified`.
+- **`add_domain_route(p_domain_id, p_path, p_campaign_id, p_destination)` is the load-bearing
+  ownership check** — re-verifies the domain belongs to `auth.uid()` **and** calls the existing
+  `assert_owns_campaign(p_campaign_id)` RPC (from Phase C, reused as-is) before inserting. Without
+  this, a tenant could map their own verified domain's path to *another* tenant's `campaign_id`
+  and publicly serve/rebrand that tenant's presell page under an attacker-controlled domain. Never
+  add a route-mapping write path that skips this RPC.
+- **`custom_domain_routes.campaign_id` cascades on delete** (matching the precedent already set on
+  `ad_launches.campaign_id`) — deleting a campaign makes its domain routes vanish (clean 404)
+  instead of blocking the delete with an FK error.
+- **Serving path**: `middleware.ts` compares the incoming `Host` header against
+  `NEXT_PUBLIC_APP_URL`'s host (always also allowing `localhost`) **before** the auth-gate logic
+  runs. A mismatch rewrites to `/d${pathname}` and returns immediately — this traffic is always
+  anonymous and must never redirect to `/login`, and the rewrite fully pre-empts route resolution
+  for anything else (dashboard, `/api/domains`, etc. are simply never reached for a mismatched
+  Host). `app/d/[[...path]]/route.ts` reads `request.headers.get("host")` **directly** (not
+  `request.nextUrl.host`, which reflects the rewritten internal URL and would silently break
+  this), looks up `custom_domain_routes` joined to `custom_domains` (`status = 'verified'`), and
+  on a hit calls the existing `servePublicCampaignPage()` (`lib/publicPage.ts`) completely
+  unchanged — full reuse, zero duplicated serving logic, same generic 404 as the `/p/` route.
+- **Two verification checks, not one**: Vercel's domain API distinguishes *ownership*
+  verification (a TXT challenge, only needed for domains already tied to another Vercel
+  project/account) from actual *DNS-pointing* config (whether A/CNAME records really resolve
+  here). `isDomainFullyVerified()` (`lib/vercel/client.ts`) checks both — our own `status =
+  'verified'` only ever means both passed.
+- **Periodic re-verification**: `pg_cron` job `domains-reverify-backstop` (every 6 hours, same
+  pattern as `engine-drain-backstop`) calls `app/api/domains/reverify-all/route.ts` (same
+  `x-engine-secret`/`ENGINE_WEBHOOK_SECRET` trust boundary as `app/api/engine/run`) to catch a
+  domain re-pointed away from Vercel after initial verification — not a security hole (Vercel's
+  own edge just stops routing that hostname here), but worth surfacing as `error` instead of a
+  silent, unexplained 404. The Vault secret `domains_reverify_url` holds the full endpoint URL
+  (set via `execute_sql`, same as `engine_webhook_url`/`engine_webhook_secret`).
+- **Env vars**: `VERCEL_API_TOKEN` (create at vercel.com/account/tokens, scoped to this project —
+  I cannot generate this), `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID` (only needed if the project lives
+  under a team, which it does here).
 
 ## Dev
 

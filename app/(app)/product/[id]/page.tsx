@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { marked } from "marked";
-import { ArrowLeft, Copy, CheckCircle2, ExternalLink, Download } from "lucide-react";
+import { ArrowLeft, Copy, CheckCircle2, ExternalLink, Download, Pencil, Eye } from "lucide-react";
 import type { Campaign, Product } from "@/lib/shared";
 import { STATUS_COLORS } from "@/lib/shared";
 import PostToFacebook from "@/components/PostToFacebook";
 import LaunchAd from "@/components/LaunchAd";
+import PageEditor from "@/components/PageEditor";
 
 const TABS = [
   { key: "fb_ads_md", label: "FB/IG Ads" },
@@ -26,6 +27,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("fb_ads_md");
   const [copied, setCopied] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/products/${params.id}`);
@@ -154,15 +156,22 @@ export default function ProductPage({ params }: { params: { id: string } }) {
               </span>
             ) : null}
           </h2>
-          {tab === "presell_html" && campaign?.presell_html && (
-            <button onClick={() => downloadHtml("presell")} className="btn-ghost !py-1 text-xs">
-              <Download className="h-3.5 w-3.5" /> Download HTML
-            </button>
-          )}
-          {tab === "bridge_html" && campaign?.bridge_html && (
-            <button onClick={() => downloadHtml("bridge")} className="btn-ghost !py-1 text-xs">
-              <Download className="h-3.5 w-3.5" /> Download HTML
-            </button>
+          {(tab === "presell_html" || tab === "bridge_html") && campaign?.[tab] && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setEditMode((v) => !v)}
+                className="btn-ghost !py-1 text-xs"
+              >
+                {editMode ? <Eye className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                {editMode ? "View" : "Edit"}
+              </button>
+              <button
+                onClick={() => downloadHtml(tab === "presell_html" ? "presell" : "bridge")}
+                className="btn-ghost !py-1 text-xs"
+              >
+                <Download className="h-3.5 w-3.5" /> Download HTML
+              </button>
+            </div>
           )}
         </div>
 
@@ -190,6 +199,18 @@ export default function ProductPage({ params }: { params: { id: string } }) {
             <div className="p-4">
               {!content ? (
                 <p className="py-6 text-center text-sm text-zinc-500">Not generated yet.</p>
+              ) : (tab === "presell_html" || tab === "bridge_html") && editMode ? (
+                <PageEditor
+                  campaignId={campaign!.id}
+                  productTitle={product.product_title}
+                  initialCopy={campaign?.page_copy ?? null}
+                  initialPresellHtml={campaign?.presell_html ?? null}
+                  initialBridgeHtml={campaign?.bridge_html ?? null}
+                  previewHoplink={product.hoplink ?? "#"}
+                  onSaved={({ presell_html, bridge_html, page_copy }) =>
+                    setCampaign((c) => (c ? { ...c, presell_html, bridge_html, page_copy } : c))
+                  }
+                />
               ) : tab === "presell_html" ? (
                 <iframe
                   srcDoc={content}

@@ -1,6 +1,7 @@
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { fetchSalesPage, type ImageCandidate } from "./salespage";
 import { pickProductImage, fetchImageAsDataUrl } from "./images";
+import { renderPresellHtml, renderBridgeHtml, buildHoplink, type PageCopy } from "./renderPages";
 
 export const BUILD_CAMPAIGN_STAGES = ["context", "image", "ads", "pages", "content", "social"] as const;
 export type BuildStage = (typeof BUILD_CAMPAIGN_STAGES)[number];
@@ -24,9 +25,6 @@ export type StageOutput = {
   campaignPatch?: Record<string, unknown>;
 };
 
-const DISCLOSURE =
-  "This page contains affiliate links. If you purchase through them, I may earn a commission at no extra cost to you.";
-
 function productContext(product: ProductRow, salesText: string | null): string {
   return [
     `Title: ${product.product_title}`,
@@ -45,146 +43,13 @@ function productContext(product: ProductRow, salesText: string | null): string {
 
 function buildHoplinks(nickname: string, vendorId: string) {
   const tids = ["fb", "tt", "blog", "email", "page"] as const;
-  const link = (tid: string) => `https://hop.clickbank.net/?affiliate=${nickname}&vendor=${vendorId}&tid=${tid}`;
+  const link = (tid: string) => buildHoplink(nickname, vendorId, tid);
   const byChannel = Object.fromEntries(tids.map((t) => [t, link(t)])) as Record<
     (typeof tids)[number],
     string
   >;
   const text = tids.map((t) => `${t}: ${link(t)}`).join("\n");
   return { text, byChannel };
-}
-
-function escapeHtml(s: string): string {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-type PageCopy = {
-  headline: string;
-  lead: string;
-  mechanism: string;
-  benefits: string[];
-  proof: string;
-  faq: { q: string; a: string }[];
-  cta: string;
-  landing_md: string;
-};
-
-function renderPresellHtml(
-  product: ProductRow,
-  copy: PageCopy,
-  hoplink: string,
-  imageDataUrl: string | null
-): string {
-  const benefits = copy.benefits.map((b) => `<li>${escapeHtml(b)}</li>`).join("");
-  const faq = copy.faq
-    .map((f) => `<div class="faq-item"><h3>${escapeHtml(f.q)}</h3><p>${escapeHtml(f.a)}</p></div>`)
-    .join("");
-  const imageBlock = imageDataUrl
-    ? `<img src="${imageDataUrl}" alt="${escapeHtml(product.product_title)}" style="max-width:100%;border-radius:12px;margin:24px 0;" />`
-    : "";
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${escapeHtml(copy.headline)}</title>
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background:#fafafa; color:#1a1a1a; margin:0; padding:0; line-height:1.6; }
-  .wrap { max-width: 680px; margin: 0 auto; padding: 40px 20px 80px; }
-  h1 { font-size: 32px; line-height:1.2; margin-bottom: 16px; }
-  h2 { font-size: 22px; margin-top: 32px; }
-  .lead { font-size: 18px; color:#333; }
-  .cta { display:inline-block; background:#16a34a; color:#fff; text-decoration:none; padding:16px 32px; border-radius:8px; font-weight:600; font-size:18px; margin: 24px 0; }
-  .cta:hover { background:#15803d; }
-  ul { padding-left: 20px; }
-  .faq-item { margin-bottom: 16px; }
-  .faq-item h3 { font-size:16px; margin-bottom:4px; }
-  .disclosure { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e5e5; font-size: 12px; color: #888; }
-</style>
-</head>
-<body>
-  <div class="wrap">
-    <h1>${escapeHtml(copy.headline)}</h1>
-    <p class="lead">${escapeHtml(copy.lead)}</p>
-    ${imageBlock}
-    <h2>How it works</h2>
-    <p>${escapeHtml(copy.mechanism)}</p>
-    <h2>What you get</h2>
-    <ul>${benefits}</ul>
-    <p>${escapeHtml(copy.proof)}</p>
-    <a class="cta" href="${hoplink}">${escapeHtml(copy.cta)}</a>
-    <h2>Questions</h2>
-    ${faq}
-    <a class="cta" href="${hoplink}">${escapeHtml(copy.cta)}</a>
-    <p class="disclosure">${DISCLOSURE}</p>
-  </div>
-</body>
-</html>`;
-}
-
-function renderBridgeHtml(
-  product: ProductRow,
-  copy: PageCopy,
-  hoplink: string,
-  imageDataUrl: string | null
-): string {
-  const imageBlock = imageDataUrl
-    ? `<img src="${imageDataUrl}" alt="${escapeHtml(product.product_title)}" style="max-width:100%;border-radius:12px;margin:24px 0;" />`
-    : "";
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${escapeHtml(copy.headline)}</title>
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background:#fafafa; color:#1a1a1a; margin:0; padding:0; line-height:1.6; }
-  .wrap { max-width: 560px; margin: 0 auto; padding: 40px 20px 80px; text-align:center; }
-  h1 { font-size: 28px; line-height:1.25; }
-  .lead { font-size: 17px; color:#333; }
-  input { width:100%; box-sizing:border-box; padding:14px; margin:8px 0; border:1px solid #ccc; border-radius:8px; font-size:16px; }
-  .cta { display:inline-block; background:#16a34a; color:#fff; border:none; padding:16px 32px; border-radius:8px; font-weight:600; font-size:18px; margin-top: 12px; cursor:pointer; width:100%; text-decoration:none; }
-  .cta:hover { background:#15803d; }
-  .hidden { display:none; }
-  .disclosure { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e5e5; font-size: 12px; color: #888; text-align:left; }
-</style>
-</head>
-<body>
-  <div class="wrap">
-    <div id="step1">
-      <h1>${escapeHtml(copy.headline)}</h1>
-      <p class="lead">${escapeHtml(copy.lead)}</p>
-      ${imageBlock}
-      <!-- LEAD_CAPTURE_ENDPOINT: no lead-storage backend is wired up yet. Wire this form to your own API, ESP, or ClickBank Studio's own DB before sending paid traffic here. -->
-      <form id="leadForm">
-        <input type="text" placeholder="First name" required />
-        <input type="email" placeholder="Email address" required />
-        <button type="submit" class="cta">${escapeHtml(copy.cta)}</button>
-      </form>
-    </div>
-    <div id="step2" class="hidden">
-      <h1>${escapeHtml(copy.headline)}</h1>
-      <p class="lead">${escapeHtml(copy.mechanism)}</p>
-      <a class="cta" href="${hoplink}">${escapeHtml(copy.cta)}</a>
-    </div>
-    <p class="disclosure">${DISCLOSURE}</p>
-  </div>
-  <script>
-    document.getElementById('leadForm').addEventListener('submit', function (e) {
-      e.preventDefault();
-      // Placeholder only — see the LEAD_CAPTURE_ENDPOINT marker above. This does not save the lead anywhere.
-      document.getElementById('step1').classList.add('hidden');
-      document.getElementById('step2').classList.remove('hidden');
-    });
-  </script>
-</body>
-</html>`;
 }
 
 async function stageContext(product: ProductRow, nickname: string): Promise<StageOutput> {
@@ -283,7 +148,12 @@ async function stagePages(
 
   return {
     stageData: prior,
-    campaignPatch: { landing_md: copy.landing_md, presell_html: presellHtml, bridge_html: bridgeHtml },
+    campaignPatch: {
+      landing_md: copy.landing_md,
+      presell_html: presellHtml,
+      bridge_html: bridgeHtml,
+      page_copy: copy,
+    },
   };
 }
 

@@ -22,6 +22,28 @@ const PUBLIC_PREFIX_PATHS = [
 ];
 
 export async function middleware(request: NextRequest) {
+  // Custom-domain traffic (bring-your-own domains connected via /domains) must be handled BEFORE
+  // the auth-gate logic below — it's always anonymous public traffic and must never redirect to
+  // /login. A mismatch just means this Host isn't our own app's host; rewrite it to the catch-all
+  // domain-serving route and return immediately, skipping route resolution for anything else
+  // (dashboard, API routes, etc. are simply never reached for a mismatched Host).
+  const host = request.headers.get("host") ?? "";
+  const appHost = (() => {
+    try {
+      return new URL(process.env.NEXT_PUBLIC_APP_URL!).host;
+    } catch {
+      return "";
+    }
+  })();
+  const isOwnHost = host === appHost || host.startsWith("localhost") || host.startsWith("127.0.0.1");
+  const isAssetPath = request.nextUrl.pathname.startsWith("/_next");
+
+  if (!isOwnHost && !isAssetPath) {
+    const url = request.nextUrl.clone();
+    url.pathname = `/d${request.nextUrl.pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
