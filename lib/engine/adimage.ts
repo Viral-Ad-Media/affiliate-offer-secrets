@@ -1,7 +1,7 @@
 import { db } from "./core";
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { createKieTask, getKieTaskStatus, downloadKieResult } from "@/lib/kieai/client";
-import { isValidImageDataUrl } from "@/lib/images/validate";
+import { isValidImageDataUrl, MAX_AD_IMAGE_DATA_URL_CHARS } from "@/lib/images/validate";
 
 export const GENERATE_AD_IMAGE_STAGES = ["verify", "prompt", "submit", "poll", "finalize"] as const;
 export type GenerateAdImageStage = (typeof GENERATE_AD_IMAGE_STAGES)[number];
@@ -85,8 +85,10 @@ async function stageFinalize(stageData: Record<string, unknown>): Promise<AdImag
 
   // Never trust kie.ai's claimed content-type or the request having succeeded blindly — same
   // allowlist every other image-touching path in this app enforces (lib/images/validate.ts).
-  if (!isValidImageDataUrl(dataUrl)) {
-    throw new Error(`Generated image failed validation (content-type: ${contentType})`);
+  // Uses the larger ad-image cap, not the default — these are full-resolution generated photos
+  // (observed ~2.7MB decoded), not small vendor product shots.
+  if (!isValidImageDataUrl(dataUrl, MAX_AD_IMAGE_DATA_URL_CHARS)) {
+    throw new Error(`Generated image failed validation (content-type: ${contentType}, size: ${bytes.length} bytes)`);
   }
 
   return { stageData, campaignPatch: { ad_creative_image_data_url: dataUrl } };
