@@ -13,12 +13,19 @@ mirror from the pre-multi-tenant version — optional now, not required.
 `/` is the public marketing site, not the app — `app/(marketing)/*` (route group, no URL
 segment) covers Home, About, Pricing, FAQ, Contact, Terms, and Privacy, wrapped in
 `app/(marketing)/layout.tsx` with `components/MarketingNav.tsx`/`MarketingFooter.tsx`. The
-authenticated app lives at `/dashboard`, `/connections`, `/domains`, `/product/[id]`, `/billing` —
-`app/(app)/layout.tsx` is the paywall/auth gate (redirects to `/login` with no session, `/billing`
-without access), renders `components/Sidebar.tsx` (left nav: Dashboard/Connections/Domains/
-Billing, active-link highlighting via `usePathname`, collapses to a horizontal icon bar below the
-`sm` breakpoint), and owns the `mx-auto max-w-7xl px-4 py-6` content wrapper for everything under
-it. The root `app/layout.tsx` intentionally has **no** content wrapper (just fonts + `<body>`) so
+authenticated app lives at `/dashboard`, `/connections`, `/domains`, `/audit`, `/product/[id]`,
+`/billing` — `app/(app)/layout.tsx` is the paywall/auth gate (redirects to `/login` with no
+session, `/billing` without access), renders `components/Sidebar.tsx` (left nav: Dashboard/
+Connections/Domains/Audit trail/Billing, active-link highlighting via `usePathname`, collapses to
+a horizontal icon bar below the `sm` breakpoint), and owns the `mx-auto max-w-7xl px-4 py-6`
+content wrapper for everything under it. `app/(app)/audit/page.tsx` (+
+`components/AuditTrail.tsx`) is a unified, read-only log across `meta_posts`/`instagram_posts`/
+`tiktok_posts`/`youtube_posts`/`mail_sends` — every one of those tables already had owner-`select`
+RLS but no UI ever read them before this; the page fetches all five in parallel, joins
+`campaign_id` → `products.product_title` for display, and normalizes them into one
+`AuditEntry[]` (`lib/shared.ts`) sorted newest-first. No new tables/RPCs — purely a read surface
+over data the existing posting routes already wrote. The root `app/layout.tsx` intentionally has
+**no** content wrapper (just fonts + `<body>`) so
 the marketing route group can render full-bleed sections (hero backgrounds, full-width
 nav/footer) — `/login` and `/billing` are standalone pages outside both route groups and each
 carry their own wrapper. `middleware.ts`'s `PUBLIC_EXACT_PATHS` (exact match: `/`, `/login`,

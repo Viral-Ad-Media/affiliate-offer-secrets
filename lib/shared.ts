@@ -90,6 +90,19 @@ export type UsageEntry = {
   created_at: string;
 };
 
+export type AuditPlatform = "facebook" | "instagram" | "tiktok" | "youtube" | "mail";
+
+export type AuditEntry = {
+  id: string;
+  platform: AuditPlatform;
+  created_at: string;
+  campaign_id: string | null;
+  campaign_title: string | null;
+  summary: string;
+  detail: string | null;
+  externalUrl: string | null;
+};
+
 export function hasAppAccess(profile: Pick<Profile, "access_granted" | "trial_ends_at"> | null | undefined) {
   if (!profile) return false;
   if (profile.access_granted) return true;
