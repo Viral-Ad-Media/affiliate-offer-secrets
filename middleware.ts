@@ -19,6 +19,7 @@ const PUBLIC_PREFIX_PATHS = [
   "/api/engine/run",
   "/api/meta/deauthorize",
   "/p/", // public presell/bridge pages — real ad destinations, no auth
+  "/api/public/campaign-image/", // public campaign product images — needed for Instagram posting
 ];
 
 export async function middleware(request: NextRequest) {

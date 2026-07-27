@@ -115,6 +115,48 @@ export async function publishPhotoBytes(
   return json;
 }
 
+// --- Instagram Graph API (Phase E) ---
+
+// IG Business actions are authorized via the LINKED PAGE's own access token — there is no
+// separate Instagram-specific token. Returns null if this Page has no linked IG Business account.
+export async function getLinkedInstagramAccount(
+  pageId: string,
+  pageAccessToken: string
+): Promise<{ id: string; username: string } | null> {
+  const json = await graphGet(`/${pageId}`, {
+    fields: "instagram_business_account{id,username}",
+    access_token: pageAccessToken,
+  });
+  return json.instagram_business_account ?? null;
+}
+
+// Step 1 of Instagram's 2-step publish flow. image_url must be a real, publicly-fetchable HTTPS
+// URL (unlike Facebook's Photos API, IG does not accept direct byte upload) — see
+// app/api/public/campaign-image for how that URL is produced.
+export async function createIgMediaContainer(
+  igUserId: string,
+  pageAccessToken: string,
+  imageUrl: string,
+  caption: string
+): Promise<{ id: string }> {
+  return graphPost(`/${igUserId}/media`, {
+    image_url: imageUrl,
+    caption,
+    access_token: pageAccessToken,
+  });
+}
+
+export async function publishIgMedia(
+  igUserId: string,
+  pageAccessToken: string,
+  creationId: string
+): Promise<{ id: string }> {
+  return graphPost(`/${igUserId}/media_publish`, {
+    creation_id: creationId,
+    access_token: pageAccessToken,
+  });
+}
+
 // --- Marketing API (Phase C: ad campaign launch) ---
 
 export async function getAdAccounts(

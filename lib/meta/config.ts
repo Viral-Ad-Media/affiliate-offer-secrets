@@ -4,11 +4,15 @@ export const FB_GRAPH_BASE = `https://graph.facebook.com/${FB_API_VERSION}`;
 // ads_management is already App-Review-approved (per the user). Requesting it here means every
 // new/re-run connect flow grants it; existing Phase-B-only connections need one re-auth to add
 // it (Meta supports incremental auth — re-running the dialog keeps already-granted permissions).
+// instagram_basic/instagram_content_publish added for Phase E's Instagram posting — existing
+// connections need one re-auth to pick up the new scopes, same pattern as ads_management before.
 export const FB_OAUTH_SCOPES = [
   "pages_show_list",
   "pages_manage_posts",
   "pages_read_engagement",
   "ads_management",
+  "instagram_basic",
+  "instagram_content_publish",
 ];
 
 export function getFbClientId(): string {

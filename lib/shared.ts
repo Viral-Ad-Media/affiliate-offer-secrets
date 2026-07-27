@@ -43,6 +43,7 @@ export type Campaign = {
   social_md: string | null;
   email_md: string | null;
   images_json: { source_images: string[] } | null;
+  embedded_image_data_url: string | null;
   page_copy: {
     headline: string;
     lead: string;

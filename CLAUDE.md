@@ -364,6 +364,71 @@ Schema in `supabase/migrations/0009_page_domains.sql`; Vercel API wrapper in
   I cannot generate this), `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID` (only needed if the project lives
   under a team, which it does here).
 
+## Connectors (Instagram, TikTok, YouTube, Mail)
+
+Instagram gets real posting; TikTok and YouTube are **connect-only** (this app doesn't generate
+video, so there's nothing to post yet — connecting now means it's ready the moment that changes);
+Mail sends the generated email swipe copy from the client's own connected Gmail. Generic
+Vault-secret RPCs (`store_oauth_secret`/`get_oauth_secret`/`delete_oauth_secret`, added in
+`supabase/migrations/0010_connectors.sql`) are used by TikTok/YouTube/Mail instead of the
+Meta-named ones in `0007_meta_secret_helper.sql` — those stay untouched, zero risk to Phase B/C.
+
+- **Instagram reuses the existing Meta/Facebook connection — no separate OAuth flow.**
+  `FB_OAUTH_SCOPES` (`lib/meta/config.ts`) includes `instagram_basic`/`instagram_content_publish`;
+  existing connections need one re-auth to pick them up (same pattern as `ads_management` before).
+  `app/api/meta/callback/route.ts` discovers a linked IG Business account per Page
+  (`GET /{page-id}?fields=instagram_business_account`) and upserts `meta_instagram_accounts`.
+  **There is no separate IG token** — IG Business actions are authorized via the *linked Page's*
+  own token (`meta_pages.page_token_secret_id`), which is how Meta's Graph API actually works.
+  **The token lookup in `app/api/instagram/post/route.ts` is double-scoped by `user_id` AND
+  `page_id`, never by `linked_page_id` alone** — `assert_owns_ig_account` only confirms the caller
+  owns the IG-account row, not that the Page token fetched one hop away is safe to trust without
+  re-checking; this mirrors `/api/meta/post`'s existing double-scoped pattern and closes the same
+  class of cross-tenant IDOR. Never simplify that lookup to a bare `page_id` match.
+- **Instagram posting needs a real public image URL** (`POST /{ig-user-id}/media` requires a
+  fetchable `image_url`, unlike Facebook's Photos API which accepts direct byte upload).
+  `campaigns.embedded_image_data_url` persists the same image already embedded in
+  `presell_html`/`bridge_html` (written by `stagePages()` and the page-copy editor route);
+  `app/api/public/campaign-image/[campaignId]/route.ts` (`lib/publicPage.ts`'s
+  `servePublicCampaignImage`) serves it standalone, same UUID+`status='ready'` scoping as the
+  `/p/` route. **Image content-type is allowlisted, not just checked for an `image/*` prefix** —
+  `lib/images/validate.ts`'s `isValidImageDataUrl()`/`ALLOWED_IMAGE_CONTENT_TYPES` (png/jpeg/webp/
+  gif only, never svg+xml, which can carry inline `<script>`) is enforced at all three points that
+  touch this value: `lib/engine/images.ts`'s `fetchImageAsDataUrl()` at fetch time, the page-copy
+  route at save time, and the public image route again at **serve** time — never trust the DB
+  row's format is guaranteed just because a write path validated it; a non-matching stored value
+  is a 404, not served with whatever Content-Type it happens to claim.
+- **TikTok/YouTube/Mail follow the exact same OAuth-CSRF/Vault/default-deny-RLS shape as Meta**
+  (`lib/tiktok/*`, `lib/google/*`, `app/api/{tiktok,youtube,mail}/{connect,callback,disconnect}`),
+  each with its own state-cookie name (`tiktok_oauth_state`/`youtube_oauth_state`/
+  `mail_oauth_state`) so concurrent flows in different tabs never collide.
+- **YouTube and Mail share one Google Cloud OAuth client** (`GOOGLE_CLIENT_ID`/`SECRET`) but each
+  has its own dedicated callback route and its own disjoint scope constant
+  (`YOUTUBE_SCOPES`/`MAIL_SCOPES` in `lib/google/config.ts`) — **never combine them into one
+  shared list**, or the YouTube connect flow could accidentally request (and receive consent for)
+  `gmail.send`. A code issued for one flow can't be exchanged at the other's callback regardless
+  (Google requires the exchange's `redirect_uri` to exactly match the one used to obtain the
+  code), but keeping the scopes disjoint is what actually enforces "YouTube is read-only."
+  `access_type=offline&prompt=consent` is forced on both so a `refresh_token` is always returned.
+- **Google access-token refreshes must delete the old Vault secret, not just repoint the column.**
+  Meta's token replacement only happens on a rare full re-auth; Google access tokens expire
+  hourly, so `app/api/mail/send/route.ts`'s refresh-on-expiry path calls `delete_oauth_secret` on
+  the prior access-token secret immediately after storing and repointing to the new one — without
+  this, `vault.secrets` grows unbounded for any actively-used mail/YouTube connection. Any future
+  code that refreshes a Google token must do the same.
+- **`mail_sends.campaign_id`, when provided, is validated via `assert_owns_campaign` before
+  insert** — the send route itself never operates on another tenant's resource (the mailbox is
+  always the caller's own `mail_connections` row, `to`/`subject`/`html` are the caller's own
+  freeform content), but this closes a landmine for any future feature that joins `mail_sends` →
+  `campaigns` via the admin client without independently re-checking ownership.
+- **Env vars**: `TIKTOK_CLIENT_KEY`/`TIKTOK_CLIENT_SECRET` (developers.tiktok.com — register
+  `${NEXT_PUBLIC_APP_URL}/api/tiktok/callback`), `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+  (console.cloud.google.com — register both `${NEXT_PUBLIC_APP_URL}/api/youtube/callback` and
+  `${NEXT_PUBLIC_APP_URL}/api/mail/callback`). TikTok apps and Google's OAuth consent screen both
+  work immediately for the developer/testers added on the app itself, without full review —
+  sufficient for testing, same caveat as Meta's Development Mode; `gmail.send` specifically is a
+  "restricted" scope that needs Google's security assessment before a public rollout.
+
 ## Dev
 
 ```bash

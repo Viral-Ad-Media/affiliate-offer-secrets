@@ -6,6 +6,7 @@ import {
   exchangeCodeForToken,
   exchangeForLongLivedToken,
   getAdAccounts,
+  getLinkedInstagramAccount,
   getMe,
   getUserPages,
 } from "@/lib/meta/client";
@@ -114,6 +115,7 @@ export async function GET(req: Request) {
     }
 
     let anyActive = false;
+    let anyActiveIg = false;
     for (const page of pages) {
       const { data: pageSecretId, error: pageSecretErr } = await admin.rpc("store_meta_secret", {
         p_token: page.access_token,
@@ -153,6 +155,37 @@ export async function GET(req: Request) {
           token_expires_at: toExpiryIso(pageTokenInfo.expires_at),
           is_active: isActive,
         });
+      }
+
+      // Discover a linked Instagram Business account for this Page, if any. No separate token
+      // stored — IG actions reuse this same Page's token (meta_pages.page_token_secret_id).
+      const igAccount = await getLinkedInstagramAccount(page.id, page.access_token).catch(() => null);
+      if (igAccount) {
+        const { data: existingIg } = await admin
+          .from("meta_instagram_accounts")
+          .select("id, is_active")
+          .eq("user_id", user.id)
+          .eq("ig_user_id", igAccount.id)
+          .maybeSingle();
+
+        const isActiveIg = existingIg?.is_active ?? !anyActiveIg;
+        if (isActiveIg) anyActiveIg = true;
+
+        if (existingIg) {
+          await admin
+            .from("meta_instagram_accounts")
+            .update({ ig_username: igAccount.username, linked_page_id: page.id })
+            .eq("id", existingIg.id);
+        } else {
+          await admin.from("meta_instagram_accounts").insert({
+            user_id: user.id,
+            connection_id: connectionId,
+            ig_user_id: igAccount.id,
+            ig_username: igAccount.username,
+            linked_page_id: page.id,
+            is_active: isActiveIg,
+          });
+        }
       }
     }
 

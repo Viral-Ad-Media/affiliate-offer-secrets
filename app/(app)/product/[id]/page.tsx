@@ -7,6 +7,8 @@ import { ArrowLeft, Copy, CheckCircle2, ExternalLink, Download, Pencil, Eye } fr
 import type { Campaign, Product } from "@/lib/shared";
 import { STATUS_COLORS } from "@/lib/shared";
 import PostToFacebook from "@/components/PostToFacebook";
+import PostToInstagram from "@/components/PostToInstagram";
+import SendEmail from "@/components/SendEmail";
 import LaunchAd from "@/components/LaunchAd";
 import PageEditor from "@/components/PageEditor";
 
@@ -242,12 +244,22 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                     dangerouslySetInnerHTML={{ __html: marked.parse(content) as string }}
                   />
                   {tab === "social_md" && (
-                    <div className="mt-4">
+                    <div className="mt-4 space-y-3">
                       <PostToFacebook
                         campaignId={campaign!.id}
                         defaultMessage={content}
                         imageUrl={campaign?.images_json?.source_images?.[0] ?? null}
                       />
+                      <PostToInstagram
+                        campaignId={campaign!.id}
+                        defaultCaption={content}
+                        hasImage={!!campaign?.embedded_image_data_url}
+                      />
+                    </div>
+                  )}
+                  {tab === "email_md" && (
+                    <div className="mt-4">
+                      <SendEmail campaignId={campaign!.id} defaultBody={content} />
                     </div>
                   )}
                   {tab === "fb_ads_md" && campaign?.presell_html && (

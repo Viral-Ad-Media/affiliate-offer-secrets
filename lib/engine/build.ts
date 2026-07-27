@@ -153,6 +153,7 @@ async function stagePages(
       presell_html: presellHtml,
       bridge_html: bridgeHtml,
       page_copy: copy,
+      embedded_image_data_url: imageDataUrl,
     },
   };
 }

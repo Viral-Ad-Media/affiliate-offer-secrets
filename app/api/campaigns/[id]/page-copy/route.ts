@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderPresellHtml, renderBridgeHtml, renderLandingMd, buildHoplink, type PageCopy } from "@/lib/engine/renderPages";
+import { isValidImageDataUrl } from "@/lib/images/validate";
 
 export const dynamic = "force-dynamic";
 
@@ -12,13 +13,6 @@ const MAX_BENEFITS = 10;
 const MAX_BENEFIT_LEN = 300;
 const MAX_FAQ = 10;
 const MAX_CTA = 60;
-// ~200KB decoded, matching the engine's own MAX_IMAGE_BYTES budget (lib/engine/images.ts) —
-// base64 runs ~4/3 larger than raw bytes, so this is a generous but bounded ceiling.
-const MAX_IMAGE_DATA_URL_CHARS = 280_000;
-// Fix (design review): a single fully-anchored regex, checked against a hard length cap first
-// (avoids ReDoS on a huge string) — the load-bearing defense against a crafted image_data_url
-// breaking out of the unescaped `src="..."` attribute in the render templates.
-const IMAGE_DATA_URL_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+=*$/;
 
 function clampStr(v: unknown, max: number): string {
   if (typeof v !== "string") return "";
@@ -91,7 +85,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   let imageDataUrl: string | null = null;
   const rawImage = body.image_data_url;
   if (typeof rawImage === "string" && rawImage.length > 0) {
-    if (rawImage.length > MAX_IMAGE_DATA_URL_CHARS || !IMAGE_DATA_URL_RE.test(rawImage)) {
+    if (!isValidImageDataUrl(rawImage)) {
       return NextResponse.json({ error: "invalid image" }, { status: 400 });
     }
     imageDataUrl = rawImage;
@@ -137,6 +131,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       landing_md: copy.landing_md,
       presell_html: presellHtml,
       bridge_html: bridgeHtml,
+      embedded_image_data_url: imageDataUrl,
     })
     .eq("id", campaignId);
 

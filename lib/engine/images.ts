@@ -1,6 +1,7 @@
 import { completeJSON, type UsageContext } from "./anthropic";
 import { BROWSER_UA } from "./clickbank";
 import type { ImageCandidate } from "./salespage";
+import { ALLOWED_IMAGE_CONTENT_TYPES } from "../images/validate";
 
 const MAX_IMAGE_BYTES = 200 * 1024; // keep pages well under 200KB per content rule
 
@@ -42,8 +43,11 @@ export async function fetchImageAsDataUrl(url: string): Promise<string | null> {
       signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) return null;
-    const contentType = res.headers.get("content-type") ?? "";
-    if (!contentType.startsWith("image/")) return null;
+    // Allowlist, not a bare "image/*" prefix check — svg+xml can carry inline <script> and this
+    // value later gets served standalone (app/api/public/campaign-image), not just embedded in
+    // an <img src>. See lib/images/validate.ts for why this must stay in sync everywhere.
+    const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    if (!ALLOWED_IMAGE_CONTENT_TYPES.includes(contentType)) return null;
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.byteLength === 0 || buf.byteLength > MAX_IMAGE_BYTES) return null;
     return `data:${contentType};base64,${buf.toString("base64")}`;

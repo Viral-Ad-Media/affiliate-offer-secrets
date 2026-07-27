@@ -2,17 +2,19 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Facebook, RefreshCw } from "lucide-react";
+import { CheckCircle2, Facebook, Instagram, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type Page = { page_id: string; page_name: string; is_active: boolean; status: string };
 type AdAccount = { ad_account_id: string; ad_account_name: string; currency: string; is_active: boolean };
+type IgAccount = { ig_user_id: string; ig_username: string; is_active: boolean };
 type Status = {
   connected: boolean;
   status?: string;
   ads_management_granted?: boolean;
   pages?: Page[];
   ad_accounts?: AdAccount[];
+  instagram_accounts?: IgAccount[];
 };
 
 export default function ConnectionsPanel({ status }: { status: Status }) {
@@ -57,6 +59,7 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
   const needsReconnect = status.status === "needs_reconnect";
   const pages = status.pages ?? [];
   const adAccounts = status.ad_accounts ?? [];
+  const igAccounts = status.instagram_accounts ?? [];
 
   return (
     <div className="space-y-4">
@@ -121,6 +124,32 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
           ))}
           {pages.length === 0 && (
             <li className="text-sm text-zinc-500">No Pages found for this Facebook account.</li>
+          )}
+        </ul>
+      </div>
+
+      <div className="card p-5">
+        <h2 className="mb-3 text-sm font-semibold text-zinc-100">Instagram Accounts</h2>
+        <ul className="space-y-2">
+          {igAccounts.map((a) => (
+            <li
+              key={a.ig_user_id}
+              className="flex items-center justify-between rounded-lg border border-ink-700 px-3 py-2.5"
+            >
+              <div className="flex items-center gap-2 text-sm text-zinc-100">
+                <Instagram className="h-3.5 w-3.5 text-zinc-500" /> @{a.ig_username}
+              </div>
+              {a.is_active && (
+                <span className="chip border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Active
+                </span>
+              )}
+            </li>
+          ))}
+          {igAccounts.length === 0 && (
+            <li className="text-sm text-zinc-500">
+              No Instagram Business account linked to your Pages yet.
+            </li>
           )}
         </ul>
       </div>
