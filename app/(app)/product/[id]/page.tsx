@@ -9,6 +9,7 @@ import { STATUS_COLORS } from "@/lib/shared";
 import PostToFacebook from "@/components/PostToFacebook";
 import PostToInstagram from "@/components/PostToInstagram";
 import SendEmail from "@/components/SendEmail";
+import GenerateVideo from "@/components/GenerateVideo";
 import LaunchAd from "@/components/LaunchAd";
 import PageEditor from "@/components/PageEditor";
 
@@ -260,6 +261,15 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   {tab === "email_md" && (
                     <div className="mt-4">
                       <SendEmail campaignId={campaign!.id} defaultBody={content} />
+                    </div>
+                  )}
+                  {tab === "tiktok_md" && (
+                    <div className="mt-4">
+                      <GenerateVideo
+                        campaignId={campaign!.id}
+                        productTitle={product.product_title}
+                        defaultCaption={product.product_title}
+                      />
                     </div>
                   )}
                   {tab === "fb_ads_md" && campaign?.presell_html && (

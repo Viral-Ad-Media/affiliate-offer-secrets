@@ -2,6 +2,8 @@ import { db } from "./core";
 import { runBuildCampaignStage, BUILD_CAMPAIGN_STAGES } from "./build";
 import { runDiscoverProducts, type DiscoverJobPayload } from "./discover";
 import { runLaunchAdStage, LAUNCH_AD_STAGES, type LaunchAdPayload } from "./adlaunch";
+import { runGenerateAdImageStage, GENERATE_AD_IMAGE_STAGES, type GenerateAdImagePayload } from "./adimage";
+import { runGenerateVideoStage, GENERATE_VIDEO_STAGES, type GenerateVideoPayload } from "./videogen";
 
 const INVOCATION_BUDGET_MS = 50_000; // stay safely under maxDuration=60 on any Vercel plan
 const MAX_ATTEMPTS = 5;
@@ -9,13 +11,54 @@ const MAX_ATTEMPTS = 5;
 type JobRow = {
   id: string;
   user_id: string;
-  type: "discover_products" | "build_campaign" | "launch_ad";
+  type: "discover_products" | "build_campaign" | "launch_ad" | "generate_ad_image" | "generate_video";
   payload: any;
   status: string;
   stage: number;
   stage_data: Record<string, unknown>;
   attempts: number;
 };
+
+// `retry: true` means "not ready yet, don't advance" — distinct from a normal stage-advance
+// (`done: false`, falls through to re-fetch and continue) and from a raced advance (`raced:
+// true`, another worker already moved this job on). See heartbeatRetry() for why this needs its
+// own DB-level handling, not just "do nothing this invocation".
+type StageResult = { done: boolean; raced?: boolean; retry?: boolean };
+
+// Design-review fix: a poll stage that isn't ready yet must not let claim_job()'s own
+// staleness-reclaim mechanics count against MAX_ATTEMPTS — refreshes locked_at (so the job
+// isn't reclaimed as stale mid-wait) and cancels out the attempts increment claim_job() just
+// made for this claim, so a legitimately-still-waiting job never nets progress toward the
+// failure cap purely from waiting. Only genuine thrown errors still count via failJob().
+async function heartbeatRetry(jobId: string) {
+  await db.rpc("heartbeat_job_retry", { p_job_id: jobId });
+}
+
+// Shared stage-loop runner for every multi-stage job type. On `retry`, heartbeats and BREAKS
+// (yields to the outer claim loop) rather than hammering the same not-ready poll — without this,
+// a job whose poll always returns not-ready would monopolize the whole invocation budget
+// re-polling itself, starving every other tenant's queued jobs for that entire invocation.
+async function runStageLoop(
+  initialJob: JobRow,
+  processStage: (job: JobRow) => Promise<StageResult>,
+  start: number
+): Promise<number> {
+  let current: JobRow = initialJob;
+  let count = 0;
+  while (Date.now() - start < INVOCATION_BUDGET_MS) {
+    const result = await processStage(current);
+    count++;
+    if (result.retry) {
+      await heartbeatRetry(current.id);
+      break;
+    }
+    if (result.done || result.raced) break;
+    const { data: refreshed } = await db.from("jobs").select("*").eq("id", current.id).maybeSingle();
+    if (!refreshed || refreshed.status !== "running") break;
+    current = refreshed as JobRow;
+  }
+  return count;
+}
 
 async function claimJob(): Promise<JobRow | null> {
   const { data, error } = await db.rpc("claim_job");
@@ -57,6 +100,12 @@ async function failJob(job: JobRow, message: string) {
         .update({ status: "failed", notes: message, updated_at: new Date().toISOString() })
         .eq("campaign_id", job.payload.campaign_id);
     }
+    if (job.type === "generate_video" && job.payload?.campaign_id) {
+      await db
+        .from("campaigns")
+        .update({ video_status: "failed", video_error: message, updated_at: new Date().toISOString() })
+        .eq("id", job.payload.campaign_id);
+    }
   } else {
     // Leave pending (not running) so the natural claim_job() path retries it.
     await db
@@ -79,7 +128,7 @@ async function processDiscover(job: JobRow) {
 
 // Returns { done: true } once the last stage finishes, { raced: true } if another worker
 // already advanced this job (safe no-op), or { done: false } to keep looping.
-async function processBuildCampaignStage(job: JobRow): Promise<{ done: boolean; raced?: boolean }> {
+async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
   const productId = job.payload?.product_id;
   if (!productId) throw new Error("build_campaign job missing payload.product_id");
 
@@ -142,7 +191,7 @@ async function processBuildCampaignStage(job: JobRow): Promise<{ done: boolean; 
 
 // Same optimistic-concurrency stage-advance shape as processBuildCampaignStage. The "verify"
 // stage (index 0) is the real security boundary for this job type — see lib/engine/adlaunch.ts.
-async function processLaunchAdStage(job: JobRow): Promise<{ done: boolean; raced?: boolean }> {
+async function processLaunchAdStage(job: JobRow): Promise<StageResult> {
   const payload = job.payload as LaunchAdPayload;
   if (!payload?.campaign_id) throw new Error("launch_ad job missing payload.campaign_id");
 
@@ -190,6 +239,92 @@ async function processLaunchAdStage(job: JobRow): Promise<{ done: boolean; raced
   return { done: false };
 }
 
+// Same optimistic-concurrency stage-advance shape as the other multi-stage job types. The
+// "verify" stage (index 0) is the real security boundary — see lib/engine/adimage.ts.
+async function processGenerateAdImageStage(job: JobRow): Promise<StageResult> {
+  const payload = job.payload as GenerateAdImagePayload;
+  if (!payload?.campaign_id) throw new Error("generate_ad_image job missing payload.campaign_id");
+
+  const { stageData, campaignPatch, retry } = await runGenerateAdImageStage(
+    job.stage,
+    payload,
+    job.user_id,
+    job.stage_data ?? {},
+    { userId: job.user_id, jobId: job.id }
+  );
+
+  if (retry) return { done: false, retry: true };
+
+  if (campaignPatch && Object.keys(campaignPatch).length > 0) {
+    await db
+      .from("campaigns")
+      .update({ ...campaignPatch, updated_at: new Date().toISOString() })
+      .eq("id", payload.campaign_id);
+  }
+
+  const nextStage = job.stage + 1;
+  const { data: advanced } = await db
+    .from("jobs")
+    .update({ stage: nextStage, stage_data: stageData, updated_at: new Date().toISOString() })
+    .eq("id", job.id)
+    .eq("stage", job.stage)
+    .select("id")
+    .maybeSingle();
+
+  if (!advanced) return { done: false, raced: true };
+
+  if (nextStage >= GENERATE_AD_IMAGE_STAGES.length) {
+    await markDone(job.id, "ad creative ready");
+    return { done: true };
+  }
+
+  return { done: false };
+}
+
+// Same shape again. video_status is set to 'generating' by the API route that queues this job
+// (before insert, closing the concurrent-duplicate race — see app/api/campaigns/[id]/
+// generate-video/route.ts); this function only ever moves it to 'ready' (finalize stage,
+// via campaignPatch) or 'failed' (failJob, on terminal error).
+async function processGenerateVideoStage(job: JobRow): Promise<StageResult> {
+  const payload = job.payload as GenerateVideoPayload;
+  if (!payload?.campaign_id) throw new Error("generate_video job missing payload.campaign_id");
+
+  const { stageData, campaignPatch, retry } = await runGenerateVideoStage(
+    job.stage,
+    payload,
+    job.user_id,
+    job.stage_data ?? {},
+    { userId: job.user_id, jobId: job.id }
+  );
+
+  if (retry) return { done: false, retry: true };
+
+  if (campaignPatch && Object.keys(campaignPatch).length > 0) {
+    await db
+      .from("campaigns")
+      .update({ ...campaignPatch, updated_at: new Date().toISOString() })
+      .eq("id", payload.campaign_id);
+  }
+
+  const nextStage = job.stage + 1;
+  const { data: advanced } = await db
+    .from("jobs")
+    .update({ stage: nextStage, stage_data: stageData, updated_at: new Date().toISOString() })
+    .eq("id", job.id)
+    .eq("stage", job.stage)
+    .select("id")
+    .maybeSingle();
+
+  if (!advanced) return { done: false, raced: true };
+
+  if (nextStage >= GENERATE_VIDEO_STAGES.length) {
+    await markDone(job.id, "video ready");
+    return { done: true };
+  }
+
+  return { done: false };
+}
+
 export async function runWorkerLoop(): Promise<{ processed: number }> {
   const start = Date.now();
   let processed = 0;
@@ -203,25 +338,13 @@ export async function runWorkerLoop(): Promise<{ processed: number }> {
         await processDiscover(job);
         processed++;
       } else if (job.type === "build_campaign") {
-        let current: JobRow = job;
-        while (Date.now() - start < INVOCATION_BUDGET_MS) {
-          const result = await processBuildCampaignStage(current);
-          processed++;
-          if (result.done || result.raced) break;
-          const { data: refreshed } = await db.from("jobs").select("*").eq("id", current.id).maybeSingle();
-          if (!refreshed || refreshed.status !== "running") break;
-          current = refreshed as JobRow;
-        }
+        processed += await runStageLoop(job, processBuildCampaignStage, start);
       } else if (job.type === "launch_ad") {
-        let current: JobRow = job;
-        while (Date.now() - start < INVOCATION_BUDGET_MS) {
-          const result = await processLaunchAdStage(current);
-          processed++;
-          if (result.done || result.raced) break;
-          const { data: refreshed } = await db.from("jobs").select("*").eq("id", current.id).maybeSingle();
-          if (!refreshed || refreshed.status !== "running") break;
-          current = refreshed as JobRow;
-        }
+        processed += await runStageLoop(job, processLaunchAdStage, start);
+      } else if (job.type === "generate_ad_image") {
+        processed += await runStageLoop(job, processGenerateAdImageStage, start);
+      } else if (job.type === "generate_video") {
+        processed += await runStageLoop(job, processGenerateVideoStage, start);
       } else {
         await failJob(job, `Unknown job type: ${job.type}`);
       }

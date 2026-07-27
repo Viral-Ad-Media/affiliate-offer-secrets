@@ -6,7 +6,14 @@
 export const GOOGLE_OAUTH_BASE = "https://accounts.google.com/o/oauth2/v2/auth";
 export const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
-export const YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.readonly"];
+// youtube.upload added now that video generation exists — broader/more sensitive than
+// youtube.readonly, existing connections need one re-auth. Flag clearly: this is a more
+// sensitive scope than youtube.readonly and would need Google's stricter OAuth verification
+// before a public rollout beyond your own testing — same caveat shape as gmail.send.
+export const YOUTUBE_SCOPES = [
+  "https://www.googleapis.com/auth/youtube.readonly",
+  "https://www.googleapis.com/auth/youtube.upload",
+];
 // Deliberately not a read scope.
 export const MAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.send"];
 

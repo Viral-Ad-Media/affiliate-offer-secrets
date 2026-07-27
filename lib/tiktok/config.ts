@@ -1,10 +1,12 @@
 export const TIKTOK_OAUTH_BASE = "https://www.tiktok.com/v2/auth/authorize/";
 export const TIKTOK_API_BASE = "https://open.tiktokapis.com/v2";
 
-// Connect-only for now — no video.upload/video.publish requested (this app doesn't generate
-// video yet). TikTok Developer apps typically need testers added manually before scopes work
-// outside review, similar to Meta's Development Mode — sufficient for testing, not a surprise.
-export const TIKTOK_SCOPES = ["user.info.basic"];
+// video.publish added now that video generation exists — existing connections need one re-auth
+// to pick it up (same pattern as Meta's ads_management/instagram_content_publish additions).
+// TikTok apps need approval for unaudited "Direct Post" beyond self-only/sandbox testing with
+// added test users — sufficient to test yourself, same caveat shape as every other platform's
+// review requirement in this project.
+export const TIKTOK_SCOPES = ["user.info.basic", "video.publish"];
 
 export function getTiktokClientKey(): string {
   const key = process.env.TIKTOK_CLIENT_KEY;

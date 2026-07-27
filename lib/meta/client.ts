@@ -146,6 +146,35 @@ export async function createIgMediaContainer(
   });
 }
 
+// Reels variant of createIgMediaContainer — media_type: "REELS" + video_url instead of
+// image_url. Container processing is async on Meta's side (re-encoding); poll status via
+// getIgContainerStatus() before calling publishIgMedia().
+export async function createIgReelContainer(
+  igUserId: string,
+  pageAccessToken: string,
+  videoUrl: string,
+  caption: string
+): Promise<{ id: string }> {
+  return graphPost(`/${igUserId}/media`, {
+    media_type: "REELS",
+    video_url: videoUrl,
+    caption,
+    access_token: pageAccessToken,
+  });
+}
+
+// "EXPIRED" | "ERROR" | "FINISHED" | "IN_PROGRESS" | "PUBLISHED"
+export async function getIgContainerStatus(
+  containerId: string,
+  pageAccessToken: string
+): Promise<string> {
+  const json = await graphGet(`/${containerId}`, {
+    fields: "status_code",
+    access_token: pageAccessToken,
+  });
+  return json.status_code as string;
+}
+
 export async function publishIgMedia(
   igUserId: string,
   pageAccessToken: string,

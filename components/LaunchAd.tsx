@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Loader2, Megaphone } from "lucide-react";
+import { CheckCircle2, Loader2, Megaphone, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type AdAccount = { ad_account_id: string; ad_account_name: string; currency: string; is_active: boolean };
@@ -34,6 +34,45 @@ export default function LaunchAd({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [launch, setLaunch] = useState<LaunchRow>(null);
+  const [adCreative, setAdCreative] = useState<string | null>(null);
+  const [generatingCreative, setGeneratingCreative] = useState(false);
+
+  async function loadAdCreative() {
+    const { data } = await createClient()
+      .from("campaigns")
+      .select("ad_creative_image_data_url")
+      .eq("id", campaignId)
+      .maybeSingle();
+    setAdCreative((data as any)?.ad_creative_image_data_url ?? null);
+  }
+
+  async function generateAdCreative() {
+    setGeneratingCreative(true);
+    setError(null);
+    const res = await fetch(`/api/campaigns/${campaignId}/generate-ad-image`, { method: "POST" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Failed to start generation");
+      setGeneratingCreative(false);
+      return;
+    }
+    // Generation runs async via the job queue — poll for the result.
+    const start = Date.now();
+    const poll = setInterval(async () => {
+      const { data } = await createClient()
+        .from("campaigns")
+        .select("ad_creative_image_data_url")
+        .eq("id", campaignId)
+        .maybeSingle();
+      const url = (data as any)?.ad_creative_image_data_url ?? null;
+      if (url) setAdCreative(url);
+      if (url || Date.now() - start > 90_000) {
+        clearInterval(poll);
+        setGeneratingCreative(false);
+        if (!url) setError("Still generating — check back in a moment");
+      }
+    }, 3000);
+  }
 
   async function loadLaunch() {
     const { data } = await createClient()
@@ -46,7 +85,7 @@ export default function LaunchAd({
 
   useEffect(() => {
     const supabase = createClient();
-    Promise.all([supabase.rpc("get_meta_connection_status"), loadLaunch()]).then(([{ data }]: any[]) => {
+    Promise.all([supabase.rpc("get_meta_connection_status"), loadLaunch(), loadAdCreative()]).then(([{ data }]: any[]) => {
       setAdsGranted(!!data?.ads_management_granted);
       const accounts = (data?.ad_accounts ?? []) as AdAccount[];
       setAdAccount(accounts.find((a) => a.is_active) ?? accounts[0] ?? null);
@@ -204,6 +243,28 @@ export default function LaunchAd({
         onChange={(e) => setHeadline(e.target.value)}
         className="mb-2 w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-emerald-500"
       />
+      <div className="mb-3">
+        <label className="mb-1 block text-xs font-medium text-zinc-400">Ad creative image</label>
+        {adCreative ? (
+          <div className="flex items-center gap-3">
+            <img src={adCreative} alt="Ad creative" className="h-16 w-16 rounded-lg border border-ink-700 object-cover" />
+            <button onClick={generateAdCreative} disabled={generatingCreative} className="btn-ghost !py-1.5 text-xs">
+              {generatingCreative ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              Regenerate
+            </button>
+          </div>
+        ) : (
+          <button onClick={generateAdCreative} disabled={generatingCreative} className="btn-ghost text-xs">
+            {generatingCreative ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            {generatingCreative ? "Generating…" : "Generate ad creative"}
+          </button>
+        )}
+        {!adCreative && !generatingCreative && (
+          <p className="mt-1 text-xs text-zinc-500">
+            Optional — falls back to the product photo from the vendor's sales page if skipped.
+          </p>
+        )}
+      </div>
       <label className="mb-1 block text-xs font-medium text-zinc-400">Primary text</label>
       <textarea
         value={primaryText}

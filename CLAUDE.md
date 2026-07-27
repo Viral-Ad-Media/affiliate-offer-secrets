@@ -429,6 +429,70 @@ Meta-named ones in `0007_meta_secret_helper.sql` — those stay untouched, zero 
   sufficient for testing, same caveat as Meta's Development Mode; `gmail.send` specifically is a
   "restricted" scope that needs Google's security assessment before a public rollout.
 
+## AI image + video generation, real TikTok/YouTube/Reels posting
+
+Ad creative images (Facebook/Instagram ads only — presell/bridge pages and Instagram photo posts
+still use the vendor-extracted `embedded_image_data_url`, untouched) come from **kie.ai**
+(`lib/kieai/client.ts`). Short-form video — generated specifically to unlock real TikTok/YouTube/
+Instagram Reels posting — comes from **Google's Gemini API directly** (Veo 3.1,
+`lib/gemini/client.ts`), no third-party proxy. Both are platform-level API keys
+(`KIE_AI_API_KEY`, `GEMINI_API_KEY`), same trust tier as `ANTHROPIC_API_KEY` — not per-tenant
+OAuth. `GEMINI_API_KEY` is a plain Google AI Studio key, unrelated to the `GOOGLE_CLIENT_ID`/
+`GOOGLE_CLIENT_SECRET` OAuth client used for YouTube/Mail connections.
+
+- **A "poll, not ready yet" job stage has its own DB-level mechanism**
+  (`heartbeat_job_retry()` RPC, `lib/engine/worker.ts`'s `heartbeatRetry()`/`runStageLoop()`) —
+  distinct from a normal stage-advance and from a thrown error. `claim_job()` increments
+  `attempts` on every claim, including a stale-reclaim (`locked_at` older than 90s); without this,
+  a long `generate_video` poll that's still legitimately waiting would get reclaimed roughly every
+  90-150s and hit `MAX_ATTEMPTS` in ~8-12 minutes — squarely inside what's a *normal* Veo wait —
+  terminally failing a video that may have been about to finish. A stage function signals this by
+  returning `{ retry: true }`; `runStageLoop` heartbeats (`locked_at = now()`, `attempts =
+  greatest(attempts - 1, 0)`) and **breaks to the outer claim loop** rather than hammering the
+  same not-ready poll, so one job's wait never starves every other tenant's queued jobs for a
+  whole invocation. Any new long-running/polling job type must use this same `retry` shape, never
+  just silently `return { done: false }` on "not ready yet."
+- **`generate_ad_image`/`generate_video` both have their own `verify` stage 0**
+  (`lib/engine/adimage.ts`/`lib/engine/videogen.ts`), mirroring `launch_ad`'s — `jobs`' RLS only
+  validates the row's `user_id`, not `payload` contents, so a forged `campaign_id` would let an
+  attacker's `finalize` stage silently overwrite a *different* tenant's ad creative or video
+  (paid for with the attacker's own money — a griefing bug, not a billing-theft one). Never add a
+  job type that trusts `payload` without an equivalent stage-0 re-check.
+- **The `campaign-videos` Supabase Storage bucket is private** — the first Storage usage in this
+  codebase (every prior "needs a public URL" case used a Postgres-backed Route Handler instead).
+  `storage.objects` has zero RLS policies (default-deny, same shape as `meta_pages`), so only the
+  service-role admin client (`lib/supabase/storage.ts`) can read/write directly. TikTok's
+  `PULL_FROM_URL` and Instagram's Reels container are the only consumers that need a URL *their*
+  servers fetch — `createSignedVideoUrl()` mints a short-lived (1 hour) signed URL fresh at each
+  posting call, never stored. YouTube's resumable upload streams bytes directly from our server
+  and never touches a URL at all (`downloadCampaignVideo()`).
+- **`generate_video` has two independent cost guardrails** (`app/api/campaigns/[id]/
+  generate-video/route.ts`) — Veo pricing per generation is a materially different order of
+  magnitude than a text/image call, so the "usage-tracking only" reasoning that's fine for
+  Anthropic calls and ad-image generation doesn't transfer: (a) an atomic concurrency claim
+  (`update campaigns set video_status='generating' ... where video_status != 'generating'
+  returning id` — a single UPDATE...WHERE...RETURNING, same idiom as every job stage-advance in
+  this codebase, not a separate check-then-write) rejects a second concurrent request for the
+  same campaign; (b) `MAX_VIDEO_GENERATIONS_PER_DAY` (currently 5) caps per-user daily requests,
+  checked via a count query against `jobs` before the claim.
+- **Google's hourly token refresh must delete the old Vault secret, not just repoint the
+  column** — same `delete_oauth_secret` hygiene already established for Mail/YouTube connections
+  in the prior phase, now also applied to TikTok's refresh path (`app/api/tiktok/post-video/
+  route.ts`) and reused verbatim for YouTube's (`app/api/youtube/upload/route.ts`). Skipping this
+  leaves `vault.secrets` growing unbounded for any actively-posting connection.
+- **Real posting defaults are deliberately conservative for unaudited/unverified apps**:
+  TikTok posts are hardcoded `privacy_level: "SELF_ONLY"` (unaudited apps aren't approved for
+  public "Direct Post"); YouTube uploads default `privacyStatus: "private"`. Both are safe for
+  testing on your own account — change from the platform's own settings (TikTok app review,
+  YouTube Studio) once ready for a real rollout, same caveat shape as every other platform
+  integration in this project.
+- **Ad-creative image generation prefers the AI-generated creative over the vendor photo, never
+  a hard dependency** — `lib/engine/adlaunch.ts`'s `stageCreative` checks
+  `campaigns.ad_creative_image_data_url` first, falls back to the existing vendor-photo path
+  (`fetchImageAsDataUrl` + `uploadAdImage`) exactly as before if generation hasn't run or failed.
+- **Env vars**: `KIE_AI_API_KEY` (kie.ai/api-key), `GEMINI_API_KEY` (aistudio.google.com/apikey —
+  a plain API key, not the `GOOGLE_CLIENT_ID`/`SECRET` OAuth client).
+
 ## Dev
 
 ```bash

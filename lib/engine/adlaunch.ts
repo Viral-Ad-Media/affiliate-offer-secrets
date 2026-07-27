@@ -40,7 +40,7 @@ async function getToken(secretId: string): Promise<string> {
 async function stageVerify(payload: LaunchAdPayload, userId: string): Promise<AdLaunchStageOutput> {
   const { data: campaign } = await db
     .from("campaigns")
-    .select("id, images_json")
+    .select("id, images_json, ad_creative_image_data_url")
     .eq("id", payload.campaign_id)
     .eq("user_id", userId)
     .maybeSingle();
@@ -98,6 +98,7 @@ async function stageVerify(payload: LaunchAdPayload, userId: string): Promise<Ad
     stageData: {
       user_token_secret_id: connection.user_token_secret_id,
       source_image_url: sourceImageUrl,
+      ad_creative_image_data_url: campaign.ad_creative_image_data_url ?? null,
     },
   };
 }
@@ -135,9 +136,14 @@ async function stageCreative(
 ): Promise<AdLaunchStageOutput> {
   const token = await getToken(stageData.user_token_secret_id as string);
   const sourceImageUrl = stageData.source_image_url as string | null;
+  const adCreativeDataUrl = stageData.ad_creative_image_data_url as string | null;
 
   let imageHash: string | null = null;
-  if (sourceImageUrl) {
+  if (adCreativeDataUrl) {
+    // Prefer the AI-generated ad creative when one exists — falls back to the vendor product
+    // photo below, never a hard dependency on generation having run.
+    imageHash = await uploadAdImage(payload.ad_account_id, token, adCreativeDataUrl);
+  } else if (sourceImageUrl) {
     const dataUrl = await fetchImageAsDataUrl(sourceImageUrl);
     if (dataUrl) imageHash = await uploadAdImage(payload.ad_account_id, token, dataUrl);
   }
