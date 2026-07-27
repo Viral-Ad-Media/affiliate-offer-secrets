@@ -81,7 +81,10 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold text-zinc-100">{product.product_title}</h1>
-            <p className="mt-1 text-sm text-zinc-400">
+            <p className="mt-1 flex items-center gap-2 text-sm text-zinc-400">
+              <span className="chip !py-0 !px-1.5 text-[10px] uppercase tracking-wide">
+                {product.network === "digistore24" ? "Digistore24" : "ClickBank"}
+              </span>
               {product.vendor_id} · {product.niche}
             </p>
           </div>

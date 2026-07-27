@@ -12,14 +12,18 @@ type NetworkConfig = {
   helpText: string;
 };
 
-// Digistore24 joins this list once its own connect flow lands (see Phase G's plan doc) — the
-// form below is already network-agnostic, no changes needed here to add it.
 const NETWORKS: NetworkConfig[] = [
   {
     network: "clickbank",
     label: "ClickBank",
     fieldLabel: "Affiliate nickname",
     helpText: "The nickname from your ClickBank account — used to build your unique hoplinks.",
+  },
+  {
+    network: "digistore24",
+    label: "Digistore24",
+    fieldLabel: "Affiliate ID",
+    helpText: "Your Digistore24 Affiliate ID — used to build your unique promolinks.",
   },
 ];
 

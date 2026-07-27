@@ -19,6 +19,9 @@ import {
 import type { Job, Product } from "@/lib/shared";
 import { STATUS_COLORS } from "@/lib/shared";
 import { CLICKBANK_CATEGORIES } from "@/lib/categories";
+import ManualAddProduct from "@/components/ManualAddProduct";
+
+const NETWORK_LABELS: Record<string, string> = { clickbank: "ClickBank", digistore24: "Digistore24" };
 
 const fmtMoney = (v: number | null) => (v == null ? "—" : `$${v.toFixed(2)}`);
 const fmtNum = (v: number | null) => (v == null ? "—" : v.toFixed(1));
@@ -275,6 +278,9 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+        <div className="border-b border-ink-700 px-4 py-2.5">
+          <ManualAddProduct onAdded={load} />
+        </div>
         <div className="overflow-x-auto">
           <table className="data-table w-full text-sm">
             <thead>
@@ -300,6 +306,9 @@ export default function Dashboard() {
                       {p.product_title}
                     </Link>
                     <div className="flex items-center gap-2 text-xs text-zinc-500">
+                      <span className="chip !py-0 !px-1.5 text-[10px] uppercase tracking-wide">
+                        {NETWORK_LABELS[p.network] ?? p.network}
+                      </span>
                       <span>{p.vendor_id}</span>
                       {p.page_verified ? (
                         <span className="text-emerald-500" title="Sales page verified live">
