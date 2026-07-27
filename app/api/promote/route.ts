@@ -23,6 +23,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "product not found" }, { status: 404 });
   }
 
+  const { data: connection } = await supabase
+    .from("network_connections")
+    .select("affiliate_id")
+    .eq("user_id", user.id)
+    .eq("network", product.network)
+    .maybeSingle();
+  if (!connection?.affiliate_id) {
+    return NextResponse.json(
+      { error: `Connect your ${product.network} affiliate ID first` },
+      { status: 400 }
+    );
+  }
+
   const { data: open } = await supabase
     .from("jobs")
     .select("id")

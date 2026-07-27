@@ -1,13 +1,14 @@
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { fetchSalesPage, type ImageCandidate } from "./salespage";
 import { pickProductImage, fetchImageAsDataUrl } from "./images";
-import { renderPresellHtml, renderBridgeHtml, buildHoplink, type PageCopy } from "./renderPages";
+import { renderPresellHtml, renderBridgeHtml, buildHoplink, type PageCopy, type Network } from "./renderPages";
 
 export const BUILD_CAMPAIGN_STAGES = ["context", "image", "ads", "pages", "content", "social"] as const;
 export type BuildStage = (typeof BUILD_CAMPAIGN_STAGES)[number];
 
 export type ProductRow = {
   id: string;
+  network: Network;
   vendor_id: string;
   product_title: string;
   description: string | null;
@@ -41,9 +42,9 @@ function productContext(product: ProductRow, salesText: string | null): string {
     .join("\n");
 }
 
-function buildHoplinks(nickname: string, vendorId: string) {
+function buildHoplinks(network: Network, affiliateId: string, vendorId: string) {
   const tids = ["fb", "tt", "blog", "email", "page"] as const;
-  const link = (tid: string) => buildHoplink(nickname, vendorId, tid);
+  const link = (tid: string) => buildHoplink(network, affiliateId, vendorId, tid);
   const byChannel = Object.fromEntries(tids.map((t) => [t, link(t)])) as Record<
     (typeof tids)[number],
     string
@@ -52,11 +53,11 @@ function buildHoplinks(nickname: string, vendorId: string) {
   return { text, byChannel };
 }
 
-async function stageContext(product: ProductRow, nickname: string): Promise<StageOutput> {
+async function stageContext(product: ProductRow, affiliateId: string): Promise<StageOutput> {
   const page = product.sales_page_url
     ? await fetchSalesPage(product.sales_page_url)
     : { ok: false, text: null, imageCandidates: [] as ImageCandidate[] };
-  const hoplinks = buildHoplinks(nickname, product.vendor_id);
+  const hoplinks = buildHoplinks(product.network, affiliateId, product.vendor_id);
   return {
     stageData: {
       sales_text: page.text,
@@ -204,7 +205,7 @@ async function stageSocial(
 export async function runBuildCampaignStage(
   stageIndex: number,
   product: ProductRow,
-  nickname: string,
+  affiliateId: string,
   priorStageData: Record<string, unknown>,
   usageCtx: { userId: string; jobId: string }
 ): Promise<StageOutput> {
@@ -212,7 +213,7 @@ export async function runBuildCampaignStage(
   const usage: UsageContext = { ...usageCtx, jobType: "build_campaign", stage };
   switch (stage) {
     case "context":
-      return stageContext(product, nickname);
+      return stageContext(product, affiliateId);
     case "image":
       return stageImage(product, priorStageData, usage);
     case "ads":

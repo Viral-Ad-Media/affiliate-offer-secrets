@@ -19,6 +19,7 @@ export const db: AdminClient = new Proxy({} as AdminClient, {
 });
 
 export const PRODUCT_FIELDS = [
+  "network",
   "vendor_id",
   "niche",
   "product_title",

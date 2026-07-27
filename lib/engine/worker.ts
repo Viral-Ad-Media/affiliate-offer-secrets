@@ -69,9 +69,27 @@ async function claimJob(): Promise<JobRow | null> {
   return (data as JobRow) ?? null;
 }
 
-async function getNickname(userId: string): Promise<string> {
-  const { data } = await db.from("profiles").select("nickname").eq("id", userId).maybeSingle();
-  return data?.nickname ?? "YOURNICK";
+const KNOWN_NETWORKS = ["clickbank", "digistore24"] as const;
+
+// Reads the caller's self-service network_connections row (see 0015_network_generalization.sql —
+// not a secret, plain owner-scoped RLS, no Vault). Throws rather than falling back to a
+// placeholder like the old getNickname()'s "YOURNICK" did — that was tolerable when nickname was
+// rare-to-be-unset admin-only data; it isn't once it's self-service and commonly unset at first
+// login, where a silent placeholder would ship broken/misleading hoplinks to real ad traffic. The
+// API routes (app/api/jobs/route.ts, app/api/promote/route.ts) check this same condition before
+// ever inserting the job — this is the worker-side belt-and-suspenders re-check, same trust-
+// boundary split used for every other job type in this codebase.
+async function getAffiliateId(userId: string, network: string): Promise<string> {
+  const { data } = await db
+    .from("network_connections")
+    .select("affiliate_id")
+    .eq("user_id", userId)
+    .eq("network", network)
+    .maybeSingle();
+  if (!data?.affiliate_id) {
+    throw new Error(`No ${network} connection found — connect your ${network} affiliate ID first.`);
+  }
+  return data.affiliate_id;
 }
 
 async function markDone(jobId: string, result: string) {
@@ -116,11 +134,25 @@ async function failJob(job: JobRow, message: string) {
 }
 
 async function processDiscover(job: JobRow) {
-  const nickname = await getNickname(job.user_id);
+  // network isn't a cross-tenant reference (unlike campaign_id/page_id/ad_account_id elsewhere in
+  // this file) — it's an enum selecting behavior for the calling tenant's own job, and jobs' RLS
+  // already guarantees job.user_id is the inserting user's own auth.uid(). What still needs
+  // checking: the value is one this function actually supports, and the tenant is entitled to use
+  // it (has a real network_connections row) — the practical analogue of the ownership-reverify
+  // pattern used for foreign-key-shaped payload fields elsewhere.
+  const network = ((job.payload as any)?.network as string) || "clickbank";
+  if (!KNOWN_NETWORKS.includes(network as any)) {
+    throw new Error(`Unknown network: ${network}`);
+  }
+  if (network !== "clickbank") {
+    throw new Error(`Automated discovery for ${network} isn't available yet.`);
+  }
+  const affiliateId = await getAffiliateId(job.user_id, network);
   const result = await runDiscoverProducts(
     job.user_id,
     job.id,
-    nickname,
+    network as "clickbank",
+    affiliateId,
     job.payload as DiscoverJobPayload
   );
   await markDone(job.id, `${result.saved} products saved`);
@@ -132,7 +164,17 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
   const productId = job.payload?.product_id;
   if (!productId) throw new Error("build_campaign job missing payload.product_id");
 
-  const { data: product } = await db.from("products").select("*").eq("id", productId).maybeSingle();
+  // Bundled fix, pre-existing and unrelated to this change's origin: this SELECT had no user_id
+  // filter, so a forged payload.product_id could let one tenant's build_campaign job read (and
+  // spend that tenant's own Anthropic usage building a full content kit from) another tenant's
+  // private product row — a content-disclosure gap. Scoping to job.user_id closes it the same way
+  // every other job type in this codebase re-verifies ownership of payload-referenced resources.
+  const { data: product } = await db
+    .from("products")
+    .select("*")
+    .eq("id", productId)
+    .eq("user_id", job.user_id)
+    .maybeSingle();
   if (!product) throw new Error(`No product ${productId}`);
 
   if (job.stage === 0) {
@@ -144,11 +186,11 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
       );
   }
 
-  const nickname = await getNickname(job.user_id);
+  const affiliateId = await getAffiliateId(job.user_id, product.network);
   const { stageData, campaignPatch } = await runBuildCampaignStage(
     job.stage,
     product as any,
-    nickname,
+    affiliateId,
     job.stage_data ?? {},
     { userId: job.user_id, jobId: job.id }
   );

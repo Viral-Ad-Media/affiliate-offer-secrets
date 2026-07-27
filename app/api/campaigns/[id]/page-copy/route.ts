@@ -106,20 +106,27 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: product, error: productErr } = await admin
     .from("products")
-    .select("product_title, vendor_id, hoplink")
+    .select("product_title, network, vendor_id, hoplink")
     .eq("id", campaign.product_id)
     .single();
   if (productErr || !product) {
     return NextResponse.json({ error: "product not found" }, { status: 404 });
   }
 
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("nickname")
-    .eq("id", user.id)
-    .single();
+  const { data: connection } = await admin
+    .from("network_connections")
+    .select("affiliate_id")
+    .eq("user_id", user.id)
+    .eq("network", product.network)
+    .maybeSingle();
+  if (!connection?.affiliate_id) {
+    return NextResponse.json(
+      { error: `Connect your ${product.network} affiliate ID first` },
+      { status: 400 }
+    );
+  }
 
-  const hoplink = buildHoplink(profile?.nickname ?? "YOURNICK", product.vendor_id, "page");
+  const hoplink = buildHoplink(product.network, connection.affiliate_id, product.vendor_id, "page");
 
   const presellHtml = renderPresellHtml(product, copy, hoplink, imageDataUrl);
   const bridgeHtml = renderBridgeHtml(product, copy, hoplink, imageDataUrl);

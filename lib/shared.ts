@@ -3,6 +3,7 @@
 export type Product = {
   id: string;
   user_id: string;
+  network: "clickbank" | "digistore24";
   vendor_id: string;
   niche: string;
   product_title: string;
@@ -62,7 +63,13 @@ export type Campaign = {
 export type Job = {
   id: string;
   type: "discover_products" | "build_campaign";
-  payload: { niche?: string; vendor_id?: string; product_id?: string; [k: string]: unknown };
+  payload: {
+    niche?: string;
+    vendor_id?: string;
+    product_id?: string;
+    network?: "clickbank" | "digistore24";
+    [k: string]: unknown;
+  };
   status: "pending" | "running" | "done" | "error";
   result: string | null;
   created_at: string;

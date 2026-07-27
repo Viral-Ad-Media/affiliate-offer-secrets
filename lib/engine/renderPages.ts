@@ -16,13 +16,27 @@ export type PageCopy = {
 
 export type ProductLike = { product_title: string };
 
+export type Network = "clickbank" | "digistore24";
+
 export const DISCLOSURE =
   "This page contains affiliate links. If you purchase through them, I may earn a commission at no extra cost to you.";
 
 // Shared with lib/engine/build.ts's buildHoplinks() and the page-copy editor route, so both
 // always derive the identical "tid=page" link a presell/bridge page's CTA points at.
-export function buildHoplink(nickname: string, vendorId: string, tid: string): string {
-  return `https://hop.clickbank.net/?affiliate=${nickname}&vendor=${vendorId}&tid=${tid}`;
+//
+// Every dynamic segment is URL-encoded — affiliateId in particular is now self-service, free-text
+// user input (see network_connections in 0015_network_generalization.sql), not admin-set data, so
+// this can no longer assume it's already URL-safe. Callers must still route the returned hoplink
+// through escapeHtml() before interpolating it into an href attribute — encodeURIComponent() alone
+// doesn't escape HTML-significant characters like `"` the way an attribute context needs.
+export function buildHoplink(network: Network, affiliateId: string, vendorId: string, tid: string): string {
+  const aff = encodeURIComponent(affiliateId);
+  const vid = encodeURIComponent(vendorId);
+  const channel = encodeURIComponent(tid);
+  if (network === "digistore24") {
+    return `https://www.checkout-ds24.com/redir/${vid}/${aff}/${channel}`;
+  }
+  return `https://hop.clickbank.net/?affiliate=${aff}&vendor=${vid}&tid=${channel}`;
 }
 
 // Deterministic markdown rebuild of the "Landing copy" tab from structured fields — used when
@@ -101,10 +115,10 @@ export function renderPresellHtml(
     <h2>What you get</h2>
     <ul>${benefits}</ul>
     <p>${escapeHtml(copy.proof)}</p>
-    <a class="cta" href="${hoplink}">${escapeHtml(copy.cta)}</a>
+    <a class="cta" href="${escapeHtml(hoplink)}">${escapeHtml(copy.cta)}</a>
     <h2>Questions</h2>
     ${faq}
-    <a class="cta" href="${hoplink}">${escapeHtml(copy.cta)}</a>
+    <a class="cta" href="${escapeHtml(hoplink)}">${escapeHtml(copy.cta)}</a>
     <p class="disclosure">${DISCLOSURE}</p>
   </div>
 </body>
@@ -155,7 +169,7 @@ export function renderBridgeHtml(
     <div id="step2" class="hidden">
       <h1>${escapeHtml(copy.headline)}</h1>
       <p class="lead">${escapeHtml(copy.mechanism)}</p>
-      <a class="cta" href="${hoplink}">${escapeHtml(copy.cta)}</a>
+      <a class="cta" href="${escapeHtml(hoplink)}">${escapeHtml(copy.cta)}</a>
     </div>
     <p class="disclosure">${DISCLOSURE}</p>
   </div>

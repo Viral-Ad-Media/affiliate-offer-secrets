@@ -108,10 +108,14 @@ must never be lost. Read-only Supabase queries (via the `mcp__supabase__execute_
    over promise angles; no personal-attribute callouts; flag products whose own sales pages make
    claims that will get ads rejected (note it in `angle_notes`).
 3. Presell pages and blog articles always include an affiliate disclosure.
-4. Hoplinks: `https://hop.clickbank.net/?affiliate=NICKNAME&vendor=VENDORID&tid=<channel>` with
-   per-channel tids (fb, tt, blog, email, page). Nickname comes from `settings` (key `nickname`)
-   or Drive `clickbank-engine/config.json` — placeholder `YOURNICK` only if truly unknown, and
-   clearly marked.
+4. Hoplinks are built by `buildHoplink(network, affiliateId, vendorId, tid)`
+   (`lib/engine/renderPages.ts`) with per-channel tids (fb, tt, blog, email, page) — ClickBank's
+   format is `https://hop.clickbank.net/?affiliate=ID&vendor=VENDORID&tid=<channel>`, Digistore24's
+   is `https://www.checkout-ds24.com/redir/VENDORID/ID/<channel>`. The affiliate ID comes from the
+   caller's own self-service `network_connections` row (see "Multi-network affiliate connections"
+   below) — there is no silent `"YOURNICK"`-style placeholder anymore; a missing connection is a
+   clear 400 at the API route (or a thrown error in the worker as a defensive re-check), never a
+   broken hoplink shipped to real ad traffic.
 5. Marketplace data changes daily — on discovery, always pull fresh numbers (`lib/engine/clickbank.ts`
    hits `https://accounts.clickbank.com/graphql` live on every run). Never reuse stale rows as
    "current stats". Discovery jobs are queued from the dashboard's category/subcategory dropdown
@@ -500,6 +504,73 @@ OAuth. `GEMINI_API_KEY` is a plain Google AI Studio key, unrelated to the `GOOGL
 - **Env vars**: `KIE_AI_API_KEY` (kie.ai/api-key), `GEMINI_API_KEY` (aistudio.google.com/apikey —
   a plain API key, not the `GOOGLE_CLIENT_ID`/`SECRET` OAuth client).
 
+## Multi-network affiliate connections (ClickBank + Digistore24)
+
+Every product row now records which affiliate network it came from (`products.network`, `text`
+check-constrained to `'clickbank' | 'digistore24'`, defaulting existing rows to `'clickbank'`),
+and hoplink generation is fully generalized — `buildHoplink(network, affiliateId, vendorId, tid)`
+(`lib/engine/renderPages.ts`) branches on `network` to produce the right URL shape for each
+platform. This closed a real, pre-existing gap: before this, `profiles.nickname` (the ClickBank
+affiliate ID baked into every hoplink) could **only ever be set via direct admin SQL** — there was
+no UI or RPC for a client to set their own. Digistore24 is the second network landing on the same
+foundation.
+
+- **`network_connections` is deliberately NOT the Vault-secret pattern every other connector in
+  this app uses.** `meta_connections`/`tiktok_connections`/`youtube_connections`/`mail_connections`
+  store real OAuth bearer tokens in Vault behind default-deny RLS because the token itself is
+  dangerous if leaked. An affiliate nickname/ID is different — it's public information embedded in
+  the hoplink URL every ad visitor sees, not a secret — so this table uses plain owner-scoped RLS
+  (`for all using/with check (auth.uid() = user_id)`) with **no RPC indirection**:
+  `components/NetworkConnectionsPanel.tsx` writes directly via `supabase.from("network_connections")
+  .upsert(...)` from the client. Never add a genuinely sensitive column to this table without
+  revisiting that decision — if that ever happens, it needs the Vault pattern instead.
+- **`affiliate_id` is charset-constrained at the DB layer (`^[A-Za-z0-9_.-]+$`, 1–64 chars) as
+  the load-bearing half of a three-layer XSS defense**, not just input hygiene. `buildHoplink()`'s
+  output is interpolated into `href="..."` in `renderPresellHtml`/`renderBridgeHtml`
+  (`lib/engine/renderPages.ts`) — pages served completely raw to real, unauthenticated ad traffic.
+  Before this phase, `nickname` could only ever be trusted admin-set data; the moment it became
+  self-service free-text, an unescaped/unencoded value here would be a real stored-XSS vector (the
+  exact class of bug `lib/images/validate.ts`'s allowlist regex already exists to prevent for
+  `image_data_url`). Fixed at three independent layers: the DB check constraint, `encodeURIComponent()`
+  on every dynamic segment inside `buildHoplink()`, and `escapeHtml()` wrapping the hoplink at its
+  three HTML interpolation points (defense-in-depth — any one layer alone would already stop this,
+  all three are kept because that's this codebase's established pattern for this exact bug class).
+- **A forged `network` value in a job payload does not need the same stage-0 ownership-reverify
+  pattern used elsewhere** (`launch_ad`/`generate_ad_image`/`generate_video`'s `stageVerify`) —
+  that pattern exists because `jobs`' RLS only validates the row's `user_id`, not payload contents
+  shaped like a *reference to another tenant's row* (`campaign_id`, `page_id`). `network` isn't a
+  cross-tenant reference; it's an enum selecting behavior for the calling tenant's own job. What it
+  *does* need, and gets in `lib/engine/worker.ts`'s `processDiscover`/`processBuildCampaignStage`:
+  validate the value against the known set (fail clearly on garbage, never silently fall through to
+  ClickBank behavior), and check `network_connections` has a row for `(job.user_id, network)` before
+  doing real work — `getAffiliateId()` throws a clear error otherwise. This replaced the old
+  `getNickname()`'s silent `"YOURNICK"` fallback, which was tolerable when nickname was rare-to-be-
+  unset admin data and isn't once it's self-service and commonly unset at first login. Two layers,
+  same trust-boundary split as every other job type here: the API route
+  (`app/api/jobs/route.ts`/`app/api/promote/route.ts`) checks first for a fast, clear 400; the
+  worker re-checks as belt-and-suspenders against a direct-insert bypass.
+- **A real, pre-existing, unrelated IDOR-shaped gap got bundled into this same change**:
+  `processBuildCampaignStage`'s product `SELECT` had no `user_id` filter, so a forged
+  `payload.product_id` could let one tenant's `build_campaign` job read (and spend that tenant's
+  own Anthropic usage generating a full content kit from) another tenant's private product row — a
+  content-disclosure bug, not a write-side one. Fixed by scoping the SELECT to
+  `.eq("user_id", job.user_id)`, same as every other job type's payload-reference re-check. Caught
+  and confirmed live: the still-deployed pre-fix Vercel instance raced a local test job via its own
+  `pg_cron` backstop and genuinely built a cross-tenant campaign before this fix reached
+  production — see the note on that race below.
+- **Automated marketplace discovery exists only for ClickBank today.** `lib/engine/discover.ts`'s
+  `runDiscoverProducts` is still ClickBank-specific (`searchMarketplace` from `lib/engine/
+  clickbank.ts`); a `digistore24` value is accepted by the network-validation layer but explicitly
+  rejected with a clear "not available yet" error rather than silently no-op'ing. Digistore24's own
+  marketplace-search API shape is unconfirmed — `api.digistore24.com`'s documented endpoints
+  (`GET /products/{id}`, `GET /orders`, ...) look vendor-side (managing your own listings), not an
+  affiliate-side bulk browse/search endpoint, and `dev.digistore24.com`'s full reference blocks
+  automated fetches (same class of bot-protection ClickBank's WAF had). This needs a live
+  verification spike — try a realistic-browser-UA fetch first, the same approach that turned out to
+  work for ClickBank — before writing any discovery code against it, not an assumption. Connect
+  (Affiliate ID) + manual product entry + full content-kit generation for Digistore24 is real,
+  buildable work independent of that spike and not blocked on it.
+
 ## Dev
 
 ```bash
@@ -519,5 +590,19 @@ deployed Vercel URL, not `localhost`. Locally, drive the same code path directly
 ```bash
 curl -X POST http://localhost:3400/api/engine/run -H "x-engine-secret: $ENGINE_WEBHOOK_SECRET"
 ```
+
+**A deployed Vercel instance races local testing for shared-queue jobs.** The production
+deployment's own `pg_cron` backstop calls its `/api/engine/run` every minute regardless of what's
+running locally, since both point at the same Supabase `jobs` table and `claim_job()` is a single
+shared atomic claim — whichever caller (local `curl`, or the deployed cron tick) claims a row first
+wins, using *its own* deployed code. Confirmed concretely during this phase: a local IDOR-fix test
+job got claimed and completed by the still-undeployed-fix production instance before the local
+server got to it, producing exactly the vulnerable behavior the fix was meant to prevent — not a
+bug in the fix (verified separately, in isolation, against the exact query), just proof the fix
+hadn't shipped to production yet. **Implication: local-only code changes to `lib/engine/*` are not
+safely testable via the shared `jobs` queue until deployed** — either test the changed function
+directly in isolation (bypass `claim_job()`/the HTTP route, call the exported stage function with
+real Supabase data, the same technique used to verify the AI-generation pipeline in the prior
+phase), or deploy first and accept that the deployed instance may win the race either way.
 
 Call repeatedly to step a `build_campaign` job through its stages one at a time.

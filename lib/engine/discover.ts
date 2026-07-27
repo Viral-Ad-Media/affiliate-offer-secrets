@@ -2,16 +2,24 @@ import { searchMarketplace, type DiscoverPayload } from "./clickbank";
 import { fetchSalesPage } from "./salespage";
 import { completeJSON, COMPLIANCE_SYSTEM } from "./anthropic";
 import { upsertProduct, db } from "./core";
+import { buildHoplink, type Network } from "./renderPages";
 
 export type DiscoverJobPayload = DiscoverPayload & { niche: string };
 
 // Single-stage: fetch the marketplace, save bare rows immediately (visible in the dashboard
 // within seconds — the biggest "feels real-time" win), then verify+score the batch in parallel/
 // one LLM call rather than per-product agentic browsing.
+//
+// Only 'clickbank' has a real marketplace-search implementation today — searchMarketplace() is
+// ClickBank-specific (lib/engine/clickbank.ts). A digistore24 dispatch branch lands here once its
+// own marketplace-discovery API shape is confirmed live (see Phase G's discovery-spike follow-on
+// in the plan doc); the caller (lib/engine/worker.ts) already validates the requested network is
+// one this function actually supports before invoking it.
 export async function runDiscoverProducts(
   userId: string,
   jobId: string,
-  nickname: string,
+  network: Network,
+  affiliateId: string,
   payload: DiscoverJobPayload
 ): Promise<{ saved: number }> {
   const hits = await searchMarketplace(payload);
@@ -19,8 +27,9 @@ export async function runDiscoverProducts(
   for (const hit of hits) {
     const vendorId = hit.site;
     if (!vendorId || !hit.title) continue;
-    const hoplink = `https://hop.clickbank.net/?affiliate=${nickname}&vendor=${vendorId}&tid=page`;
+    const hoplink = buildHoplink(network, affiliateId, vendorId, "page");
     await upsertProduct(userId, {
+      network,
       vendor_id: vendorId,
       niche: payload.niche,
       product_title: hit.title,

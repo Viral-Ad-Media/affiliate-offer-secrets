@@ -5,6 +5,7 @@ import ConnectionsPanel from "@/components/ConnectionsPanel";
 import TikTokPanel from "@/components/TikTokPanel";
 import YouTubePanel from "@/components/YouTubePanel";
 import MailPanel from "@/components/MailPanel";
+import NetworkConnectionsPanel from "@/components/NetworkConnectionsPanel";
 
 const PROVIDER_LABELS: Record<string, string> = {
   meta: "Facebook",
@@ -24,12 +25,17 @@ export default async function ConnectionsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [metaStatus, tiktokStatus, youtubeStatus, mailStatus] = await Promise.all([
+  const [metaStatus, tiktokStatus, youtubeStatus, mailStatus, networkRows] = await Promise.all([
     supabase.rpc("get_meta_connection_status").then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_tiktok_connection_status").then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_youtube_connection_status").then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_mail_connection_status").then((r) => r.data ?? { connected: false }),
+    supabase
+      .from("network_connections")
+      .select("network, affiliate_id")
+      .then((r) => r.data ?? []),
   ]);
+  const networkConnections = Object.fromEntries(networkRows.map((r) => [r.network, r.affiliate_id]));
 
   const banners = (["meta", "tiktok", "youtube", "mail"] as const)
     .map((key) => ({ key, value: searchParams[key] }))
@@ -69,6 +75,13 @@ export default async function ConnectionsPage({
           </div>
         ) : null
       )}
+
+      <div>
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Affiliate networks
+        </h2>
+        <NetworkConnectionsPanel userId={user.id} initialConnections={networkConnections} />
+      </div>
 
       <ConnectionsPanel status={metaStatus} />
 

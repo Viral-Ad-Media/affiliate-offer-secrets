@@ -35,12 +35,29 @@ export async function POST(req: Request) {
 
   const count = Number(body.count) || 10;
   const mode = body.mode === "keyword" ? "keyword" : "category";
+  // Automated discovery only exists for ClickBank today (see lib/engine/discover.ts) — the
+  // dashboard's discovery form doesn't offer a network picker yet, so this defensively defaults
+  // rather than trusting client input for a value the UI doesn't actually let a user set.
+  const network = "clickbank";
+
+  const { data: connection } = await supabase
+    .from("network_connections")
+    .select("affiliate_id")
+    .eq("user_id", user.id)
+    .eq("network", network)
+    .maybeSingle();
+  if (!connection?.affiliate_id) {
+    return NextResponse.json(
+      { error: `Connect your ${network} affiliate ID first` },
+      { status: 400 }
+    );
+  }
 
   let payload: Record<string, unknown>;
   if (mode === "keyword") {
     const keyword = (body.keyword ?? "").trim();
     if (!keyword) return NextResponse.json({ error: "keyword required" }, { status: 400 });
-    payload = { mode: "keyword", keyword, niche: keyword, count };
+    payload = { mode: "keyword", keyword, niche: keyword, count, network };
   } else {
     const category = CLICKBANK_CATEGORIES.find((c) => c.name === body.category);
     if (!category) return NextResponse.json({ error: "unknown category" }, { status: 400 });
@@ -49,7 +66,7 @@ export async function POST(req: Request) {
         ? body.subCategory
         : undefined;
     const niche = subCategory ? `${category.name} > ${subCategory}` : category.name;
-    payload = { mode: "category", category: category.name, subCategory, niche, count };
+    payload = { mode: "category", category: category.name, subCategory, niche, count, network };
   }
 
   // jsonb equality via PostgREST wants the JSON-encoded string as the filter value.
