@@ -6,13 +6,13 @@ import { marked } from "marked";
 import { ArrowLeft, Copy, CheckCircle2, ExternalLink, Download, Pencil, Eye } from "lucide-react";
 import type { Campaign, Product } from "@/lib/shared";
 import { STATUS_COLORS } from "@/lib/shared";
-import PostToFacebook from "@/components/PostToFacebook";
-import PostToInstagram from "@/components/PostToInstagram";
 import SendEmail from "@/components/SendEmail";
 import GenerateVideo from "@/components/GenerateVideo";
 import LaunchAd from "@/components/LaunchAd";
 import PageEditor from "@/components/PageEditor";
 import PublishBridge from "@/components/PublishBridge";
+import AdAnglesPanel from "@/components/AdAnglesPanel";
+import SocialPostsPanel from "@/components/SocialPostsPanel";
 
 const TABS = [
   { key: "fb_ads_md", label: "FB/IG Ads" },
@@ -48,6 +48,16 @@ export default function ProductPage({ params }: { params: { id: string } }) {
   if (!product) return <p className="text-sm text-zinc-500">Loading…</p>;
 
   const content = campaign ? ((campaign as any)[tab] as string | null) : null;
+
+  // fb_ads_md/social_md are legacy flat strings; fb_ad_angles/social_posts are the new structured
+  // arrays. Either counts as "has content" for the tab dot-indicator and the "not generated yet"
+  // gate — everything else is still a single flat column.
+  function hasTabContent(key: (typeof TABS)[number]["key"]): boolean {
+    if (!campaign) return false;
+    if (key === "fb_ads_md") return !!campaign.fb_ad_angles || !!campaign.fb_ads_md;
+    if (key === "social_md") return !!campaign.social_posts || !!campaign.social_md;
+    return !!(campaign as any)[key];
+  }
 
   function copyHoplink() {
     if (!product?.hoplink) return;
@@ -194,12 +204,38 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   }`}
                 >
                   {t.label}
-                  {(campaign as any)[t.key] ? "" : " ·"}
+                  {hasTabContent(t.key) ? "" : " ·"}
                 </button>
               ))}
             </div>
             <div className="p-4">
-              {!content ? (
+              {tab === "fb_ads_md" ? (
+                <>
+                  <AdAnglesPanel
+                    campaignId={campaign.id}
+                    angles={campaign.fb_ad_angles}
+                    legacyMarkdown={campaign.fb_ads_md}
+                  />
+                  {campaign?.bridge_html && (
+                    <div className="mt-4">
+                      <LaunchAd
+                        campaignId={campaign!.id}
+                        defaultHeadline={product.product_title}
+                        defaultPrimaryText=""
+                        bridgePublished={campaign.bridge_published}
+                      />
+                    </div>
+                  )}
+                </>
+              ) : tab === "social_md" ? (
+                <SocialPostsPanel
+                  campaignId={campaign.id}
+                  posts={campaign.social_posts}
+                  legacyMarkdown={campaign.social_md}
+                  sourceImageUrl={campaign.images_json?.source_images?.[0] ?? null}
+                  hasEmbeddedImage={!!campaign.embedded_image_data_url}
+                />
+              ) : !content ? (
                 <p className="py-6 text-center text-sm text-zinc-500">Not generated yet.</p>
               ) : tab === "bridge_html" && editMode ? (
                 <>
@@ -242,20 +278,6 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                     className="prose-dark"
                     dangerouslySetInnerHTML={{ __html: marked.parse(content) as string }}
                   />
-                  {tab === "social_md" && (
-                    <div className="mt-4 space-y-3">
-                      <PostToFacebook
-                        campaignId={campaign!.id}
-                        defaultMessage={content}
-                        imageUrl={campaign?.images_json?.source_images?.[0] ?? null}
-                      />
-                      <PostToInstagram
-                        campaignId={campaign!.id}
-                        defaultCaption={content}
-                        hasImage={!!campaign?.embedded_image_data_url}
-                      />
-                    </div>
-                  )}
                   {tab === "email_md" && (
                     <div className="mt-4">
                       <SendEmail campaignId={campaign!.id} defaultBody={content} />
@@ -267,16 +289,6 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                         campaignId={campaign!.id}
                         productTitle={product.product_title}
                         defaultCaption={product.product_title}
-                      />
-                    </div>
-                  )}
-                  {tab === "fb_ads_md" && campaign?.bridge_html && (
-                    <div className="mt-4">
-                      <LaunchAd
-                        campaignId={campaign!.id}
-                        defaultHeadline={product.product_title}
-                        defaultPrimaryText=""
-                        bridgePublished={campaign.bridge_published}
                       />
                     </div>
                   )}

@@ -4,6 +4,16 @@ import { runDiscoverProducts, type DiscoverJobPayload } from "./discover";
 import { runLaunchAdStage, LAUNCH_AD_STAGES, type LaunchAdPayload } from "./adlaunch";
 import { runGenerateAdImageStage, GENERATE_AD_IMAGE_STAGES, type GenerateAdImagePayload } from "./adimage";
 import { runGenerateVideoStage, GENERATE_VIDEO_STAGES, type GenerateVideoPayload } from "./videogen";
+import {
+  runGenerateCreativeImageStage,
+  GENERATE_CREATIVE_IMAGE_STAGES,
+  type GenerateCreativeImagePayload,
+} from "./creativeimage";
+import {
+  runGenerateCreativeVideoStage,
+  GENERATE_CREATIVE_VIDEO_STAGES,
+  type GenerateCreativeVideoPayload,
+} from "./creativevideo";
 
 const INVOCATION_BUDGET_MS = 50_000; // stay safely under maxDuration=60 on any Vercel plan
 const MAX_ATTEMPTS = 5;
@@ -11,7 +21,14 @@ const MAX_ATTEMPTS = 5;
 type JobRow = {
   id: string;
   user_id: string;
-  type: "discover_products" | "build_campaign" | "launch_ad" | "generate_ad_image" | "generate_video";
+  type:
+    | "discover_products"
+    | "build_campaign"
+    | "launch_ad"
+    | "generate_ad_image"
+    | "generate_video"
+    | "generate_creative_image"
+    | "generate_creative_video";
   payload: any;
   status: string;
   stage: number;
@@ -123,6 +140,18 @@ async function failJob(job: JobRow, message: string) {
         .from("campaigns")
         .update({ video_status: "failed", video_error: message, updated_at: new Date().toISOString() })
         .eq("id", job.payload.campaign_id);
+    }
+    // Unlike generate_ad_image (which has no analogous failure signal — a known, documented gap
+    // left as-is on that legacy job type), the per-item creative jobs always write a real status
+    // so the UI can show "failed" instead of silently staying "generating" forever.
+    if (
+      (job.type === "generate_creative_image" || job.type === "generate_creative_video") &&
+      job.payload?.campaign_creative_id
+    ) {
+      await db
+        .from("campaign_creatives")
+        .update({ status: "failed", error: message, updated_at: new Date().toISOString() })
+        .eq("id", job.payload.campaign_creative_id);
     }
   } else {
     // Leave pending (not running) so the natural claim_job() path retries it.
@@ -379,6 +408,97 @@ async function processGenerateVideoStage(job: JobRow): Promise<StageResult> {
   return { done: false };
 }
 
+// Per-item generalization of processGenerateAdImageStage — same shape, but every write targets
+// campaign_creatives by id (payload.campaign_creative_id), not campaigns by campaign_id, since
+// multiple rows now share one campaign.
+async function processGenerateCreativeImageStage(job: JobRow): Promise<StageResult> {
+  const payload = job.payload as GenerateCreativeImagePayload;
+  if (!payload?.campaign_creative_id) {
+    throw new Error("generate_creative_image job missing payload.campaign_creative_id");
+  }
+
+  const { stageData, creativePatch, retry } = await runGenerateCreativeImageStage(
+    job.stage,
+    payload,
+    job.user_id,
+    job.stage_data ?? {},
+    { userId: job.user_id, jobId: job.id }
+  );
+
+  if (retry) return { done: false, retry: true };
+
+  if (creativePatch && Object.keys(creativePatch).length > 0) {
+    await db
+      .from("campaign_creatives")
+      .update({ ...creativePatch, updated_at: new Date().toISOString() })
+      .eq("id", payload.campaign_creative_id);
+  }
+
+  const nextStage = job.stage + 1;
+  const { data: advanced } = await db
+    .from("jobs")
+    .update({ stage: nextStage, stage_data: stageData, updated_at: new Date().toISOString() })
+    .eq("id", job.id)
+    .eq("stage", job.stage)
+    .select("id")
+    .maybeSingle();
+
+  if (!advanced) return { done: false, raced: true };
+
+  if (nextStage >= GENERATE_CREATIVE_IMAGE_STAGES.length) {
+    await markDone(job.id, "creative image ready");
+    return { done: true };
+  }
+
+  return { done: false };
+}
+
+// Per-item generalization of processGenerateVideoStage — same shape, targets campaign_creatives
+// by id. The atomic per-row 'generating' claim happens up front in
+// app/api/campaign-creatives/generate/route.ts (claim_campaign_creative RPC), same idiom as
+// generate-video/route.ts's campaign-level UPDATE...WHERE...RETURNING claim.
+async function processGenerateCreativeVideoStage(job: JobRow): Promise<StageResult> {
+  const payload = job.payload as GenerateCreativeVideoPayload;
+  if (!payload?.campaign_creative_id) {
+    throw new Error("generate_creative_video job missing payload.campaign_creative_id");
+  }
+
+  const { stageData, creativePatch, retry } = await runGenerateCreativeVideoStage(
+    job.stage,
+    payload,
+    job.user_id,
+    job.stage_data ?? {},
+    { userId: job.user_id, jobId: job.id }
+  );
+
+  if (retry) return { done: false, retry: true };
+
+  if (creativePatch && Object.keys(creativePatch).length > 0) {
+    await db
+      .from("campaign_creatives")
+      .update({ ...creativePatch, updated_at: new Date().toISOString() })
+      .eq("id", payload.campaign_creative_id);
+  }
+
+  const nextStage = job.stage + 1;
+  const { data: advanced } = await db
+    .from("jobs")
+    .update({ stage: nextStage, stage_data: stageData, updated_at: new Date().toISOString() })
+    .eq("id", job.id)
+    .eq("stage", job.stage)
+    .select("id")
+    .maybeSingle();
+
+  if (!advanced) return { done: false, raced: true };
+
+  if (nextStage >= GENERATE_CREATIVE_VIDEO_STAGES.length) {
+    await markDone(job.id, "creative video ready");
+    return { done: true };
+  }
+
+  return { done: false };
+}
+
 export async function runWorkerLoop(): Promise<{ processed: number }> {
   const start = Date.now();
   let processed = 0;
@@ -399,6 +519,10 @@ export async function runWorkerLoop(): Promise<{ processed: number }> {
         processed += await runStageLoop(job, processGenerateAdImageStage, start);
       } else if (job.type === "generate_video") {
         processed += await runStageLoop(job, processGenerateVideoStage, start);
+      } else if (job.type === "generate_creative_image") {
+        processed += await runStageLoop(job, processGenerateCreativeImageStage, start);
+      } else if (job.type === "generate_creative_video") {
+        processed += await runStageLoop(job, processGenerateCreativeVideoStage, start);
       } else {
         await failJob(job, `Unknown job type: ${job.type}`);
       }

@@ -7,7 +7,11 @@ export const dynamic = "force-dynamic";
 // Design-review fix #4: video generation costs a materially different order of magnitude than a
 // text/image call, and nothing else stops a client from re-queuing generate_video against the
 // same campaign repeatedly — two independent, cheap guardrails instead of full credit-gating.
-const MAX_VIDEO_GENERATIONS_PER_DAY = 5;
+// Pooled with generate_creative_video (app/api/campaign-creatives/generate/route.ts) under one
+// shared per-user daily count — a client can't dodge the cap by using the per-item route instead
+// of this one. Currently a nominal runaway-loop backstop, not a real budget control (the user is
+// testing solo) — revisit before opening this beyond solo testing.
+const MAX_VIDEO_GENERATIONS_PER_DAY = 100;
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -27,7 +31,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     .from("jobs")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)
-    .eq("type", "generate_video")
+    .in("type", ["generate_video", "generate_creative_video"])
     .gte("created_at", since);
   if ((count ?? 0) >= MAX_VIDEO_GENERATIONS_PER_DAY) {
     return NextResponse.json(

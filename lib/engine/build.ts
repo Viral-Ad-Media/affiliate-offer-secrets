@@ -2,6 +2,7 @@ import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic"
 import { fetchSalesPage, type ImageCandidate } from "./salespage";
 import { pickProductImage, fetchImageAsDataUrl } from "./images";
 import { renderBridgeHtml, buildHoplink, type PageCopy, type Network } from "./renderPages";
+import type { FbAdAngle, SocialPost } from "@/lib/shared";
 
 export const BUILD_CAMPAIGN_STAGES = ["context", "image", "ads", "pages", "content", "social"] as const;
 export type BuildStage = (typeof BUILD_CAMPAIGN_STAGES)[number];
@@ -90,20 +91,40 @@ async function stageAds(
   usage: UsageContext
 ): Promise<StageOutput> {
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
-  const result = await completeJSON<{ fb_ads_md: string; tiktok_md: string }>({
+  const result = await completeJSON<{ fb_ad_angles: FbAdAngle[]; tiktok_md: string }>({
     system: COMPLIANCE_SYSTEM,
-    prompt: `${ctx}\n\nWrite:\n1. fb_ads_md — 3 distinct Meta-compliant ad angles for this product, each with clearly labeled Primary Text, Headline, Description, and CTA.\n2. tiktok_md — 3 short one-line hooks plus 3 full 30-45s UGC-style video scripts (spoken lines + shot notes) for the same product.\n\nReturn both as Markdown strings.`,
+    prompt: `${ctx}\n\nWrite:\n1. fb_ad_angles — exactly 3 distinct Meta-compliant ad angles for this product, each as a structured object with a headline, primary_text, description, and cta.\n2. tiktok_md — 3 short one-line hooks plus 3 full 30-45s UGC-style video scripts (spoken lines + shot notes) for the same product, as a Markdown string.`,
     schema: {
       type: "object",
       properties: {
-        fb_ads_md: { type: "string" },
+        fb_ad_angles: {
+          type: "array",
+          minItems: 3,
+          maxItems: 3,
+          items: {
+            type: "object",
+            properties: {
+              headline: { type: "string" },
+              primary_text: { type: "string" },
+              description: { type: "string" },
+              cta: { type: "string" },
+            },
+            required: ["headline", "primary_text", "description", "cta"],
+          },
+        },
         tiktok_md: { type: "string" },
       },
-      required: ["fb_ads_md", "tiktok_md"],
+      required: ["fb_ad_angles", "tiktok_md"],
     },
     maxTokens: 3000,
     usage,
   });
+  // Defensive validation — the JSON Schema's minItems/maxItems is the primary enforcement, but a
+  // wire hiccup shouldn't be able to write a malformed array; fail the stage (existing
+  // retry/attempts-cap machinery handles it) rather than persist bad data.
+  if (!Array.isArray(result.fb_ad_angles) || result.fb_ad_angles.length !== 3) {
+    throw new Error("Model did not return exactly 3 ad angles");
+  }
   return { stageData: prior, campaignPatch: result };
 }
 
@@ -182,20 +203,32 @@ async function stageSocial(
   usage: UsageContext
 ): Promise<StageOutput> {
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
-  const result = await completeJSON<{ social_md: string; email_md: string }>({
+  const result = await completeJSON<{ social_posts: SocialPost[]; email_md: string }>({
     system: COMPLIANCE_SYSTEM,
-    prompt: `${ctx}\n\nWrite:\n1. social_md — 5 short organic social captions for this product/niche.\n2. email_md — a 3-email swipe sequence (subject + body each) for the "tid=email" channel.\n\nReturn both as Markdown strings.`,
+    prompt: `${ctx}\n\nWrite:\n1. social_posts — exactly 5 short organic social captions for this product/niche, each as a structured object with a caption field.\n2. email_md — a 3-email swipe sequence (subject + body each) for the "tid=email" channel, as a Markdown string.`,
     schema: {
       type: "object",
       properties: {
-        social_md: { type: "string" },
+        social_posts: {
+          type: "array",
+          minItems: 5,
+          maxItems: 5,
+          items: {
+            type: "object",
+            properties: { caption: { type: "string" } },
+            required: ["caption"],
+          },
+        },
         email_md: { type: "string" },
       },
-      required: ["social_md", "email_md"],
+      required: ["social_posts", "email_md"],
     },
     maxTokens: 3000,
     usage,
   });
+  if (!Array.isArray(result.social_posts) || result.social_posts.length !== 5) {
+    throw new Error("Model did not return exactly 5 social posts");
+  }
   return { stageData: prior, campaignPatch: result };
 }
 

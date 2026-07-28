@@ -586,6 +586,83 @@ OAuth. `GEMINI_API_KEY` is a plain Google AI Studio key, unrelated to the `GOOGL
 - **Env vars**: `KIE_AI_API_KEY` (kie.ai/api-key), `GEMINI_API_KEY` (aistudio.google.com/apikey —
   a plain API key, not the `GOOGLE_CLIENT_ID`/`SECRET` OAuth client).
 
+## Per-item ad angle & social post creatives
+
+`fb_ads_md`/`social_md` used to be one flat markdown string each (3 ad angles / 5 social captions
+as prose inside a single string, no per-item addressability). `lib/engine/build.ts`'s `stageAds`/
+`stageSocial` now request structured arrays instead — `campaigns.fb_ad_angles jsonb` (exactly 3
+`{headline, primary_text, description, cta}` objects) and `campaigns.social_posts jsonb` (exactly
+5 `{caption}` objects) — so each angle/post can have its own AI-generated image and/or video,
+independent of every other item on the campaign. `fb_ads_md`/`social_md` are never written by new
+builds; old rows keep their legacy flat text, unread by the new UI — same precedent as
+`profiles.nickname`/`campaigns.presell_html`/`campaigns.landing_md`. `tiktok_md`/`email_md`/
+`blog_md` are untouched by this — still flat strings, no per-item generation for those.
+
+- **`campaign_creatives`** (`supabase/migrations/0019_campaign_creatives.sql`) is the per-item
+  generalization of the old single `campaigns.ad_creative_image_data_url`/`video_path`/
+  `video_status` columns — one row per `(campaign_id, source ∈ {'fb_ad_angle','social_post'},
+  item_index, kind ∈ {'image','video'})`, each with its own `status` (`'none'|'generating'|
+  'ready'|'failed'`), `image_data_url`/`video_path`, and `error`. Same owner-select-only RLS +
+  admin-client-only-write pattern as every other domain table in this app. The old single-column
+  flows (`components/LaunchAd.tsx`'s "Generate ad creative" button, `components/GenerateVideo.tsx`)
+  are left exactly as they were — they're campaign-level fallbacks/quick options, not replaced.
+- **`claim_campaign_creative(campaign_id, source, item_index, kind)` is an atomic per-row
+  generation claim in one round trip** — an `INSERT ... ON CONFLICT DO UPDATE ... WHERE status <>
+  'generating' RETURNING id`, returning `NULL` (not an error) if the row was already generating.
+  This exists because PostgREST's `.upsert({onConflict})` can't express a conditional `WHERE` on
+  the `UPDATE` arm of an upsert (same limitation already documented for the `contacts` de-dupe
+  index in `0017_contacts.sql`) — this is what a per-row analogue of `generate-video/route.ts`'s
+  `UPDATE...WHERE...RETURNING` concurrency claim has to look like once there's a row per item
+  instead of one column per campaign. Verified directly: two claims for the same `(campaign_id,
+  source, item_index, kind)` — first returns a real id, second returns `NULL`; a claim against
+  another tenant's `campaign_id` raises before any row is touched.
+- **Two new job types generalize `generate_ad_image`/`generate_video`** — `generate_creative_image`
+  (`lib/engine/creativeimage.ts`, stages `["verify","prompt","submit","poll","finalize"]`) and
+  `generate_creative_video` (`lib/engine/creativevideo.ts`, stages `["verify","script","submit",
+  "poll","download","finalize"]`) — same stage-loop + `retry`-heartbeat mechanics as every other
+  job type in `lib/engine/worker.ts`, same stage-0 ownership re-check pattern (jobs' RLS only
+  validates the row's `user_id`, not payload contents), but every read/write targets one
+  `campaign_creatives` row by `id`, not a `campaigns` column by `campaign_id`. The generation
+  prompt is seeded from that *one* angle's/post's own copy (`campaigns.fb_ad_angles[item_index]`/
+  `social_posts[item_index]`, with a defensive bounds check — the array could have shrunk if the
+  campaign was rebuilt after the creative row was created), not the whole `fb_ads_md`/`tiktok_md`
+  blob the legacy jobs use. **Unlike the legacy `generate_ad_image` job (a known, documented gap —
+  a terminally-failed image job leaves no failure signal anywhere), both new job types get a real
+  `failJob()` branch** writing `status='failed'`/`error` onto the `campaign_creatives` row, so the
+  UI can actually show "failed" instead of silently staying "generating" forever.
+- **Ad-angle video defaults to `16:9` (Feed-ad-shaped); social-post video stays `9:16`**
+  (Reels/Stories-shaped, matching `GenerateVideo.tsx`'s existing default) — picked automatically
+  from the `campaign_creatives` row's own `source` column, no extra input needed. Storage path is
+  per-item (`${campaignId}/${source}-${itemIndex}.mp4`), not the legacy flat `${campaignId}.mp4` —
+  the private `campaign-videos` bucket and its signed-URL helpers (`lib/supabase/storage.ts`) are
+  reused completely unchanged, only the path shape is new.
+- **Rate caps, revisited for multiplied volume.** A campaign can now have up to 8 image slots and
+  8 video slots (3 angles + 5 posts), versus 1+1 before — `app/api/campaign-creatives/generate/
+  route.ts` pools its daily cap check with the matching legacy route (`generate_ad_image`+
+  `generate_creative_image` share one counter; `generate_video`+`generate_creative_video` share
+  another) so a client can't dodge either cap by picking one route over the other for the same
+  kind of generation. **Both caps are currently `100`/day — a nominal runaway-loop backstop, not a
+  real budget control** (the user is testing solo and explicitly doesn't want to hit a ceiling
+  while trying this out) — revisit both before opening this beyond solo testing. Image generation
+  never had a cap at all before this (it was "usage-tracking only, no cap" specifically because it
+  was structurally rare at one button per campaign — that reasoning doesn't survive 8x the
+  volume), so this is the first time it does.
+- **UI**: `components/CreativeItemCard.tsx` (one card, two independent Generate Image / Generate
+  Video buttons, each polling its own status every 4s while `generating` — same pattern
+  `GenerateVideo.tsx`/`LaunchAd.tsx` already use) renders under every angle/post in
+  `components/AdAnglesPanel.tsx`/`components/SocialPostsPanel.tsx`, which replace the old
+  `marked.parse()` blob render for the `fb_ads_md`/`social_md` tabs in `app/(app)/product/[id]/
+  page.tsx`. **Legacy campaigns without `fb_ad_angles`/`social_posts` fall back to that exact old
+  blob render**, with a "regenerate to unlock per-item generation" note — same "regenerate to
+  upgrade" precedent `components/PageEditor.tsx` already established for `page_copy = null`, no
+  backfill/parsing of old markdown attempted. `SocialPostsPanel.tsx` keeps `PostToFacebook`/
+  `PostToInstagram` mounted underneath, completely unchanged components — only their
+  default-content prop changes (first generated caption instead of the old flat `social_md`
+  string). Wiring a *specific* post's own generated creative into the actual posting API calls
+  (`PostToFacebook`/`PostToInstagram`/`/api/tiktok/post-video`/`/api/youtube/upload` all still
+  reference the single campaign-level `embedded_image_data_url`/`video_path`) is explicitly
+  deferred, not built here.
+
 ## Multi-network affiliate connections (ClickBank + Digistore24)
 
 Every product row now records which affiliate network it came from (`products.network`, `text`

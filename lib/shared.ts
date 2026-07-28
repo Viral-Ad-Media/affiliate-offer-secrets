@@ -28,6 +28,17 @@ export type Product = {
   campaign_status?: string | null;
 };
 
+export type FbAdAngle = {
+  headline: string;
+  primary_text: string;
+  description: string;
+  cta: string;
+};
+
+export type SocialPost = {
+  caption: string;
+};
+
 export type Campaign = {
   id: string;
   product_id: string;
@@ -36,11 +47,13 @@ export type Campaign = {
   drive_link: string | null;
   hoplinks_txt: string | null;
   fb_ads_md: string | null;
+  fb_ad_angles: FbAdAngle[] | null;
   tiktok_md: string | null;
   bridge_html: string | null;
   bridge_published: boolean;
   blog_md: string | null;
   social_md: string | null;
+  social_posts: SocialPost[] | null;
   email_md: string | null;
   images_json: { source_images: string[] } | null;
   embedded_image_data_url: string | null;
@@ -54,6 +67,24 @@ export type Campaign = {
     cta: string;
   } | null;
   notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreativeSource = "fb_ad_angle" | "social_post";
+export type CreativeKind = "image" | "video";
+export type CreativeStatus = "none" | "generating" | "ready" | "failed";
+
+export type CampaignCreative = {
+  id: string;
+  campaign_id: string;
+  source: CreativeSource;
+  item_index: number;
+  kind: CreativeKind;
+  status: CreativeStatus;
+  image_data_url: string | null;
+  video_path: string | null;
+  error: string | null;
   created_at: string;
   updated_at: string;
 };
