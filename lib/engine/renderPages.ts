@@ -21,6 +21,15 @@ export type Network = "clickbank" | "digistore24";
 export const DISCLOSURE =
   "This page contains affiliate links. If you purchase through them, I may earn a commission at no extra cost to you.";
 
+// Bridge pages now collect a real name + email (see app/api/public/leads/route.ts) — a real third
+// party's PII, for the first time in this codebase. Cheap, consistent with how seriously this app
+// already treats compliance (DISCLOSURE above is mandatory). Deliberately not a link to this app's
+// own /privacy page: a bridge page represents the *tenant's* offer/brand, not ClickBank Studio's —
+// the tenant's own downstream compliance (their privacy policy, consent mechanics, CAN-SPAM/CASL
+// for their subsequent use of these leads) stays their responsibility, same division DISCLOSURE
+// already establishes for affiliate-link rules.
+export const LEAD_CONSENT_TEXT = "By submitting, you agree to be contacted about this offer.";
+
 // Shared with lib/engine/build.ts's buildHoplinks() and the page-copy editor route, so both
 // always derive the identical "tid=page" link a presell/bridge page's CTA points at.
 //
@@ -129,7 +138,8 @@ export function renderBridgeHtml(
   product: ProductLike,
   copy: PageCopy,
   hoplink: string,
-  imageDataUrl: string | null
+  imageDataUrl: string | null,
+  campaignId: string
 ): string {
   const imageBlock = imageDataUrl
     ? `<img src="${escapeHtml(imageDataUrl)}" alt="${escapeHtml(product.product_title)}" style="max-width:100%;border-radius:12px;margin:24px 0;" />`
@@ -159,11 +169,15 @@ export function renderBridgeHtml(
       <h1>${escapeHtml(copy.headline)}</h1>
       <p class="lead">${escapeHtml(copy.lead)}</p>
       ${imageBlock}
-      <!-- LEAD_CAPTURE_ENDPOINT: no lead-storage backend is wired up yet. Wire this form to your own API, ESP, or ClickBank Studio's own DB before sending paid traffic here. -->
-      <form id="leadForm">
-        <input type="text" placeholder="First name" required />
-        <input type="email" placeholder="Email address" required />
+      <!-- LEAD_CAPTURE_ENDPOINT: posts to /api/public/leads (app/api/public/leads/route.ts).
+           This wiring — the endpoint URL and data-campaign-id below — is rendered by this function
+           only; components/PageEditor.tsx never exposes it as an editable field, so it can't be
+           redirected elsewhere via the no-code editor. -->
+      <form id="leadForm" data-campaign-id="${escapeHtml(campaignId)}">
+        <input id="leadFirstName" name="first_name" type="text" placeholder="First name" required />
+        <input id="leadEmail" name="email" type="email" placeholder="Email address" required />
         <button type="submit" class="cta">${escapeHtml(copy.cta)}</button>
+        <p class="disclosure" style="margin-top:12px;padding-top:0;border-top:none;">${LEAD_CONSENT_TEXT}</p>
       </form>
     </div>
     <div id="step2" class="hidden">
@@ -176,9 +190,23 @@ export function renderBridgeHtml(
   <script>
     document.getElementById('leadForm').addEventListener('submit', function (e) {
       e.preventDefault();
-      // Placeholder only — see the LEAD_CAPTURE_ENDPOINT marker above. This does not save the lead anywhere.
-      document.getElementById('step1').classList.add('hidden');
-      document.getElementById('step2').classList.remove('hidden');
+      var form = e.target;
+      var payload = {
+        campaign_id: form.dataset.campaignId,
+        first_name: document.getElementById('leadFirstName').value,
+        email: document.getElementById('leadEmail').value
+      };
+      function advance() {
+        document.getElementById('step1').classList.add('hidden');
+        document.getElementById('step2').classList.remove('hidden');
+      }
+      // Always reveal the hoplink CTA regardless of save outcome — this is paid ad traffic;
+      // losing a lead-save is far cheaper than losing a conversion on a dead-end page.
+      fetch('/api/public/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(function () {}).then(advance);
     });
   </script>
 </body>

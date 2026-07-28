@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { AuditEntry } from "@/lib/shared";
+import type { AuditEntry, UsageEntry } from "@/lib/shared";
 import AuditTrail from "@/components/AuditTrail";
+import UsageLedger from "@/components/UsageLedger";
 
 function truncate(text: string | null, max = 80): string {
   if (!text) return "";
@@ -15,7 +16,7 @@ export default async function AuditPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: meta }, { data: instagram }, { data: tiktok }, { data: youtube }, { data: mail }, { data: campaigns }] =
+  const [{ data: meta }, { data: instagram }, { data: tiktok }, { data: youtube }, { data: mail }, { data: campaigns }, { data: usageRows }] =
     await Promise.all([
       supabase.from("meta_posts").select("*").eq("user_id", user.id),
       supabase.from("instagram_posts").select("*").eq("user_id", user.id),
@@ -23,7 +24,11 @@ export default async function AuditPage() {
       supabase.from("youtube_posts").select("*").eq("user_id", user.id),
       supabase.from("mail_sends").select("*").eq("user_id", user.id),
       supabase.from("campaigns").select("id, products(product_title)"),
+      supabase.from("usage_ledger").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
     ]);
+
+  const usage = (usageRows ?? []) as UsageEntry[];
+  const totalCostUsd = usage.reduce((sum, u) => sum + u.cost_usd, 0);
 
   const titleByCampaign = new Map<string, string>();
   for (const c of campaigns ?? []) {
@@ -94,6 +99,7 @@ export default async function AuditPage() {
         </p>
       </header>
       <AuditTrail entries={entries} />
+      {usage.length > 0 && <UsageLedger entries={usage} totalCostUsd={totalCostUsd} />}
     </main>
   );
 }

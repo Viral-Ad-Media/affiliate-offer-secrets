@@ -186,13 +186,25 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
       );
   }
 
+  // Needed so the bridge page's lead-capture form can embed the real campaign id (see
+  // renderBridgeHtml's campaignId param) — this function never held the campaign's own id before,
+  // only ever addressing the row by (user_id, product_id).
+  const { data: campaignRow } = await db
+    .from("campaigns")
+    .select("id")
+    .eq("user_id", job.user_id)
+    .eq("product_id", productId)
+    .maybeSingle();
+  if (!campaignRow) throw new Error(`No campaign row for product ${productId}`);
+
   const affiliateId = await getAffiliateId(job.user_id, product.network);
   const { stageData, campaignPatch } = await runBuildCampaignStage(
     job.stage,
     product as any,
     affiliateId,
     job.stage_data ?? {},
-    { userId: job.user_id, jobId: job.id }
+    { userId: job.user_id, jobId: job.id },
+    campaignRow.id
   );
 
   if (campaignPatch && Object.keys(campaignPatch).length > 0) {

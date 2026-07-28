@@ -110,7 +110,8 @@ async function stageAds(
 async function stagePages(
   product: ProductRow,
   prior: Record<string, unknown>,
-  usage: UsageContext
+  usage: UsageContext,
+  campaignId: string
 ): Promise<StageOutput> {
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
   const copy = await completeJSON<PageCopy>({
@@ -145,7 +146,7 @@ async function stagePages(
   const imageDataUrl = (prior.image_data_url as string | null) ?? null;
   const hoplink = byChannel.page ?? product.hoplink ?? "#";
   const presellHtml = renderPresellHtml(product, copy, hoplink, imageDataUrl);
-  const bridgeHtml = renderBridgeHtml(product, copy, hoplink, imageDataUrl);
+  const bridgeHtml = renderBridgeHtml(product, copy, hoplink, imageDataUrl, campaignId);
 
   return {
     stageData: prior,
@@ -207,7 +208,8 @@ export async function runBuildCampaignStage(
   product: ProductRow,
   affiliateId: string,
   priorStageData: Record<string, unknown>,
-  usageCtx: { userId: string; jobId: string }
+  usageCtx: { userId: string; jobId: string },
+  campaignId: string
 ): Promise<StageOutput> {
   const stage = BUILD_CAMPAIGN_STAGES[stageIndex];
   const usage: UsageContext = { ...usageCtx, jobType: "build_campaign", stage };
@@ -219,7 +221,7 @@ export async function runBuildCampaignStage(
     case "ads":
       return stageAds(product, priorStageData, usage);
     case "pages":
-      return stagePages(product, priorStageData, usage);
+      return stagePages(product, priorStageData, usage, campaignId);
     case "content":
       return stageContent(product, priorStageData, usage);
     case "social":

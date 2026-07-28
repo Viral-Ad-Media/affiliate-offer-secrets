@@ -2,10 +2,9 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, XCircle, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { hasAppAccess, type UsageEntry } from "@/lib/shared";
+import { hasAppAccess } from "@/lib/shared";
 import { BuyAccessButton, BuyCreditsGrid, StartTrialButton } from "@/components/BillingActions";
 import LogoutButton from "@/components/LogoutButton";
-import UsageLedger from "@/components/UsageLedger";
 
 export default async function BillingPage({
   searchParams,
@@ -35,14 +34,6 @@ export default async function BillingPage({
     .select("delta")
     .eq("user_id", user.id);
   const creditBalance = (creditRows ?? []).reduce((sum, r) => sum + r.delta, 0);
-
-  const { data: usageRows } = await supabase
-    .from("usage_ledger")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
-  const usage = (usageRows ?? []) as UsageEntry[];
-  const totalCostUsd = usage.reduce((sum, u) => sum + u.cost_usd, 0);
 
   return (
     <main className="mx-auto max-w-lg px-4 py-10">
@@ -113,12 +104,6 @@ export default async function BillingPage({
           <Link href="/dashboard" className="btn-ghost block text-center">
             Back to dashboard
           </Link>
-        </div>
-      )}
-
-      {usage.length > 0 && (
-        <div className="mt-6">
-          <UsageLedger entries={usage} totalCostUsd={totalCostUsd} />
         </div>
       )}
     </main>

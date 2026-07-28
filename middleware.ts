@@ -20,6 +20,7 @@ const PUBLIC_PREFIX_PATHS = [
   "/api/meta/deauthorize",
   "/p/", // public presell/bridge pages — real ad destinations, no auth
   "/api/public/campaign-image/", // public campaign product images — needed for Instagram posting
+  "/api/public/leads", // bridge-page lead capture — anonymous visitors, no auth
 ];
 
 export async function middleware(request: NextRequest) {
@@ -38,8 +39,15 @@ export async function middleware(request: NextRequest) {
   })();
   const isOwnHost = host === appHost || host.startsWith("localhost") || host.startsWith("127.0.0.1");
   const isAssetPath = request.nextUrl.pathname.startsWith("/_next");
+  // A bridge page served under a tenant's custom domain runs its lead-capture fetch() from that
+  // domain's own origin — a relative /api/public/leads call would otherwise get caught by the
+  // rewrite below and 404 (no matching custom_domain_routes entry for an API path). Every route
+  // under /api/public/ already does its own campaign-scoped authorization, so it's safe to resolve
+  // regardless of the arriving Host — same reasoning as the /_next exemption, just for API routes
+  // client-side JS running inside a /d/-served page needs to call back into.
+  const isPublicApiPath = request.nextUrl.pathname.startsWith("/api/public/");
 
-  if (!isOwnHost && !isAssetPath) {
+  if (!isOwnHost && !isAssetPath && !isPublicApiPath) {
     const url = request.nextUrl.clone();
     url.pathname = `/d${request.nextUrl.pathname}`;
     return NextResponse.rewrite(url);

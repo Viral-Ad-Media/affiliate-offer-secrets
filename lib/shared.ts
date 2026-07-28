@@ -110,6 +110,15 @@ export type AuditEntry = {
   externalUrl: string | null;
 };
 
+export type Contact = {
+  id: string;
+  campaign_id: string | null;
+  campaign_title: string | null;
+  first_name: string | null;
+  email: string;
+  created_at: string;
+};
+
 export function hasAppAccess(profile: Pick<Profile, "access_granted" | "trial_ends_at"> | null | undefined) {
   if (!profile) return false;
   if (profile.access_granted) return true;

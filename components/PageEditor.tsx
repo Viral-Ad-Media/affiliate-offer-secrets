@@ -94,7 +94,7 @@ export default function PageEditor({
   const previewHtml =
     previewTab === "presell"
       ? renderPresellHtml(product, copy, previewHoplink, imageDataUrl)
-      : renderBridgeHtml(product, copy, previewHoplink, imageDataUrl);
+      : renderBridgeHtml(product, copy, previewHoplink, imageDataUrl, campaignId);
 
   function update<K extends keyof PageCopy>(key: K, value: PageCopy[K]) {
     setCopy((c) => ({ ...c, [key]: value }));

@@ -13,18 +13,22 @@ mirror from the pre-multi-tenant version — optional now, not required.
 `/` is the public marketing site, not the app — `app/(marketing)/*` (route group, no URL
 segment) covers Home, About, Pricing, FAQ, Contact, Terms, and Privacy, wrapped in
 `app/(marketing)/layout.tsx` with `components/MarketingNav.tsx`/`MarketingFooter.tsx`. The
-authenticated app lives at `/dashboard`, `/connections`, `/domains`, `/audit`, `/product/[id]`,
-`/billing` — `app/(app)/layout.tsx` is the paywall/auth gate (redirects to `/login` with no
-session, `/billing` without access), renders `components/Sidebar.tsx` (left nav: Dashboard/
-Connections/Domains/Audit trail/Billing, active-link highlighting via `usePathname`, collapses to
-a horizontal icon bar below the `sm` breakpoint), and owns the `mx-auto max-w-7xl px-4 py-6`
-content wrapper for everything under it. `app/(app)/audit/page.tsx` (+
-`components/AuditTrail.tsx`) is a unified, read-only log across `meta_posts`/`instagram_posts`/
+authenticated app lives at `/dashboard`, `/connections`, `/domains`, `/contacts`, `/audit`,
+`/product/[id]`, `/billing` — `app/(app)/layout.tsx` is the paywall/auth gate (redirects to
+`/login` with no session, `/billing` without access), renders `components/Sidebar.tsx` (left nav:
+Dashboard/Connections/Domains/Contacts/Audit trail/Billing, active-link highlighting via
+`usePathname`, collapses to a horizontal icon bar below the `sm` breakpoint), and owns the
+`mx-auto max-w-7xl px-4 py-6` content wrapper for everything under it. `app/(app)/audit/page.tsx`
+(+ `components/AuditTrail.tsx`) is a unified, read-only log across `meta_posts`/`instagram_posts`/
 `tiktok_posts`/`youtube_posts`/`mail_sends` — every one of those tables already had owner-`select`
 RLS but no UI ever read them before this; the page fetches all five in parallel, joins
 `campaign_id` → `products.product_title` for display, and normalizes them into one
-`AuditEntry[]` (`lib/shared.ts`) sorted newest-first. No new tables/RPCs — purely a read surface
-over data the existing posting routes already wrote. The root `app/layout.tsx` intentionally has
+`AuditEntry[]` (`lib/shared.ts`) sorted newest-first. The page also renders `usage_ledger` via the
+existing `components/UsageLedger.tsx` (moved here from the Billing page, not duplicated — the
+Anthropic-call cost trail is itself a kind of activity log, and the user asked for it to live
+alongside the other activity logs rather than as a separate structure on Billing). No new
+tables/RPCs for the audit trail itself — purely a read surface over data other routes already
+wrote. The root `app/layout.tsx` intentionally has
 **no** content wrapper (just fonts + `<body>`) so
 the marketing route group can render full-bleed sections (hero backgrounds, full-width
 nav/footer) — `/login` and `/billing` are standalone pages outside both route groups and each
@@ -128,12 +132,12 @@ must never be lost. Read-only Supabase queries (via the `mcp__supabase__execute_
    for hand-intervening on something the automated retries can't resolve.
 8. **Bridge page (`bridge_html`)** is a second, optional landing-page variant alongside
    `presell_html`: a two-step lead-capture flow (hook + name/email form → reveal step with the
-   `tid=page` hoplink CTA) instead of a straight advertorial-to-hoplink page. There is currently
-   **no wired lead-storage backend** — the form's submit handler is a clearly marked placeholder
-   (`<!-- LEAD_CAPTURE_ENDPOINT -->`, rendered by `renderBridgeHtml()` in `lib/engine/build.ts`)
-   that only advances the UI locally. Never remove or soften that placeholder marker, and never
-   fabricate a working backend; the user wires up real storage (their own API, ESP, or ClickBank
-   Studio's own DB) before running paid traffic to it.
+   `tid=page` hoplink CTA) instead of a straight advertorial-to-hoplink page. It has a real,
+   wired lead-storage backend — see "Lead capture (Contacts)" below — that posts to
+   `/api/public/leads` and always advances to the reveal step regardless of save outcome. The
+   form's `campaign_id`/`email`/`first_name` wiring and the disclosure/consent text are
+   code-owned in `renderBridgeHtml()` (`lib/engine/renderPages.ts`) and are never exposed as
+   editable fields in `components/PageEditor.tsx` — never let a future editor field touch them.
 9. `presell_html` and `bridge_html` carry a real product image, base64-embedded inline (never
    hotlinked) so the page stays self-contained — `lib/engine/images.ts` has the LLM pick a
    neutral product shot (bottle/box/cover/screenshot, never people/testimonial photos) from the
@@ -166,8 +170,10 @@ must never be lost. Read-only Supabase queries (via the `mcp__supabase__execute_
   computed dollar cost (`recordUsage()` in `lib/engine/anthropic.ts`, using the introductory
   Sonnet 5 per-MTok rates — revisit `PRICE_PER_MTOK_USD` after 2026-08-31). Logged even on a
   refused/malformed response, since tokens were genuinely spent either way. RLS lets a client
-  read only their own rows (`app/billing/page.tsx` renders it via `components/UsageLedger.tsx`);
-  only the service-role worker writes here, same trust boundary as `credits_ledger`/`payments`.
+  read only their own rows; it's rendered via `components/UsageLedger.tsx` on
+  `app/(app)/audit/page.tsx` (moved there from the Billing page — see "Site structure" above),
+  not Billing — only the service-role worker writes here, same trust boundary as
+  `credits_ledger`/`payments`.
 
 ## Meta (Facebook) connections and posting
 
@@ -570,6 +576,87 @@ foundation.
   work for ClickBank — before writing any discovery code against it, not an assumption. Connect
   (Affiliate ID) + manual product entry + full content-kit generation for Digistore24 is real,
   buildable work independent of that spike and not blocked on it.
+
+## Lead capture (Contacts)
+
+Every bridge page's opt-in form now saves real leads. Schema in
+`supabase/migrations/0017_contacts.sql`; write endpoint at `app/api/public/leads/route.ts`; read
+UI at `app/(app)/contacts/page.tsx` + `components/ContactsTable.tsx`. This is genuinely new
+ground for this codebase in two ways: `contacts` is the **first table that stores a third
+party's PII** (a tenant's own site visitor, not the tenant's own data), and `/api/public/leads`
+is this app's **first-ever anonymous, unauthenticated write** — every prior public route is a
+GET, and every prior write from an unauthenticated caller is a signature-verified webhook
+(Stripe, Meta's deauthorize). A campaign UUID plus server-side validation is a meaningfully
+weaker trust boundary than an HMAC check, and the design below treats that as the central risk to
+manage, not an afterthought.
+
+- **`user_id` comes only from the campaign row, never from the request body.** There is no
+  client-suppliable tenant field anywhere in this endpoint's input shape, and there must never be
+  one added later — the campaign lookup (`.eq("id", campaign_id).eq("status", "ready")`,
+  identical scoping to `servePublicCampaignPage`) is what derives ownership. Not found / not
+  `ready` returns a **generic 404** — the same enumeration-oracle concern every other public route
+  already guards (guessing valid campaign UUIDs), now reachable via a new verb (POST) that must
+  stay just as generic as the existing GETs.
+- **Two independent, cheap per-campaign abuse caps**, mirroring the `generate-video` route's
+  `MAX_VIDEO_GENERATIONS_PER_DAY` idiom: a burst cap (20 submissions per campaign per 10 minutes)
+  and a daily cap (300 per campaign per 24h). Either exceeded → **silently drop, still `200 OK`**
+  — a capped submission must be invisible to the real visitor (this is paid ad traffic; losing a
+  lead-save is far cheaper than losing a conversion on a dead-end page), and only blocks what's
+  very likely spam. Deliberately per-campaign, not per-IP: a valid, `ready` campaign UUID is
+  already this app's entire access-control model for every public route in existence, so
+  per-campaign scoping is consistent defense-in-depth with that model, not a weaker substitute.
+- **No CAPTCHA, no IP-based rate limiting, no email-deliverability verification, no moderation
+  queue** — explicitly deferred v1 decisions, not silent gaps (zero rate-limiting infrastructure
+  exists anywhere else in this codebase to build on). Also explicitly deferred: a per-lead delete
+  path for a GDPR/CCPA-style erasure request — v1 is view + export only, a real gap for a table
+  holding third-party PII for the first time here.
+- **De-dupe is a plain `(campaign_id, email)` unique index, not `lower(email)` or a partial
+  `WHERE`.** Both of those shapes are conflict targets `supabase-js`'s `.upsert({onConflict})`
+  cannot express — PostgREST only accepts a plain, non-partial column-list unique
+  index/constraint. Case-insensitive de-dupe is achieved by normalizing `email` to lowercase in
+  application code (`app/api/public/leads/route.ts`) before every insert instead. No `WHERE`
+  predicate is needed either: standard SQL never treats `NULL = NULL` as true in a uniqueness
+  check, so rows that survive a campaign delete (`contacts.campaign_id on delete set null`)
+  already coexist freely under a plain unique index. If a future migration ever needs a
+  functional or partial de-dupe index here, it cannot be targeted by a bare `.upsert({onConflict})`
+  call — raw SQL (`on conflict (...) do nothing` in a `execute_sql`-applied function, or a
+  hand-written `INSERT ... ON CONFLICT`) would be required instead.
+- **`contacts.campaign_id` is `on delete set null`, not cascade** — deliberate, matches
+  `meta_posts` (audit-log-shaped: history worth keeping even after the source campaign is gone),
+  not `ad_launches`/`custom_domain_routes` (operational config correctly tied to the campaign's
+  existence). A captured lead is a real person the tenant may still want to export/email after
+  archiving the campaign that captured them.
+- **RLS is owner-`select` only, same shape as `meta_posts`/`instagram_posts`** — no client write
+  policy at all (`revoke insert, update, delete ... from anon, authenticated`). The trust model
+  differs from those tables (this PII describes a third party, not an action the tenant took),
+  but the RLS story doesn't change: the only legitimate writer is `/api/public/leads`, running on
+  the admin client from a caller with no `auth.uid()` at all — never an authenticated tenant's own
+  browser session.
+- **A real bug this design surfaced, not something deferred**: `middleware.ts`'s host-mismatch
+  rewrite (for BYO custom domains, see "Custom domains" above) used to rewrite *any* non-own-host
+  path except `/_next` to `/d${pathname}`, unconditionally — including API paths. A bridge page
+  served under a tenant's custom domain runs its lead-capture `fetch('/api/public/leads', ...)`
+  from that domain's own origin, which would otherwise get rewritten to `/d/api/public/leads`,
+  match no `custom_domain_routes` entry, and 404 — lead capture would silently fail for every
+  tenant using a custom domain. `/api/public/` is now exempt from that rewrite (every route under
+  it already does its own campaign-scoped authorization and is safe to resolve regardless of the
+  arriving `Host`, the same reasoning as the existing `/_next` exemption), and
+  `"/api/public/leads"` is in `PUBLIC_PREFIX_PATHS`. Live-verified through both `/p/[campaignId]/
+  bridge` and a direct POST simulating custom-domain traffic — not assumed to work from the code
+  alone.
+- **No collision with the existing marketing `/contact` page** — that's a visitor contacting the
+  SaaS operator (ClickBank Studio itself), a completely different context from a tenant's own ad
+  visitor submitting a bridge page's opt-in form. `contacts` (the table/nav entry) and `/contact`
+  (the marketing page) are unrelated on purpose; don't conflate them when extending either.
+- **`ContactsTable.tsx` is `"use client"`, a deliberate deviation from `AuditTrail.tsx`'s
+  server-rendered shape** — justified by the two v1 actions that are the actual reason to have
+  this page at all (exporting leads into an ESP): per-row **Copy email** and header-level
+  **Export CSV**, built client-side from the already-fetched array with a real CSV-field-escaping
+  helper (quotes fields containing commas/quotes/newlines — a naive `.join(",")` would corrupt any
+  name containing a comma). The page query caps at `.limit(1000)` — leads can accumulate fast from
+  real paid traffic, unlike audit-trail rows throttled by human posting cadence, so this doesn't
+  safely generalize to audit's fetch-all pattern. Full pagination/search/date-filter is an
+  explicit deferred v2, not silently absent.
 
 ## Dev
 

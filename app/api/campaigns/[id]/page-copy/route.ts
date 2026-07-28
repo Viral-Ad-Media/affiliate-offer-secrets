@@ -129,7 +129,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const hoplink = buildHoplink(product.network, connection.affiliate_id, product.vendor_id, "page");
 
   const presellHtml = renderPresellHtml(product, copy, hoplink, imageDataUrl);
-  const bridgeHtml = renderBridgeHtml(product, copy, hoplink, imageDataUrl);
+  const bridgeHtml = renderBridgeHtml(product, copy, hoplink, imageDataUrl, campaignId);
 
   const { error: updateErr } = await admin
     .from("campaigns")
