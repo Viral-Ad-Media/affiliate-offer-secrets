@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { renderBridgeHtml, renderLandingMd, buildHoplink, type PageCopy } from "@/lib/engine/renderPages";
+import { renderBridgeHtml, buildHoplink, type PageCopy } from "@/lib/engine/renderPages";
 import { isValidImageDataUrl } from "@/lib/images/validate";
 
 export const dynamic = "force-dynamic";
@@ -70,9 +70,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       }))
       .filter((f) => f.q && f.a),
     cta: clampStr(body.cta, MAX_CTA) || "Get started",
-    landing_md: "",
   };
-  copy.landing_md = renderLandingMd(copy);
 
   if (!copy.headline || !copy.lead) {
     return NextResponse.json({ error: "headline and lead are required" }, { status: 400 });
@@ -134,7 +132,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .from("campaigns")
     .update({
       page_copy: copy,
-      landing_md: copy.landing_md,
       bridge_html: bridgeHtml,
       embedded_image_data_url: imageDataUrl,
     })

@@ -17,7 +17,6 @@ export type PageCopy = {
   proof: string;
   faq: { q: string; a: string }[];
   cta: string;
-  landing_md: string;
 };
 
 export type ProductLike = { product_title: string };
@@ -52,30 +51,6 @@ export function buildHoplink(network: Network, affiliateId: string, vendorId: st
     return `https://www.checkout-ds24.com/redir/${vid}/${aff}/${channel}`;
   }
   return `https://hop.clickbank.net/?affiliate=${aff}&vendor=${vid}&tid=${channel}`;
-}
-
-// Deterministic markdown rebuild of the "Landing copy" tab from structured fields — used when
-// the no-code editor saves an edit, so that tab stays in sync with the edited bridge page without
-// another (costly, slower) LLM call. The engine's own generation still lets the
-// LLM write landing_md directly for nicer prose transitions on first generation; only edits go
-// through this mechanical rebuild.
-export function renderLandingMd(copy: PageCopy): string {
-  const benefits = copy.benefits.map((b) => `- ${b}`).join("\n");
-  const faq = copy.faq.map((f) => `**${f.q}**\n\n${f.a}`).join("\n\n");
-  return [
-    `# ${copy.headline}`,
-    copy.lead,
-    `## How it works`,
-    copy.mechanism,
-    `## What you get`,
-    benefits,
-    copy.proof,
-    `## Questions`,
-    faq,
-    `## ${copy.cta}`,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
 }
 
 export function escapeHtml(s: string): string {

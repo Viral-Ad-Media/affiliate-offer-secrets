@@ -37,8 +37,8 @@ export type Campaign = {
   hoplinks_txt: string | null;
   fb_ads_md: string | null;
   tiktok_md: string | null;
-  landing_md: string | null;
   bridge_html: string | null;
+  bridge_published: boolean;
   blog_md: string | null;
   social_md: string | null;
   email_md: string | null;
@@ -52,7 +52,6 @@ export type Campaign = {
     proof: string;
     faq: { q: string; a: string }[];
     cta: string;
-    landing_md: string;
   } | null;
   notes: string | null;
   created_at: string;

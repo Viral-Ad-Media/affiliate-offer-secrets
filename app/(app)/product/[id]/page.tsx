@@ -12,12 +12,12 @@ import SendEmail from "@/components/SendEmail";
 import GenerateVideo from "@/components/GenerateVideo";
 import LaunchAd from "@/components/LaunchAd";
 import PageEditor from "@/components/PageEditor";
+import PublishBridge from "@/components/PublishBridge";
 
 const TABS = [
   { key: "fb_ads_md", label: "FB/IG Ads" },
   { key: "tiktok_md", label: "TikTok" },
-  { key: "landing_md", label: "Landing copy" },
-  { key: "bridge_html", label: "Landing page (lead capture)" },
+  { key: "bridge_html", label: "Bridge page" },
   { key: "blog_md", label: "Blog" },
   { key: "social_md", label: "Social" },
   { key: "email_md", label: "Emails" },
@@ -202,18 +202,22 @@ export default function ProductPage({ params }: { params: { id: string } }) {
               {!content ? (
                 <p className="py-6 text-center text-sm text-zinc-500">Not generated yet.</p>
               ) : tab === "bridge_html" && editMode ? (
-                <PageEditor
-                  campaignId={campaign!.id}
-                  productTitle={product.product_title}
-                  initialCopy={campaign?.page_copy ?? null}
-                  initialBridgeHtml={campaign?.bridge_html ?? null}
-                  previewHoplink={product.hoplink ?? "#"}
-                  onSaved={({ bridge_html, page_copy }) =>
-                    setCampaign((c) => (c ? { ...c, bridge_html, page_copy } : c))
-                  }
-                />
+                <>
+                  <PublishBridge campaignId={campaign!.id} initialPublished={campaign?.bridge_published ?? false} />
+                  <PageEditor
+                    campaignId={campaign!.id}
+                    productTitle={product.product_title}
+                    initialCopy={campaign?.page_copy ?? null}
+                    initialBridgeHtml={campaign?.bridge_html ?? null}
+                    previewHoplink={product.hoplink ?? "#"}
+                    onSaved={({ bridge_html, page_copy }) =>
+                      setCampaign((c) => (c ? { ...c, bridge_html, page_copy } : c))
+                    }
+                  />
+                </>
               ) : tab === "bridge_html" ? (
                 <>
+                  <PublishBridge campaignId={campaign!.id} initialPublished={campaign?.bridge_published ?? false} />
                   <p className="mb-2 text-xs text-zinc-500">
                     Preview is interactive — try the opt-in form, leads land on your{" "}
                     <Link href="/contacts" className="underline">
@@ -224,7 +228,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   <iframe
                     srcDoc={content}
                     sandbox="allow-scripts"
-                    title="Landing page preview"
+                    title="Bridge page preview"
                     className="h-[70vh] w-full rounded-lg border border-ink-700 bg-white"
                   />
                 </>
@@ -272,6 +276,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                         campaignId={campaign!.id}
                         defaultHeadline={product.product_title}
                         defaultPrimaryText=""
+                        bridgePublished={campaign.bridge_published}
                       />
                     </div>
                   )}

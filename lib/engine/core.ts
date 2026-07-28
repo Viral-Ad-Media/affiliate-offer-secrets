@@ -46,7 +46,6 @@ export const CAMPAIGN_FIELDS = [
   "hoplinks_txt",
   "fb_ads_md",
   "tiktok_md",
-  "landing_md",
   "bridge_html",
   "blog_md",
   "social_md",

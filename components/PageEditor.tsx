@@ -65,7 +65,6 @@ const emptyCopy: PageCopy = {
   proof: "",
   faq: [{ q: "", a: "" }],
   cta: "Get started",
-  landing_md: "",
 };
 
 export default function PageEditor({

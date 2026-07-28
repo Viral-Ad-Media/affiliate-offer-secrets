@@ -45,6 +45,20 @@ export async function POST(req: Request) {
   if (!ownsPage) return NextResponse.json({ error: "Page not found" }, { status: 404 });
   if (!ownsAdAccount) return NextResponse.json({ error: "Ad account not found" }, { status: 404 });
 
+  // Don't let a real paid ad point at a page nobody can see yet — publishing (see
+  // app/api/campaigns/[id]/publish/route.ts) is what makes the bridge page publicly reachable.
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("bridge_published")
+    .eq("id", campaignId)
+    .single();
+  if (!campaign?.bridge_published) {
+    return NextResponse.json(
+      { error: "Publish your bridge page before launching an ad" },
+      { status: 400 }
+    );
+  }
+
   const { data: job, error } = await supabase
     .from("jobs")
     .insert({

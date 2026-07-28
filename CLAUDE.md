@@ -299,14 +299,24 @@ condition — both fixed, not deferred, since this phase moves real money:
 ## No-code page editor
 
 `bridge_html` is no longer edit-only-by-regenerating. `renderBridgeHtml` (+ the `PageCopy` type,
-`escapeHtml`, `buildHoplink`, `renderLandingMd`) lives in `lib/engine/renderPages.ts` — a pure,
-isomorphic function with zero server-only imports, imported by **both** the campaign build
-pipeline (`lib/engine/build.ts`'s `stagePages`, which now also persists the structured `page_copy
-jsonb` alongside the rendered HTML) and the client-side editor (`components/PageEditor.tsx`), so
-live preview and what actually gets published are always the literal same function call — never
-two copies that can drift apart. (There used to be a second render function, `renderPresellHtml`,
-and a second preview tab in the editor to match — removed when the presell page variant was
-merged into the bridge page; see content rule 8.)
+`escapeHtml`, `buildHoplink`) lives in `lib/engine/renderPages.ts` — a pure, isomorphic function
+with zero server-only imports, imported by **both** the campaign build pipeline
+(`lib/engine/build.ts`'s `stagePages`, which now also persists the structured `page_copy jsonb`
+alongside the rendered HTML) and the client-side editor (`components/PageEditor.tsx`), so live
+preview and what actually gets published are always the literal same function call — never two
+copies that can drift apart. (There used to be a second render function, `renderPresellHtml`, and
+a second preview tab in the editor to match — removed when the presell page variant was merged
+into the bridge page; see content rule 8.)
+
+- **There is no separate "Landing copy" tab/field anymore.** `PageCopy.landing_md` and
+  `campaigns.landing_md` (a standalone markdown rendering of the same headline/lead/mechanism/
+  benefits/proof/FAQ/CTA fields, previously shown on its own read-only tab) were pure duplication
+  once the bridge page itself became the single, fully editable landing page — every field that
+  markdown doc carried already lives in `page_copy` and renders in `bridge_html`. Removed:
+  `renderLandingMd()`, the `landing_md` field from `PageCopy`/`Campaign`, the LLM's obligation to
+  produce it in `stagePages`' schema, and the `landing_md` write in both `stagePages` and the
+  page-copy PATCH route. `campaigns.landing_md` is left as an unread legacy column on old rows
+  rather than a destructive migration (same precedent as `profiles.nickname`/`presell_html`).
 
 - **The editor is structured-field, not drag-and-drop, on purpose**: headline/lead/mechanism/
   benefits/proof/FAQ/CTA/image are editable; the affiliate disclosure, the hoplink, and the bridge
@@ -327,12 +337,62 @@ merged into the bridge page; see content rule 8.)
   through `escapeHtml()` as defense-in-depth). Never loosen this to a `.startsWith(...)` check —
   that's exactly the gap a crafted value could use to break out of the attribute and stored-XSS
   real ad visitors.
-- The editor rebuilds `landing_md` deterministically from the edited structured fields
-  (`renderLandingMd()`) rather than calling the LLM again — faster, free, and keeps the "Landing
-  copy" tab in sync with what was actually edited; only first-generation `landing_md` is
-  LLM-written prose.
 - Campaigns generated before this shipped have `page_copy = null` and can't be edited until
   regenerated — `PageEditor` shows a clear message rather than a broken form in that case.
+
+## Bridge page publish/draft state
+
+Building (or editing) a campaign's bridge page no longer makes it publicly reachable by itself.
+`campaigns.bridge_published boolean not null default false` (`supabase/migrations/
+0018_bridge_publish.sql`) is an explicit gate on top of `status = 'ready'` —
+`servePublicCampaignPage()` (`lib/publicPage.ts`, shared by `/p/[campaignId]/bridge` and the
+custom-domain `/d/[[...path]]` route) now requires **both** conditions. `components/
+PublishBridge.tsx`, rendered at the top of the product page's Bridge page tab, is the toggle UI;
+`app/api/campaigns/[id]/publish/route.ts` is the only writer (ownership-checked via
+`assert_owns_campaign`, refuses to publish a campaign that isn't `status='ready'` or has no
+`bridge_html` yet).
+
+- **No backfill was needed when this shipped** — verified via a direct query before writing the
+  migration that zero rows existed in `ad_launches` or `custom_domain_routes` at the time, so no
+  real ad traffic depended on any campaign's bridge page already being public; every pre-existing
+  `ready` campaign safely defaults to unpublished, same as a brand-new one. If this pattern is
+  reused for a future gate, don't assume that's still true — recheck.
+- **Publishing surfaces two kinds of link**: the default `/p/{campaignId}/bridge` URL (always
+  available once published, no setup needed) and, if the tenant has verified domains, one or more
+  branded links via the existing custom-domain route-mapping RPC (`add_domain_route`,
+  `supabase/migrations/0009_page_domains.sql`) — `PublishBridge.tsx` is a campaign-scoped view
+  over the same `custom_domain_routes` data `components/DomainsPanel.tsx` manages, calling the
+  exact same `/api/domains/[id]/routes` POST and `/api/domains/[id]/routes/[routeId]` DELETE
+  endpoints rather than duplicating that logic. Unpublishing doesn't remove any domain-route
+  mappings — they just stop resolving (same generic 404 as everything else here) until
+  republished.
+- **`/api/meta/ads/create` refuses to queue a `launch_ad` job for an unpublished campaign** —
+  checks `campaigns.bridge_published` (via the RLS-respecting user-scoped client, already
+  ownership-scoped by that point) and returns a clear 400 rather than letting a real paid ad go
+  live pointing at a page nobody can see yet. `components/LaunchAd.tsx` mirrors this client-side
+  (a `bridgePublished` prop gates the whole create-draft UI behind a "publish first" message) so
+  the 400 is a defensive backstop, not the primary UX. Not a security boundary — a tenant can only
+  ever misconfigure their own campaign this way — so there's no matching worker-side stage-0
+  re-check the way `campaign_id`/`page_id` cross-tenant references get elsewhere in this codebase.
+
+**A real, pre-existing bug this surfaced and fixed, not new to this feature**:
+`createAdminClient()` (`lib/supabase/admin.ts`) previously let `@supabase/supabase-js`'s
+underlying `fetch()` calls go through Next.js's default Data Cache. `export const dynamic =
+"force-dynamic"` on a Route Handler does **not** reliably disable that for a library's own
+internal fetch calls — confirmed directly: toggling `bridge_published` in the database, then
+re-requesting `/p/{campaignId}/bridge` against the *same already-running* `next start` process,
+kept serving the stale pre-toggle result. It had gone unnoticed until now because every other
+`createAdminClient()` call site is either a mutation (POST/PATCH/DELETE, never cached) or sits
+behind `createClient()`'s cookie read first (implicitly dynamic) — the public bridge/domain-image
+serving routes were the only GET paths using the admin client with nothing upstream forcing
+dynamism, and until this phase nothing about their output actually needed to change within a
+process lifetime. **Fixed at the source**: `createAdminClient()` now passes `global: { fetch: (url,
+init) => fetch(url, { ...init, cache: "no-store" }) }` — a blanket fix, not a per-route patch,
+since caching a service-role read was never correct anywhere this client is used (the engine
+worker, the Stripe webhook, `/api/public/leads`' campaign lookup, and `servePublicCampaignImage`
+all benefit from the same fix, not just the bridge-publish gate that exposed it). Verified by
+toggling `bridge_published` against a single long-running `next start` process (no rebuild) and
+confirming both directions took effect on the very next request.
 
 ## Custom domains
 

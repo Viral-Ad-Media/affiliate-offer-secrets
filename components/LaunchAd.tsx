@@ -16,10 +16,12 @@ export default function LaunchAd({
   campaignId,
   defaultHeadline,
   defaultPrimaryText,
+  bridgePublished,
 }: {
   campaignId: string;
   defaultHeadline: string;
   defaultPrimaryText: string;
+  bridgePublished: boolean;
 }) {
   const [loading, setLoading] = useState(true);
   const [adsGranted, setAdsGranted] = useState(false);
@@ -161,6 +163,14 @@ export default function LaunchAd({
           Connections
         </a>{" "}
         to launch real ad campaigns.
+      </div>
+    );
+  }
+  if (!bridgePublished && !launch) {
+    return (
+      <div className="rounded-lg border border-ink-700 bg-ink-800/50 p-4 text-sm text-zinc-400">
+        Publish your bridge page (on the Bridge page tab) before launching an ad — otherwise
+        traffic would land on a page nobody can see yet.
       </div>
     );
   }

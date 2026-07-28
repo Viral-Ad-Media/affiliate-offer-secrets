@@ -116,7 +116,7 @@ async function stagePages(
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
   const copy = await completeJSON<PageCopy>({
     system: COMPLIANCE_SYSTEM,
-    prompt: `${ctx}\n\nWrite landing (bridge) page copy: a headline, a lead paragraph, a "mechanism" explanation (why/how it works), 3-5 benefit bullets, a short proof/credibility paragraph, 3-4 FAQ pairs, and a short CTA button label. Also return the same material as one cohesive landing_md markdown document with headline/lead/mechanism/benefits/proof/FAQ/CTA sections in that order.`,
+    prompt: `${ctx}\n\nWrite bridge (landing) page copy: a headline, a lead paragraph, a "mechanism" explanation (why/how it works), 3-5 benefit bullets, a short proof/credibility paragraph, 3-4 FAQ pairs, and a short CTA button label.`,
     schema: {
       type: "object",
       properties: {
@@ -134,9 +134,8 @@ async function stagePages(
           },
         },
         cta: { type: "string" },
-        landing_md: { type: "string" },
       },
-      required: ["headline", "lead", "mechanism", "benefits", "proof", "faq", "cta", "landing_md"],
+      required: ["headline", "lead", "mechanism", "benefits", "proof", "faq", "cta"],
     },
     maxTokens: 3000,
     usage,
@@ -150,7 +149,6 @@ async function stagePages(
   return {
     stageData: prior,
     campaignPatch: {
-      landing_md: copy.landing_md,
       bridge_html: bridgeHtml,
       page_copy: copy,
       embedded_image_data_url: imageDataUrl,
