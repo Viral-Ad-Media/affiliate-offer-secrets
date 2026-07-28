@@ -129,11 +129,21 @@ async function failJob(job: JobRow, message: string) {
         .eq("user_id", job.user_id)
         .eq("product_id", job.payload.product_id);
     }
-    if (job.type === "launch_ad" && job.payload?.campaign_id) {
-      await db
-        .from("ad_launches")
-        .update({ status: "failed", notes: message, updated_at: new Date().toISOString() })
-        .eq("campaign_id", job.payload.campaign_id);
+    if (job.type === "launch_ad") {
+      // Keyed by the launch's own id (threaded through stage_data by stageVerify), not
+      // campaign_id — a campaign can have multiple launches now (one per angle), so campaign_id
+      // alone would touch every launch under it. launch_id is only known once stage 0 has
+      // committed; a failure during stage 0 itself has no row to update yet (no-op, correct — job
+      // is still marked 'error' above regardless). A failure on a LATER stage within the same
+      // invocation that claimed stage 0 could, in principle, miss this too (job is the pre-loop
+      // object, not the loop's refreshed copy) — narrow, self-heals on the next claim/attempt.
+      const launchId = (job.stage_data as any)?.launch_id as string | undefined;
+      if (launchId) {
+        await db
+          .from("ad_launches")
+          .update({ status: "failed", notes: message, updated_at: new Date().toISOString() })
+          .eq("id", launchId);
+      }
     }
     if (job.type === "generate_video" && job.payload?.campaign_id) {
       await db
@@ -274,17 +284,22 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
 
 // Same optimistic-concurrency stage-advance shape as processBuildCampaignStage. The "verify"
 // stage (index 0) is the real security boundary for this job type — see lib/engine/adlaunch.ts.
+// Past stage 0, every lookup/write is keyed by the launch's own id (threaded through stage_data by
+// stageVerify), not campaign_id — a campaign can now have multiple launches, one per angle.
 async function processLaunchAdStage(job: JobRow): Promise<StageResult> {
   const payload = job.payload as LaunchAdPayload;
   if (!payload?.campaign_id) throw new Error("launch_ad job missing payload.campaign_id");
 
-  const { data: existingLaunch } = await db
-    .from("ad_launches")
-    .select("meta_campaign_id, meta_adset_id, meta_creative_id")
-    .eq("campaign_id", payload.campaign_id)
-    .maybeSingle();
+  const launchId = (job.stage_data as any)?.launch_id as string | undefined;
+  const { data: existingLaunch } = launchId
+    ? await db
+        .from("ad_launches")
+        .select("meta_campaign_id, meta_adset_id, meta_creative_id")
+        .eq("id", launchId)
+        .maybeSingle()
+    : { data: null };
 
-  const { stageData, launchPatch } = await runLaunchAdStage(
+  const { stageData, launchPatch, retry } = await runLaunchAdStage(
     job.stage,
     payload,
     job.user_id,
@@ -296,11 +311,21 @@ async function processLaunchAdStage(job: JobRow): Promise<StageResult> {
     }
   );
 
-  if (launchPatch && Object.keys(launchPatch).length > 0) {
+  const currentLaunchId = (stageData as any)?.launch_id as string | undefined;
+  if (launchPatch && Object.keys(launchPatch).length > 0 && currentLaunchId) {
     await db
       .from("ad_launches")
       .update({ ...launchPatch, updated_at: new Date().toISOString() })
-      .eq("campaign_id", payload.campaign_id);
+      .eq("id", currentLaunchId);
+  }
+
+  // Unlike the other retry-capable job types (whose stageData is stable across retries — a poll
+  // stage just re-checks the same operation_name/task_id), this stage's stageData can gain real
+  // progress between retries (meta_video_id, once the upload completes) that must survive to the
+  // next poll — so, uniquely here, persist stage_data even when not advancing the stage.
+  if (retry) {
+    await db.from("jobs").update({ stage_data: stageData, updated_at: new Date().toISOString() }).eq("id", job.id);
+    return { done: false, retry: true };
   }
 
   const nextStage = job.stage + 1;

@@ -10,18 +10,18 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 async function refundAndFail(
   admin: AdminClient,
   userId: string,
-  campaignId: string,
+  launchId: string,
   amount: number,
   message: string
 ) {
   await admin
     .from("ad_launches")
     .update({ status: "failed", notes: message, updated_at: new Date().toISOString() })
-    .eq("campaign_id", campaignId);
+    .eq("id", launchId);
   await admin.rpc("refund_ad_credits", {
     p_user_id: userId,
     p_amount: amount,
-    p_reason: `refund: activation failed for launch ${campaignId}`,
+    p_reason: `refund: activation failed for launch ${launchId}`,
   });
 }
 
@@ -37,16 +37,12 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const body = await req.json();
-  const campaignId = body.campaign_id as string | undefined;
-  if (!campaignId) return NextResponse.json({ error: "campaign_id is required" }, { status: 400 });
+  const launchId = body.launch_id as string | undefined;
+  if (!launchId) return NextResponse.json({ error: "launch_id is required" }, { status: 400 });
 
   // ad_launches' RLS ("own ad launches", select-only for auth.uid()=user_id) is what makes this
-  // an implicit ownership check — a row for another tenant's campaign simply won't be visible.
-  const { data: launch } = await supabase
-    .from("ad_launches")
-    .select("*")
-    .eq("campaign_id", campaignId)
-    .maybeSingle();
+  // an implicit ownership check — a row belonging to another tenant simply won't be visible.
+  const { data: launch } = await supabase.from("ad_launches").select("*").eq("id", launchId).maybeSingle();
   if (!launch) return NextResponse.json({ error: "Launch not found" }, { status: 404 });
   if (launch.status !== "paused_review") {
     return NextResponse.json(
@@ -60,7 +56,7 @@ export async function POST(req: Request) {
   const { data: claimed } = await admin
     .from("ad_launches")
     .update({ status: "activating", updated_at: new Date().toISOString() })
-    .eq("campaign_id", campaignId)
+    .eq("id", launchId)
     .eq("status", "paused_review")
     .select("id")
     .maybeSingle();
@@ -70,13 +66,13 @@ export async function POST(req: Request) {
 
   const { data: reserved, error: reserveErr } = await supabase.rpc("reserve_ad_credits", {
     p_amount: launch.budget_credits,
-    p_reason: `ad launch: ${campaignId}`,
+    p_reason: `ad launch: ${launch.campaign_id} angle ${launch.angle_index}`,
   });
   if (reserveErr || !reserved) {
     await admin
       .from("ad_launches")
       .update({ status: "paused_review", updated_at: new Date().toISOString() })
-      .eq("campaign_id", campaignId);
+      .eq("id", launchId);
     return NextResponse.json({ error: "Insufficient credits" }, { status: 402 });
   }
 
@@ -86,7 +82,7 @@ export async function POST(req: Request) {
     .eq("user_id", user.id)
     .maybeSingle();
   if (!connection) {
-    await refundAndFail(admin, user.id, campaignId, launch.budget_credits, "No Meta connection");
+    await refundAndFail(admin, user.id, launchId, launch.budget_credits, "No Meta connection");
     return NextResponse.json({ error: "No Meta connection" }, { status: 500 });
   }
 
@@ -97,7 +93,7 @@ export async function POST(req: Request) {
     await refundAndFail(
       admin,
       user.id,
-      campaignId,
+      launchId,
       launch.budget_credits,
       "Could not retrieve Meta access token"
     );
@@ -134,7 +130,7 @@ export async function POST(req: Request) {
   await admin
     .from("ad_launches")
     .update({ activation_state: activationState, updated_at: new Date().toISOString() })
-    .eq("campaign_id", campaignId);
+    .eq("id", launchId);
 
   if (failedAt) {
     // Re-pause whatever DID activate — so the ledger and Meta's actual state never disagree
@@ -158,12 +154,12 @@ export async function POST(req: Request) {
         notes: failureMessage,
         updated_at: new Date().toISOString(),
       })
-      .eq("campaign_id", campaignId);
+      .eq("id", launchId);
 
     await admin.rpc("refund_ad_credits", {
       p_user_id: user.id,
       p_amount: launch.budget_credits,
-      p_reason: `refund: activation failed for launch ${campaignId}`,
+      p_reason: `refund: activation failed for launch ${launch.campaign_id} angle ${launch.angle_index}`,
     });
 
     return NextResponse.json({ error: failureMessage }, { status: 502 });
@@ -172,7 +168,7 @@ export async function POST(req: Request) {
   await admin
     .from("ad_launches")
     .update({ status: "active", updated_at: new Date().toISOString() })
-    .eq("campaign_id", campaignId);
+    .eq("id", launchId);
 
   return NextResponse.json({ ok: true });
 }

@@ -663,6 +663,100 @@ builds; old rows keep their legacy flat text, unread by the new UI — same prec
   reference the single campaign-level `embedded_image_data_url`/`video_path`) is explicitly
   deferred, not built here.
 
+## Per-angle ad launches, including real video ads (Phase J)
+
+`ad_launches` used to be one row per campaign (`unique(campaign_id)`), always an image creative
+built from a hard-coded fallback chain. It's now one row per `(campaign_id, angle_index)` — a
+client picks a specific ad angle and launches it with that angle's own copy **and** its own
+generated creative (image or video, per `campaign_creatives`), and real Meta video ads are
+supported end to end (upload → processing-poll → video ad creative), not just a downloadable
+asset.
+
+- **`supabase/migrations/0020_multi_angle_ad_launches.sql`**: dropped
+  `ad_launches_campaign_id_key`, added `angle_index int not null`, `creative_kind text not null
+  default 'image' check (in ('image','video'))`, `meta_video_id text`, and a new
+  `unique(campaign_id, angle_index)`. Reconfirmed immediately before applying (both facts, not
+  assumed from the plan): `ad_launches` had zero rows and the dropped constraint was exactly what
+  was expected — low-risk widen.
+- **`id`, not the `(campaign_id, angle_index)` business key, is what every stage after `verify`
+  actually uses.** `lib/engine/adlaunch.ts`'s `stageVerify` is the only place that needs
+  find-or-create-by-business-key semantics (`upsert(..., {onConflict: "campaign_id,angle_index"})`
+  — verified directly: a same-key upsert returns the same `id` and updates in place, a different
+  `angle_index` creates an independent row); it selects the row's `id` back and threads it forward
+  as `stageData.launch_id`. Every later stage/route keys off that plain `id` — `worker.ts`'s
+  `processLaunchAdStage` (past stage 0), `app/api/meta/ads/activate/route.ts` (request body is now
+  `{launch_id}`, not `{campaign_id}`), `components/LaunchAd.tsx` (queries by `(campaign_id,
+  angle_index)` to *find* its own launch, then acts on it by `id`). This avoids a client ever
+  pre-choosing the primary key of a row only the admin client writes — a pattern nothing else in
+  this codebase does and one that would need its own defensive re-check against key collisions
+  across tenants.
+- **The worker's `verify` stage re-checks the specific angle AND its specific creative, not just
+  the campaign.** Same load-bearing pattern as Phase C (jobs' RLS only validates the row's
+  `user_id`, not payload contents) — extended to check `payload.angle_index` is in range for
+  `campaigns.fb_ad_angles`, and that the matching `campaign_creatives` row `(campaign_id,
+  'fb_ad_angle', angle_index, creative_kind)` is `status = 'ready'`, throwing a clear error if
+  either isn't true. `app/api/meta/ads/create/route.ts` does the same check for a fast 400 — same
+  "route is UX nicety, worker is the boundary" split as every other job type here.
+- **Video ad creation reuses the existing `retry: true` heartbeat mechanic — no new stage, no new
+  pattern.** `LAUNCH_AD_STAGES` stays `["verify","campaign","adset","creative","ad"]`; the
+  `creative` stage branches on `creative_kind`. The video branch is genuinely multi-step and async
+  (upload the stored video bytes to Meta, wait for Meta's own transcoding, then create the video ad
+  creative) — on first entry it uploads and stores `meta_video_id` in `stageData`; on every entry
+  (including the first, once the id exists) it checks processing status; not-ready returns
+  `{stageData, retry: true}`, which heartbeats and yields to other tenants' jobs exactly like
+  `generate_creative_video`'s own `poll` stage does. **This required one real fix to the shared
+  worker loop**: every other retry-capable job type's `stageData` is stable across retries (a poll
+  stage just re-checks the same `operation_name`/`task_id`, persisted once at the prior stage's
+  transition) — this is the first stage whose `stageData` gains real progress *during* retries
+  (`meta_video_id`, once the upload completes) that must survive to the next poll. `worker.ts`'s
+  `processLaunchAdStage` now persists `stage_data` even on `retry` (uniquely — the other
+  `process*Stage` functions still don't, since their `stageData` doesn't need it), so the video
+  upload never gets re-submitted to Meta on every ~1-minute cron re-poll.
+- **The two flagged unknowns from the plan were live-verified before writing `lib/meta/client.ts`,
+  not assumed** (via Meta's own Ads MCP tool schema plus direct fetches of
+  `developers.facebook.com`'s current Marketing API reference, matching this project's standing
+  rule for every external integration): `POST /{ad_account_id}/advideos` takes a simple `source`
+  byte-form upload (same shape as `uploadAdImage`/`publishPhotoBytes`) — chunked/resumable upload
+  is a separate path Meta reserves for much larger files, not needed for an ~8-second Veo clip; the
+  response's id key is documented inconsistently across Meta's own pages (`id` per the `AdVideo`
+  field enum, `video_id` elsewhere), so `uploadAdVideo()` reads both defensively. Processing status
+  is `GET /{video_id}?fields=status` → `{video_status: "ready"|"processing"|"error",
+  processing_progress}`. `object_story_spec.video_data` accepts `image_hash` for its thumbnail
+  (not just `image_url`) — confirmed by two independent sources — so the thumbnail follows this
+  app's existing no-hotlinking convention (content rule 9) exactly like the image-ad path, never a
+  public thumbnail URL or a new serving route.
+- **Thumbnail resolution is the same chain for both image ads and video-ad thumbnails**: this
+  angle's own generated image first (if `status='ready'`), then the old campaign-level
+  `ad_creative_image_data_url` fallback, then the vendor product photo — never a hard dependency on
+  any one of them having been generated.
+- **`failJob()`'s `launch_ad` branch is keyed by `launch_id` now, not `campaign_id`** — with
+  multiple launches per campaign, the old `campaign_id`-only match would have flipped *every*
+  launch under a campaign to `failed` on one angle's terminal error. `launch_id` comes from
+  `job.stage_data` at claim time, so it's only known once stage 0 has committed — a failure during
+  stage 0 itself has no row to update yet (correct no-op; the `jobs` row itself is still marked
+  `error` regardless). A narrower, self-healing edge case: a failure on a later stage within the
+  *same* invocation that also ran stage 0 could, in principle, use a stale in-memory `job` object
+  that predates that stage 0 write — accepted as a known, narrow gap (the job record itself is
+  never wrong, only the mirrored `ad_launches.status` might lag one attempt cycle), not blocking.
+- **`components/LaunchAd.tsx` is now per-angle**, mounted once per angle inside
+  `components/AdAnglesPanel.tsx` (folded in, not a separate component elsewhere) — it looks up its
+  own launch row by `(campaign_id, angle_index)`, shows "Launch as image ad" / "Launch as video ad"
+  buttons only for the kinds that have a `ready` `campaign_creatives` row, and reads/activates by
+  `launch_id`. Legacy campaigns (`fb_ad_angles = null`) can't launch per-angle ads until
+  regenerated — same "regenerate to upgrade" precedent as everything else gated on structured
+  angles; the global campaign-level launch UI this replaced is removed outright (`ad_launches` had
+  zero real rows in production at the time this shipped, confirmed before touching the schema, so
+  there was nothing to migrate).
+- **Not live-verified against a real Meta ad account** — this environment has no connected Meta
+  ad account/page/video to exercise `uploadAdVideo`/`getVideoStatus`/`createVideoAdCreative`
+  against Meta's real API, and structured ad-angle generation itself depends on a working
+  Anthropic API key (see the Phase I note on this same gap). What *is* verified: `tsc --noEmit`,
+  `npm run build`, `get_advisors` (clean, same shape as every prior migration), and the
+  `ad_launches` upsert's find-or-create/independent-row behavior directly against the live
+  database. A real end-to-end video-ad launch (paused draft → Meta Ads Manager → activate → live
+  delivery) still needs to be run once a real ad account is connected — flag this to the user
+  before relying on it.
+
 ## Multi-network affiliate connections (ClickBank + Digistore24)
 
 Every product row now records which affiliate network it came from (`products.network`, `text`

@@ -8,7 +8,6 @@ import type { Campaign, Product } from "@/lib/shared";
 import { STATUS_COLORS } from "@/lib/shared";
 import SendEmail from "@/components/SendEmail";
 import GenerateVideo from "@/components/GenerateVideo";
-import LaunchAd from "@/components/LaunchAd";
 import PageEditor from "@/components/PageEditor";
 import PublishBridge from "@/components/PublishBridge";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
@@ -210,23 +209,12 @@ export default function ProductPage({ params }: { params: { id: string } }) {
             </div>
             <div className="p-4">
               {tab === "fb_ads_md" ? (
-                <>
-                  <AdAnglesPanel
-                    campaignId={campaign.id}
-                    angles={campaign.fb_ad_angles}
-                    legacyMarkdown={campaign.fb_ads_md}
-                  />
-                  {campaign?.bridge_html && (
-                    <div className="mt-4">
-                      <LaunchAd
-                        campaignId={campaign!.id}
-                        defaultHeadline={product.product_title}
-                        defaultPrimaryText=""
-                        bridgePublished={campaign.bridge_published}
-                      />
-                    </div>
-                  )}
-                </>
+                <AdAnglesPanel
+                  campaignId={campaign.id}
+                  angles={campaign.fb_ad_angles}
+                  legacyMarkdown={campaign.fb_ads_md}
+                  bridgePublished={campaign.bridge_published}
+                />
               ) : tab === "social_md" ? (
                 <SocialPostsPanel
                   campaignId={campaign.id}

@@ -299,6 +299,77 @@ export async function setEntityStatus(
   return graphPost(`/${entityId}`, { status, access_token: userAccessToken });
 }
 
+// --- Marketing API (Phase J: per-angle video ad launching) ---
+
+// Live-verified against Meta's current Marketing API reference (POST /{ad_account_id}/advideos +
+// the AdVideo field list) before writing this, per this codebase's standing rule for every
+// external integration. Simple `source` byte upload (same pattern as uploadAdImage/
+// publishPhotoBytes) — Meta's chunked/resumable path only kicks in well above the size of an
+// ~8-second Veo clip, so it's not needed here. The response's id key is documented
+// inconsistently across Meta's own pages ("id" per the AdVideo field enum, "video_id" elsewhere)
+// — read both defensively rather than trusting one.
+export async function uploadAdVideo(adAccountId: string, userAccessToken: string, videoBytes: Buffer): Promise<string> {
+  const form = new FormData();
+  form.append("source", new Blob([new Uint8Array(videoBytes)], { type: "video/mp4" }), "video.mp4");
+  form.append("access_token", userAccessToken);
+
+  const res = await fetch(`${FB_GRAPH_BASE}/${adAccountId}/advideos`, {
+    method: "POST",
+    body: form,
+    signal: AbortSignal.timeout(60_000),
+  });
+  const json = await res.json();
+  if (json.error) throw new MetaApiError(json.error.message, json.error.code, json.error.error_subcode);
+  const id = json.id ?? json.video_id;
+  if (!id) throw new MetaApiError("No video id returned from Meta");
+  return id as string;
+}
+
+// Live-verified shape (Graph API's VideoStatus reference): GET /{video_id}?fields=status returns
+// { video_status: "ready" | "processing" | "error", processing_progress: 0-100 }.
+export async function getVideoStatus(
+  videoId: string,
+  userAccessToken: string
+): Promise<{ video_status: "ready" | "processing" | "error"; processing_progress: number }> {
+  const json = await graphGet(`/${videoId}`, { fields: "status", access_token: userAccessToken });
+  return json.status ?? { video_status: "processing", processing_progress: 0 };
+}
+
+// Live-verified: object_story_spec.video_data accepts image_hash for its thumbnail (confirmed via
+// both the AdCreativeVideoData field reference and Meta's own Ads MCP tool schema, which
+// documents image_hash/image_url as interchangeable for the video thumbnail) — so, per this app's
+// no-hotlinking convention (content rule 9, and uploadAdImage/publishPhotoBytes above), the
+// thumbnail is always an uploaded image_hash, never a public image_url. The headline field is
+// named `title` here (not `name`, unlike link_data for image ads) — also live-verified.
+export async function createVideoAdCreative(
+  adAccountId: string,
+  userAccessToken: string,
+  opts: {
+    name: string;
+    pageId: string;
+    videoId: string;
+    imageHash: string;
+    linkUrl?: string;
+    message: string;
+    headline: string;
+  }
+): Promise<{ id: string }> {
+  const videoData: Record<string, unknown> = {
+    video_id: opts.videoId,
+    image_hash: opts.imageHash,
+    title: opts.headline,
+    message: opts.message,
+  };
+  if (opts.linkUrl) {
+    videoData.call_to_action = { type: "LEARN_MORE", value: { link: opts.linkUrl } };
+  }
+  return graphPost(`/${adAccountId}/adcreatives`, {
+    name: opts.name,
+    object_story_spec: JSON.stringify({ page_id: opts.pageId, video_data: videoData }),
+    access_token: userAccessToken,
+  });
+}
+
 // 190 = invalid/expired OAuth token. 200/10 = permission errors (app or user lost access).
 // Best-effort classification — used to proactively flag a connection as needs_reconnect rather
 // than waiting solely on token_expires_at, since token revocation has no reliable push signal.

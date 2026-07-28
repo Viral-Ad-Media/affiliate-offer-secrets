@@ -1,24 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Loader2, Megaphone, Sparkles } from "lucide-react";
+import { CheckCircle2, Loader2, Megaphone } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import type { AdLaunch, CreativeKind } from "@/lib/shared";
 
 type AdAccount = { ad_account_id: string; ad_account_name: string; currency: string; is_active: boolean };
 type PageInfo = { page_id: string; page_name: string; is_active: boolean; status: string };
-type LaunchRow = {
-  status: "building" | "paused_review" | "activating" | "active" | "failed";
-  budget_credits: number;
-  notes: string | null;
-} | null;
+type LaunchRow = Pick<AdLaunch, "id" | "creative_kind" | "status" | "budget_credits" | "notes"> | null;
 
+// Per-angle launch UI (Phase J) — one instance per ad angle, mounted inside AdAnglesPanel.tsx.
+// Launches that angle's own copy + its own generated creative (image or video), picked from
+// campaign_creatives, instead of a single global campaign-level creative.
 export default function LaunchAd({
   campaignId,
+  angleIndex,
   defaultHeadline,
   defaultPrimaryText,
   bridgePublished,
 }: {
   campaignId: string;
+  angleIndex: number;
   defaultHeadline: string;
   defaultPrimaryText: string;
   bridgePublished: boolean;
@@ -34,67 +36,46 @@ export default function LaunchAd({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [launch, setLaunch] = useState<LaunchRow>(null);
-  const [adCreative, setAdCreative] = useState<string | null>(null);
-  const [generatingCreative, setGeneratingCreative] = useState(false);
-
-  async function loadAdCreative() {
-    const { data } = await createClient()
-      .from("campaigns")
-      .select("ad_creative_image_data_url")
-      .eq("id", campaignId)
-      .maybeSingle();
-    setAdCreative((data as any)?.ad_creative_image_data_url ?? null);
-  }
-
-  async function generateAdCreative() {
-    setGeneratingCreative(true);
-    setError(null);
-    const res = await fetch(`/api/campaigns/${campaignId}/generate-ad-image`, { method: "POST" });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Failed to start generation");
-      setGeneratingCreative(false);
-      return;
-    }
-    // Generation runs async via the job queue — poll for the result.
-    const start = Date.now();
-    const poll = setInterval(async () => {
-      const { data } = await createClient()
-        .from("campaigns")
-        .select("ad_creative_image_data_url")
-        .eq("id", campaignId)
-        .maybeSingle();
-      const url = (data as any)?.ad_creative_image_data_url ?? null;
-      if (url) setAdCreative(url);
-      if (url || Date.now() - start > 90_000) {
-        clearInterval(poll);
-        setGeneratingCreative(false);
-        if (!url) setError("Still generating — check back in a moment");
-      }
-    }, 3000);
-  }
+  const [readyKinds, setReadyKinds] = useState<Record<CreativeKind, boolean>>({ image: false, video: false });
 
   async function loadLaunch() {
     const { data } = await createClient()
       .from("ad_launches")
-      .select("status, budget_credits, notes")
+      .select("id, creative_kind, status, budget_credits, notes")
       .eq("campaign_id", campaignId)
+      .eq("angle_index", angleIndex)
       .maybeSingle();
     setLaunch(data as LaunchRow);
   }
 
+  async function loadReadyKinds() {
+    const { data } = await createClient()
+      .from("campaign_creatives")
+      .select("kind, status")
+      .eq("campaign_id", campaignId)
+      .eq("source", "fb_ad_angle")
+      .eq("item_index", angleIndex);
+    const rows = (data ?? []) as { kind: CreativeKind; status: string }[];
+    setReadyKinds({
+      image: rows.some((r) => r.kind === "image" && r.status === "ready"),
+      video: rows.some((r) => r.kind === "video" && r.status === "ready"),
+    });
+  }
+
   useEffect(() => {
     const supabase = createClient();
-    Promise.all([supabase.rpc("get_meta_connection_status"), loadLaunch(), loadAdCreative()]).then(([{ data }]: any[]) => {
-      setAdsGranted(!!data?.ads_management_granted);
-      const accounts = (data?.ad_accounts ?? []) as AdAccount[];
-      setAdAccount(accounts.find((a) => a.is_active) ?? accounts[0] ?? null);
-      const pages = (data?.pages ?? []) as PageInfo[];
-      setPage(pages.find((p) => p.is_active && p.status === "connected") ?? null);
-      setLoading(false);
-    });
+    Promise.all([supabase.rpc("get_meta_connection_status"), loadLaunch(), loadReadyKinds()]).then(
+      ([{ data }]: any[]) => {
+        setAdsGranted(!!data?.ads_management_granted);
+        const accounts = (data?.ad_accounts ?? []) as AdAccount[];
+        setAdAccount(accounts.find((a) => a.is_active) ?? accounts[0] ?? null);
+        const pages = (data?.pages ?? []) as PageInfo[];
+        setPage(pages.find((p) => p.is_active && p.status === "connected") ?? null);
+        setLoading(false);
+      }
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId]);
+  }, [campaignId, angleIndex]);
 
   useEffect(() => {
     if (launch?.status !== "building" && launch?.status !== "activating") return;
@@ -103,7 +84,7 @@ export default function LaunchAd({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [launch?.status]);
 
-  async function createDraft() {
+  async function createDraft(kind: CreativeKind) {
     setBusy(true);
     setError(null);
     const res = await fetch("/api/meta/ads/create", {
@@ -113,6 +94,8 @@ export default function LaunchAd({
         campaign_id: campaignId,
         ad_account_id: adAccount!.ad_account_id,
         page_id: page!.page_id,
+        angle_index: angleIndex,
+        creative_kind: kind,
         headline,
         primary_text: primaryText,
         country,
@@ -125,16 +108,18 @@ export default function LaunchAd({
       setError(data.error ?? "Failed to queue launch");
       return;
     }
-    setLaunch({ status: "building", budget_credits: budget, notes: null });
+    setLaunch({ id: "", creative_kind: kind, status: "building", budget_credits: budget, notes: null });
+    await loadLaunch();
   }
 
   async function activate() {
+    if (!launch?.id) return;
     setBusy(true);
     setError(null);
     const res = await fetch("/api/meta/ads/activate", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ campaign_id: campaignId }),
+      body: JSON.stringify({ launch_id: launch.id }),
     });
     const data = await res.json();
     setBusy(false);
@@ -146,31 +131,31 @@ export default function LaunchAd({
 
   if (!adsGranted) {
     return (
-      <div className="rounded-lg border border-ink-700 bg-ink-800/50 p-4 text-sm text-zinc-400">
+      <div className="mt-2 rounded-lg border border-ink-700 bg-ink-800/50 p-3 text-xs text-zinc-400">
         Connect Facebook with ad permissions in{" "}
         <a href="/connections" className="text-emerald-400 underline">
           Connections
         </a>{" "}
-        to launch real ad campaigns.
+        to launch this angle as a real ad.
       </div>
     );
   }
   if (!adAccount || !page) {
     return (
-      <div className="rounded-lg border border-ink-700 bg-ink-800/50 p-4 text-sm text-zinc-400">
+      <div className="mt-2 rounded-lg border border-ink-700 bg-ink-800/50 p-3 text-xs text-zinc-400">
         Connect a Facebook Page and ad account in{" "}
         <a href="/connections" className="text-emerald-400 underline">
           Connections
         </a>{" "}
-        to launch real ad campaigns.
+        to launch this angle as a real ad.
       </div>
     );
   }
   if (!bridgePublished && !launch) {
     return (
-      <div className="rounded-lg border border-ink-700 bg-ink-800/50 p-4 text-sm text-zinc-400">
-        Publish your bridge page (on the Bridge page tab) before launching an ad — otherwise
-        traffic would land on a page nobody can see yet.
+      <div className="mt-2 rounded-lg border border-ink-700 bg-ink-800/50 p-3 text-xs text-zinc-400">
+        Publish your bridge page before launching an ad — otherwise traffic would land on a page
+        nobody can see yet.
       </div>
     );
   }
@@ -180,35 +165,36 @@ export default function LaunchAd({
 
   if (launch?.status === "building") {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-300">
-        <Loader2 className="h-4 w-4 animate-spin" /> Building your ad draft on Meta (paused,
-        nothing spends yet)…
+      <div className="mt-2 flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-300">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Building your {launch.creative_kind} ad draft
+        on Meta (paused, nothing spends yet)…
       </div>
     );
   }
   if (launch?.status === "activating") {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-300">
-        <Loader2 className="h-4 w-4 animate-spin" /> Activating…
+      <div className="mt-2 flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-300">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Activating…
       </div>
     );
   }
   if (launch?.status === "active") {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-        <CheckCircle2 className="h-4 w-4" /> Live on Meta — {launch.budget_credits} credits/day
-        authorized.
+      <div className="mt-2 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Live on Meta ({launch.creative_kind}) —{" "}
+        {launch.budget_credits} credits/day authorized.
       </div>
     );
   }
   if (launch?.status === "paused_review") {
     return (
-      <div className="rounded-lg border border-ink-700 p-4">
-        <div className="mb-2 text-sm text-zinc-100">Draft ready — paused, review before going live</div>
-        <div className="mb-3 space-y-1 text-xs text-zinc-400">
+      <div className="mt-2 rounded-lg border border-ink-700 p-3">
+        <div className="mb-1.5 text-xs text-zinc-100">
+          {launch.creative_kind === "video" ? "Video" : "Image"} ad draft ready — paused, review
+          before going live
+        </div>
+        <div className="mb-2 space-y-0.5 text-[11px] text-zinc-400">
           <div>Budget: {launch.budget_credits} credits/day (≈ ${launch.budget_credits}/day)</div>
-          <div>Ad account: {adAccount.ad_account_name}</div>
-          <div>Page: {page.page_name}</div>
           <div>
             Links to:{" "}
             <a href={previewUrl} target="_blank" rel="noreferrer" className="text-emerald-400 underline">
@@ -216,97 +202,97 @@ export default function LaunchAd({
             </a>
           </div>
         </div>
-        <button onClick={activate} disabled={busy} className="btn-primary">
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
+        <button onClick={activate} disabled={busy} className="btn-primary !py-1.5 text-xs">
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Megaphone className="h-3.5 w-3.5" />}
           Activate — spend {launch.budget_credits} credits
         </button>
-        {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+        {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
       </div>
     );
   }
   if (launch?.status === "failed") {
     return (
-      <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
-        <p className="mb-2 text-sm text-red-300">Launch failed: {launch.notes ?? "Unknown error"}</p>
-        <p className="mb-3 text-xs text-zinc-500">Any reserved credits were refunded automatically.</p>
-        <button onClick={createDraft} disabled={busy} className="btn-ghost">
+      <div className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+        <p className="mb-1.5 text-xs text-red-300">Launch failed: {launch.notes ?? "Unknown error"}</p>
+        <p className="mb-2 text-[11px] text-zinc-500">Any reserved credits were refunded automatically.</p>
+        <button onClick={() => setLaunch(null)} className="btn-ghost !py-1 text-xs">
           Try again
         </button>
       </div>
     );
   }
 
-  return (
-    <div className="rounded-lg border border-ink-700 p-4">
-      <div className="mb-2 flex items-center gap-2 text-xs text-zinc-500">
-        <Megaphone className="h-3.5 w-3.5" /> Launch on {adAccount.ad_account_name} → {page.page_name}
-        — paused until you confirm
+  if (!readyKinds.image && !readyKinds.video) {
+    return (
+      <div className="mt-2 rounded-lg border border-ink-700 bg-ink-800/50 p-3 text-xs text-zinc-500">
+        Generate an image or video above to launch this angle as a real ad.
       </div>
-      <label className="mb-1 block text-xs font-medium text-zinc-400">Headline</label>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-lg border border-ink-700 p-3">
+      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] text-zinc-500">
+        <Megaphone className="h-3.5 w-3.5" /> Launch on {adAccount.ad_account_name} → {page.page_name} —
+        paused until you confirm
+      </div>
+      <label className="mb-1 block text-[11px] font-medium text-zinc-400">Headline</label>
       <input
         value={headline}
         onChange={(e) => setHeadline(e.target.value)}
-        className="mb-2 w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+        className="mb-1.5 w-full rounded-lg border border-ink-600 bg-ink-900 px-2.5 py-1.5 text-xs outline-none focus:border-emerald-500"
       />
-      <div className="mb-3">
-        <label className="mb-1 block text-xs font-medium text-zinc-400">Ad creative image</label>
-        {adCreative ? (
-          <div className="flex items-center gap-3">
-            <img src={adCreative} alt="Ad creative" className="h-16 w-16 rounded-lg border border-ink-700 object-cover" />
-            <button onClick={generateAdCreative} disabled={generatingCreative} className="btn-ghost !py-1.5 text-xs">
-              {generatingCreative ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-              Regenerate
-            </button>
-          </div>
-        ) : (
-          <button onClick={generateAdCreative} disabled={generatingCreative} className="btn-ghost text-xs">
-            {generatingCreative ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-            {generatingCreative ? "Generating…" : "Generate ad creative"}
-          </button>
-        )}
-        {!adCreative && !generatingCreative && (
-          <p className="mt-1 text-xs text-zinc-500">
-            Optional — falls back to the product photo from the vendor's sales page if skipped.
-          </p>
-        )}
-      </div>
-      <label className="mb-1 block text-xs font-medium text-zinc-400">Primary text</label>
+      <label className="mb-1 block text-[11px] font-medium text-zinc-400">Primary text</label>
       <textarea
         value={primaryText}
         onChange={(e) => setPrimaryText(e.target.value)}
-        rows={3}
-        className="mb-2 w-full rounded-lg border border-ink-600 bg-ink-900 p-3 text-sm outline-none focus:border-emerald-500"
+        rows={2}
+        className="mb-1.5 w-full rounded-lg border border-ink-600 bg-ink-900 p-2.5 text-xs outline-none focus:border-emerald-500"
       />
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-2 flex items-center gap-2">
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-400">Daily budget (credits)</label>
+          <label className="mb-1 block text-[11px] font-medium text-zinc-400">Daily budget (credits)</label>
           <input
             type="number"
             min={1}
             value={budget}
             onChange={(e) => setBudget(Number(e.target.value) || 1)}
-            className="w-28 rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+            className="w-24 rounded-lg border border-ink-600 bg-ink-900 px-2.5 py-1.5 text-xs outline-none focus:border-emerald-500"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-400">Country</label>
+          <label className="mb-1 block text-[11px] font-medium text-zinc-400">Country</label>
           <input
             value={country}
             onChange={(e) => setCountry(e.target.value.toUpperCase())}
             maxLength={2}
-            className="w-20 rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+            className="w-16 rounded-lg border border-ink-600 bg-ink-900 px-2.5 py-1.5 text-xs outline-none focus:border-emerald-500"
           />
         </div>
       </div>
-      <button
-        onClick={createDraft}
-        disabled={busy || !headline.trim() || !primaryText.trim()}
-        className="btn-primary"
-      >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
-        Create paused draft
-      </button>
-      {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+      <div className="flex flex-wrap gap-2">
+        {readyKinds.image && (
+          <button
+            onClick={() => createDraft("image")}
+            disabled={busy || !headline.trim() || !primaryText.trim()}
+            className="btn-primary !py-1.5 text-xs"
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Megaphone className="h-3.5 w-3.5" />}
+            Launch as image ad
+          </button>
+        )}
+        {readyKinds.video && (
+          <button
+            onClick={() => createDraft("video")}
+            disabled={busy || !headline.trim() || !primaryText.trim()}
+            className="btn-primary !py-1.5 text-xs"
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Megaphone className="h-3.5 w-3.5" />}
+            Launch as video ad
+          </button>
+        )}
+      </div>
+      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
     </div>
   );
 }

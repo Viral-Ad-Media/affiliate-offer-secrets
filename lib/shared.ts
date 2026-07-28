@@ -89,6 +89,16 @@ export type CampaignCreative = {
   updated_at: string;
 };
 
+export type AdLaunch = {
+  id: string;
+  campaign_id: string;
+  angle_index: number;
+  creative_kind: "image" | "video";
+  status: "building" | "paused_review" | "activating" | "active" | "failed";
+  budget_credits: number;
+  notes: string | null;
+};
+
 export type Job = {
   id: string;
   type: "discover_products" | "build_campaign";
