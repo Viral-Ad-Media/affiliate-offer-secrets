@@ -13,12 +13,12 @@ const PUBLIC_EXACT_PATHS = [
   "/privacy",
 ];
 
-// Prefix-match — dynamic sub-paths (e.g. /p/[campaignId]/presell) or server-to-server webhooks.
+// Prefix-match — dynamic sub-paths (e.g. /p/[campaignId]/bridge) or server-to-server webhooks.
 const PUBLIC_PREFIX_PATHS = [
   "/api/billing/webhook",
   "/api/engine/run",
   "/api/meta/deauthorize",
-  "/p/", // public presell/bridge pages — real ad destinations, no auth
+  "/p/", // public bridge (lead-capture landing) pages — real ad destinations, no auth
   "/api/public/campaign-image/", // public campaign product images — needed for Instagram posting
   "/api/public/leads", // bridge-page lead capture — anonymous visitors, no auth
 ];

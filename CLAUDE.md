@@ -111,7 +111,7 @@ must never be lost. Read-only Supabase queries (via the `mcp__supabase__execute_
 2. Health/wealth niches are heavily policed on Meta/TikTok: prefer curiosity + mechanism angles
    over promise angles; no personal-attribute callouts; flag products whose own sales pages make
    claims that will get ads rejected (note it in `angle_notes`).
-3. Presell pages and blog articles always include an affiliate disclosure.
+3. The bridge (landing) page and blog articles always include an affiliate disclosure.
 4. Hoplinks are built by `buildHoplink(network, affiliateId, vendorId, tid)`
    (`lib/engine/renderPages.ts`) with per-channel tids (fb, tt, blog, email, page) — ClickBank's
    format is `https://hop.clickbank.net/?affiliate=ID&vendor=VENDORID&tid=<channel>`, Digistore24's
@@ -125,25 +125,28 @@ must never be lost. Read-only Supabase queries (via the `mcp__supabase__execute_
    "current stats". Discovery jobs are queued from the dashboard's category/subcategory dropdown
    (`lib/categories.ts` — ClickBank's live taxonomy, 21 categories) or, as a fallback, a
    free-text keyword.
-6. Paid ads never direct-link the raw hoplink; the presell page (or bridge page, see below) is
-   the ad destination.
+6. Paid ads never direct-link the raw hoplink; the bridge page (see rule 8) is the ad destination.
 7. Never leave a job stuck in `running` — the worker's retry/attempts-cap and `claim_job()`
    staleness reclaim handle this automatically now; a manual `npm run engine -- fail` is only
    for hand-intervening on something the automated retries can't resolve.
-8. **Bridge page (`bridge_html`)** is a second, optional landing-page variant alongside
-   `presell_html`: a two-step lead-capture flow (hook + name/email form → reveal step with the
-   `tid=page` hoplink CTA) instead of a straight advertorial-to-hoplink page. It has a real,
-   wired lead-storage backend — see "Lead capture (Contacts)" below — that posts to
-   `/api/public/leads` and always advances to the reveal step regardless of save outcome. The
-   form's `campaign_id`/`email`/`first_name` wiring and the disclosure/consent text are
-   code-owned in `renderBridgeHtml()` (`lib/engine/renderPages.ts`) and are never exposed as
-   editable fields in `components/PageEditor.tsx` — never let a future editor field touch them.
-9. `presell_html` and `bridge_html` carry a real product image, base64-embedded inline (never
-   hotlinked) so the page stays self-contained — `lib/engine/images.ts` has the LLM pick a
-   neutral product shot (bottle/box/cover/screenshot, never people/testimonial photos) from the
-   sales page's actual `<img>`/`og:image` candidates, then fetches and base64-encodes it
-   (capped ~200KB). If nothing clean is available, the page stays text-only rather than
-   fabricating a product image.
+8. **Bridge page (`bridge_html`)** is every campaign's single landing page: a two-step
+   advertorial-then-lead-capture flow — step 1 is the full pitch (hook, mechanism, benefits,
+   proof, FAQ) followed by an opt-in form, step 2 (shown after submit) is a short reveal with the
+   `tid=page` hoplink CTA. There used to be a second, separate "presell" variant (the same
+   advertorial with no lead capture, no form) — it was merged into this one so the advertorial
+   content isn't split across two pages, only one of which collects a lead. `renderPresellHtml`/
+   `campaigns.presell_html` no longer exist; old rows keep their `presell_html` value as an
+   unread legacy column rather than a destructive migration (same precedent as
+   `profiles.nickname`). It has a real, wired lead-storage backend — see "Lead capture (Contacts)"
+   below — that posts to `/api/public/leads` and always advances to the reveal step regardless of
+   save outcome. The form's `campaign_id`/`email`/`first_name` wiring and the disclosure/consent
+   text are code-owned in `renderBridgeHtml()` (`lib/engine/renderPages.ts`) and are never exposed
+   as editable fields in `components/PageEditor.tsx` — never let a future editor field touch them.
+9. `bridge_html` carries a real product image, base64-embedded inline (never hotlinked) so the
+   page stays self-contained — `lib/engine/images.ts` has the LLM pick a neutral product shot
+   (bottle/box/cover/screenshot, never people/testimonial photos) from the sales page's actual
+   `<img>`/`og:image` candidates, then fetches and base64-encodes it (capped ~200KB). If nothing
+   clean is available, the page stays text-only rather than fabricating a product image.
 
 ## Billing (Stripe) and access control
 
@@ -240,14 +243,18 @@ condition — both fixed, not deferred, since this phase moves real money:
   stage 0) is the actual security boundary; the route's own checks are a UX nicety for a fast
   error, not the enforcement. Never add a new job type that trusts `payload` without an
   equivalent re-check inside its own stage-0 handler.
-- **No public URL existed for presell/bridge pages before this phase** — they only ever rendered
-  in an authenticated `<iframe srcDoc>`. A real ad's `link_url` needs one:
-  `app/p/[campaignId]/presell|bridge/route.ts` are Route Handlers (not React pages, so the root
-  layout never wraps the self-contained HTML) using the admin client scoped to one campaign UUID
-  + `status = 'ready'` (the UUID is unguessable — that's the access control, not RLS).
+- **No public URL existed for the bridge page before this phase** — it only ever rendered in an
+  authenticated `<iframe srcDoc>`. A real ad's `link_url` needs one: `app/p/[campaignId]/bridge/
+  route.ts` is a Route Handler (not a React page, so the root layout never wraps the
+  self-contained HTML) using the admin client scoped to one campaign UUID + `status = 'ready'`
+  (the UUID is unguessable — that's the access control, not RLS). A sibling `.../presell/route.ts`
+  existed here too until the presell page variant was merged into the bridge page (content rule
+  8) — removed outright, not left as a redirect, since nothing live ever pointed ad traffic at it
+  (confirmed via a direct query before removing: zero `ad_launches`/`custom_domain_routes` rows
+  referenced it).
 - **Ad creative images are uploaded, never hotlinked.** `images_json.source_images[0]` is the raw
-  vendor URL — the same reason CLAUDE.md's content rule 9 already bans hotlinking for presell
-  pages applies to an ad creative too. `uploadAdImage()` (`lib/meta/client.ts`) fetches real bytes
+  vendor URL — the same reason CLAUDE.md's content rule 9 already bans hotlinking for the bridge
+  page applies to an ad creative too. `uploadAdImage()` (`lib/meta/client.ts`) fetches real bytes
   via the existing `fetchImageAsDataUrl()` and uploads to `POST /act_{id}/adimages` for a stable
   `image_hash`. The same fix was retrofitted into Phase B's Page photo posting —
   `publishPhotoBytes()` replaced the old `url`-param `publishPhoto()`.
@@ -291,13 +298,15 @@ condition — both fixed, not deferred, since this phase moves real money:
 
 ## No-code page editor
 
-`presell_html`/`bridge_html` are no longer edit-only-by-regenerating. `renderPresellHtml`/
-`renderBridgeHtml` (+ the `PageCopy` type, `escapeHtml`, `buildHoplink`, `renderLandingMd`) live in
-`lib/engine/renderPages.ts` — pure, isomorphic functions with zero server-only imports, imported
-by **both** the campaign build pipeline (`lib/engine/build.ts`'s `stagePages`, which now also
-persists the structured `page_copy jsonb` alongside the rendered HTML) and the client-side editor
-(`components/PageEditor.tsx`), so live preview and what actually gets published are always the
-literal same function call — never two copies that can drift apart.
+`bridge_html` is no longer edit-only-by-regenerating. `renderBridgeHtml` (+ the `PageCopy` type,
+`escapeHtml`, `buildHoplink`, `renderLandingMd`) lives in `lib/engine/renderPages.ts` — a pure,
+isomorphic function with zero server-only imports, imported by **both** the campaign build
+pipeline (`lib/engine/build.ts`'s `stagePages`, which now also persists the structured `page_copy
+jsonb` alongside the rendered HTML) and the client-side editor (`components/PageEditor.tsx`), so
+live preview and what actually gets published are always the literal same function call — never
+two copies that can drift apart. (There used to be a second render function, `renderPresellHtml`,
+and a second preview tab in the editor to match — removed when the presell page variant was
+merged into the bridge page; see content rule 8.)
 
 - **The editor is structured-field, not drag-and-drop, on purpose**: headline/lead/mechanism/
   benefits/proof/FAQ/CTA/image are editable; the affiliate disclosure, the hoplink, and the bridge
@@ -328,7 +337,7 @@ literal same function call — never two copies that can drift apart.
 ## Custom domains
 
 Clients can connect their own domain(s) — bring-your-own only, no in-app domain purchase — and
-publish presell/bridge pages under them. **One domain can host many campaigns**, each at its own
+publish bridge pages under them. **One domain can host many campaigns**, each at its own
 path (e.g. `yourdomain.com/eat-stop-eat`, `yourdomain.com/smoothie-diet`, or the bare root).
 Schema in `supabase/migrations/0009_page_domains.sql`; Vercel API wrapper in
 `lib/vercel/client.ts`; routes under `app/api/domains/*`; UI at `app/(app)/domains/page.tsx` +
@@ -350,8 +359,15 @@ Schema in `supabase/migrations/0009_page_domains.sql`; Vercel API wrapper in
   ownership check** — re-verifies the domain belongs to `auth.uid()` **and** calls the existing
   `assert_owns_campaign(p_campaign_id)` RPC (from Phase C, reused as-is) before inserting. Without
   this, a tenant could map their own verified domain's path to *another* tenant's `campaign_id`
-  and publicly serve/rebrand that tenant's presell page under an attacker-controlled domain. Never
-  add a route-mapping write path that skips this RPC.
+  and publicly serve/rebrand that tenant's bridge page under an attacker-controlled domain. Never
+  add a route-mapping write path that skips this RPC. `p_destination`/`custom_domain_routes
+  .destination` still exist at the DB layer (`'presell' | 'bridge'` check constraint) but the app
+  never accepts it as caller input anymore — `app/api/domains/[id]/routes/route.ts` always passes
+  the literal `"bridge"`, since the presell page variant was merged into the bridge page (content
+  rule 8); the column stays rather than a destructive migration, matching every other deprecated
+  column this codebase has left in place (`profiles.nickname`, `campaigns.presell_html`). Same for
+  `ad_launches.destination` (`lib/engine/adlaunch.ts`, `app/api/meta/ads/create/route.ts`) — always
+  `"bridge"`, no longer a `LaunchAd`/`DomainsPanel` UI choice.
 - **`custom_domain_routes.campaign_id` cascades on delete** (matching the precedent already set on
   `ad_launches.campaign_id`) — deleting a campaign makes its domain routes vanish (clean 404)
   instead of blocking the delete with an FK error.
@@ -405,7 +421,7 @@ Meta-named ones in `0007_meta_secret_helper.sql` — those stay untouched, zero 
 - **Instagram posting needs a real public image URL** (`POST /{ig-user-id}/media` requires a
   fetchable `image_url`, unlike Facebook's Photos API which accepts direct byte upload).
   `campaigns.embedded_image_data_url` persists the same image already embedded in
-  `presell_html`/`bridge_html` (written by `stagePages()` and the page-copy editor route);
+  `bridge_html` (written by `stagePages()` and the page-copy editor route);
   `app/api/public/campaign-image/[campaignId]/route.ts` (`lib/publicPage.ts`'s
   `servePublicCampaignImage`) serves it standalone, same UUID+`status='ready'` scoping as the
   `/p/` route. **Image content-type is allowlisted, not just checked for an `image/*` prefix** —
@@ -448,7 +464,7 @@ Meta-named ones in `0007_meta_secret_helper.sql` — those stay untouched, zero 
 
 ## AI image + video generation, real TikTok/YouTube/Reels posting
 
-Ad creative images (Facebook/Instagram ads only — presell/bridge pages and Instagram photo posts
+Ad creative images (Facebook/Instagram ads only — the bridge page and Instagram photo posts
 still use the vendor-extracted `embedded_image_data_url`, untouched) come from **kie.ai**
 (`lib/kieai/client.ts`). Short-form video — generated specifically to unlock real TikTok/YouTube/
 Instagram Reels posting — comes from **Google's Gemini API directly** (Veo 3.1,
@@ -532,8 +548,8 @@ foundation.
   revisiting that decision — if that ever happens, it needs the Vault pattern instead.
 - **`affiliate_id` is charset-constrained at the DB layer (`^[A-Za-z0-9_.-]+$`, 1–64 chars) as
   the load-bearing half of a three-layer XSS defense**, not just input hygiene. `buildHoplink()`'s
-  output is interpolated into `href="..."` in `renderPresellHtml`/`renderBridgeHtml`
-  (`lib/engine/renderPages.ts`) — pages served completely raw to real, unauthenticated ad traffic.
+  output is interpolated into `href="..."` in `renderBridgeHtml` (`lib/engine/renderPages.ts`) —
+  served completely raw to real, unauthenticated ad traffic.
   Before this phase, `nickname` could only ever be trusted admin-set data; the moment it became
   self-service free-text, an unescaped/unencoded value here would be a real stored-XSS vector (the
   exact class of bug `lib/images/validate.ts`'s allowlist regex already exists to prevent for

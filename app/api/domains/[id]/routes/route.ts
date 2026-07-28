@@ -25,10 +25,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const body = await req.json().catch(() => ({}));
   const path = normalizePath(body.path);
   const campaignId = String(body.campaign_id ?? "");
-  const destination =
-    body.destination === "bridge" ? "bridge" : body.destination === "presell" ? "presell" : null;
 
-  if (!campaignId || !destination || !PATH_RE.test(path)) {
+  if (!campaignId || !PATH_RE.test(path)) {
     return NextResponse.json({ error: "invalid request" }, { status: 400 });
   }
 
@@ -36,7 +34,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     p_domain_id: params.id,
     p_path: path,
     p_campaign_id: campaignId,
-    p_destination: destination,
+    // Always "bridge" — the presell page variant was merged into it (lib/engine/renderPages.ts).
+    // Not exposed as caller input anymore; add_domain_route()/custom_domain_routes.destination
+    // keep the legacy 'presell' check-constraint option (no live rows use it).
+    p_destination: "bridge",
   });
 
   if (error) {

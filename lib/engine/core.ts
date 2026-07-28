@@ -47,7 +47,6 @@ export const CAMPAIGN_FIELDS = [
   "fb_ads_md",
   "tiktok_md",
   "landing_md",
-  "presell_html",
   "bridge_html",
   "blog_md",
   "social_md",

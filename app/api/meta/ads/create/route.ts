@@ -19,7 +19,6 @@ export async function POST(req: Request) {
   const campaignId = body.campaign_id as string | undefined;
   const adAccountId = body.ad_account_id as string | undefined;
   const pageId = body.page_id as string | undefined;
-  const destination = body.destination as string | undefined;
   const headline = (body.headline as string | undefined)?.trim();
   const primaryText = (body.primary_text as string | undefined)?.trim();
   const country = ((body.country as string | undefined) ?? "US").trim().toUpperCase();
@@ -29,7 +28,6 @@ export async function POST(req: Request) {
     !campaignId ||
     !adAccountId ||
     !pageId ||
-    (destination !== "presell" && destination !== "bridge") ||
     !headline ||
     !primaryText ||
     !Number.isFinite(budgetCredits) ||
@@ -56,7 +54,10 @@ export async function POST(req: Request) {
         campaign_id: campaignId,
         ad_account_id: adAccountId,
         page_id: pageId,
-        destination,
+        // Always "bridge" — the presell page variant was merged into it (see
+        // lib/engine/renderPages.ts); ad_launches.destination stays a NOT NULL column with the
+        // legacy 'presell' check-constraint option (no live rows use it, harmless to leave).
+        destination: "bridge",
         headline,
         primary_text: primaryText,
         country,

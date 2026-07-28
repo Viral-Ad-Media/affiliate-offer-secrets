@@ -68,7 +68,7 @@ export async function POST(req: Request) {
   try {
     let fbPostId: string;
     // Never hotlink the vendor's raw image URL into a live post — fetch real bytes server-side
-    // first (same helper the presell page embed already uses), same reasoning as CLAUDE.md
+    // first (same helper the bridge page embed already uses), same reasoning as CLAUDE.md
     // content rule 9. Falls back to a text-only post if the fetch fails rather than erroring out.
     const imageDataUrl = imageUrl ? await fetchImageAsDataUrl(imageUrl) : null;
     if (imageDataUrl) {

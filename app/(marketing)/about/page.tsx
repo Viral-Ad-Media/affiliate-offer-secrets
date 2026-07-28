@@ -12,7 +12,7 @@ export default function AboutPage() {
       <p className="mt-4 text-base leading-relaxed text-zinc-400">
         ClickBank Studio is a research and campaign-generation cockpit built for ClickBank
         affiliate marketers who are tired of the manual grind: scrolling the marketplace for
-        products, digging through sales pages for angles, and writing ad copy, presell pages, and
+        products, digging through sales pages for angles, and writing ad copy, landing pages, and
         email swipes by hand for every single offer.
       </p>
 
@@ -23,8 +23,8 @@ export default function AboutPage() {
             Point it at a category, and it pulls live ClickBank marketplace data, scores products
             on gravity and earnings potential, and verifies each one against its actual vendor
             sales page. For anything worth promoting, it generates a complete kit — Facebook and
-            TikTok ad copy, a presell page, an optional bridge/lead-capture page, a blog article,
-            and email swipes — grounded entirely in what the vendor's own page actually claims.
+            TikTok ad copy, a bridge (lead-capture) landing page, a blog article, and email
+            swipes — grounded entirely in what the vendor's own page actually claims.
           </p>
         </section>
 

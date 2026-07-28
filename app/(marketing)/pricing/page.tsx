@@ -9,7 +9,7 @@ export const metadata = {
 
 const ACCESS_INCLUDES = [
   "Unlimited product discovery across all ClickBank categories",
-  "Unlimited campaign kit generation (ads, presell/bridge pages, blog, email)",
+  "Unlimited campaign kit generation (ads, bridge landing pages, blog, email)",
   "Connect your Facebook Page and publish posts",
   "Full usage & cost audit trail",
   "30-day free trial before you pay anything",

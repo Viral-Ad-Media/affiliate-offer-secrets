@@ -25,8 +25,8 @@ export default async function DomainsPage() {
       <header>
         <h1 className="text-2xl font-bold text-zinc-100">Domains</h1>
         <p className="text-sm text-zinc-400">
-          Connect your own domain and publish presell/bridge pages under it — one domain can host
-          several campaigns, each at its own path.
+          Connect your own domain and publish bridge (lead-capture landing) pages under it — one
+          domain can host several campaigns, each at its own path.
         </p>
       </header>
 

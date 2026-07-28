@@ -38,7 +38,6 @@ export type Campaign = {
   fb_ads_md: string | null;
   tiktok_md: string | null;
   landing_md: string | null;
-  presell_html: string | null;
   bridge_html: string | null;
   blog_md: string | null;
   social_md: string | null;

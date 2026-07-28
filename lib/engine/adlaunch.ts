@@ -9,7 +9,6 @@ export type LaunchAdPayload = {
   campaign_id: string;
   ad_account_id: string;
   page_id: string;
-  destination: "presell" | "bridge";
   headline: string;
   primary_text: string;
   country: string;
@@ -78,7 +77,10 @@ async function stageVerify(payload: LaunchAdPayload, userId: string): Promise<Ad
       campaign_id: payload.campaign_id,
       ad_account_id: payload.ad_account_id,
       page_id: payload.page_id,
-      destination: payload.destination,
+      // Always "bridge" — the presell page variant was merged into it (lib/engine/renderPages.ts).
+      // Not exposed as caller input anymore; the column itself stays for now (see build.ts's
+      // comment on campaigns.presell_html for why this codebase leaves deprecated columns as-is).
+      destination: "bridge",
       headline: payload.headline,
       primary_text: payload.primary_text,
       country: payload.country,
@@ -151,7 +153,7 @@ async function stageCreative(
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   if (!appUrl) throw new Error("NEXT_PUBLIC_APP_URL is not set");
-  const linkUrl = `${appUrl}/p/${payload.campaign_id}/${payload.destination}`;
+  const linkUrl = `${appUrl}/p/${payload.campaign_id}/bridge`;
 
   const result = await createAdCreative(payload.ad_account_id, token, {
     name: `CBS - ${payload.headline}`.slice(0, 100),

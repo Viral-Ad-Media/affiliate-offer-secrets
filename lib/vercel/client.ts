@@ -1,5 +1,5 @@
 // Thin wrapper over Vercel's REST Domains API — used to attach a client's bring-your-own domain
-// to this Vercel project so their presell/bridge pages can be served under it. Same shape as
+// to this Vercel project so their bridge pages can be served under it. Same shape as
 // lib/meta/client.ts (typed fetch helpers + a dedicated error class).
 
 const VERCEL_API_BASE = "https://api.vercel.com";

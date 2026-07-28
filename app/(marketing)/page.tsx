@@ -17,7 +17,7 @@ const STEPS = [
   {
     icon: Sparkles,
     title: "Generate",
-    body: "Every product gets a full kit automatically: Facebook & TikTok ad copy, a presell page, a bridge page, a blog article, email swipes, and social captions — grounded in the vendor's own sales page.",
+    body: "Every product gets a full kit automatically: Facebook & TikTok ad copy, a bridge (lead-capture) landing page, a blog article, email swipes, and social captions — grounded in the vendor's own sales page.",
   },
   {
     icon: Rocket,
@@ -35,7 +35,7 @@ const FEATURES = [
   {
     icon: Sparkles,
     title: "Full campaign kits",
-    body: "Ad copy, presell & bridge pages, blog content, and email swipes generated per product, with a real product image embedded — no hotlinking.",
+    body: "Ad copy, a bridge (lead-capture) landing page, blog content, and email swipes generated per product, with a real product image embedded — no hotlinking.",
   },
   {
     icon: Facebook,

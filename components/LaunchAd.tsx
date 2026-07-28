@@ -16,12 +16,10 @@ export default function LaunchAd({
   campaignId,
   defaultHeadline,
   defaultPrimaryText,
-  destination,
 }: {
   campaignId: string;
   defaultHeadline: string;
   defaultPrimaryText: string;
-  destination: "presell" | "bridge";
 }) {
   const [loading, setLoading] = useState(true);
   const [adsGranted, setAdsGranted] = useState(false);
@@ -113,7 +111,6 @@ export default function LaunchAd({
         campaign_id: campaignId,
         ad_account_id: adAccount!.ad_account_id,
         page_id: page!.page_id,
-        destination,
         headline,
         primary_text: primaryText,
         country,
@@ -169,9 +166,7 @@ export default function LaunchAd({
   }
 
   const previewUrl =
-    typeof window !== "undefined"
-      ? `${process.env.NEXT_PUBLIC_APP_URL}/p/${campaignId}/${destination}`
-      : "";
+    typeof window !== "undefined" ? `${process.env.NEXT_PUBLIC_APP_URL}/p/${campaignId}/bridge` : "";
 
   if (launch?.status === "building") {
     return (

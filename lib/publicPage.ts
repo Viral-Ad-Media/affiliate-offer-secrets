@@ -1,25 +1,25 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { IMAGE_DATA_URL_RE } from "@/lib/images/validate";
 
-// Serves a campaign's presell/bridge HTML at a real public URL — needed so a real Meta ad's
-// link_url has somewhere to point (previously this HTML only ever rendered inside an
-// authenticated iframe). The campaign UUID is unguessable — that's the access control, not RLS
+// Serves a campaign's bridge (lead-capture landing) page HTML at a real public URL — needed so a
+// real Meta ad's link_url has somewhere to point (previously this HTML only ever rendered inside
+// an authenticated iframe). The campaign UUID is unguessable — that's the access control, not RLS
 // (RLS would reject an anonymous read outright, so this deliberately uses the admin client,
 // scoped by application code to exactly one campaign id + status='ready'). Same generic 404 for
 // "not found" and "not ready" so the response code can't be used to enumerate campaign state.
-export async function servePublicCampaignPage(
-  campaignId: string,
-  field: "presell_html" | "bridge_html"
-): Promise<Response> {
+// There used to be a second page variant ("presell", no lead capture) this took a `field` param
+// to pick between — it's been merged into the bridge page (lib/engine/renderPages.ts), so this
+// only ever serves bridge_html now.
+export async function servePublicCampaignPage(campaignId: string): Promise<Response> {
   const admin = createAdminClient();
   const { data: campaign } = await admin
     .from("campaigns")
-    .select(field)
+    .select("bridge_html")
     .eq("id", campaignId)
     .eq("status", "ready")
     .maybeSingle();
 
-  const html = (campaign as Record<string, unknown> | null)?.[field] as string | null | undefined;
+  const html = campaign?.bridge_html as string | null | undefined;
   if (!html) {
     return new Response("Not found", { status: 404 });
   }

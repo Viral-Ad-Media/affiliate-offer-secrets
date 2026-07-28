@@ -91,8 +91,8 @@ function dataUrlToBlob(dataUrl: string): { blob: Blob; mime: string } {
 // Uploads real image bytes rather than hotlinking a third-party URL — vendor CDNs commonly block
 // unknown-fetcher requests, the vendor can swap the image later, and hotlinking a third party's
 // asset into a live post is more exposed than embedding a copy (same reasoning CLAUDE.md's
-// content rule 9 already applies to presell pages). Callers get the bytes via
-// lib/engine/images.ts's fetchImageAsDataUrl(), same helper the presell page embed already uses.
+// content rule 9 already applies to the bridge page). Callers get the bytes via
+// lib/engine/images.ts's fetchImageAsDataUrl(), same helper the bridge page embed already uses.
 export async function publishPhotoBytes(
   pageId: string,
   pageAccessToken: string,

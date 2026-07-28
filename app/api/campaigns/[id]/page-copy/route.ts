@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { renderPresellHtml, renderBridgeHtml, renderLandingMd, buildHoplink, type PageCopy } from "@/lib/engine/renderPages";
+import { renderBridgeHtml, renderLandingMd, buildHoplink, type PageCopy } from "@/lib/engine/renderPages";
 import { isValidImageDataUrl } from "@/lib/images/validate";
 
 export const dynamic = "force-dynamic";
@@ -79,7 +79,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 
   // The client always sends this key explicitly — either the unchanged current image (which it
-  // seeds by reading the campaign's existing presell_html once on load), a freshly picked
+  // seeds by reading the campaign's existing bridge_html once on load), a freshly picked
   // replacement, or null if the user removed the image. There's no "omit to keep existing" case
   // to handle server-side, which keeps this validation branch-free.
   let imageDataUrl: string | null = null;
@@ -128,7 +128,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const hoplink = buildHoplink(product.network, connection.affiliate_id, product.vendor_id, "page");
 
-  const presellHtml = renderPresellHtml(product, copy, hoplink, imageDataUrl);
   const bridgeHtml = renderBridgeHtml(product, copy, hoplink, imageDataUrl, campaignId);
 
   const { error: updateErr } = await admin
@@ -136,7 +135,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .update({
       page_copy: copy,
       landing_md: copy.landing_md,
-      presell_html: presellHtml,
       bridge_html: bridgeHtml,
       embedded_image_data_url: imageDataUrl,
     })
@@ -146,5 +144,5 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "failed to save" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, presell_html: presellHtml, bridge_html: bridgeHtml });
+  return NextResponse.json({ ok: true, bridge_html: bridgeHtml });
 }

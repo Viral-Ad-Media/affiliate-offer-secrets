@@ -17,8 +17,7 @@ const TABS = [
   { key: "fb_ads_md", label: "FB/IG Ads" },
   { key: "tiktok_md", label: "TikTok" },
   { key: "landing_md", label: "Landing copy" },
-  { key: "presell_html", label: "Presell page" },
-  { key: "bridge_html", label: "Bridge (lead capture)" },
+  { key: "bridge_html", label: "Landing page (lead capture)" },
   { key: "blog_md", label: "Blog" },
   { key: "social_md", label: "Social" },
   { key: "email_md", label: "Emails" },
@@ -57,13 +56,13 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     setTimeout(() => setCopied(false), 1500);
   }
 
-  function downloadHtml(kind: "presell" | "bridge") {
-    const html = kind === "presell" ? campaign?.presell_html : campaign?.bridge_html;
+  function downloadHtml() {
+    const html = campaign?.bridge_html;
     if (!html) return;
     const blob = new Blob([html], { type: "text/html" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `${product!.vendor_id}-${kind}.html`;
+    a.download = `${product!.vendor_id}-bridge.html`;
     a.click();
     URL.revokeObjectURL(a.href);
   }
@@ -162,7 +161,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
               </span>
             ) : null}
           </h2>
-          {(tab === "presell_html" || tab === "bridge_html") && campaign?.[tab] && (
+          {tab === "bridge_html" && campaign?.bridge_html && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setEditMode((v) => !v)}
@@ -171,10 +170,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                 {editMode ? <Eye className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
                 {editMode ? "View" : "Edit"}
               </button>
-              <button
-                onClick={() => downloadHtml(tab === "presell_html" ? "presell" : "bridge")}
-                className="btn-ghost !py-1 text-xs"
-              >
+              <button onClick={downloadHtml} className="btn-ghost !py-1 text-xs">
                 <Download className="h-3.5 w-3.5" /> Download HTML
               </button>
             </div>
@@ -205,35 +201,30 @@ export default function ProductPage({ params }: { params: { id: string } }) {
             <div className="p-4">
               {!content ? (
                 <p className="py-6 text-center text-sm text-zinc-500">Not generated yet.</p>
-              ) : (tab === "presell_html" || tab === "bridge_html") && editMode ? (
+              ) : tab === "bridge_html" && editMode ? (
                 <PageEditor
                   campaignId={campaign!.id}
                   productTitle={product.product_title}
                   initialCopy={campaign?.page_copy ?? null}
-                  initialPresellHtml={campaign?.presell_html ?? null}
                   initialBridgeHtml={campaign?.bridge_html ?? null}
                   previewHoplink={product.hoplink ?? "#"}
-                  onSaved={({ presell_html, bridge_html, page_copy }) =>
-                    setCampaign((c) => (c ? { ...c, presell_html, bridge_html, page_copy } : c))
+                  onSaved={({ bridge_html, page_copy }) =>
+                    setCampaign((c) => (c ? { ...c, bridge_html, page_copy } : c))
                   }
-                />
-              ) : tab === "presell_html" ? (
-                <iframe
-                  srcDoc={content}
-                  sandbox=""
-                  title="Presell preview"
-                  className="h-[70vh] w-full rounded-lg border border-ink-700 bg-white"
                 />
               ) : tab === "bridge_html" ? (
                 <>
                   <p className="mb-2 text-xs text-zinc-500">
-                    Preview is interactive (try the form) — the submit handler is a placeholder
-                    until you wire up real lead storage. See the ⚠ note inside the page.
+                    Preview is interactive — try the opt-in form, leads land on your{" "}
+                    <Link href="/contacts" className="underline">
+                      Contacts
+                    </Link>{" "}
+                    page.
                   </p>
                   <iframe
                     srcDoc={content}
                     sandbox="allow-scripts"
-                    title="Bridge page preview"
+                    title="Landing page preview"
                     className="h-[70vh] w-full rounded-lg border border-ink-700 bg-white"
                   />
                 </>
@@ -275,13 +266,12 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                       />
                     </div>
                   )}
-                  {tab === "fb_ads_md" && campaign?.presell_html && (
+                  {tab === "fb_ads_md" && campaign?.bridge_html && (
                     <div className="mt-4">
                       <LaunchAd
                         campaignId={campaign!.id}
                         defaultHeadline={product.product_title}
                         defaultPrimaryText=""
-                        destination="presell"
                       />
                     </div>
                   )}

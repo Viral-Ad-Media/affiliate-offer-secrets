@@ -1,7 +1,7 @@
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { fetchSalesPage, type ImageCandidate } from "./salespage";
 import { pickProductImage, fetchImageAsDataUrl } from "./images";
-import { renderPresellHtml, renderBridgeHtml, buildHoplink, type PageCopy, type Network } from "./renderPages";
+import { renderBridgeHtml, buildHoplink, type PageCopy, type Network } from "./renderPages";
 
 export const BUILD_CAMPAIGN_STAGES = ["context", "image", "ads", "pages", "content", "social"] as const;
 export type BuildStage = (typeof BUILD_CAMPAIGN_STAGES)[number];
@@ -116,7 +116,7 @@ async function stagePages(
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
   const copy = await completeJSON<PageCopy>({
     system: COMPLIANCE_SYSTEM,
-    prompt: `${ctx}\n\nWrite presell/landing page copy: a headline, a lead paragraph, a "mechanism" explanation (why/how it works), 3-5 benefit bullets, a short proof/credibility paragraph, 3-4 FAQ pairs, and a short CTA button label. Also return the same material as one cohesive landing_md markdown document with headline/lead/mechanism/benefits/proof/FAQ/CTA sections in that order.`,
+    prompt: `${ctx}\n\nWrite landing (bridge) page copy: a headline, a lead paragraph, a "mechanism" explanation (why/how it works), 3-5 benefit bullets, a short proof/credibility paragraph, 3-4 FAQ pairs, and a short CTA button label. Also return the same material as one cohesive landing_md markdown document with headline/lead/mechanism/benefits/proof/FAQ/CTA sections in that order.`,
     schema: {
       type: "object",
       properties: {
@@ -145,14 +145,12 @@ async function stagePages(
   const byChannel = (prior.hoplink_by_channel as Record<string, string>) ?? {};
   const imageDataUrl = (prior.image_data_url as string | null) ?? null;
   const hoplink = byChannel.page ?? product.hoplink ?? "#";
-  const presellHtml = renderPresellHtml(product, copy, hoplink, imageDataUrl);
   const bridgeHtml = renderBridgeHtml(product, copy, hoplink, imageDataUrl, campaignId);
 
   return {
     stageData: prior,
     campaignPatch: {
       landing_md: copy.landing_md,
-      presell_html: presellHtml,
       bridge_html: bridgeHtml,
       page_copy: copy,
       embedded_image_data_url: imageDataUrl,

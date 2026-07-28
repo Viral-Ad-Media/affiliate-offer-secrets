@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Plus, Trash2, Image as ImageIcon, Loader2, CheckCircle2 } from "lucide-react";
-import { renderPresellHtml, renderBridgeHtml, type PageCopy } from "@/lib/engine/renderPages";
+import { renderBridgeHtml, type PageCopy } from "@/lib/engine/renderPages";
 
 const MAX_IMAGE_DATA_URL_CHARS = 280_000;
 
@@ -52,10 +52,9 @@ type Props = {
   campaignId: string;
   productTitle: string;
   initialCopy: PageCopy | null;
-  initialPresellHtml: string | null;
   initialBridgeHtml: string | null;
   previewHoplink: string;
-  onSaved: (result: { presell_html: string; bridge_html: string; page_copy: PageCopy }) => void;
+  onSaved: (result: { bridge_html: string; page_copy: PageCopy }) => void;
 };
 
 const emptyCopy: PageCopy = {
@@ -73,16 +72,12 @@ export default function PageEditor({
   campaignId,
   productTitle,
   initialCopy,
-  initialPresellHtml,
   initialBridgeHtml,
   previewHoplink,
   onSaved,
 }: Props) {
   const [copy, setCopy] = useState<PageCopy>(initialCopy ?? emptyCopy);
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(
-    extractImageSrc(initialPresellHtml ?? initialBridgeHtml)
-  );
-  const [previewTab, setPreviewTab] = useState<"presell" | "bridge">("presell");
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(extractImageSrc(initialBridgeHtml));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -91,10 +86,7 @@ export default function PageEditor({
 
   const product = useMemo(() => ({ product_title: productTitle }), [productTitle]);
 
-  const previewHtml =
-    previewTab === "presell"
-      ? renderPresellHtml(product, copy, previewHoplink, imageDataUrl)
-      : renderBridgeHtml(product, copy, previewHoplink, imageDataUrl, campaignId);
+  const previewHtml = renderBridgeHtml(product, copy, previewHoplink, imageDataUrl, campaignId);
 
   function update<K extends keyof PageCopy>(key: K, value: PageCopy[K]) {
     setCopy((c) => ({ ...c, [key]: value }));
@@ -147,7 +139,7 @@ export default function PageEditor({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
-      onSaved({ presell_html: data.presell_html, bridge_html: data.bridge_html, page_copy: copy });
+      onSaved({ bridge_html: data.bridge_html, page_copy: copy });
       setSavedAt(Date.now());
     } catch (err: any) {
       setError(err?.message ?? "Failed to save");
@@ -358,23 +350,12 @@ export default function PageEditor({
       </div>
 
       <div>
-        <div className="mb-2 flex gap-1 text-xs">
-          <button
-            onClick={() => setPreviewTab("presell")}
-            className={`rounded-full px-2.5 py-1 ${previewTab === "presell" ? "bg-emerald-600 text-white" : "text-zinc-400 hover:bg-ink-700"}`}
-          >
-            Presell preview
-          </button>
-          <button
-            onClick={() => setPreviewTab("bridge")}
-            className={`rounded-full px-2.5 py-1 ${previewTab === "bridge" ? "bg-emerald-600 text-white" : "text-zinc-400 hover:bg-ink-700"}`}
-          >
-            Bridge preview
-          </button>
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Live preview
         </div>
         <iframe
           srcDoc={previewHtml}
-          sandbox={previewTab === "bridge" ? "allow-scripts" : ""}
+          sandbox="allow-scripts"
           title="Live preview"
           className="h-[70vh] w-full rounded-lg border border-ink-700 bg-white"
         />

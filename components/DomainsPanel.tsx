@@ -18,7 +18,6 @@ import {
 type DomainRoute = {
   id: string;
   path: string;
-  destination: "presell" | "bridge";
   campaign_id: string;
 };
 
@@ -49,7 +48,6 @@ function AddRouteForm({
   onAdded: (route: DomainRoute) => void;
 }) {
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
-  const [destination, setDestination] = useState<"presell" | "bridge">("presell");
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,11 +60,11 @@ function AddRouteForm({
       const res = await fetch(`/api/domains/${domain.id}/routes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaign_id: campaignId, destination, path }),
+        body: JSON.stringify({ campaign_id: campaignId, path }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to add route");
-      onAdded({ id: data.id, path: path.replace(/^\/+|\/+$/g, "").toLowerCase(), destination, campaign_id: campaignId });
+      onAdded({ id: data.id, path: path.replace(/^\/+|\/+$/g, "").toLowerCase(), campaign_id: campaignId });
       setPath("");
     } catch (err: any) {
       setError(err?.message ?? "Failed to add route");
@@ -95,14 +93,6 @@ function AddRouteForm({
             {c.title}
           </option>
         ))}
-      </select>
-      <select
-        value={destination}
-        onChange={(e) => setDestination(e.target.value as "presell" | "bridge")}
-        className="rounded-lg border border-ink-600 bg-ink-800 px-2 py-1.5 text-xs text-zinc-100"
-      >
-        <option value="presell">Presell</option>
-        <option value="bridge">Bridge</option>
       </select>
       <div className="flex items-center gap-1 text-xs text-zinc-500">
         <span>/{domain.domain}/</span>
@@ -237,9 +227,6 @@ function DomainRow({
                   className="flex items-center justify-between rounded-lg border border-ink-700 px-3 py-2 text-xs"
                 >
                   <div className="flex items-center gap-2 text-zinc-300">
-                    <span className="chip border-ink-600 bg-ink-800 text-zinc-400">
-                      {r.destination}
-                    </span>
                     <span className="truncate">{url}</span>
                   </div>
                   <div className="flex items-center gap-1">

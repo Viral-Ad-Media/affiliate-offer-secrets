@@ -8,7 +8,7 @@ export const metadata = {
 const FAQS = [
   {
     q: "What exactly does ClickBank Studio generate for me?",
-    a: "For each product you promote, it generates Facebook and TikTok ad copy, a presell page, an optional bridge (lead-capture) page, a blog article, and email swipes — all grounded in claims taken directly from the vendor's own sales page.",
+    a: "For each product you promote, it generates Facebook and TikTok ad copy, a bridge (lead-capture) landing page, a blog article, and email swipes — all grounded in claims taken directly from the vendor's own sales page.",
   },
   {
     q: "Do I need a ClickBank account?",
@@ -35,8 +35,8 @@ const FAQS = [
     a: "Yes — every new account gets a 30-day free trial with full access to product discovery and campaign generation, no credit card required to start.",
   },
   {
-    q: "Is the presell/bridge page content compliant for ad platforms?",
-    a: "Generated copy avoids fabricated claims, income promises, and cure language, and includes affiliate disclosures on every presell and blog page. You're still responsible for reviewing copy against the specific ad platform's current policies before running paid traffic.",
+    q: "Is the bridge page content compliant for ad platforms?",
+    a: "Generated copy avoids fabricated claims, income promises, and cure language, and includes affiliate disclosures on every landing page and blog page. You're still responsible for reviewing copy against the specific ad platform's current policies before running paid traffic.",
   },
   {
     q: "Can I edit the generated content?",
