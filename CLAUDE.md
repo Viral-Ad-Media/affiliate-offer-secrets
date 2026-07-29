@@ -933,6 +933,87 @@ per-component recoloring:
   install` — the CSS variable mapping above means no manual re-theming should be needed for
   components that use standard shadcn semantic classes.
 
+## Broadcast (drip sequences)
+
+Full autoresponder/drip-sequence email feature — a client picks an audience (a specific
+campaign's contacts, all contacts, or a manually chosen subset) and a named sequence of N steps,
+each firing `delay_days` after that **contact's own** enrollment (standard ESP semantics — "day 3
+after this contact signed up", never a shared calendar date). Reuses the existing `jobs`/
+`claim_job()`/`worker.ts` engine unchanged.
+
+- **`claim_job()` has no time-gating** — any pending job is immediately claimable. A step that
+  isn't due yet must therefore never become a `jobs` row. `broadcast_enrollment_steps.due_at` is
+  the real precomputed timestamp that keeps this a non-issue: nothing inserts a `jobs` row from
+  that table until `run_broadcast_sweep()` (`supabase/migrations/0021_broadcast.sql`) finds
+  `status='pending' and due_at <= now()` — a narrow, additive `pg_cron` backstop
+  (`broadcast-sweep-backstop`, every 1 minute, same shape as `domains-reverify-backstop`), not a
+  change to the shared engine. Cron registration (like `engine_webhook_url`) is applied via
+  `execute_sql`, never committed to a migration or git.
+- **New contacts are enrolled by the same sweep**, not a write into
+  `app/api/public/leads/route.ts` — that route is this codebase's hardest-to-get-right trust
+  boundary (anonymous, unauthenticated, rate-capped); a 1-minute sweep delivers enrollment close
+  enough to instant without raising that route's blast radius.
+- **`enroll_broadcast_sequence_contacts(p_sequence_id)`** is the one function that both
+  `activate_broadcast_sequence()`'s retroactive pass and every sweep tick's continuous pass call
+  — idempotent (`unique(sequence_id, contact_id)` + `ON CONFLICT DO NOTHING`), so double-calling
+  it (activation racing a sweep tick, or two sweep ticks racing each other) is always safe. A
+  `campaign_id`-scoped sequence whose campaign gets deleted fails safe automatically (no CHECK
+  constraint couples `audience_type='campaign'` to a non-null `campaign_id` — that would break
+  campaign deletion; `c.campaign_id = seq.campaign_id` simply never matches a NULL).
+- **Unsubscribe is global per contact** (`contacts.unsubscribed_at`), not per-sequence. The
+  unsubscribe link (`GET /api/public/unsubscribe?token=<contacts.unsub_token>` — a *second*,
+  dedicated unguessable column, never `contacts.id` itself) is code-owned
+  (`lib/engine/broadcastEmail.ts`'s `renderUnsubscribeFooterHtml()`) and appended to every sent
+  email, same non-negotiable-compliance-text treatment as `DISCLOSURE`/`LEAD_CONSENT_TEXT` in
+  `renderPages.ts` — never exposed as an editable field in the step editor. **GET, not POST/RPC**
+  — a deliberate exception to this codebase's usual write-via-POST/RPC rule, since the link must
+  work as a bare `<a href>` inside an email client with zero JS; the only possible harm from a
+  forged/prefetched GET is an unwanted unsubscribe of that same contact. The route eagerly flips
+  `broadcast_enrollments`/`broadcast_enrollment_steps` too, purely so the UI's stats don't lag —
+  **not** the security boundary; `lib/engine/broadcast.ts`'s `verify` stage re-checks
+  `unsubscribed_at` unconditionally right before every send regardless.
+- **`send_broadcast_email` job** (`lib/engine/broadcast.ts`, stages `["verify","send"]`, payload
+  `{enrollment_step_id}`) — same stage-0 ownership-reverify pattern as every other job type (jobs'
+  RLS only validates the row's own `user_id`, not payload contents; `verify` re-scopes every hop —
+  enrollment step → enrollment → sequence/step → contact — to `job.user_id`). `verify` also
+  handles the unsubscribed-since-queued case (`skip: true`, applies `status='skipped'`, worker
+  marks the job done without ever reaching `send`) and a defensive rate-cap re-check (`retry:
+  true`, reusing the existing `heartbeatRetry()` mechanic — the sweep's own admission control is
+  the primary gate, this covers the narrow race window between that check and the job running).
+  `failJob()` mirrors terminal failure onto `broadcast_enrollment_steps.status='failed'`, the
+  `ad_launches`/`campaign_creatives` convention.
+- **Rate cap is pooled across `mail_sends` + `broadcast_sends`** — same Gmail account, same real
+  ~500/day free-tier limit, same pooling idiom Phase I used for `generate_ad_image`+
+  `generate_creative_image`. 300/day is a nominal, revisit-before-scale figure, but unlike the
+  generation caps this one is protecting a real external rate limit (Gmail account
+  flagging/suspension), not just a runaway-loop backstop.
+- **`getValidMailAccessToken()`** (`lib/google/mailToken.ts`) is the Gmail refresh-or-fetch dance
+  (2-minute-early threshold, store-new-then-delete-old Vault hygiene, `needs_reconnect` flip on
+  failure), extracted out of `app/api/mail/send/route.ts` (which now calls it, behavior-preserving)
+  so the new job stage can reuse it too — this would otherwise have been the fifth independent
+  copy of this exact logic in the codebase.
+- **Pre-existing, unrelated bug found while building this** (not fixed here):
+  `app/api/domains/reverify-all/route.ts` is missing from `middleware.ts`'s
+  `PUBLIC_PREFIX_PATHS` — since it's called by an unauthenticated `pg_net` POST, the auth-gate
+  likely redirects it to `/login` before the handler runs, meaning `domains-reverify-backstop`'s
+  cron tick has probably been silently failing since it shipped. `/api/broadcast/sweep` is added
+  to `PUBLIC_PREFIX_PATHS` explicitly so it doesn't repeat the mistake; the `reverify-all` gap is
+  a separate, still-open follow-up.
+- **UI**: `/broadcast` (list, `components/BroadcastSequenceList.tsx`) → `/broadcast/[id]`
+  (detail/editor — `BroadcastSequenceForm.tsx` for name/audience while `draft`,
+  `BroadcastStepsEditor.tsx` for steps while `draft`/`paused`, `BroadcastContactPicker.tsx` for
+  the manual-audience case, `BroadcastActivateControl.tsx` for lifecycle + live stats, gated on
+  Gmail connection status the same way `LaunchAd.tsx` gates on `bridgePublished`). All reads go
+  directly through the browser Supabase client against each table's owner-select RLS policy (same
+  pattern as `CreativeItemCard.tsx`); all writes go through the narrow RPCs in
+  `0021_broadcast.sql` — no wrapping Next.js routes for CRUD, matching `add_domain_route`/
+  `claim_campaign_creative`'s precedent of RPC-only writes when there's no external side effect.
+- **Not included**: no retroactive re-scheduling when a sequence's steps are edited after
+  contacts are already enrolled (existing enrollments keep the schedule frozen in at their own
+  `enrolled_at`); no per-sequence unsubscribe scope (global per contact only); no CAPTCHA/IP-based
+  abuse protection on the unsubscribe endpoint (same accepted v1 gap as `/api/public/leads`); no
+  manual "send this step now" override or drag-and-drop step reordering.
+
 ## Dev
 
 ```bash

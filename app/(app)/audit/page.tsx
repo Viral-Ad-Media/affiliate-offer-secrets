@@ -16,16 +16,25 @@ export default async function AuditPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: meta }, { data: instagram }, { data: tiktok }, { data: youtube }, { data: mail }, { data: campaigns }, { data: usageRows }] =
-    await Promise.all([
-      supabase.from("meta_posts").select("*").eq("user_id", user.id),
-      supabase.from("instagram_posts").select("*").eq("user_id", user.id),
-      supabase.from("tiktok_posts").select("*").eq("user_id", user.id),
-      supabase.from("youtube_posts").select("*").eq("user_id", user.id),
-      supabase.from("mail_sends").select("*").eq("user_id", user.id),
-      supabase.from("campaigns").select("id, products(product_title)"),
-      supabase.from("usage_ledger").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-    ]);
+  const [
+    { data: meta },
+    { data: instagram },
+    { data: tiktok },
+    { data: youtube },
+    { data: mail },
+    { data: broadcast },
+    { data: campaigns },
+    { data: usageRows },
+  ] = await Promise.all([
+    supabase.from("meta_posts").select("*").eq("user_id", user.id),
+    supabase.from("instagram_posts").select("*").eq("user_id", user.id),
+    supabase.from("tiktok_posts").select("*").eq("user_id", user.id),
+    supabase.from("youtube_posts").select("*").eq("user_id", user.id),
+    supabase.from("mail_sends").select("*").eq("user_id", user.id),
+    supabase.from("broadcast_sends").select("*").eq("user_id", user.id),
+    supabase.from("campaigns").select("id, products(product_title)"),
+    supabase.from("usage_ledger").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+  ]);
 
   const usage = (usageRows ?? []) as UsageEntry[];
   const totalCostUsd = usage.reduce((sum, u) => sum + u.cost_usd, 0);
@@ -85,6 +94,16 @@ export default async function AuditPage() {
       campaign_title: p.campaign_id ? (titleByCampaign.get(p.campaign_id) ?? null) : null,
       summary: truncate(p.subject) || "Sent an email",
       detail: `to ${p.to_address}`,
+      externalUrl: null,
+    })),
+    ...(broadcast ?? []).map((p: any): AuditEntry => ({
+      id: p.id,
+      platform: "broadcast",
+      created_at: p.created_at,
+      campaign_id: p.campaign_id,
+      campaign_title: p.campaign_id ? (titleByCampaign.get(p.campaign_id) ?? null) : null,
+      summary: truncate(p.subject) || "Sent a broadcast email",
+      detail: `to ${p.to_address}${p.status === "failed" ? " — failed" : ""}`,
       externalUrl: null,
     })),
   ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());

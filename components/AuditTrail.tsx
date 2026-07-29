@@ -1,4 +1,4 @@
-import { Facebook, Instagram, Music2, Youtube, Mail, ExternalLink } from "lucide-react";
+import { Facebook, Instagram, Music2, Youtube, Mail, Send, ExternalLink } from "lucide-react";
 import type { AuditEntry, AuditPlatform } from "@/lib/shared";
 
 const PLATFORM_META: Record<AuditPlatform, { label: string; icon: typeof Facebook; className: string }> = {
@@ -7,6 +7,7 @@ const PLATFORM_META: Record<AuditPlatform, { label: string; icon: typeof Faceboo
   tiktok: { label: "TikTok", icon: Music2, className: "border-zinc-400/30 bg-zinc-400/10 text-zinc-200" },
   youtube: { label: "YouTube", icon: Youtube, className: "border-red-500/30 bg-red-500/10 text-red-300" },
   mail: { label: "Mail", icon: Mail, className: "border-amber-500/30 bg-amber-500/10 text-amber-300" },
+  broadcast: { label: "Broadcast", icon: Send, className: "border-violet-500/30 bg-violet-500/10 text-violet-300" },
 };
 
 export default function AuditTrail({ entries }: { entries: AuditEntry[] }) {

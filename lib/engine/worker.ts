@@ -14,6 +14,11 @@ import {
   GENERATE_CREATIVE_VIDEO_STAGES,
   type GenerateCreativeVideoPayload,
 } from "./creativevideo";
+import {
+  runSendBroadcastEmailStage,
+  SEND_BROADCAST_EMAIL_STAGES,
+  type SendBroadcastEmailPayload,
+} from "./broadcast";
 
 const INVOCATION_BUDGET_MS = 50_000; // stay safely under maxDuration=60 on any Vercel plan
 const MAX_ATTEMPTS = 5;
@@ -28,7 +33,8 @@ type JobRow = {
     | "generate_ad_image"
     | "generate_video"
     | "generate_creative_image"
-    | "generate_creative_video";
+    | "generate_creative_video"
+    | "send_broadcast_email";
   payload: any;
   status: string;
   stage: number;
@@ -162,6 +168,12 @@ async function failJob(job: JobRow, message: string) {
         .from("campaign_creatives")
         .update({ status: "failed", error: message, updated_at: new Date().toISOString() })
         .eq("id", job.payload.campaign_creative_id);
+    }
+    if (job.type === "send_broadcast_email" && job.payload?.enrollment_step_id) {
+      await db
+        .from("broadcast_enrollment_steps")
+        .update({ status: "failed", updated_at: new Date().toISOString() })
+        .eq("id", job.payload.enrollment_step_id);
     }
   } else {
     // Leave pending (not running) so the natural claim_job() path retries it.
@@ -524,6 +536,56 @@ async function processGenerateCreativeVideoStage(job: JobRow): Promise<StageResu
   return { done: false };
 }
 
+// Same optimistic-concurrency stage-advance shape as the other multi-stage job types, plus one
+// narrow addition: a `skip: true` result (contact unsubscribed between queueing and this job
+// running — see lib/engine/broadcast.ts's stageVerify) applies its patch and marks the job done
+// without ever advancing to the "send" stage, rather than a generic new mechanic.
+async function processSendBroadcastEmailStage(job: JobRow): Promise<StageResult> {
+  const payload = job.payload as SendBroadcastEmailPayload;
+  if (!payload?.enrollment_step_id) {
+    throw new Error("send_broadcast_email job missing payload.enrollment_step_id");
+  }
+
+  const { stageData, enrollmentStepPatch, retry, skip } = await runSendBroadcastEmailStage(
+    job.stage,
+    payload,
+    job.user_id,
+    job.stage_data ?? {}
+  );
+
+  if (retry) return { done: false, retry: true };
+
+  if (enrollmentStepPatch && Object.keys(enrollmentStepPatch).length > 0) {
+    await db
+      .from("broadcast_enrollment_steps")
+      .update({ ...enrollmentStepPatch, updated_at: new Date().toISOString() })
+      .eq("id", payload.enrollment_step_id);
+  }
+
+  if (skip) {
+    await markDone(job.id, "skipped (unsubscribed)");
+    return { done: true };
+  }
+
+  const nextStage = job.stage + 1;
+  const { data: advanced } = await db
+    .from("jobs")
+    .update({ stage: nextStage, stage_data: stageData, updated_at: new Date().toISOString() })
+    .eq("id", job.id)
+    .eq("stage", job.stage)
+    .select("id")
+    .maybeSingle();
+
+  if (!advanced) return { done: false, raced: true };
+
+  if (nextStage >= SEND_BROADCAST_EMAIL_STAGES.length) {
+    await markDone(job.id, "sent");
+    return { done: true };
+  }
+
+  return { done: false };
+}
+
 export async function runWorkerLoop(): Promise<{ processed: number }> {
   const start = Date.now();
   let processed = 0;
@@ -548,6 +610,8 @@ export async function runWorkerLoop(): Promise<{ processed: number }> {
         processed += await runStageLoop(job, processGenerateCreativeImageStage, start);
       } else if (job.type === "generate_creative_video") {
         processed += await runStageLoop(job, processGenerateCreativeVideoStage, start);
+      } else if (job.type === "send_broadcast_email") {
+        processed += await runStageLoop(job, processSendBroadcastEmailStage, start);
       } else {
         await failJob(job, `Unknown job type: ${job.type}`);
       }

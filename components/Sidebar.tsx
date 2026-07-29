@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Link2, Globe, Users, History, CreditCard, Clock, Coins, LogOut } from "lucide-react";
+import { LayoutDashboard, Link2, Globe, Users, Send, History, CreditCard, Clock, Coins, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
@@ -11,6 +11,7 @@ const NAV = [
   { href: "/connections", label: "Connections", icon: Link2, match: (p: string) => p === "/connections" },
   { href: "/domains", label: "Domains", icon: Globe, match: (p: string) => p.startsWith("/domains") },
   { href: "/contacts", label: "Contacts", icon: Users, match: (p: string) => p === "/contacts" },
+  { href: "/broadcast", label: "Broadcast", icon: Send, match: (p: string) => p.startsWith("/broadcast") },
   { href: "/audit", label: "Audit trail", icon: History, match: (p: string) => p === "/audit" },
   { href: "/billing", label: "Billing", icon: CreditCard, match: (p: string) => p === "/billing" },
 ];

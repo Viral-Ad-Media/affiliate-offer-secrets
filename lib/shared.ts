@@ -136,7 +136,7 @@ export type UsageEntry = {
   created_at: string;
 };
 
-export type AuditPlatform = "facebook" | "instagram" | "tiktok" | "youtube" | "mail";
+export type AuditPlatform = "facebook" | "instagram" | "tiktok" | "youtube" | "mail" | "broadcast";
 
 export type AuditEntry = {
   id: string;
@@ -157,6 +157,30 @@ export type Contact = {
   email: string;
   created_at: string;
 };
+
+export type BroadcastAudienceType = "campaign" | "all" | "manual";
+export type BroadcastSequenceStatus = "draft" | "active" | "paused";
+
+export type BroadcastSequence = {
+  id: string;
+  name: string;
+  audience_type: BroadcastAudienceType;
+  campaign_id: string | null;
+  status: BroadcastSequenceStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BroadcastStep = {
+  id: string;
+  sequence_id: string;
+  step_index: number;
+  delay_days: number;
+  subject: string;
+  body_md: string;
+};
+
+export type BroadcastEnrollmentStepStatus = "pending" | "queued" | "sent" | "failed" | "skipped";
 
 export function hasAppAccess(profile: Pick<Profile, "access_granted" | "trial_ends_at"> | null | undefined) {
   if (!profile) return false;

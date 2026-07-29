@@ -21,6 +21,8 @@ const PUBLIC_PREFIX_PATHS = [
   "/p/", // public bridge (lead-capture landing) pages — real ad destinations, no auth
   "/api/public/campaign-image/", // public campaign product images — needed for Instagram posting
   "/api/public/leads", // bridge-page lead capture — anonymous visitors, no auth
+  "/api/public/unsubscribe", // one-click email unsubscribe link — anonymous visitors, no auth
+  "/api/broadcast/sweep", // pg_cron backstop for Broadcast drip sequences, x-engine-secret gated
 ];
 
 export async function middleware(request: NextRequest) {
