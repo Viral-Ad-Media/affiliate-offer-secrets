@@ -394,6 +394,18 @@ all benefit from the same fix, not just the bridge-publish gate that exposed it)
 toggling `bridge_published` against a single long-running `next start` process (no rebuild) and
 confirming both directions took effect on the very next request.
 
+## Funnels (sidebar)
+
+`/funnels` (`app/(app)/funnels/page.tsx`) is a list/overview page, not a new entity — a "funnel"
+isn't its own table, it's every `campaigns` row that already has `bridge_html` generated. It
+appears there automatically the moment `stagePages` (`lib/engine/build.ts`) writes the bridge page
+— nothing explicitly inserts a "funnel." The page shows publish status (`bridge_published`), the
+public link (a verified custom-domain route if one is mapped, else the default `/p/{id}/bridge`),
+and leads captured (`contacts` count by `campaign_id`). Publishing/editing still happens in one
+place, the product page's Bridge page tab (`PublishBridge`/`PageEditor`) — Funnels' "Edit" link
+deep-links there via `?tab=bridge_html`, read by `ProductPage`'s `useSearchParams()` to set the
+initial tab (defaults to `fb_ads_md` if absent/unrecognized).
+
 ## Custom domains
 
 Clients can connect their own domain(s) — bring-your-own only, no in-app domain purchase — and

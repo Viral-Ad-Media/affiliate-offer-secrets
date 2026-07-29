@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Megaphone, Link2, Globe, Users, Send, History, CreditCard, Clock, Coins, LogOut } from "lucide-react";
+import { LayoutDashboard, Megaphone, Filter, Link2, Globe, Users, Send, History, CreditCard, Clock, Coins, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: (p: string) => p === "/dashboard" },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone, match: (p: string) => p === "/campaigns" || p.startsWith("/product/") },
+  { href: "/funnels", label: "Funnels", icon: Filter, match: (p: string) => p === "/funnels" },
   { href: "/connections", label: "Connections", icon: Link2, match: (p: string) => p === "/connections" },
   { href: "/domains", label: "Domains", icon: Globe, match: (p: string) => p.startsWith("/domains") },
   { href: "/contacts", label: "Contacts", icon: Users, match: (p: string) => p === "/contacts" },

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { marked } from "marked";
 import { ArrowLeft, Copy, CheckCircle2, ExternalLink, Download, Pencil, Eye } from "lucide-react";
 import type { Campaign, Product } from "@/lib/shared";
@@ -25,9 +26,15 @@ const TABS = [
 ] as const;
 
 export default function ProductPage({ params }: { params: { id: string } }) {
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const initialTab =
+    (TABS.find((t) => t.key === requestedTab)?.key as (typeof TABS)[number]["key"] | undefined) ??
+    "fb_ads_md";
+
   const [product, setProduct] = useState<Product | null>(null);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("fb_ads_md");
+  const [tab, setTab] = useState<(typeof TABS)[number]["key"]>(initialTab);
   const [copied, setCopied] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
