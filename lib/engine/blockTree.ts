@@ -1,0 +1,437 @@
+// The freeform block-tree page model (Phase O) — sections/rows/columns/elements, each stylable.
+// Isomorphic, no server-only imports (same discipline as renderPages.ts, which re-exports this
+// module's public surface so it stays the one stable import path every existing caller already
+// uses). Kept in its own file because it's large; renderPages.ts owns the outer HTML document
+// shell (doctype/head/style/submit-script) and both PageCopy-shaped functions that build it.
+
+// Defined here (not renderPages.ts) so blockTree.ts has zero dependency on renderPages.ts —
+// renderPages.ts imports/re-exports this instead, keeping the dependency one-directional even
+// though renderPages.ts otherwise depends heavily on this module.
+export function escapeHtml(s: string): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Style
+// ---------------------------------------------------------------------------------------------
+
+// Structured values ONLY — never a raw CSS string. This is what makes "full custom styling"
+// safe: there is no code path from a BlockStyle to a rendered style="..." attribute that
+// concatenates attacker-influenceable text. Every value here is small, typed, and range-checked
+// by validatePageBlockTree.ts before it's ever stored; styleToInlineCss() below re-checks the
+// same constraints defensively (belt-and-suspenders, matching this codebase's habit of not
+// trusting a single validation layer for anything rendered into real HTML served to real
+// visitors — see the hoplink XSS fix and image_data_url's anchored regex for the same pattern).
+export type HexColor = string; // must match /^#[0-9a-f]{6}$/i
+export type FontFamily = "system" | "serif" | "mono";
+
+export const FONT_STACKS: Record<FontFamily, string> = {
+  system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+  serif: 'Georgia, "Times New Roman", serif',
+  mono: '"SF Mono", Consolas, monospace',
+};
+
+export type BlockStyle = {
+  fontFamily?: FontFamily;
+  fontSize?: number; // px, 8-96
+  fontWeight?: 400 | 500 | 600 | 700 | 800;
+  textAlign?: "left" | "center" | "right";
+  color?: HexColor;
+  lineHeight?: number; // 1.0-2.5
+  backgroundColor?: HexColor;
+  paddingTop?: number; // px, 0-200
+  paddingRight?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
+  marginTop?: number; // px, 0-200
+  marginBottom?: number;
+  borderWidth?: number; // px, 0-16
+  borderColor?: HexColor;
+  borderRadius?: number; // px, 0-64
+  maxWidth?: number; // px, 100-1200 — section/row only, ignored elsewhere
+};
+
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
+const FONT_WEIGHTS = new Set([400, 500, 600, 700, 800]);
+const TEXT_ALIGNS = new Set(["left", "center", "right"]);
+
+// The single choke point every BlockStyle value passes through on its way into HTML. Per-key,
+// not a generic loop over arbitrary props — a key not explicitly handled here can never emit
+// anything, regardless of what's in `allowed` or the stored object.
+export function styleToInlineCss(style: BlockStyle | undefined, allowed: readonly (keyof BlockStyle)[]): string {
+  if (!style) return "";
+  const parts: string[] = [];
+  const has = (k: keyof BlockStyle) => allowed.includes(k);
+  const px = (n: unknown, min: number, max: number) =>
+    typeof n === "number" && Number.isFinite(n) && n >= min && n <= max ? Math.round(n) : null;
+  const hex = (v: unknown) => (typeof v === "string" && HEX_COLOR_RE.test(v) ? v.toLowerCase() : null);
+
+  if (has("fontFamily") && style.fontFamily && FONT_STACKS[style.fontFamily]) {
+    parts.push(`font-family:${FONT_STACKS[style.fontFamily]}`);
+  }
+  if (has("fontSize")) {
+    const v = px(style.fontSize, 8, 96);
+    if (v !== null) parts.push(`font-size:${v}px`);
+  }
+  if (has("fontWeight") && typeof style.fontWeight === "number" && FONT_WEIGHTS.has(style.fontWeight)) {
+    parts.push(`font-weight:${style.fontWeight}`);
+  }
+  if (has("textAlign") && typeof style.textAlign === "string" && TEXT_ALIGNS.has(style.textAlign)) {
+    parts.push(`text-align:${style.textAlign}`);
+  }
+  if (has("color")) {
+    const v = hex(style.color);
+    if (v) parts.push(`color:${v}`);
+  }
+  if (has("lineHeight")) {
+    const n = style.lineHeight;
+    if (typeof n === "number" && Number.isFinite(n) && n >= 1 && n <= 2.5) parts.push(`line-height:${n}`);
+  }
+  if (has("backgroundColor")) {
+    const v = hex(style.backgroundColor);
+    if (v) parts.push(`background-color:${v}`);
+  }
+  for (const [key, prop] of [
+    ["paddingTop", "padding-top"],
+    ["paddingRight", "padding-right"],
+    ["paddingBottom", "padding-bottom"],
+    ["paddingLeft", "padding-left"],
+    ["marginTop", "margin-top"],
+    ["marginBottom", "margin-bottom"],
+  ] as const) {
+    if (has(key)) {
+      const v = px(style[key], 0, 200);
+      if (v !== null) parts.push(`${prop}:${v}px`);
+    }
+  }
+  if (has("borderWidth")) {
+    const v = px(style.borderWidth, 0, 16);
+    if (v !== null && v > 0) {
+      parts.push(`border-width:${v}px`, "border-style:solid");
+      const bc = has("borderColor") ? hex(style.borderColor) : null;
+      parts.push(`border-color:${bc ?? "#000000"}`);
+    }
+  }
+  if (has("borderRadius")) {
+    const v = px(style.borderRadius, 0, 64);
+    if (v !== null) parts.push(`border-radius:${v}px`);
+  }
+  if (has("maxWidth")) {
+    const v = px(style.maxWidth, 100, 1200);
+    if (v !== null) parts.push(`max-width:${v}px`);
+  }
+  return parts.join(";");
+}
+
+function styleAttr(style: BlockStyle | undefined, allowed: readonly (keyof BlockStyle)[]): string {
+  const css = styleToInlineCss(style, allowed);
+  return css ? ` style="${css}"` : "";
+}
+
+// ---------------------------------------------------------------------------------------------
+// Block types
+// ---------------------------------------------------------------------------------------------
+
+type Base = { id: string; style: BlockStyle };
+
+export type HeadingBlock = Base & { type: "heading"; content: { text: string } };
+export type SubheadingBlock = Base & { type: "subheading"; content: { text: string } };
+export type ParagraphBlock = Base & { type: "paragraph"; content: { text: string } };
+export type ImageBlock = Base & { type: "image"; content: { dataUrl: string | null; alt: string } };
+export type BulletListBlock = Base & { type: "bullet_list"; content: { items: string[] } };
+export type IconListBlock = Base & { type: "icon_list"; content: { items: { icon: string; text: string }[] } };
+export type DividerBlock = Base & { type: "divider"; content: Record<string, never> };
+export type ImageListBlock = Base & {
+  type: "image_list";
+  content: { items: { imageDataUrl: string | null; caption: string }[] };
+};
+export type ButtonBlock = Base & { type: "button"; content: { text: string; href: string } };
+export type FaqItemBlock = Base & { type: "faq_item"; content: { question: string; answer: string } };
+
+export type ElementBlock =
+  | HeadingBlock
+  | SubheadingBlock
+  | ParagraphBlock
+  | ImageBlock
+  | BulletListBlock
+  | IconListBlock
+  | DividerBlock
+  | ImageListBlock
+  | ButtonBlock
+  | FaqItemBlock;
+
+export const ELEMENT_BLOCK_TYPES = [
+  "heading",
+  "subheading",
+  "paragraph",
+  "image",
+  "bullet_list",
+  "icon_list",
+  "divider",
+  "image_list",
+  "button",
+  "faq_item",
+] as const;
+
+// Only ever a child of a lead_capture_form block — never part of ElementBlock, so a Column's
+// children (typed ElementBlock[]) can never structurally contain one. A "floating" form input
+// elsewhere on the page is impossible by construction, not just rejected at validation time.
+export type FormInputBlock = Base & {
+  type: "form_input";
+  content: { label: string; fieldKey: string; fieldType: "text" | "email" | "tel"; placeholder: string; required: boolean };
+};
+
+export type ColumnBlock = Base & { type: "column"; children: ElementBlock[] };
+export type RowBlock = Base & { type: "row"; layout: "1col" | "2col" | "3col"; columns: ColumnBlock[] };
+export type SectionBlock = Base & { type: "section"; children: (RowBlock | ElementBlock)[] };
+
+// Locked (compliance-critical) blocks — a strict 1:1 type<->locked mapping enforced by
+// validatePageBlockTree.ts. Draggable to reposition among root-level siblings; never deletable;
+// core content/wiring never editable. See CLAUDE.md's "Freeform block page builder" section for
+// the full design rationale.
+export type DisclosureBlock = Base & { type: "disclosure"; locked: "disclosure"; content: Record<string, never> };
+// The fixed name/email inputs are NOT tree nodes — renderBlockTree's lead_capture_form case
+// always renders them first, unconditionally. There is no tree state that could represent
+// "email field deleted."
+export type LeadCaptureFormBlock = Base & {
+  type: "lead_capture_form";
+  locked: "lead_capture_form";
+  content: { ctaText: string };
+  children: FormInputBlock[];
+};
+export type PrimaryCtaBlock = Base & { type: "primary_cta"; locked: "primary_cta"; content: { text: string } };
+// 4th locked kind (beyond the 3 named originally) — funnel-step upsell's "No thanks, continue"
+// link, same locked-href/editable-text/style shape as primary_cta.
+export type DeclineLinkBlock = Base & { type: "decline_link"; locked: "decline_link"; content: { text: string } };
+
+export type LockedBlock = DisclosureBlock | LeadCaptureFormBlock | PrimaryCtaBlock | DeclineLinkBlock;
+
+export type Block = SectionBlock | RowBlock | ColumnBlock | ElementBlock | FormInputBlock | LockedBlock;
+export type BlockType = Block["type"];
+
+export type PageBlockTree = { version: 2; blocks: (SectionBlock | LockedBlock)[] };
+
+// ---------------------------------------------------------------------------------------------
+// Icons — a curated, bounded set (not the full lucide-react catalog). Rendering happens as a
+// plain string (renderPages.ts is a pure isomorphic string-builder, no react-dom/server), so
+// icons are hand-authored inline SVG rather than rendered lucide-react components. This map is
+// ALSO validatePageBlockTree.ts's ALLOWED_ICON_NAMES source — a stored icon_list item's `icon`
+// value that isn't a key here is never rendered (falls back to a plain bullet), closing off any
+// use of user input as a lookup key into something that could execute or fetch.
+// ---------------------------------------------------------------------------------------------
+
+export const ICON_SVG_PATHS: Record<string, string> = {
+  check: '<polyline points="20 6 9 17 4 12" />',
+  "check-circle": '<circle cx="12" cy="12" r="10" /><polyline points="16 9 10.5 15 8 12.5" />',
+  star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />',
+  heart:
+    '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" />',
+  shield: '<path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5z" />',
+  clock: '<circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />',
+  zap: '<polygon points="13 2 3 14 11 14 11 22 21 10 13 10 13 2" />',
+  award: '<circle cx="12" cy="8" r="6" /><path d="M8.2 13.4 7 22l5-3 5 3-1.2-8.6" />',
+  "thumbs-up": '<path d="M7 22V11h3l4-8 2 1v6h5l-2 12H7z" />',
+  sparkles: '<path d="M12 2v6M12 16v6M4 12h6M14 12h6M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3" />',
+  target: '<circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1" />',
+  "trending-up": '<polyline points="3 17 9 11 13 15 21 6" /><polyline points="15 6 21 6 21 12" />',
+  users: '<circle cx="9" cy="8" r="3.5" /><path d="M2 20c0-3.9 3.1-7 7-7s7 3.1 7 7" /><path d="M17 6a3.5 3.5 0 0 1 0 7" /><path d="M22 20c0-3-2-5.5-4.7-6.5" />',
+  gift: '<rect x="3" y="8" width="18" height="13" /><path d="M12 8v13M3 12h18" /><path d="M12 8C10 8 8 6.5 8 4.5S9.5 2 11 3s1 5 1 5zM12 8c2 0 4-1.5 4-3.5S14.5 2 13 3s-1 5-1 5z" />',
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />',
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2" /><polyline points="2 6 12 13 22 6" />',
+  phone: '<path d="M6 3h4l2 5-2.5 1.5a11 11 0 0 0 5 5L16 12l5 2v4a2 2 0 0 1-2 2C10 20 3 13 3 5a2 2 0 0 1 2-2z" />',
+  "map-pin": '<path d="M12 22s7-6.6 7-12a7 7 0 1 0-14 0c0 5.4 7 12 7 12z" /><circle cx="12" cy="10" r="2.5" />',
+  calendar: '<rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" />',
+  "dollar-sign": '<path d="M12 2v20" /><path d="M17 6.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 3 5 3 5 1.1 5 3-2.2 3-5 3-5-1.1-5-3" />',
+  package: '<path d="M3 8l9-5 9 5-9 5-9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" />',
+  truck: '<rect x="1" y="6" width="14" height="11" /><path d="M15 10h4l3 3v4h-7z" /><circle cx="6" cy="19" r="1.7" /><circle cx="17.5" cy="19" r="1.7" />',
+  "refresh-cw": '<path d="M21 12a9 9 0 1 1-3-6.7" /><polyline points="21 3 21 8 16 8" />',
+  "alert-circle": '<circle cx="12" cy="12" r="10" /><path d="M12 7v6M12 17h.01" />',
+  "x-circle": '<circle cx="12" cy="12" r="10" /><path d="m9 9 6 6M15 9l-6 6" />',
+};
+
+export const ALLOWED_ICON_NAMES: string[] = Object.keys(ICON_SVG_PATHS);
+
+function renderIcon(name: string): string {
+  const inner = ICON_SVG_PATHS[name];
+  if (!inner) return "";
+  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------------------------
+
+export type FunnelStepType = "thank_you" | "upsell" | "order";
+
+export type RenderCtx = {
+  pageKind: "bridge" | "funnel_step";
+  stepType?: FunnelStepType;
+  disclosureText: string;
+  leadConsentText: string;
+  campaignId: string;
+  primaryHref: string;
+  declineHref?: string | null;
+  nextStepUrl?: string | null;
+  productTitle: string;
+};
+
+const HEADING_STYLE_KEYS = ["fontFamily", "fontSize", "fontWeight", "textAlign", "color", "lineHeight", "marginTop", "marginBottom"] as const;
+const TEXT_STYLE_KEYS = ["fontFamily", "fontSize", "fontWeight", "textAlign", "color", "lineHeight", "marginTop", "marginBottom"] as const;
+const BOX_STYLE_KEYS = [
+  "backgroundColor",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+  "marginTop",
+  "marginBottom",
+  "borderWidth",
+  "borderColor",
+  "borderRadius",
+  "maxWidth",
+] as const;
+const BUTTON_STYLE_KEYS = [
+  "fontFamily",
+  "fontSize",
+  "fontWeight",
+  "color",
+  "backgroundColor",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+  "borderWidth",
+  "borderColor",
+  "borderRadius",
+  "marginTop",
+  "marginBottom",
+] as const;
+const DIVIDER_STYLE_KEYS = ["borderColor", "borderWidth", "marginTop", "marginBottom"] as const;
+
+function renderElement(block: ElementBlock, ctx: RenderCtx): string {
+  switch (block.type) {
+    case "heading":
+      return `<h1${styleAttr(block.style, HEADING_STYLE_KEYS)}>${escapeHtml(block.content.text)}</h1>`;
+    case "subheading":
+      return `<h2${styleAttr(block.style, HEADING_STYLE_KEYS)}>${escapeHtml(block.content.text)}</h2>`;
+    case "paragraph":
+      return `<p${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(block.content.text)}</p>`;
+    case "image":
+      return block.content.dataUrl
+        ? `<img src="${escapeHtml(block.content.dataUrl)}" alt="${escapeHtml(block.content.alt || ctx.productTitle)}"${styleAttr(
+            block.style,
+            BOX_STYLE_KEYS
+          )} class="block-img" />`
+        : "";
+    case "bullet_list":
+      return `<ul${styleAttr(block.style, TEXT_STYLE_KEYS)}>${block.content.items
+        .map((i) => `<li>${escapeHtml(i)}</li>`)
+        .join("")}</ul>`;
+    case "icon_list":
+      return `<div class="icon-list"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${block.content.items
+        .map(
+          (i) =>
+            `<div class="icon-list-item">${renderIcon(i.icon)}<span>${escapeHtml(i.text)}</span></div>`
+        )
+        .join("")}</div>`;
+    case "divider":
+      return `<hr${styleAttr(block.style, DIVIDER_STYLE_KEYS)} />`;
+    case "image_list":
+      return `<div class="image-list"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${block.content.items
+        .map(
+          (i) =>
+            `<div class="image-list-item">${
+              i.imageDataUrl ? `<img src="${escapeHtml(i.imageDataUrl)}" alt="" />` : ""
+            }<span>${escapeHtml(i.caption)}</span></div>`
+        )
+        .join("")}</div>`;
+    case "button":
+      return `<a class="block-btn" href="${escapeHtml(block.content.href)}"${styleAttr(
+        block.style,
+        BUTTON_STYLE_KEYS
+      )}>${escapeHtml(block.content.text)}</a>`;
+    case "faq_item":
+      return `<div class="faq-item"${styleAttr(block.style, TEXT_STYLE_KEYS)}><h3>${escapeHtml(
+        block.content.question
+      )}</h3><p>${escapeHtml(block.content.answer)}</p></div>`;
+  }
+}
+
+function renderColumn(col: ColumnBlock, ctx: RenderCtx): string {
+  return `<div class="col"${styleAttr(col.style, BOX_STYLE_KEYS)}>${col.children
+    .map((c) => renderElement(c, ctx))
+    .join("\n")}</div>`;
+}
+
+function renderRow(row: RowBlock, ctx: RenderCtx): string {
+  return `<div class="row"${styleAttr(row.style, BOX_STYLE_KEYS)}>${row.columns
+    .map((c) => renderColumn(c, ctx))
+    .join("\n")}</div>`;
+}
+
+function renderSection(section: SectionBlock, ctx: RenderCtx): string {
+  return `<div class="section"${styleAttr(section.style, BOX_STYLE_KEYS)}>${section.children
+    .map((c) => (c.type === "row" ? renderRow(c, ctx) : renderElement(c, ctx)))
+    .join("\n")}</div>`;
+}
+
+// LEAD_CAPTURE_ENDPOINT: posts to /api/public/leads. The fixed name/email inputs and the POST
+// wiring below are rendered by this function only — never exposed as editable fields in the
+// editor, so they can't be redirected or removed via the block-tree builder.
+function renderLeadCaptureForm(block: LeadCaptureFormBlock, ctx: RenderCtx): string {
+  const extraInputs = block.children
+    .map(
+      (f) =>
+        `<input name="${escapeHtml(f.content.fieldKey)}" type="${
+          f.content.fieldType === "email" ? "email" : f.content.fieldType === "tel" ? "tel" : "text"
+        }" placeholder="${escapeHtml(f.content.placeholder || f.content.label)}"${
+          f.content.required ? " required" : ""
+        } />`
+    )
+    .join("\n          ");
+  return `<div class="optin"${styleAttr(block.style, BOX_STYLE_KEYS)}>
+        <form id="leadForm" data-campaign-id="${escapeHtml(ctx.campaignId)}" data-next-step-url="${
+    ctx.nextStepUrl ? escapeHtml(ctx.nextStepUrl) : ""
+  }">
+          <input id="leadFirstName" name="first_name" type="text" placeholder="First name" required />
+          <input id="leadEmail" name="email" type="email" placeholder="Email address" required />
+          ${extraInputs}
+          <button type="submit" class="cta">${escapeHtml(block.content.ctaText)}</button>
+          <p class="disclosure">${ctx.leadConsentText}</p>
+        </form>
+      </div>`;
+}
+
+function renderLockedBlock(block: LockedBlock, ctx: RenderCtx): string {
+  switch (block.locked) {
+    case "disclosure":
+      return `<p class="disclosure"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${ctx.disclosureText}</p>`;
+    case "lead_capture_form":
+      return renderLeadCaptureForm(block, ctx);
+    case "primary_cta": {
+      const inner = `<a class="cta" href="${escapeHtml(ctx.primaryHref)}"${styleAttr(
+        block.style,
+        BUTTON_STYLE_KEYS
+      )}>${escapeHtml(block.content.text)}</a>`;
+      return ctx.pageKind === "bridge" ? `<div id="step2" class="hidden reveal">${inner}</div>` : inner;
+    }
+    case "decline_link":
+      if (!(ctx.pageKind === "funnel_step" && ctx.stepType === "upsell" && ctx.declineHref)) return "";
+      return `<p class="decline-wrap"><a class="decline" href="${escapeHtml(ctx.declineHref)}"${styleAttr(
+        block.style,
+        TEXT_STYLE_KEYS
+      )}>${escapeHtml(block.content.text)}</a></p>`;
+  }
+}
+
+// Returns a body-fragment string — renderBridgeHtml/renderFunnelStepHtml in renderPages.ts own
+// the outer <!doctype>/<head>/<style>/submit-script and splice this in unchanged.
+export function renderBlockTree(tree: PageBlockTree, ctx: RenderCtx): string {
+  return tree.blocks
+    .map((b) => (b.type === "section" ? renderSection(b, ctx) : renderLockedBlock(b, ctx)))
+    .join("\n");
+}

@@ -1,7 +1,7 @@
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { fetchSalesPage, type ImageCandidate } from "./salespage";
 import { pickProductImage, fetchImageAsDataUrl } from "./images";
-import { renderBridgeHtml, buildHoplink, type PageCopy, type Network } from "./renderPages";
+import { renderBridgeHtml, buildHoplink, normalizePageCopy, type PageCopy, type Network } from "./renderPages";
 import type { FbAdAngle, SocialPost } from "@/lib/shared";
 
 export const BUILD_CAMPAIGN_STAGES = ["context", "image", "ads", "pages", "content", "social"] as const;
@@ -165,13 +165,18 @@ async function stagePages(
   const byChannel = (prior.hoplink_by_channel as Record<string, string>) ?? {};
   const imageDataUrl = (prior.image_data_url as string | null) ?? null;
   const hoplink = byChannel.page ?? product.hoplink ?? "#";
-  const bridgeHtml = renderBridgeHtml(product, copy, hoplink, imageDataUrl, campaignId);
+  // The Anthropic structured-output schema above stays the permanent flat authoring shape (see
+  // lib/engine/renderPages.ts's header comment) — normalize it into a block tree once here so
+  // every newly-built campaign persists version-2 page_copy going forward, rather than relying on
+  // renderBridgeHtml's own internal (idempotent) normalization at every future read.
+  const tree = normalizePageCopy(copy, imageDataUrl);
+  const bridgeHtml = renderBridgeHtml(product, tree, hoplink, imageDataUrl, campaignId);
 
   return {
     stageData: prior,
     campaignPatch: {
       bridge_html: bridgeHtml,
-      page_copy: copy,
+      page_copy: tree,
       embedded_image_data_url: imageDataUrl,
     },
   };

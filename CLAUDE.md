@@ -1191,6 +1191,92 @@ after this contact signed up", never a shared calendar date). Reuses the existin
   abuse protection on the unsubscribe endpoint (same accepted v1 gap as `/api/public/leads`); no
   manual "send this step now" override or drag-and-drop step reordering.
 
+## Freeform block-based page builder (Phase O — in progress, sub-phase 1 of 5 landed)
+
+Replacing the fixed-field bridge/funnel-step content model (headline/lead/mechanism/benefits/
+proof/faq/cta) with a true Elementor-style block tree: sections containing rows/columns containing
+elements (heading, subheading, paragraph, image, bullet list, icon list, divider, image list,
+button, FAQ item), each with full custom styling, plus a lead-capture form that accepts real
+user-added fields. This is a multi-week rebuild landing in five sub-phases (see
+`/Users/macbookpro/.claude/plans/binary-stirring-brooks.md`'s "Phase O" for the full design) —
+**only sub-phase 1 has landed so far**: the schema and renderer exist, but the editor UI is
+unchanged (still `components/WysiwygCanvas.tsx` over the old flat `PageCopy` shape) — this section
+will grow as sub-phases 2-5 ship.
+
+- **`lib/engine/blockTree.ts`** (new) defines the block-tree schema (`PageBlockTree`,
+  `SectionBlock`/`RowBlock`/`ColumnBlock`/`ElementBlock`/`LockedBlock`/`FormInputBlock`) and
+  `renderBlockTree(tree, ctx)`, a recursive walker producing a body-fragment HTML string.
+  Zero dependency on `renderPages.ts` (one-directional: `renderPages.ts` depends on `blockTree.ts`,
+  never the reverse) — `escapeHtml()` now lives here and is re-exported from `renderPages.ts` so
+  every existing importer (`lib/engine/broadcastEmail.ts`, etc.) is unaffected.
+- **Style values are structured, never raw CSS** — `BlockStyle` only holds enums/numbers/hex-color
+  strings; `styleToInlineCss()` is the single choke point every value passes through on its way
+  into an HTML `style="..."` attribute, via a fixed per-key table with its own range/regex checks
+  (defensive — the real validation is `validatePageBlockTree.ts`, landing in sub-phase 2). This is
+  what makes "full custom styling per element" safe: there is no code path from stored style data
+  to rendered HTML that concatenates attacker-influenceable text, closing off CSS-injection risk by
+  construction rather than by sanitization — same defense-in-depth instinct as the hoplink's
+  three-layer XSS fix and `image_data_url`'s anchored regex.
+- **Icons are a curated, bounded set** (`ICON_SVG_PATHS`/`ALLOWED_ICON_NAMES` in `blockTree.ts`),
+  not the full lucide-react catalog — hand-authored inline SVG, since `renderPages.ts` is a pure
+  isomorphic string-builder (no `react-dom/server`, so lucide-react components can't be rendered to
+  a string directly). The same map doubles as the eventual validator's icon allowlist — a stored
+  `icon_list` item's `icon` value that isn't a key here is never rendered (falls back to nothing),
+  closing off using user input as a lookup key into anything that could execute or fetch.
+- **Locked (compliance-critical) blocks**: `disclosure`, `lead_capture_form` (a container whose
+  fixed name/email inputs are NOT tree nodes — always rendered first by `renderBlockTree`'s own
+  case, so "email field deleted" is structurally impossible, not just UI-prevented), `primary_cta`
+  (destination still resolved via the existing `cta_action`/`redirect_url`/hoplink logic, now read
+  from `RenderCtx` instead of a baked function param), and `decline_link` (funnel-step upsell's
+  "No thanks, continue," same locked-href/editable-text shape as `primary_cta` — a 4th locked kind
+  beyond the 3 originally named, needed for feature parity). All four are draggable to reposition
+  among root-level siblings, never deletable, core content/wiring never editable — enforced
+  structurally (fixed form inputs) or by the validator (everything else, sub-phase 2).
+- **`normalizePageCopy(raw, imageDataUrl, opts?)`** (`renderPages.ts`) is the **permanent** adapter
+  from the legacy flat shape into a block tree — not a one-time migration shim. Pure, deterministic
+  (sequential `legacy-N` ids, reset per call — same input always produces the same output),
+  idempotent on already-normalized input (`version === 2` passes through unchanged, verified by
+  reference-equality in an isolated test). `renderBridgeHtml`/`renderFunnelStepHtml` call it
+  internally as their first line and their `copy` parameter widened from `PageCopy` to `unknown` —
+  every existing render-path caller (`lib/funnelSteps.ts`'s `rerenderFunnelSequence`, all three
+  PATCH routes) gets legacy-compat for free, no per-call-site auditing needed for rendering.
+  `lib/engine/build.ts`'s `stagePages` additionally calls it explicitly before persisting, so newly
+  built campaigns store version-2 `page_copy` from day one rather than relying on read-time
+  normalization forever.
+- **The Anthropic structured-output schema in `stagePages` is unchanged and stays that way
+  permanently** — retraining the LLM's JSON schema to emit a full block tree is a separate, much
+  larger prompt-engineering effort, explicitly out of scope. `PageCopy`/`SECTION_KEYS`/
+  `resolveSectionOrder` in `renderPages.ts` stay forever as the "AI authoring schema," with
+  `normalizePageCopy` as the permanent translation layer — never remove either half of this pair.
+- **Legacy-content mapping** (see `normalizePageCopy`'s implementation for the exact per-field
+  logic): `headline` becomes a regular draggable/editable heading block instead of being fixed
+  outside the content list — a real capability upgrade; each `faq` entry becomes its own atomic
+  `faq_item` block (not decomposed into loose heading/paragraph pairs) specifically so future
+  nested drag-and-drop can never split a question from its answer; the lead paragraph's `style` is
+  seeded with the exact `{fontSize:18, color:"#333333"}` the old `.lead` CSS class provided, so
+  visual output stays equivalent even though the underlying HTML is no longer byte-identical (a
+  `<div class="section">` wrapper and inline `style` attributes are now unavoidably present — this
+  phase's verification is "visually/functionally equivalent," not literal byte-for-byte HTML, which
+  stopped being achievable the moment the render architecture changed).
+- **Flagged, real behavior change**: the pre-Phase-O bridge page hid the *entire* step-1 subtree
+  (headline + all content + form) and revealed a *duplicate* step-2 subtree (headline again + CTA)
+  after a successful submit. The new renderer only toggles the `lead_capture_form` block (hides,
+  via `form.parentElement.classList.add('hidden')` in the inline submit script) and the
+  `primary_cta` block's `#step2` wrapper (unhides) — every other block (headings, images, other
+  sections) stays visible throughout. Simpler against a single flat tree, arguably better UX
+  (advertorial content doesn't vanish), verified live against the real TedsWoodworking campaign.
+- **The submit-handler script now collects fields generically** (`querySelectorAll('[name]')`,
+  splitting `first_name`/`email` from everything else into `payload.extra_fields`) instead of
+  reading `#leadFirstName`/`#leadEmail` by hardcoded id — laying groundwork for sub-phase 5's real
+  form-input fields. `app/api/public/leads/route.ts` doesn't read `extra_fields` yet (harmless
+  extra JSON key, ignored) — wiring that up is explicitly sub-phase 5, not this one.
+- **Not yet built** (sub-phases 2-5, see the plan doc): `lib/engine/validatePageBlockTree.ts` (the
+  real server-side validation boundary — until it lands, the three PATCH routes still validate the
+  old flat shape only, so the block-tree renderer/schema aren't reachable from the editor yet);
+  the tree-aware editor UI (nested drag-and-drop, the full element palette, Row/Column insertion);
+  `components/BlockStylePanel.tsx`; the `contacts.extra_fields` migration and real form-input
+  backend wiring.
+
 ## Dev
 
 ```bash
