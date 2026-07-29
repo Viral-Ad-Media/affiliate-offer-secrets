@@ -494,12 +494,27 @@ testing, unchanged) and stays the funnel's entry point. One publish toggle
 state. A funnel with zero `funnel_steps` rows (the default) behaves byte-for-byte as before this
 feature existed.
 
-- **Editing/publishing moved off the product page.** `PublishBridge`/`PageEditor`/`SplitTestPanel`
-  now mount on `/funnels/[campaignId]/page.tsx` (a client component fetching campaign + steps via
-  `createClient()`, same pattern as `/broadcast/[id]/page.tsx`), plus a new "Funnel steps" section
-  (`components/FunnelStepsSection.tsx` — up/down move, delete, "Add step" with a type picker,
-  inline `components/FunnelStepEditor.tsx` on "Edit"). The product page's Bridge tab is now
-  preview-only (the existing read-only iframe) with a "Manage & publish this funnel" link there.
+- **Editing/publishing moved off the product page** onto `/funnels/[campaignId]/page.tsx` (a client
+  component fetching campaign + steps via `createClient()`, same pattern as `/broadcast/[id]/page.tsx`).
+  The product page's Bridge tab is now preview-only (the existing read-only iframe) with a "Manage &
+  publish this funnel" link there.
+- **The management page defaults to a map, not one long inline scroll.** `components/FunnelMap.tsx`
+  renders the opt-in page and every step as a sequence of nodes (icon + label + a connecting arrow),
+  each with a **Preview** action (opens a shadcn `Dialog` with an `iframe srcDoc={html}` of that
+  page's currently-*stored* HTML — `campaign.bridge_html` for the opt-in node, `step.html` per step
+  — not a fresh render, so it can go stale relative to unsaved in-progress edits until the next
+  Save; "Nothing to preview yet" is the deliberate empty state for a step that's never been saved)
+  and an **Edit** action. Steps additionally keep their own Move up/down/Delete icons inline on the
+  node (these are map-level operations now, not inside the editor). `FunnelPage`
+  (`app/(app)/funnels/[campaignId]/page.tsx`) holds a `View = {kind:"map"}|{kind:"optin"}|
+  {kind:"step",stepId}` state — clicking Edit switches to a focused single-page editor view
+  (`PageEditor`+`SplitTestPanel` for `"optin"`, `FunnelStepEditor` for a step) with a "← Back to
+  funnel map" link, replacing the entire page body rather than expanding inline — the map, the
+  opt-in editor, and a step's editor are never rendered at the same time. `PublishBridge` (the
+  funnel-wide publish toggle) only shows on the map view, since it's a funnel-level control, not
+  specific to whichever page happens to be open. Replaced `components/FunnelStepsSection.tsx`
+  outright (deleted, not deprecated) — its list+inline-edit responsibilities split between
+  `FunnelMap.tsx` (list/move/delete/preview) and the page's own view-switching (edit).
 - **CTA hrefs are resolved and baked into `html` at write time**, matching how every other
   rendered field in this codebase already works — not templated at serve time, which would be a
   second mechanism unique to this feature. Because of that, `lib/funnelSteps.ts`'s
