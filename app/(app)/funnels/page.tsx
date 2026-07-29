@@ -1,13 +1,14 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Radio, ExternalLink, Inbox, Beaker } from "lucide-react";
+import { Radio, ExternalLink, Inbox, Beaker, Layers } from "lucide-react";
 
 // A "funnel" isn't its own entity — it's a derived view over campaigns that already have a bridge
 // (lead-capture) page generated. A funnel appears here automatically the moment stagePages
 // (lib/engine/build.ts) writes campaigns.bridge_html; there's nothing to explicitly create or keep
-// in sync. Publishing/editing still happens on the product page's Bridge page tab (PublishBridge /
-// PageEditor) — this page is a list/overview, not a second place that writes campaign state.
+// in sync. Editing/publishing/split-testing/adding steps all happen on the funnel's own
+// /funnels/[campaignId] page — this list page is read-only, not a second place that writes state.
+// The product page's Bridge tab is preview-only, linking here to actually manage anything.
 export default async function FunnelsPage() {
   const supabase = createClient();
   const {
@@ -15,19 +16,21 @@ export default async function FunnelsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: campaigns }, { data: routes }, { data: contactRows }, { data: variantRows }] = await Promise.all([
-    supabase
-      .from("campaigns")
-      .select("id, product_id, bridge_published, updated_at, products(product_title)")
-      .not("bridge_html", "is", null)
-      .order("updated_at", { ascending: false }),
-    supabase
-      .from("custom_domain_routes")
-      .select("campaign_id, path, custom_domains(domain, status)")
-      .eq("destination", "bridge"),
-    supabase.from("contacts").select("campaign_id").not("campaign_id", "is", null).limit(1000),
-    supabase.from("bridge_variants").select("campaign_id"),
-  ]);
+  const [{ data: campaigns }, { data: routes }, { data: contactRows }, { data: variantRows }, { data: stepRows }] =
+    await Promise.all([
+      supabase
+        .from("campaigns")
+        .select("id, product_id, bridge_published, updated_at, products(product_title)")
+        .not("bridge_html", "is", null)
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("custom_domain_routes")
+        .select("campaign_id, path, custom_domains(domain, status)")
+        .eq("destination", "bridge"),
+      supabase.from("contacts").select("campaign_id").not("campaign_id", "is", null).limit(1000),
+      supabase.from("bridge_variants").select("campaign_id"),
+      supabase.from("funnel_steps").select("campaign_id"),
+    ]);
 
   const leadCounts = new Map<string, number>();
   for (const c of contactRows ?? []) {
@@ -37,6 +40,11 @@ export default async function FunnelsPage() {
   const variantCounts = new Map<string, number>();
   for (const v of variantRows ?? []) {
     variantCounts.set(v.campaign_id as string, (variantCounts.get(v.campaign_id as string) ?? 0) + 1);
+  }
+
+  const stepCounts = new Map<string, number>();
+  for (const s of stepRows ?? []) {
+    stepCounts.set(s.campaign_id as string, (stepCounts.get(s.campaign_id as string) ?? 0) + 1);
   }
 
   // First verified custom-domain route wins if a campaign has more than one — same "just show one
@@ -58,6 +66,7 @@ export default async function FunnelsPage() {
     leads: leadCounts.get(c.id) ?? 0,
     url: domainUrlByCampaign.get(c.id) ?? `${appUrl}/p/${c.id}/bridge`,
     variantCount: variantCounts.get(c.id) ?? 0,
+    stepCount: stepCounts.get(c.id) ?? 0,
   }));
 
   return (
@@ -91,6 +100,7 @@ export default async function FunnelsPage() {
                   <th>Funnel</th>
                   <th>Status</th>
                   <th>Link</th>
+                  <th className="text-right">Steps</th>
                   <th className="text-right">Leads</th>
                   <th className="text-right">Actions</th>
                 </tr>
@@ -132,10 +142,13 @@ export default async function FunnelsPage() {
                         <span>Not publicly reachable until published</span>
                       )}
                     </td>
+                    <td className="px-2 py-2.5 text-right tabular-nums text-zinc-400">
+                      {f.stepCount > 0 ? `+${f.stepCount}` : "—"}
+                    </td>
                     <td className="px-2 py-2.5 text-right tabular-nums">{f.leads}</td>
                     <td className="px-4 py-2.5 text-right">
-                      <Link href={`/product/${f.productId}?tab=bridge_html`} className="btn-ghost">
-                        Edit
+                      <Link href={`/funnels/${f.id}`} className="btn-ghost">
+                        <Layers className="h-3.5 w-3.5" /> Manage
                       </Link>
                     </td>
                   </tr>

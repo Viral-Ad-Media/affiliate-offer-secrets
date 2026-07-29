@@ -396,16 +396,17 @@ confirming both directions took effect on the very next request.
 
 ## Funnels (sidebar)
 
-`/funnels` (`app/(app)/funnels/page.tsx`) is a list/overview page, not a new entity — a "funnel"
+`/funnels` (`app/(app)/funnels/page.tsx`) is a read-only list page, not a new entity — a "funnel"
 isn't its own table, it's every `campaigns` row that already has `bridge_html` generated. It
 appears there automatically the moment `stagePages` (`lib/engine/build.ts`) writes the bridge page
 — nothing explicitly inserts a "funnel." The page shows publish status (`bridge_published`), the
 public link (a verified custom-domain route if one is mapped, else the default `/p/{id}/bridge`),
-and leads captured (`contacts` count by `campaign_id`). Publishing/editing still happens in one
-place, the product page's Bridge page tab (`PublishBridge`/`PageEditor`) — Funnels' "Edit" link
-deep-links there via `?tab=bridge_html`, read by `ProductPage`'s `useSearchParams()` to set the
-initial tab (defaults to `fb_ads_md` if absent/unrecognized). A "Testing (N)" chip appears once a
-campaign has active `bridge_variants` rows (see below).
+step count, and leads captured (`contacts` count by `campaign_id`). **All editing, publishing,
+split-testing, and step management happen on the funnel's own `/funnels/[campaignId]` page** — the
+"Manage" link goes there. The product page's Bridge tab is preview-only (a read-only iframe of the
+opt-in page plus a link to `/funnels/{campaignId}`); it no longer mounts `PublishBridge`/
+`PageEditor`/`SplitTestPanel` directly. A "Testing (N)" chip appears once a campaign has active
+`bridge_variants` rows (see below).
 
 ## Bridge page A/B / split testing
 
@@ -450,11 +451,56 @@ lookup, nothing else changes.
   literally the same write shape the page-copy route already does) then deletes every
   `bridge_variants` row for the campaign either way; leads already captured keep their row
   (`contacts.bridge_variant_id` → null via `on delete set null`).
-- **New `components/SplitTestPanel.tsx`**, mounted in the product page's Bridge tab next to
-  `PublishBridge` (both view and edit mode): variant list (weight, pause/resume, delete, leads,
-  views, computed rate), "Add variant" (capped at 5 total rows — nominal UI-sanity limit, not a
-  security boundary), and "End test" with a promote-winner picker. A non-control variant's "Edit"
-  expands an inline `PageEditor` in the panel's own local state.
+- **New `components/SplitTestPanel.tsx`**, mounted on the funnel's own `/funnels/[campaignId]`
+  page (moved here from the product page — see "Multi-step funnels" below) next to
+  `PublishBridge`: variant list (weight, pause/resume, delete, leads, views, computed rate), "Add
+  variant" (capped at 5 total rows — nominal UI-sanity limit, not a security boundary), and "End
+  test" with a promote-winner picker. A non-control variant's "Edit" expands an inline `PageEditor`
+  in the panel's own local state.
+
+## Multi-step funnels
+
+`funnel_steps` (`supabase/migrations/0023_funnel_steps.sql`) lets a tenant chain fixed-type pages
+(Thank-you, Upsell, Order) after the opt-in page, all still anchored to one campaign — no separate
+parent "funnel" row; `/funnels/[campaignId]` uses the campaign id directly. The opt-in page itself
+is untouched (`campaigns.bridge_html`/`page_copy`/`bridge_published` + `bridge_variants` A/B
+testing, unchanged) and stays the funnel's entry point. One publish toggle
+(`campaigns.bridge_published`) gates the opt-in page and every step together — no per-step publish
+state. A funnel with zero `funnel_steps` rows (the default) behaves byte-for-byte as before this
+feature existed.
+
+- **Editing/publishing moved off the product page.** `PublishBridge`/`PageEditor`/`SplitTestPanel`
+  now mount on `/funnels/[campaignId]/page.tsx` (a client component fetching campaign + steps via
+  `createClient()`, same pattern as `/broadcast/[id]/page.tsx`), plus a new "Funnel steps" section
+  (`components/FunnelStepsSection.tsx` — up/down move, delete, "Add step" with a type picker,
+  inline `components/FunnelStepEditor.tsx` on "Edit"). The product page's Bridge tab is now
+  preview-only (the existing read-only iframe) with a "Manage & publish this funnel" link there.
+- **CTA hrefs are resolved and baked into `html` at write time**, matching how every other
+  rendered field in this codebase already works — not templated at serve time, which would be a
+  second mechanism unique to this feature. Because of that, `lib/funnelSteps.ts`'s
+  `rerenderFunnelSequence(admin, campaignId, userId)` re-renders `campaigns.bridge_html` (its
+  `nextStepUrl`) and every step's `html` (its own CTA/decline href) in one pass after any action
+  that changes the step sequence or a step's own copy — simplest-correct for typical funnel size,
+  not a targeted diff. `renderBridgeHtml()` gained an optional `nextStepUrl` param for this; when
+  set, the opt-in page's submit handler redirects there instead of today's in-place step-2 reveal.
+- **Thank-you/Order**: one CTA, `cta_action` picks `next_step` (the following step's URL, or the
+  resolved hoplink if this is the last step) or `hoplink` (always the hoplink, skipping ahead).
+  **Upsell**: Accept always resolves to a hoplink (`target_product_id`'s, or this campaign's own
+  product if null — cross-sell, ownership-checked in `app/api/funnel-steps/[id]/route.ts` against
+  the same user); Decline always continues (next step, or the *original* product's hoplink as a
+  fallback). Each hoplink gets a distinct tid (`step-{index}`, `step-{index}-upsell`/`-decline`)
+  extending the existing per-channel tid convention.
+- **`add_funnel_step`/`move_funnel_step`/`delete_funnel_step`** (`SECURITY DEFINER`,
+  `authenticated`) are advisory-locked (`pg_advisory_xact_lock(hashtextextended('funnel_steps:' ||
+  campaign_id, 0))`, same idiom as `bridge_variants`) — a double-click can't collide two rows on
+  the `(campaign_id, step_index)` unique constraint. `move_funnel_step`'s swap uses a large
+  sentinel offset (`1000000000 + index`), not `-1`: `step_index` has a `>= 1` CHECK and this
+  table's unique index isn't deferrable, so a naive swap would fail mid-transaction.
+- **Public serving**: `app/p/[campaignId]/step/[stepIndex]/route.ts` mirrors `.../bridge/route.ts`
+  exactly (same `status='ready' AND bridge_published=true` gate, same generic 404, no oracle).
+  Deliberately **not** custom-domain-routed or A/B-tested in this phase (both stay scoped to the
+  opt-in page) — downstream steps are only reachable via the internal redirect chain, using the
+  default `/p/` URL even when the opt-in page itself was reached through a custom domain.
 
 ## Custom domains
 

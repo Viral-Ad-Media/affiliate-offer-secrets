@@ -126,7 +126,21 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const hoplink = buildHoplink(product.network, connection.affiliate_id, product.vendor_id, "page");
 
-  const bridgeHtml = renderBridgeHtml(product, copy, hoplink, imageDataUrl, campaignId);
+  // If this campaign's funnel has added steps after opt-in (0023_funnel_steps.sql), the
+  // post-submit CTA redirects to step 1 instead of revealing in place — resolved here, not
+  // baked in once at step-creation time, so editing the opt-in copy never goes stale.
+  const { data: firstStep } = await admin
+    .from("funnel_steps")
+    .select("step_index")
+    .eq("campaign_id", campaignId)
+    .order("step_index", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const nextStepUrl = firstStep
+    ? `${process.env.NEXT_PUBLIC_APP_URL}/p/${campaignId}/step/${firstStep.step_index}`
+    : null;
+
+  const bridgeHtml = renderBridgeHtml(product, copy, hoplink, imageDataUrl, campaignId, nextStepUrl);
 
   const { error: updateErr } = await admin
     .from("campaigns")

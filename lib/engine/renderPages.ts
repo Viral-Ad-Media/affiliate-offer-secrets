@@ -64,13 +64,16 @@ export function escapeHtml(s: string): string {
 // Step 1 is the merged-in former "presell" content: hook, image, the full mechanism/benefits/
 // proof/FAQ advertorial, then the opt-in form. Step 2 is the reveal — a short confirmation plus
 // the real hoplink CTA — shown only after a successful (or attempted, see the submit handler
-// below) form submission.
+// below) form submission. `nextStepUrl` (multi-step funnels, 0023_funnel_steps.sql) is optional —
+// when a funnel has added steps after opt-in, the submit handler redirects there instead of
+// revealing step 2 in place; omitted/null is byte-for-byte the original single-page behavior.
 export function renderBridgeHtml(
   product: ProductLike,
   copy: PageCopy,
   hoplink: string,
   imageDataUrl: string | null,
-  campaignId: string
+  campaignId: string,
+  nextStepUrl?: string | null
 ): string {
   const benefits = copy.benefits.map((b) => `<li>${escapeHtml(b)}</li>`).join("");
   const faq = copy.faq
@@ -123,7 +126,7 @@ export function renderBridgeHtml(
              This wiring — the endpoint URL and data-campaign-id below — is rendered by this
              function only; components/PageEditor.tsx never exposes it as an editable field, so
              it can't be redirected elsewhere via the no-code editor. -->
-        <form id="leadForm" data-campaign-id="${escapeHtml(campaignId)}">
+        <form id="leadForm" data-campaign-id="${escapeHtml(campaignId)}" data-next-step-url="${nextStepUrl ? escapeHtml(nextStepUrl) : ""}">
           <input id="leadFirstName" name="first_name" type="text" placeholder="First name" required />
           <input id="leadEmail" name="email" type="email" placeholder="Email address" required />
           <button type="submit" class="cta">${escapeHtml(copy.cta)}</button>
@@ -147,6 +150,10 @@ export function renderBridgeHtml(
         email: document.getElementById('leadEmail').value
       };
       function advance() {
+        if (form.dataset.nextStepUrl) {
+          window.location.href = form.dataset.nextStepUrl;
+          return;
+        }
         document.getElementById('step1').classList.add('hidden');
         document.getElementById('step2').classList.remove('hidden');
       }
@@ -159,6 +166,78 @@ export function renderBridgeHtml(
       }).catch(function () {}).then(advance);
     });
   </script>
+</body>
+</html>`;
+}
+
+export type FunnelStepType = "thank_you" | "upsell" | "order";
+
+// Sibling to renderBridgeHtml() for the fixed-type pages a funnel can optionally chain after
+// opt-in (0023_funnel_steps.sql) — same advertorial content block (headline/lead/mechanism/
+// benefits/proof/FAQ/image), no lead-capture form (the visitor is already a lead by this point).
+// thank_you/order render one CTA; upsell renders an Accept CTA plus a small Decline link.
+// `primaryHref`/`declineHref` are resolved and baked in by the caller (the next step's public URL,
+// or a real hoplink if this is the last step) — this function has no knowledge of funnel
+// structure, matching renderBridgeHtml's own "caller resolves the URL" contract.
+export function renderFunnelStepHtml(
+  product: ProductLike,
+  copy: PageCopy,
+  stepType: FunnelStepType,
+  primaryHref: string,
+  imageDataUrl: string | null,
+  declineHref?: string | null
+): string {
+  const benefits = copy.benefits.map((b) => `<li>${escapeHtml(b)}</li>`).join("");
+  const faq = copy.faq
+    .map((f) => `<div class="faq-item"><h3>${escapeHtml(f.q)}</h3><p>${escapeHtml(f.a)}</p></div>`)
+    .join("");
+  const imageBlock = imageDataUrl
+    ? `<img src="${escapeHtml(imageDataUrl)}" alt="${escapeHtml(product.product_title)}" style="max-width:100%;border-radius:12px;margin:24px 0;" />`
+    : "";
+  const declineBlock =
+    stepType === "upsell" && declineHref
+      ? `<p style="margin-top:16px;"><a href="${escapeHtml(declineHref)}" style="color:#888;text-decoration:underline;font-size:14px;">No thanks, continue</a></p>`
+      : "";
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(copy.headline)}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background:#fafafa; color:#1a1a1a; margin:0; padding:0; line-height:1.6; }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 32px; line-height:1.2; margin-bottom: 16px; }
+  h2 { font-size: 22px; margin-top: 32px; }
+  .lead { font-size: 18px; color:#333; }
+  ul { padding-left: 20px; }
+  .faq-item { margin-bottom: 16px; }
+  .faq-item h3 { font-size:16px; margin-bottom:4px; }
+  .cta-wrap { max-width: 420px; margin: 40px auto 0; text-align:center; }
+  .cta { display:inline-block; background:#16a34a; color:#fff; border:none; padding:16px 32px; border-radius:8px; font-weight:600; font-size:18px; cursor:pointer; width:100%; text-decoration:none; box-sizing:border-box; }
+  .cta:hover { background:#15803d; }
+  .disclosure { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e5e5; font-size: 12px; color: #888; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>${escapeHtml(copy.headline)}</h1>
+    <p class="lead">${escapeHtml(copy.lead)}</p>
+    ${imageBlock}
+    <h2>How it works</h2>
+    <p>${escapeHtml(copy.mechanism)}</p>
+    <h2>What you get</h2>
+    <ul>${benefits}</ul>
+    <p>${escapeHtml(copy.proof)}</p>
+    <h2>Questions</h2>
+    ${faq}
+    <div class="cta-wrap">
+      <a class="cta" href="${escapeHtml(primaryHref)}">${escapeHtml(copy.cta)}</a>
+      ${declineBlock}
+    </div>
+    <p class="disclosure">${DISCLOSURE}</p>
+  </div>
 </body>
 </html>`;
 }

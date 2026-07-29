@@ -86,6 +86,22 @@ export type BridgeVariant = {
   updated_at: string;
 };
 
+export type FunnelStepType = "thank_you" | "upsell" | "order";
+
+export type FunnelStep = {
+  id: string;
+  campaign_id: string;
+  step_type: FunnelStepType;
+  step_index: number;
+  page_copy: Campaign["page_copy"];
+  html: string | null;
+  embedded_image_data_url: string | null;
+  cta_action: "next_step" | "hoplink";
+  target_product_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CreativeSource = "fb_ad_angle" | "social_post";
 export type CreativeKind = "image" | "video";
 export type CreativeStatus = "none" | "generating" | "ready" | "failed";

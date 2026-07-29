@@ -4,14 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { marked } from "marked";
-import { ArrowLeft, Copy, CheckCircle2, ExternalLink, Download, Pencil, Eye } from "lucide-react";
+import { ArrowLeft, Copy, CheckCircle2, ExternalLink, Download, Layers } from "lucide-react";
 import type { Campaign, Product } from "@/lib/shared";
 import { STATUS_COLORS } from "@/lib/shared";
 import SendEmail from "@/components/SendEmail";
 import GenerateVideo from "@/components/GenerateVideo";
-import PageEditor from "@/components/PageEditor";
-import PublishBridge from "@/components/PublishBridge";
-import SplitTestPanel from "@/components/SplitTestPanel";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
 import SocialPostsPanel from "@/components/SocialPostsPanel";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -37,7 +34,6 @@ export default function ProductPage({ params }: { params: { id: string } }) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>(initialTab);
   const [copied, setCopied] = useState(false);
-  const [editMode, setEditMode] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/products/${params.id}`);
@@ -181,13 +177,9 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           </h2>
           {tab === "bridge_html" && campaign?.bridge_html && (
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setEditMode((v) => !v)}
-                className="btn-ghost !py-1 text-xs"
-              >
-                {editMode ? <Eye className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
-                {editMode ? "View" : "Edit"}
-              </button>
+              <Link href={`/funnels/${campaign.id}`} className="btn-primary !py-1 text-xs">
+                <Layers className="h-3.5 w-3.5" /> Manage &amp; publish this funnel
+              </Link>
               <button onClick={downloadHtml} className="btn-ghost !py-1 text-xs">
                 <Download className="h-3.5 w-3.5" /> Download HTML
               </button>
@@ -236,35 +228,15 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                 />
               ) : !content ? (
                 <p className="py-6 text-center text-sm text-zinc-500">Not generated yet.</p>
-              ) : tab === "bridge_html" && editMode ? (
-                <>
-                  <PublishBridge campaignId={campaign!.id} initialPublished={campaign?.bridge_published ?? false} />
-                  <SplitTestPanel
-                    campaignId={campaign!.id}
-                    productTitle={product.product_title}
-                    previewHoplink={product.hoplink ?? "#"}
-                  />
-                  <PageEditor
-                    campaignId={campaign!.id}
-                    productTitle={product.product_title}
-                    initialCopy={campaign?.page_copy ?? null}
-                    initialBridgeHtml={campaign?.bridge_html ?? null}
-                    previewHoplink={product.hoplink ?? "#"}
-                    onSaved={({ bridge_html, page_copy }) =>
-                      setCampaign((c) => (c ? { ...c, bridge_html, page_copy } : c))
-                    }
-                  />
-                </>
               ) : tab === "bridge_html" ? (
                 <>
-                  <PublishBridge campaignId={campaign!.id} initialPublished={campaign?.bridge_published ?? false} />
-                  <SplitTestPanel
-                    campaignId={campaign!.id}
-                    productTitle={product.product_title}
-                    previewHoplink={product.hoplink ?? "#"}
-                  />
                   <p className="mb-2 text-xs text-zinc-500">
-                    Preview is interactive — try the opt-in form, leads land on your{" "}
+                    Preview only — editing, publishing, split-testing, and adding funnel steps all
+                    happen on the{" "}
+                    <Link href={`/funnels/${campaign!.id}`} className="underline">
+                      funnel's own page
+                    </Link>
+                    . This preview is interactive — try the opt-in form, leads land on your{" "}
                     <Link href="/contacts" className="underline">
                       Contacts
                     </Link>{" "}
