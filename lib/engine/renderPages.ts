@@ -9,6 +9,26 @@
 // longer exist; `campaigns.presell_html` is left as an unread legacy column on old rows rather
 // than a destructive migration (same precedent as `profiles.nickname`).
 
+// The reorderable content blocks between the hero (headline/image) and the CTA — Headline, CTA,
+// and the embedded image stay fixed (hero title, action, and hero art aren't "content" to
+// reorder); these five are what components/PageEditor.tsx and components/FunnelStepEditor.tsx's
+// drag-to-reorder UI actually reorders. `sectionOrder` is optional and lives inside the existing
+// `page_copy` JSONB blob — no migration needed — so rows saved before this feature existed just
+// fall back to DEFAULT_SECTION_ORDER (byte-for-byte today's fixed layout).
+export const SECTION_KEYS = ["lead", "mechanism", "benefits", "proof", "faq"] as const;
+export type SectionKey = (typeof SECTION_KEYS)[number];
+export const DEFAULT_SECTION_ORDER: SectionKey[] = ["lead", "mechanism", "benefits", "proof", "faq"];
+
+// Guards against corrupt/partial stored order (old data, a manually edited row, a key removed in
+// a future version): keeps only recognized keys, then appends any missing ones in default order,
+// so every section always renders exactly once regardless of what's stored.
+export function resolveSectionOrder(order: string[] | null | undefined): SectionKey[] {
+  const requested = order ?? DEFAULT_SECTION_ORDER;
+  const valid = requested.filter((k): k is SectionKey => (SECTION_KEYS as readonly string[]).includes(k));
+  const missing = SECTION_KEYS.filter((k) => !valid.includes(k));
+  return [...valid, ...missing];
+}
+
 export type PageCopy = {
   headline: string;
   lead: string;
@@ -17,6 +37,7 @@ export type PageCopy = {
   proof: string;
   faq: { q: string; a: string }[];
   cta: string;
+  sectionOrder?: SectionKey[];
 };
 
 export type ProductLike = { product_title: string };
@@ -82,6 +103,19 @@ export function renderBridgeHtml(
   const imageBlock = imageDataUrl
     ? `<img src="${escapeHtml(imageDataUrl)}" alt="${escapeHtml(product.product_title)}" style="max-width:100%;border-radius:12px;margin:24px 0;" />`
     : "";
+  const sectionHtml: Record<SectionKey, string> = {
+    // Image stays coupled to the lead paragraph (its original fixed position) rather than a
+    // separately-orderable block — dragging "Lead paragraph" carries the hero image with it,
+    // and the default order renders byte-for-byte identical to before this feature existed.
+    lead: `<p class="lead">${escapeHtml(copy.lead)}</p>\n      ${imageBlock}`,
+    mechanism: `<h2>How it works</h2>\n      <p>${escapeHtml(copy.mechanism)}</p>`,
+    benefits: `<h2>What you get</h2>\n      <ul>${benefits}</ul>`,
+    proof: `<p>${escapeHtml(copy.proof)}</p>`,
+    faq: `<h2>Questions</h2>\n      ${faq}`,
+  };
+  const orderedSections = resolveSectionOrder(copy.sectionOrder)
+    .map((key) => sectionHtml[key])
+    .join("\n      ");
 
   return `<!doctype html>
 <html lang="en">
@@ -112,15 +146,7 @@ export function renderBridgeHtml(
   <div class="wrap">
     <div id="step1">
       <h1>${escapeHtml(copy.headline)}</h1>
-      <p class="lead">${escapeHtml(copy.lead)}</p>
-      ${imageBlock}
-      <h2>How it works</h2>
-      <p>${escapeHtml(copy.mechanism)}</p>
-      <h2>What you get</h2>
-      <ul>${benefits}</ul>
-      <p>${escapeHtml(copy.proof)}</p>
-      <h2>Questions</h2>
-      ${faq}
+      ${orderedSections}
       <div class="optin">
         <!-- LEAD_CAPTURE_ENDPOINT: posts to /api/public/leads (app/api/public/leads/route.ts).
              This wiring — the endpoint URL and data-campaign-id below — is rendered by this
@@ -198,6 +224,16 @@ export function renderFunnelStepHtml(
     stepType === "upsell" && declineHref
       ? `<p style="margin-top:16px;"><a href="${escapeHtml(declineHref)}" style="color:#888;text-decoration:underline;font-size:14px;">No thanks, continue</a></p>`
       : "";
+  const sectionHtml: Record<SectionKey, string> = {
+    lead: `<p class="lead">${escapeHtml(copy.lead)}</p>\n    ${imageBlock}`,
+    mechanism: `<h2>How it works</h2>\n    <p>${escapeHtml(copy.mechanism)}</p>`,
+    benefits: `<h2>What you get</h2>\n    <ul>${benefits}</ul>`,
+    proof: `<p>${escapeHtml(copy.proof)}</p>`,
+    faq: `<h2>Questions</h2>\n    ${faq}`,
+  };
+  const orderedSections = resolveSectionOrder(copy.sectionOrder)
+    .map((key) => sectionHtml[key])
+    .join("\n    ");
 
   return `<!doctype html>
 <html lang="en">
@@ -223,15 +259,7 @@ export function renderFunnelStepHtml(
 <body>
   <div class="wrap">
     <h1>${escapeHtml(copy.headline)}</h1>
-    <p class="lead">${escapeHtml(copy.lead)}</p>
-    ${imageBlock}
-    <h2>How it works</h2>
-    <p>${escapeHtml(copy.mechanism)}</p>
-    <h2>What you get</h2>
-    <ul>${benefits}</ul>
-    <p>${escapeHtml(copy.proof)}</p>
-    <h2>Questions</h2>
-    ${faq}
+    ${orderedSections}
     <div class="cta-wrap">
       <a class="cta" href="${escapeHtml(primaryHref)}">${escapeHtml(copy.cta)}</a>
       ${declineBlock}

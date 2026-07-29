@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { renderBridgeHtml, buildHoplink, type PageCopy } from "@/lib/engine/renderPages";
+import { renderBridgeHtml, buildHoplink, resolveSectionOrder, type PageCopy } from "@/lib/engine/renderPages";
 import { isValidImageDataUrl } from "@/lib/images/validate";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +70,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       }))
       .filter((f) => f.q && f.a),
     cta: clampStr(body.cta, MAX_CTA) || "Get started",
+    // resolveSectionOrder() also guards against a corrupt/foreign array here — unrecognized
+    // strings are dropped, missing keys appended in default order (never trusts client shape).
+    sectionOrder: resolveSectionOrder(Array.isArray(body.section_order) ? body.section_order : null),
   };
 
   if (!copy.headline || !copy.lead) {

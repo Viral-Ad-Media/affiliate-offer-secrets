@@ -318,10 +318,35 @@ into the bridge page; see content rule 8.)
   page-copy PATCH route. `campaigns.landing_md` is left as an unread legacy column on old rows
   rather than a destructive migration (same precedent as `profiles.nickname`/`presell_html`).
 
-- **The editor is structured-field, not drag-and-drop, on purpose**: headline/lead/mechanism/
-  benefits/proof/FAQ/CTA/image are editable; the affiliate disclosure, the hoplink, and the bridge
-  page's `LEAD_CAPTURE_ENDPOINT` placeholder marker are not exposed as fields at all, so they can
-  never be edited out.
+- **The editor is structured-field, with drag-**_**to-reorder**_**, not a freeform block canvas.**
+  headline/lead/mechanism/benefits/proof/FAQ/CTA/image are editable; the affiliate disclosure, the
+  hoplink, and the bridge page's `LEAD_CAPTURE_ENDPOINT` placeholder marker are not exposed as
+  fields at all, so they can never be edited out. When the user asked for an "Elementor/
+  ClickFunnels style" editor, that was explicitly scoped down via `AskUserQuestion` (flagged as
+  conflicting with the decision above first) to **drag-to-reorder of the 5 existing content
+  sections only** — not new block types, not a style panel, not freeform layout. Confirmed choice:
+  "Drag-to-reorder sections," not "Full visual canvas builder."
+  - **Zero-migration**: `sectionOrder?: SectionKey[]` (`SECTION_KEYS = ["lead", "mechanism",
+    "benefits", "proof", "faq"] as const`, `lib/engine/renderPages.ts`) lives *inside* the existing
+    `page_copy` JSONB blob — already shared by `campaigns`, `bridge_variants`, and `funnel_steps`,
+    so no new DB column was needed for any of the three. Headline, CTA text, and the embedded
+    product image stay fixed/non-reorderable — the hero image is deliberately kept *coupled inside*
+    the `lead` section's own HTML fragment (not a separate fixed block), specifically so the
+    default (no `sectionOrder` set) render output stays byte-for-byte identical to before this
+    feature, and dragging "Lead paragraph" carries its hero image along with it.
+  - **`resolveSectionOrder(order)`** is a defensive resolver — keeps only recognized
+    `SECTION_KEYS`, then appends any missing ones in default order — so corrupt/partial/foreign
+    data always renders all 5 sections exactly once. Called both server-side (every PATCH route
+    that writes `page_copy`) and client-side (`PageEditor.tsx`/`FunnelStepEditor.tsx` reading it
+    back for the drag list), never trusting either direction's shape.
+  - **`@dnd-kit/core`+`/sortable`+`/utilities`** (first DnD library in this codebase) —
+    `DndContext`(sensors + `closestCenter` + `onDragEnd`) → `SortableContext`(items + strategy) →
+    `.map()` of `components/SortableSection.tsx` (wraps `useSortable({id})`, a drag handle, and the
+    section's title). `PointerSensor` uses `activationConstraint: {distance: 4}` so a plain click
+    doesn't misfire as a drag. Factored into its own component specifically to avoid a third copy
+    of the dnd-kit wiring — `components/PageEditor.tsx` and `components/FunnelStepEditor.tsx` both
+    use it identically, each with its own `renderSectionFields(key)` switch returning just that
+    section's form fields (no outer wrapper — `SortableSection` owns that now).
 - **`campaigns`' RLS is select-only for `authenticated`** (tightened in
   `supabase/migrations/0009_page_domains.sql`, dropping the original Phase-A `for all` policy).
   This table's HTML fields are served completely raw to real, unauthenticated ad traffic

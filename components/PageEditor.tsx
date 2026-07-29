@@ -2,7 +2,18 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Plus, Trash2, Image as ImageIcon, Loader2, CheckCircle2 } from "lucide-react";
-import { renderBridgeHtml, type PageCopy } from "@/lib/engine/renderPages";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { renderBridgeHtml, resolveSectionOrder, type PageCopy, type SectionKey } from "@/lib/engine/renderPages";
+import SortableSection from "@/components/SortableSection";
+
+const SECTION_TITLES: Record<SectionKey, string> = {
+  lead: "Lead paragraph",
+  mechanism: "How it works",
+  benefits: "Benefits",
+  proof: "Proof / credibility",
+  faq: "FAQ",
+};
 
 const MAX_IMAGE_DATA_URL_CHARS = 280_000;
 
@@ -88,11 +99,21 @@ export default function PageEditor({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const product = useMemo(() => ({ product_title: productTitle }), [productTitle]);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const previewHtml = renderBridgeHtml(product, copy, previewHoplink, imageDataUrl, campaignId);
+  const sectionOrder = resolveSectionOrder(copy.sectionOrder);
 
   function update<K extends keyof PageCopy>(key: K, value: PageCopy[K]) {
     setCopy((c) => ({ ...c, [key]: value }));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = sectionOrder.indexOf(active.id as SectionKey);
+    const newIndex = sectionOrder.indexOf(over.id as SectionKey);
+    update("sectionOrder", arrayMove(sectionOrder, oldIndex, newIndex));
   }
 
   function updateBenefit(i: number, value: string) {
@@ -138,6 +159,7 @@ export default function PageEditor({
           faq: copy.faq.filter((f) => f.q.trim() && f.a.trim()),
           cta: copy.cta,
           image_data_url: imageDataUrl,
+          section_order: sectionOrder,
         }),
       });
       const data = await res.json();
@@ -160,6 +182,120 @@ export default function PageEditor({
     );
   }
 
+  function renderSectionFields(key: SectionKey) {
+    switch (key) {
+      case "lead":
+        return (
+          <textarea
+            value={copy.lead}
+            onChange={(e) => update("lead", e.target.value)}
+            maxLength={1000}
+            rows={3}
+            className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
+          />
+        );
+      case "mechanism":
+        return (
+          <textarea
+            value={copy.mechanism}
+            onChange={(e) => update("mechanism", e.target.value)}
+            maxLength={3000}
+            rows={3}
+            className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
+          />
+        );
+      case "benefits":
+        return (
+          <>
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => update("benefits", [...copy.benefits, ""])}
+                disabled={copy.benefits.length >= 10}
+                className="btn-ghost !py-1 text-xs"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add
+              </button>
+            </div>
+            <div className="mt-1 space-y-2">
+              {copy.benefits.map((b, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    value={b}
+                    onChange={(e) => updateBenefit(i, e.target.value)}
+                    maxLength={300}
+                    className="flex-1 rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => update("benefits", copy.benefits.filter((_, idx) => idx !== i))}
+                    className="rounded-lg p-2 text-zinc-500 hover:bg-ink-800 hover:text-red-300"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      case "proof":
+        return (
+          <textarea
+            value={copy.proof}
+            onChange={(e) => update("proof", e.target.value)}
+            maxLength={1000}
+            rows={2}
+            className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
+          />
+        );
+      case "faq":
+        return (
+          <>
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => update("faq", [...copy.faq, { q: "", a: "" }])}
+                disabled={copy.faq.length >= 10}
+                className="btn-ghost !py-1 text-xs"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add
+              </button>
+            </div>
+            <div className="mt-1 space-y-3">
+              {copy.faq.map((f, i) => (
+                <div key={i} className="rounded-lg border border-ink-700 p-2.5">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={f.q}
+                      onChange={(e) => updateFaq(i, "q", e.target.value)}
+                      placeholder="Question"
+                      maxLength={200}
+                      className="flex-1 rounded-lg border border-ink-600 bg-ink-800 px-3 py-1.5 text-sm text-zinc-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => update("faq", copy.faq.filter((_, idx) => idx !== i))}
+                      className="rounded-lg p-2 text-zinc-500 hover:bg-ink-800 hover:text-red-300"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <textarea
+                    value={f.a}
+                    onChange={(e) => updateFaq(i, "a", e.target.value)}
+                    placeholder="Answer"
+                    maxLength={1000}
+                    rows={2}
+                    className="mt-1.5 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-1.5 text-sm text-zinc-100"
+                  />
+                </div>
+              ))}
+            </div>
+          </>
+        );
+    }
+  }
+
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <div className="space-y-4">
@@ -175,125 +311,17 @@ export default function PageEditor({
           />
         </div>
 
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-            Lead paragraph
-          </label>
-          <textarea
-            value={copy.lead}
-            onChange={(e) => update("lead", e.target.value)}
-            maxLength={1000}
-            rows={3}
-            className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-            How it works
-          </label>
-          <textarea
-            value={copy.mechanism}
-            onChange={(e) => update("mechanism", e.target.value)}
-            maxLength={3000}
-            rows={3}
-            className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Benefits
-            </label>
-            <button
-              type="button"
-              onClick={() => update("benefits", [...copy.benefits, ""])}
-              disabled={copy.benefits.length >= 10}
-              className="btn-ghost !py-1 text-xs"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add
-            </button>
-          </div>
-          <div className="mt-1 space-y-2">
-            {copy.benefits.map((b, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <input
-                  value={b}
-                  onChange={(e) => updateBenefit(i, e.target.value)}
-                  maxLength={300}
-                  className="flex-1 rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
-                />
-                <button
-                  type="button"
-                  onClick={() => update("benefits", copy.benefits.filter((_, idx) => idx !== i))}
-                  className="rounded-lg p-2 text-zinc-500 hover:bg-ink-800 hover:text-red-300"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-            Proof / credibility
-          </label>
-          <textarea
-            value={copy.proof}
-            onChange={(e) => update("proof", e.target.value)}
-            maxLength={1000}
-            rows={2}
-            className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              FAQ
-            </label>
-            <button
-              type="button"
-              onClick={() => update("faq", [...copy.faq, { q: "", a: "" }])}
-              disabled={copy.faq.length >= 10}
-              className="btn-ghost !py-1 text-xs"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add
-            </button>
-          </div>
-          <div className="mt-1 space-y-3">
-            {copy.faq.map((f, i) => (
-              <div key={i} className="rounded-lg border border-ink-700 p-2.5">
-                <div className="flex items-center gap-2">
-                  <input
-                    value={f.q}
-                    onChange={(e) => updateFaq(i, "q", e.target.value)}
-                    placeholder="Question"
-                    maxLength={200}
-                    className="flex-1 rounded-lg border border-ink-600 bg-ink-800 px-3 py-1.5 text-sm text-zinc-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => update("faq", copy.faq.filter((_, idx) => idx !== i))}
-                    className="rounded-lg p-2 text-zinc-500 hover:bg-ink-800 hover:text-red-300"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-                <textarea
-                  value={f.a}
-                  onChange={(e) => updateFaq(i, "a", e.target.value)}
-                  placeholder="Answer"
-                  maxLength={1000}
-                  rows={2}
-                  className="mt-1.5 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-1.5 text-sm text-zinc-100"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={sectionOrder} strategy={verticalListSortingStrategy}>
+            <div className="space-y-3">
+              {sectionOrder.map((key) => (
+                <SortableSection key={key} id={key} title={SECTION_TITLES[key]}>
+                  {renderSectionFields(key)}
+                </SortableSection>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
 
         <div>
           <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
