@@ -80,10 +80,10 @@ export default function ProductPage({ params }: { params: { id: string } }) {
   return (
     <main className="space-y-5">
       <Link
-        href="/dashboard"
+        href="/campaigns"
         className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200"
       >
-        <ArrowLeft className="h-4 w-4" /> Back to dashboard
+        <ArrowLeft className="h-4 w-4" /> Back to campaigns
       </Link>
 
       <header className="card p-5">
@@ -189,7 +189,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
 
         {!campaign ? (
           <p className="px-4 py-10 text-center text-sm text-zinc-500">
-            No campaign kit yet. Hit <strong>Promote</strong> on the dashboard to queue one — it
+            No campaign kit yet. Hit <strong>Promote</strong> on the Campaigns page to queue one — it
             builds automatically.
           </p>
         ) : (
