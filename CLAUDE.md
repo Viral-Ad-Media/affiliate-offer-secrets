@@ -483,13 +483,20 @@ feature existed.
   that changes the step sequence or a step's own copy — simplest-correct for typical funnel size,
   not a targeted diff. `renderBridgeHtml()` gained an optional `nextStepUrl` param for this; when
   set, the opt-in page's submit handler redirects there instead of today's in-place step-2 reveal.
-- **Thank-you/Order**: one CTA, `cta_action` picks `next_step` (the following step's URL, or the
-  resolved hoplink if this is the last step) or `hoplink` (always the hoplink, skipping ahead).
-  **Upsell**: Accept always resolves to a hoplink (`target_product_id`'s, or this campaign's own
-  product if null — cross-sell, ownership-checked in `app/api/funnel-steps/[id]/route.ts` against
-  the same user); Decline always continues (next step, or the *original* product's hoplink as a
-  fallback). Each hoplink gets a distinct tid (`step-{index}`, `step-{index}-upsell`/`-decline`)
-  extending the existing per-channel tid convention.
+- **Thank-you/Order**: one CTA, `cta_action` (`supabase/migrations/0024_funnel_step_redirect_url.sql`)
+  picks `next_step` (the following step's URL, or the resolved hoplink if this is the last step),
+  `hoplink` (always the hoplink, skipping ahead), or `redirect_url` (a tenant-supplied custom URL,
+  stored in `redirect_url`, validated server-side — see below). **Upsell** has two independent
+  actions, each with the same three-way choice: Accept (`cta_action`, defaulting to `hoplink`
+  against `target_product_id`'s product — or this campaign's own product if null — for cross-sell,
+  ownership-checked in `app/api/funnel-steps/[id]/route.ts` against the same user) and Decline
+  (`decline_action`/`decline_redirect_url`, defaulting to `next_step`, falling back to the
+  *original* product's hoplink if there's no next step). Every hoplink path still gets a distinct
+  tid (`step-{index}`, `step-{index}-upsell`/`-decline`) extending the existing per-channel tid
+  convention; a `redirect_url` choice bypasses hoplink resolution (and the target-product lookup)
+  entirely. `isValidRedirectUrl()` requires `http(s)://` and caps length at 2000 chars — the value
+  is tenant-supplied, not public input, but still becomes a real `<a href>` on the tenant's own
+  page, so a cheap scheme allowlist avoids an accidental `javascript:`/`data:` self-XSS.
 - **`add_funnel_step`/`move_funnel_step`/`delete_funnel_step`** (`SECURITY DEFINER`,
   `authenticated`) are advisory-locked (`pg_advisory_xact_lock(hashtextextended('funnel_steps:' ||
   campaign_id, 0))`, same idiom as `bridge_variants`) — a double-click can't collide two rows on

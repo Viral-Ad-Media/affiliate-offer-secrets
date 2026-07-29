@@ -19,6 +19,21 @@ function clampStr(v: unknown, max: number): string {
   return v.slice(0, max).trim();
 }
 
+const MAX_REDIRECT_URL = 2000;
+
+// Admin/tenant-supplied, not public input — but this still becomes a real <a href> on the
+// tenant's own funnel step, so a cheap scheme allowlist avoids an accidental self-XSS via a
+// javascript:/data: URI (copy-pasted from somewhere untrusted, browser autofill, etc.).
+function isValidRedirectUrl(v: unknown): v is string {
+  return typeof v === "string" && v.length > 0 && v.length <= MAX_REDIRECT_URL && /^https?:\/\//i.test(v);
+}
+
+type CtaAction = "next_step" | "hoplink" | "redirect_url";
+
+function parseAction(v: unknown, fallback: CtaAction): CtaAction {
+  return v === "next_step" || v === "hoplink" || v === "redirect_url" ? v : fallback;
+}
+
 // Same validate/render/write shape as app/api/campaigns/[id]/page-copy/route.ts, scoped to a
 // funnel_steps row. The actual re-render happens in rerenderFunnelSequence (this route just
 // persists the edited copy/settings, then triggers it) since it needs to resolve this step's
@@ -88,7 +103,23 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "invalid image" }, { status: 400 });
   }
 
-  const ctaAction = body.cta_action === "next_step" ? "next_step" : "hoplink";
+  const ctaAction = parseAction(body.cta_action, "hoplink");
+  let redirectUrl: string | null = null;
+  if (ctaAction === "redirect_url") {
+    if (!isValidRedirectUrl(body.redirect_url)) {
+      return NextResponse.json({ error: "invalid redirect URL" }, { status: 400 });
+    }
+    redirectUrl = body.redirect_url;
+  }
+
+  const declineAction = parseAction(body.decline_action, "next_step");
+  let declineRedirectUrl: string | null = null;
+  if (declineAction === "redirect_url") {
+    if (!isValidRedirectUrl(body.decline_redirect_url)) {
+      return NextResponse.json({ error: "invalid decline redirect URL" }, { status: 400 });
+    }
+    declineRedirectUrl = body.decline_redirect_url;
+  }
 
   const admin = createAdminClient();
 
@@ -122,7 +153,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       page_copy: copy,
       embedded_image_data_url: imageDataUrl,
       cta_action: ctaAction,
+      redirect_url: redirectUrl,
       target_product_id: targetProductId,
+      decline_action: declineAction,
+      decline_redirect_url: declineRedirectUrl,
       updated_at: new Date().toISOString(),
     })
     .eq("id", stepId);

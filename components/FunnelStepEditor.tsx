@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Plus, Trash2, Image as ImageIcon, Loader2, CheckCircle2 } from "lucide-react";
 import { renderFunnelStepHtml, type PageCopy, type FunnelStepType } from "@/lib/engine/renderPages";
+import type { FunnelStepCtaAction } from "@/lib/shared";
 
 const MAX_IMAGE_DATA_URL_CHARS = 280_000;
 
@@ -63,8 +64,11 @@ type Props = {
   productTitle: string;
   initialCopy: PageCopy | null;
   initialHtml: string | null;
-  initialCtaAction: "next_step" | "hoplink";
+  initialCtaAction: FunnelStepCtaAction;
+  initialRedirectUrl: string | null;
   initialTargetProductId: string | null;
+  initialDeclineAction: FunnelStepCtaAction;
+  initialDeclineRedirectUrl: string | null;
   crossSellOptions: { id: string; title: string }[];
   onSaved: (result: { html: string; page_copy: PageCopy }) => void;
 };
@@ -76,14 +80,20 @@ export default function FunnelStepEditor({
   initialCopy,
   initialHtml,
   initialCtaAction,
+  initialRedirectUrl,
   initialTargetProductId,
+  initialDeclineAction,
+  initialDeclineRedirectUrl,
   crossSellOptions,
   onSaved,
 }: Props) {
   const [copy, setCopy] = useState<PageCopy>(initialCopy ?? emptyCopy);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(extractImageSrc(initialHtml));
-  const [ctaAction, setCtaAction] = useState<"next_step" | "hoplink">(initialCtaAction);
+  const [ctaAction, setCtaAction] = useState<FunnelStepCtaAction>(initialCtaAction);
+  const [redirectUrl, setRedirectUrl] = useState(initialRedirectUrl ?? "");
   const [targetProductId, setTargetProductId] = useState<string>(initialTargetProductId ?? "");
+  const [declineAction, setDeclineAction] = useState<FunnelStepCtaAction>(initialDeclineAction);
+  const [declineRedirectUrl, setDeclineRedirectUrl] = useState(initialDeclineRedirectUrl ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -152,7 +162,10 @@ export default function FunnelStepEditor({
           cta: copy.cta,
           image_data_url: imageDataUrl,
           cta_action: ctaAction,
+          redirect_url: ctaAction === "redirect_url" ? redirectUrl : null,
           target_product_id: targetProductId || null,
+          decline_action: declineAction,
+          decline_redirect_url: declineAction === "redirect_url" ? declineRedirectUrl : null,
         }),
       });
       const data = await res.json();
@@ -314,27 +327,69 @@ export default function FunnelStepEditor({
         </div>
 
         {stepType === "upsell" ? (
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Cross-sell product
-            </label>
-            <select
-              value={targetProductId}
-              onChange={(e) => setTargetProductId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
-            >
-              <option value="">This funnel's own product</option>
-              {crossSellOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-zinc-500">
-              Accept links to this product's hoplink; "No thanks, continue" always moves on to the
-              next step (or the original product's hoplink if this is the last step).
-            </p>
-          </div>
+          <>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                When Accept is clicked
+              </label>
+              <select
+                value={ctaAction}
+                onChange={(e) => setCtaAction(e.target.value as FunnelStepCtaAction)}
+                className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
+              >
+                <option value="hoplink">Go to a product's hoplink</option>
+                <option value="next_step">Continue to the next step (or the hoplink, if last)</option>
+                <option value="redirect_url">Redirect to a custom URL</option>
+              </select>
+              {ctaAction === "hoplink" && (
+                <select
+                  value={targetProductId}
+                  onChange={(e) => setTargetProductId(e.target.value)}
+                  className="mt-2 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
+                >
+                  <option value="">This funnel's own product</option>
+                  {crossSellOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {ctaAction === "redirect_url" && (
+                <input
+                  value={redirectUrl}
+                  onChange={(e) => setRedirectUrl(e.target.value)}
+                  placeholder="https://example.com/checkout"
+                  maxLength={2000}
+                  className="mt-2 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
+                />
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                When "No thanks, continue" is clicked
+              </label>
+              <select
+                value={declineAction}
+                onChange={(e) => setDeclineAction(e.target.value as FunnelStepCtaAction)}
+                className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
+              >
+                <option value="next_step">Continue to the next step (or the original hoplink, if last)</option>
+                <option value="hoplink">Go straight to the original product's hoplink</option>
+                <option value="redirect_url">Redirect to a custom URL</option>
+              </select>
+              {declineAction === "redirect_url" && (
+                <input
+                  value={declineRedirectUrl}
+                  onChange={(e) => setDeclineRedirectUrl(e.target.value)}
+                  placeholder="https://example.com/no-thanks"
+                  maxLength={2000}
+                  className="mt-2 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
+                />
+              )}
+            </div>
+          </>
         ) : (
           <div>
             <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
@@ -342,12 +397,22 @@ export default function FunnelStepEditor({
             </label>
             <select
               value={ctaAction}
-              onChange={(e) => setCtaAction(e.target.value as "next_step" | "hoplink")}
+              onChange={(e) => setCtaAction(e.target.value as FunnelStepCtaAction)}
               className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
             >
               <option value="next_step">Continue to the next step (or the hoplink, if last)</option>
               <option value="hoplink">Go straight to the hoplink</option>
+              <option value="redirect_url">Redirect to a custom URL</option>
             </select>
+            {ctaAction === "redirect_url" && (
+              <input
+                value={redirectUrl}
+                onChange={(e) => setRedirectUrl(e.target.value)}
+                placeholder="https://example.com/thank-you"
+                maxLength={2000}
+                className="mt-2 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
+              />
+            )}
           </div>
         )}
 

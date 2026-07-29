@@ -87,6 +87,7 @@ export type BridgeVariant = {
 };
 
 export type FunnelStepType = "thank_you" | "upsell" | "order";
+export type FunnelStepCtaAction = "next_step" | "hoplink" | "redirect_url";
 
 export type FunnelStep = {
   id: string;
@@ -96,8 +97,11 @@ export type FunnelStep = {
   page_copy: Campaign["page_copy"];
   html: string | null;
   embedded_image_data_url: string | null;
-  cta_action: "next_step" | "hoplink";
+  cta_action: FunnelStepCtaAction;
+  redirect_url: string | null;
   target_product_id: string | null;
+  decline_action: FunnelStepCtaAction;
+  decline_redirect_url: string | null;
   created_at: string;
   updated_at: string;
 };

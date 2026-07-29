@@ -139,7 +139,10 @@ export default function FunnelStepsSection({
               initialCopy={editingStep.page_copy}
               initialHtml={editingStep.html}
               initialCtaAction={editingStep.cta_action}
+              initialRedirectUrl={editingStep.redirect_url}
               initialTargetProductId={editingStep.target_product_id}
+              initialDeclineAction={editingStep.decline_action}
+              initialDeclineRedirectUrl={editingStep.decline_redirect_url}
               crossSellOptions={crossSellOptions}
               onSaved={() => onChanged()}
             />

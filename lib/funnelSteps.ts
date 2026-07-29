@@ -7,14 +7,19 @@ import {
   type FunnelStepType,
 } from "@/lib/engine/renderPages";
 
+type CtaAction = "next_step" | "hoplink" | "redirect_url";
+
 type FunnelStepRow = {
   id: string;
   step_type: FunnelStepType;
   step_index: number;
   page_copy: PageCopy | null;
   embedded_image_data_url: string | null;
-  cta_action: "next_step" | "hoplink";
+  cta_action: CtaAction;
+  redirect_url: string | null;
   target_product_id: string | null;
+  decline_action: CtaAction;
+  decline_redirect_url: string | null;
 };
 
 function stepUrl(campaignId: string, stepIndex: number): string {
@@ -56,7 +61,9 @@ export async function rerenderFunnelSequence(
 
   const { data: stepsRaw } = await admin
     .from("funnel_steps")
-    .select("id, step_type, step_index, page_copy, embedded_image_data_url, cta_action, target_product_id")
+    .select(
+      "id, step_type, step_index, page_copy, embedded_image_data_url, cta_action, redirect_url, target_product_id, decline_action, decline_redirect_url"
+    )
     .eq("campaign_id", campaignId)
     .order("step_index", { ascending: true });
   const steps = (stepsRaw ?? []) as FunnelStepRow[];
@@ -86,34 +93,53 @@ export async function rerenderFunnelSequence(
     const nextUrl = next ? stepUrl(campaignId, next.step_index) : null;
 
     if (step.step_type === "upsell") {
-      const targetProductId = step.target_product_id ?? campaign.product_id;
       let targetProduct = product;
-      let targetAffiliateId = affiliateId;
-      if (targetProductId !== campaign.product_id) {
-        const { data: tp } = await admin
-          .from("products")
-          .select("product_title, network, vendor_id")
-          .eq("id", targetProductId)
-          .eq("user_id", userId)
-          .maybeSingle();
-        if (tp) {
-          targetProduct = tp;
-          if (tp.network !== product.network) {
-            const { data: tc } = await admin
-              .from("network_connections")
-              .select("affiliate_id")
-              .eq("user_id", userId)
-              .eq("network", tp.network)
-              .maybeSingle();
-            targetAffiliateId = tc?.affiliate_id ?? null;
+
+      let acceptHref: string;
+      if (step.cta_action === "redirect_url" && step.redirect_url) {
+        acceptHref = step.redirect_url;
+      } else if (step.cta_action === "next_step" && nextUrl) {
+        acceptHref = nextUrl;
+      } else {
+        // 'hoplink' (explicit or fallback) — resolve the target product/connection, only when
+        // actually needed (skipped entirely for the redirect_url/next_step branches above).
+        const targetProductId = step.target_product_id ?? campaign.product_id;
+        let targetAffiliateId = affiliateId;
+        if (targetProductId !== campaign.product_id) {
+          const { data: tp } = await admin
+            .from("products")
+            .select("product_title, network, vendor_id")
+            .eq("id", targetProductId)
+            .eq("user_id", userId)
+            .maybeSingle();
+          if (tp) {
+            targetProduct = tp;
+            if (tp.network !== product.network) {
+              const { data: tc } = await admin
+                .from("network_connections")
+                .select("affiliate_id")
+                .eq("user_id", userId)
+                .eq("network", tp.network)
+                .maybeSingle();
+              targetAffiliateId = tc?.affiliate_id ?? null;
+            }
           }
         }
+        acceptHref = targetAffiliateId
+          ? buildHoplink(targetProduct.network, targetAffiliateId, targetProduct.vendor_id, `step-${step.step_index}-upsell`)
+          : "#";
       }
-      const acceptHref = targetAffiliateId
-        ? buildHoplink(targetProduct.network, targetAffiliateId, targetProduct.vendor_id, `step-${step.step_index}-upsell`)
-        : "#";
-      const declineHref =
-        nextUrl ?? buildHoplink(product.network, affiliateId, product.vendor_id, `step-${step.step_index}-decline`);
+
+      let declineHref: string;
+      if (step.decline_action === "redirect_url" && step.decline_redirect_url) {
+        declineHref = step.decline_redirect_url;
+      } else if (step.decline_action === "hoplink") {
+        declineHref = buildHoplink(product.network, affiliateId, product.vendor_id, `step-${step.step_index}-decline`);
+      } else {
+        declineHref =
+          nextUrl ?? buildHoplink(product.network, affiliateId, product.vendor_id, `step-${step.step_index}-decline`);
+      }
+
       const html = renderFunnelStepHtml(
         targetProduct,
         step.page_copy as PageCopy,
@@ -124,10 +150,14 @@ export async function rerenderFunnelSequence(
       );
       await admin.from("funnel_steps").update({ html }).eq("id", step.id);
     } else {
-      const primaryHref =
-        step.cta_action === "next_step" && nextUrl
-          ? nextUrl
-          : buildHoplink(product.network, affiliateId, product.vendor_id, `step-${step.step_index}`);
+      let primaryHref: string;
+      if (step.cta_action === "redirect_url" && step.redirect_url) {
+        primaryHref = step.redirect_url;
+      } else if (step.cta_action === "next_step" && nextUrl) {
+        primaryHref = nextUrl;
+      } else {
+        primaryHref = buildHoplink(product.network, affiliateId, product.vendor_id, `step-${step.step_index}`);
+      }
       const html = renderFunnelStepHtml(
         product,
         step.page_copy as PageCopy,
