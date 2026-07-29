@@ -12,6 +12,7 @@ import PageEditor from "@/components/PageEditor";
 import PublishBridge from "@/components/PublishBridge";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
 import SocialPostsPanel from "@/components/SocialPostsPanel";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const TABS = [
   { key: "fb_ads_md", label: "FB/IG Ads" },
@@ -193,19 +194,21 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           </p>
         ) : (
           <>
-            <div className="flex flex-wrap gap-1 border-b border-ink-700 px-4 py-2 text-xs">
-              {TABS.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setTab(t.key)}
-                  className={`rounded-full px-2.5 py-1 ${
-                    tab === t.key ? "bg-emerald-600 text-white" : "text-zinc-400 hover:bg-ink-700"
-                  }`}
-                >
-                  {t.label}
-                  {hasTabContent(t.key) ? "" : " ·"}
-                </button>
-              ))}
+            <div className="border-b border-ink-700 px-4 py-2">
+              <Tabs value={tab} onValueChange={(v) => setTab(v as (typeof TABS)[number]["key"])}>
+                <TabsList className="h-auto flex-wrap justify-start gap-1 bg-transparent p-0">
+                  {TABS.map((t) => (
+                    <TabsTrigger
+                      key={t.key}
+                      value={t.key}
+                      className="rounded-full px-2.5 py-1 text-xs font-medium text-zinc-400 hover:bg-ink-700 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-none"
+                    >
+                      {t.label}
+                      {hasTabContent(t.key) ? "" : " ·"}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
             </div>
             <div className="p-4">
               {tab === "fb_ads_md" ? (
