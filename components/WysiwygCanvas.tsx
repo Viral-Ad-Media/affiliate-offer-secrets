@@ -1,8 +1,27 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { GripVertical, ImagePlus, Plus, X, Monitor, Tablet, Smartphone } from "lucide-react";
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import {
+  GripVertical,
+  ImagePlus,
+  Image as ImageIcon,
+  Plus,
+  X,
+  Trash2,
+  Monitor,
+  Tablet,
+  Smartphone,
+  Heading1,
+  Heading2,
+  AlignLeft,
+  List,
+  ListChecks,
+  Minus,
+  Images,
+  MousePointerClick,
+  HelpCircle,
+} from "lucide-react";
+import { DndContext, closestCenter, useDroppable, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -10,7 +29,14 @@ import {
   updateBlockContent,
   removeChildBlock,
   addChildBlock,
+  findBlockLocation,
+  moveBlockToContainer,
+  insertElement,
+  insertRow,
+  containerKey,
+  parseContainerKey,
   ALLOWED_ICON_NAMES,
+  ELEMENT_BLOCK_TYPES,
   type PageBlockTree,
   type SectionBlock,
   type RowBlock,
@@ -18,7 +44,10 @@ import {
   type ElementBlock,
   type LockedBlock,
   type FormInputBlock,
+  type ContainerRef,
 } from "@/lib/engine/renderPages";
+
+type ElementBlockTypeLocal = (typeof ELEMENT_BLOCK_TYPES)[number];
 
 // Matches the real page's <style> block in lib/engine/renderPages.ts — this canvas IS the editor
 // (no separate form-panel-plus-iframe split), so drift here means the editor stops looking like
@@ -28,9 +57,22 @@ const PAGE_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ari
 // Desktop matches the real page's own `.wrap { max-width: 680px }` (lib/engine/renderPages.ts) —
 // the actual published content column, not a full browser viewport. Tablet/mobile narrow that
 // same column so a Row's `.row { flex-wrap: wrap }` columns (lib/engine/blockTree.ts) actually
-// demonstrate stacking, once Row/Column insertion ships (Phase O.3) — purely a preview aid, not
-// stored anywhere; it never affects what's saved or how the real page renders at a real width.
+// demonstrate stacking — purely a preview aid, not stored anywhere; it never affects what's saved
+// or how the real page renders at a real width.
 const DEVICE_WIDTHS: Record<"desktop" | "tablet" | "mobile", number> = { desktop: 680, tablet: 480, mobile: 360 };
+
+const ELEMENT_PALETTE: { type: ElementBlockTypeLocal; label: string; icon: any }[] = [
+  { type: "heading", label: "Heading", icon: Heading1 },
+  { type: "subheading", label: "Subheading", icon: Heading2 },
+  { type: "paragraph", label: "Paragraph", icon: AlignLeft },
+  { type: "image", label: "Image", icon: ImageIcon },
+  { type: "bullet_list", label: "Bullet list", icon: List },
+  { type: "icon_list", label: "Icon list", icon: ListChecks },
+  { type: "divider", label: "Divider", icon: Minus },
+  { type: "image_list", label: "Image list", icon: Images },
+  { type: "button", label: "Button", icon: MousePointerClick },
+  { type: "faq_item", label: "FAQ item", icon: HelpCircle },
+];
 
 // Sets the DOM node's text exactly once, at mount, then never touches it again on re-render (no
 // children/dangerouslySetInnerHTML passed after that) — deliberately "uncontrolled" so editing a
@@ -110,6 +152,222 @@ function RootBlockWrapper({ id, children }: { id: string; children: React.ReactN
   );
 }
 
+// Drag handle + delete for anything nested below root (a Row within a Section, or an element
+// within a Section or a Column) — module-scope (not defined inside WysiwygCanvas's body) so its
+// component identity is stable across renders; an inline nested-function definition would get a
+// fresh identity on every WysiwygCanvas re-render (which happens on nearly every edit), forcing
+// React to unmount/remount this subtree each time — breaking EditableText's mount-once pattern
+// and any transient UI state (like AddBlockMenu's own open/closed toggle) beneath it.
+function NestedItemWrapper({
+  id,
+  onDelete,
+  deleteTitle,
+  children,
+}: {
+  id: string;
+  onDelete?: () => void;
+  deleteTitle?: string;
+  children: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="group/nested relative mb-2 rounded-md border border-transparent px-1 py-0.5 hover:border-dashed hover:border-emerald-200"
+    >
+      <div className="absolute -left-1 -top-1 z-10 flex gap-0.5 opacity-0 transition-opacity group-hover/nested:opacity-100">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          title="Drag to reposition"
+          className="flex h-5 w-5 cursor-grab items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-emerald-600 active:cursor-grabbing"
+        >
+          <GripVertical className="h-3 w-3" />
+        </button>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            title={deleteTitle ?? "Delete"}
+            className="flex h-5 w-5 items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-red-500"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// The "+ Add block" control mounted at the end of every Section body and every Column body.
+// `onPickRow` is only passed for Section-level menus (columns can't contain rows — no code path
+// exists for it, matching the schema's ColumnBlock.children: ElementBlock[] shape) — its presence
+// is what toggles the extra "Row" section of the menu on/off.
+function AddBlockMenu({ onPick, onPickRow }: { onPick: (type: ElementBlockTypeLocal) => void; onPickRow?: (layout: RowBlock["layout"]) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="mt-1 inline-flex items-center gap-1 rounded-md border border-dashed border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-500 hover:border-emerald-400 hover:text-emerald-600"
+      >
+        <Plus className="h-3.5 w-3.5" /> Add block
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-lg border border-gray-200 bg-white p-1 shadow-lg">
+            {onPickRow && (
+              <div className="mb-1 border-b border-gray-100 pb-1">
+                <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Row</div>
+                <div className="flex gap-1 px-2 pb-1">
+                  {(["1col", "2col", "3col"] as const).map((layout) => (
+                    <button
+                      key={layout}
+                      type="button"
+                      onClick={() => {
+                        onPickRow(layout);
+                        setOpen(false);
+                      }}
+                      className="flex-1 rounded border border-gray-200 py-1 text-[11px] text-gray-600 hover:border-emerald-400 hover:text-emerald-600"
+                    >
+                      {layout === "1col" ? "1 col" : layout === "2col" ? "2 col" : "3 col"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Element</div>
+            <div className="max-h-56 overflow-y-auto">
+              {ELEMENT_PALETTE.map(({ type, label, icon: Icon }) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => {
+                    onPick(type);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] text-gray-700 hover:bg-emerald-50"
+                >
+                  <Icon className="h-3.5 w-3.5 text-gray-400" /> {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+type RenderElementFn = (el: ElementBlock, containerId: string) => React.ReactNode;
+
+// A Row's single Column — its own drop zone (so an empty column is still a valid drag target) and
+// its own SortableContext (elements reorder within it, or arrive from a different column/section
+// via cross-container drag, handled centrally by WysiwygCanvas's handleDragEnd).
+function ColumnEditor({
+  col,
+  rowId,
+  colIndex,
+  renderElement,
+  onDeleteElement,
+  onAddElement,
+}: {
+  col: ColumnBlock;
+  rowId: string;
+  colIndex: number;
+  renderElement: RenderElementFn;
+  onDeleteElement: (containerId: string, elementId: string) => void;
+  onAddElement: (ref: ContainerRef, type: ElementBlockTypeLocal) => void;
+}) {
+  const ref: ContainerRef = { kind: "column", rowId, colIndex };
+  const { setNodeRef } = useDroppable({ id: containerKey(ref) });
+  return (
+    <div ref={setNodeRef} className="min-h-[2.5rem] flex-1 rounded-md border border-dashed border-transparent p-0.5 hover:border-gray-200">
+      <SortableContext items={col.children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+        {col.children.map((el) => (
+          <NestedItemWrapper key={el.id} id={el.id} onDelete={() => onDeleteElement(col.id, el.id)}>
+            {renderElement(el, col.id)}
+          </NestedItemWrapper>
+        ))}
+      </SortableContext>
+      <AddBlockMenu onPick={(type) => onAddElement(ref, type)} />
+    </div>
+  );
+}
+
+// A Row's columns, side by side. The row itself isn't a drop zone (it never directly holds
+// elements — only its columns do) so no useDroppable here, only the per-column ones above.
+function RowEditor({
+  row,
+  renderElement,
+  onDeleteElement,
+  onAddElement,
+}: {
+  row: RowBlock;
+  renderElement: RenderElementFn;
+  onDeleteElement: (containerId: string, elementId: string) => void;
+  onAddElement: (ref: ContainerRef, type: ElementBlockTypeLocal) => void;
+}) {
+  return (
+    <div className="flex gap-6">
+      {row.columns.map((col, colIndex) => (
+        <ColumnEditor
+          key={col.id}
+          col={col}
+          rowId={row.id}
+          colIndex={colIndex}
+          renderElement={renderElement}
+          onDeleteElement={onDeleteElement}
+          onAddElement={onAddElement}
+        />
+      ))}
+    </div>
+  );
+}
+
+// A Section's body — its own drop zone plus a SortableContext over its direct children (a mix of
+// Row and bare Element siblings, matching SectionBlock.children's real shape).
+function SectionBody({
+  section,
+  renderElement,
+  onDeleteChild,
+  onAddElement,
+  onAddRow,
+}: {
+  section: SectionBlock;
+  renderElement: RenderElementFn;
+  onDeleteChild: (containerId: string, childId: string) => void;
+  onAddElement: (ref: ContainerRef, type: ElementBlockTypeLocal) => void;
+  onAddRow: (sectionId: string, layout: RowBlock["layout"]) => void;
+}) {
+  const ref: ContainerRef = { kind: "section", sectionId: section.id };
+  const { setNodeRef } = useDroppable({ id: containerKey(ref) });
+  return (
+    <div ref={setNodeRef}>
+      <SortableContext items={section.children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+        {section.children.map((child) =>
+          child.type === "row" ? (
+            <NestedItemWrapper key={child.id} id={child.id} onDelete={() => onDeleteChild(section.id, child.id)} deleteTitle="Delete row">
+              <RowEditor row={child} renderElement={renderElement} onDeleteElement={onDeleteChild} onAddElement={onAddElement} />
+            </NestedItemWrapper>
+          ) : (
+            <NestedItemWrapper key={child.id} id={child.id} onDelete={() => onDeleteChild(section.id, child.id)}>
+              {renderElement(child, section.id)}
+            </NestedItemWrapper>
+          )
+        )}
+      </SortableContext>
+      <AddBlockMenu onPick={(type) => onAddElement(ref, type)} onPickRow={(layout) => onAddRow(section.id, layout)} />
+    </div>
+  );
+}
+
 export type WysiwygCanvasProps = {
   tree: PageBlockTree;
   onChange: (tree: PageBlockTree) => void;
@@ -126,11 +384,13 @@ export type WysiwygCanvasProps = {
 // codebase already uses for those two files extends to this shared canvas rather than tripling
 // the WYSIWYG/dnd-kit wiring a third time.
 //
-// Phase O.2: this canvas now edits a real PageBlockTree (sections/rows/columns/elements + locked
-// blocks) instead of the old fixed 5-section PageCopy. Drag-to-reorder is still top-level only
-// (root Sections + locked blocks) — nested drag-and-drop between rows/columns/elements is
-// Phase O.3. Legacy-converted trees have exactly one umbrella Section with no rows, so this
-// mostly looks like the pre-Phase-O editor today; Row/Column insertion UI also lands in O.3.
+// Phase O.3: nested drag-and-drop (elements between columns/sections, rows within a section) plus
+// a full "+ Add block" element palette and Row/Column insertion (fixed 1/2/3-col presets, no
+// drag-to-resize). Modeled as multiple dnd-kit sortable containers under one DndContext — root
+// (Sections + locked blocks), one per Section body, one per Column body — rather than a single
+// globally-flattened indented list, since this schema's containment is already a fixed, shallow
+// shape (root -> section-child -> column-child). See lib/engine/blockTree.ts's
+// findBlockLocation/moveBlockToContainer for the pure data-layer half of this.
 export default function WysiwygCanvas({
   tree,
   onChange,
@@ -147,16 +407,53 @@ export default function WysiwygCanvas({
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const ids = tree.blocks.map((b) => b.id);
-    const oldIndex = ids.indexOf(active.id as string);
-    const newIndex = ids.indexOf(over.id as string);
-    if (oldIndex === -1 || newIndex === -1) return;
-    onChange({ ...tree, blocks: arrayMove(tree.blocks, oldIndex, newIndex) });
+    if (!over) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (activeId === overId) return;
+
+    // Root-level (Sections + locked blocks) — unchanged from Phase O.2, reorder within root only.
+    const rootIds = tree.blocks.map((b) => b.id);
+    if (rootIds.includes(activeId)) {
+      if (!rootIds.includes(overId)) return;
+      const oldIndex = rootIds.indexOf(activeId);
+      const newIndex = rootIds.indexOf(overId);
+      onChange({ ...tree, blocks: arrayMove(tree.blocks, oldIndex, newIndex) });
+      return;
+    }
+
+    // Nested (a Row or an Element, anywhere below root). `overId` is either another block's id
+    // (reorder/reparent to just before it) or a container's own droppable id (dropped on empty
+    // space inside a Section/Column — append at the end; moveBlockToContainer clamps internally).
+    const parsedContainer = parseContainerKey(overId);
+    let targetRef: ContainerRef;
+    let targetIndex: number;
+    if (parsedContainer) {
+      targetRef = parsedContainer;
+      targetIndex = Number.MAX_SAFE_INTEGER;
+    } else {
+      const overLoc = findBlockLocation(tree, overId);
+      if (!overLoc) return;
+      targetRef = overLoc.ref;
+      targetIndex = overLoc.index;
+    }
+    onChange(moveBlockToContainer(tree, activeId, targetRef, targetIndex));
   }
 
   function commit(blockId: string, patch: Record<string, unknown>) {
     onChange(updateBlockContent(tree, blockId, patch));
+  }
+
+  function deleteChild(containerId: string, childId: string) {
+    onChange(removeChildBlock(tree, containerId, childId));
+  }
+
+  function addElement(ref: ContainerRef, type: ElementBlockTypeLocal) {
+    onChange(insertElement(tree, ref, Number.MAX_SAFE_INTEGER, type));
+  }
+
+  function addRow(sectionId: string, layout: RowBlock["layout"]) {
+    onChange(insertRow(tree, sectionId, Number.MAX_SAFE_INTEGER, layout));
   }
 
   async function pickImage(blockId: string, file: File) {
@@ -171,7 +468,7 @@ export default function WysiwygCanvas({
     }
   }
 
-  function renderElement(el: ElementBlock, sectionId?: string): React.ReactNode {
+  const renderElement: RenderElementFn = (el, containerId) => {
     switch (el.type) {
       case "heading":
         return (
@@ -404,7 +701,7 @@ export default function WysiwygCanvas({
         );
       case "faq_item":
         return (
-          <div className="group/item relative mb-4 pr-6">
+          <div className="mb-1 pr-2">
             <EditableText
               as="h3"
               value={el.content.question}
@@ -413,72 +710,10 @@ export default function WysiwygCanvas({
               className="mb-1 block text-[16px] font-semibold"
             />
             <EditableText as="p" value={el.content.answer} onCommit={(v) => commit(el.id, { answer: v })} maxLength={1000} multiline />
-            <button
-              type="button"
-              onClick={() => sectionId && onChange(removeChildBlock(tree, sectionId, el.id))}
-              title="Remove"
-              className="absolute right-0 top-0 hidden text-gray-400 hover:text-red-500 group-hover/item:block"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
           </div>
         );
     }
-  }
-
-  function renderColumn(col: ColumnBlock) {
-    return (
-      <div key={col.id} className="flex-1">
-        {col.children.map((el) => (
-          <div key={el.id} className="mb-2">
-            {renderElement(el, col.id)}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  function renderSectionChild(child: RowBlock | ElementBlock, sectionId: string) {
-    if (child.type === "row") {
-      return (
-        <div key={child.id} className="mb-2 flex gap-6">
-          {child.columns.map((c) => renderColumn(c))}
-        </div>
-      );
-    }
-    return (
-      <div key={child.id} className="mb-2">
-        {renderElement(child, sectionId)}
-      </div>
-    );
-  }
-
-  function renderSection(section: SectionBlock) {
-    const hasFaq = section.children.some((c) => c.type === "faq_item");
-    return (
-      <div>
-        {section.children.map((c) => renderSectionChild(c, section.id))}
-        {hasFaq && (
-          <button
-            type="button"
-            onClick={() =>
-              onChange(
-                addChildBlock(tree, section.id, {
-                  id: newBlockId(),
-                  type: "faq_item",
-                  style: {},
-                  content: { question: "New question", answer: "Answer" },
-                })
-              )
-            }
-            className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700"
-          >
-            <Plus className="h-3 w-3" /> Add FAQ item
-          </button>
-        )}
-      </div>
-    );
-  }
+  };
 
   function renderFormField(field: FormInputBlock, formId: string) {
     return (
@@ -612,7 +847,11 @@ export default function WysiwygCanvas({
           <SortableContext items={tree.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
             {tree.blocks.map((b) => (
               <RootBlockWrapper key={b.id} id={b.id}>
-                {b.type === "section" ? renderSection(b) : renderLockedBlock(b)}
+                {b.type === "section" ? (
+                  <SectionBody section={b} renderElement={renderElement} onDeleteChild={deleteChild} onAddElement={addElement} onAddRow={addRow} />
+                ) : (
+                  renderLockedBlock(b)
+                )}
               </RootBlockWrapper>
             ))}
           </SortableContext>

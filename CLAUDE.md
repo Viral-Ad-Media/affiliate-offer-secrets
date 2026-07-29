@@ -1191,7 +1191,7 @@ after this contact signed up", never a shared calendar date). Reuses the existin
   abuse protection on the unsubscribe endpoint (same accepted v1 gap as `/api/public/leads`); no
   manual "send this step now" override or drag-and-drop step reordering.
 
-## Freeform block-based page builder (Phase O — in progress, sub-phase 2 of 5 landed)
+## Freeform block-based page builder (Phase O — in progress, sub-phase 3 of 5 landed)
 
 Replacing the fixed-field bridge/funnel-step content model (headline/lead/mechanism/benefits/
 proof/faq/cta) with a true Elementor-style block tree: sections containing rows/columns containing
@@ -1199,10 +1199,10 @@ elements (heading, subheading, paragraph, image, bullet list, icon list, divider
 button, FAQ item), each with full custom styling, plus a lead-capture form that accepts real
 user-added fields. This is a multi-week rebuild landing in five sub-phases (see
 `/Users/macbookpro/.claude/plans/binary-stirring-brooks.md`'s "Phase O" for the full design) —
-**sub-phases 1-2 have landed**: the schema/renderer (O.1) and the validator + rewritten PATCH
-routes + a tree-aware top-level editor (O.2) all exist and are live. Nested drag-and-drop, the
-full element palette, Row/Column insertion, the style panel, and real form-input backend wiring
-are still sub-phases 3-5, not yet built.
+**sub-phases 1-3 have landed**: the schema/renderer (O.1), the validator + rewritten PATCH routes +
+a tree-aware top-level editor (O.2), and now nested drag-and-drop + a full element palette +
+Row/Column insertion (O.3). The style panel and real form-input backend wiring are still
+sub-phases 4-5, not yet built.
 
 - **`lib/engine/blockTree.ts`** (new) defines the block-tree schema (`PageBlockTree`,
   `SectionBlock`/`RowBlock`/`ColumnBlock`/`ElementBlock`/`LockedBlock`/`FormInputBlock`) and
@@ -1308,13 +1308,89 @@ are still sub-phases 3-5, not yet built.
 - **A real functional gap was caught and fixed during O.2's own browser verification, not from
   user feedback**: the rewritten canvas initially had no way to add/remove FAQ items, since
   `faq_item` is a discrete block per entry now, not an array field like `benefits` — unlike the old
-  editor, which had "+ Add"/remove for FAQ pairs. Fixed by threading a `sectionId` parameter
-  through `renderElement`/`renderSectionChild`/`renderColumn`, adding a remove (X) button on each
-  `faq_item` block and an "+ Add FAQ item" button at the section level.
-- **Not yet built** (sub-phases 3-5, see the plan doc): nested drag-and-drop, the full element
-  palette, Row/Column insertion UI; `components/BlockStylePanel.tsx`; the `contacts.extra_fields`
-  migration and real form-input backend wiring (the submit script already collects fields
-  generically per O.1, but `app/api/public/leads/route.ts` still ignores `extra_fields`).
+  editor, which had "+ Add"/remove for FAQ pairs. Fixed at the time by a FAQ-specific remove (X)
+  button and "+ Add FAQ item" control. **Both are superseded in O.3** by the generic per-block
+  delete (every element, not just FAQ items, now gets a delete affordance) and the general
+  "+ Add block" palette (FAQ item is just one of its 10 entries) — see below; the FAQ-specific code
+  path no longer exists.
+
+### O.3: nested drag-and-drop + full element palette + Row/Column insertion
+
+- **Modeled as multiple dnd-kit sortable containers under one `DndContext`, not one globally-
+  flattened indented list.** This schema's containment is already a fixed, shallow shape (root ->
+  section-child -> column-child, 3 levels) — a per-container-array design (the standard dnd-kit
+  "multiple containers" pattern: one container for root, one per Section body, one per Column body)
+  is simpler to reason about and less failure-prone than generic indentation/depth-projection math
+  (dnd-kit's "sortable tree" example), which was the plan doc's original sketch but turned out not
+  to fit this shape as well once actually building it. `lib/engine/blockTree.ts` gained the pure
+  data-layer half: `ContainerRef` (`{kind:"root"}` / `{kind:"section",sectionId}` /
+  `{kind:"column",rowId,colIndex}`), `containerKey()`/`parseContainerKey()` (string round-trip,
+  used as the literal dnd-kit droppable/container id), `findBlockLocation(tree, blockId)` (locates
+  any block anywhere + which container it's in), `moveBlockToContainer(tree, blockId, toRef,
+  toIndex)` (the actual move — removes from its old container, inserts into the new one, adjusts
+  the target index the same way `arrayMove` does for a same-container reorder), `insertElement()`/
+  `insertRow()` (used by the palette). All pure, all tested via an isolated script before any UI
+  code was written (22 assertions: locate-in-column/section/root, move between two columns, move
+  out of a row entirely, move a Row within its section, insert a Row/element at a specific index,
+  and — the structural-safety cases — a locked block or a Row can never be moved somewhere the
+  schema forbids, verified as true no-ops that return the exact original tree reference unchanged).
+- **Type-position compatibility is enforced in `moveBlockToContainer` itself, not just the UI** —
+  a locked block or a Section can only ever target `{kind:"root"}`; a Row can only ever target
+  `{kind:"section", ...}` (any section, not just its originating one — nothing in the schema ties a
+  Row to one section, so cross-section Row moves are allowed); an `ElementBlock` can target a
+  Section (sitting directly alongside Rows, matching `SectionBlock.children`'s real shape) or a
+  Column, never root. An incompatible move is a silent no-op (returns the tree by the same object
+  reference) — this is NOT the security boundary (`validatePageBlockTree.ts` still is, unchanged),
+  it just keeps the client from producing an obviously-invalid tree mid-drag.
+- **`components/WysiwygCanvas.tsx`**: `NestedItemWrapper` (drag handle + delete, hover-revealed,
+  top-left) now wraps every Row and every Element below root — module-scope, not a nested function
+  defined inside `WysiwygCanvas`'s own body, which matters here specifically: an inline nested
+  component definition gets a fresh function identity on every re-render (which happens on nearly
+  every edit, since `tree` changes on every commit), forcing React to unmount/remount that whole
+  subtree each time — breaking `EditableText`'s mount-once pattern and any transient UI state
+  (like a palette's own open/closed toggle) beneath it. `SectionBody`/`RowEditor`/`ColumnEditor` are
+  the three container components (each calls `useDroppable`/`SortableContext` with its own
+  `containerKey()`), same module-scope-component discipline, taking `tree`-derived data and
+  callbacks as explicit props rather than closing over `tree`/`onChange` directly.
+  `handleDragEnd` branches once on whether `active.id` is a root block (existing O.2 behavior,
+  unchanged) or something nested (resolves `over.id` — either another block's id, via
+  `findBlockLocation`, or a container's own droppable id via `parseContainerKey`, meaning "dropped
+  on empty space inside this container, append at the end" — `moveBlockToContainer` clamps the
+  index internally either way) then calls `moveBlockToContainer`.
+- **`AddBlockMenu`** ("+ Add block") is mounted at the end of every Section body and every Column
+  body — Section-level menus additionally get a "Row" sub-section (1/2/3-col buttons, fixed presets
+  per the confirmed decision, no drag-to-resize) that Column-level menus never show (columns can't
+  contain rows — no code path exists for it, matching `ColumnBlock.children: ElementBlock[]`).
+  Below that, all 10 `ElementBlock` types with an icon (from the existing `lucide-react` dependency)
+  and label — clicking one calls `insertElement`/`insertRow`, always appending at the end of that
+  specific container (inserting mid-list is a real, deliberate v1 scope cut — drag-reorder after
+  inserting covers it, same "append then reorder" precedent the pre-O.3 editor already used for
+  "+ Add FAQ item"/"+ Add benefit").
+- **Real end-to-end verification, live against TedsWoodworking** (`e2ce68bb-8fca-4917-9653-
+  9879911396fc`): inserted a real 2-column Row via the UI, added a Heading into one column via the
+  palette, confirmed the drag-handle/delete controls render correctly on hover, deleted the
+  element then the row via those controls, back to the exact original state — all via real clicks
+  (`computer`/`javascript_tool`), no console errors at any point. Separately, a direct
+  `PATCH .../page-copy` round-trip (bypassing click-simulation) confirmed the Row/Column shape
+  itself survives `validatePageBlockTree` and `renderBlockTree` correctly (`<div class="row">` /
+  `<div class="col">` markup present, both column's content rendered), then reverted the DB row to
+  its exact original content (confirmed via `jsonb_array_length` — 4 root blocks, 12 section
+  children, matching pre-test) — same "edit through the real path, verify, restore" discipline used
+  throughout this project.
+- **Explicitly NOT verified: real mouse-drag gestures themselves.** This session's tooling cannot
+  reliably simulate a dnd-kit pointer-drag (confirmed earlier in this same project, unrelated to
+  this feature) — every check above exercises clicks (palette, delete) and the data layer
+  (`moveBlockToContainer` unit tests + a direct API round-trip), not an actual drag-and-drop
+  gesture end-to-end through the browser. The underlying move logic is verified correct in
+  isolation; the drag *interaction* itself (picking up a block, hovering a different container,
+  dropping) has not been. **Recommend a manual pass** before relying on this in production: drag an
+  element between two columns, drag an element out of a row entirely into its section, attempt to
+  drag a locked block into a column (should refuse to nest), drag a whole Row to reposition
+  relative to another block in its section.
+- **Not yet built** (sub-phases 4-5, see the plan doc): `components/BlockStylePanel.tsx`; the
+  `contacts.extra_fields` migration and real form-input backend wiring (the submit script already
+  collects fields generically per O.1, but `app/api/public/leads/route.ts` still ignores
+  `extra_fields`).
 
 ## Dev
 

@@ -510,6 +510,185 @@ export function addChildBlock(tree: PageBlockTree, parentId: string, newChild: u
   } as PageBlockTree;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Nested drag-and-drop + Row/Column/element insertion (Phase O.3). A "container" is one of the
+// three arrays a block can live in: the tree's own root list, a Section's `children`, or a Row's
+// specific Column's `children`. Modeled as multiple independent dnd-kit sortable containers
+// (the standard "multiple containers" pattern) rather than one globally-flattened indented list —
+// our containment rules are already a fixed, shallow shape (root -> section-child -> column-child,
+// 3 levels), so per-container arrays are simpler to reason about and less failure-prone than
+// generic indentation-based tree projection, while still letting an element move between any two
+// compatible containers (a column and a section, or two different columns). NEVER the security
+// boundary — validatePageBlockTree.ts re-checks everything server-side on save; these just need
+// to produce a plausible tree for the editor to keep working with locally between saves.
+// ---------------------------------------------------------------------------------------------
+
+export type ContainerRef =
+  | { kind: "root" }
+  | { kind: "section"; sectionId: string }
+  | { kind: "column"; rowId: string; colIndex: number };
+
+export function containerKey(ref: ContainerRef): string {
+  if (ref.kind === "root") return "root";
+  if (ref.kind === "section") return `section:${ref.sectionId}`;
+  return `column:${ref.rowId}:${ref.colIndex}`;
+}
+
+export function parseContainerKey(key: string): ContainerRef | null {
+  if (key === "root") return { kind: "root" };
+  if (key.startsWith("section:")) return { kind: "section", sectionId: key.slice("section:".length) };
+  const m = key.match(/^column:(.+):(\d+)$/);
+  if (m) return { kind: "column", rowId: m[1], colIndex: Number(m[2]) };
+  return null;
+}
+
+function getContainer(tree: PageBlockTree, ref: ContainerRef): any[] | null {
+  if (ref.kind === "root") return tree.blocks;
+  if (ref.kind === "section") {
+    const s = tree.blocks.find((b) => b.type === "section" && b.id === ref.sectionId) as SectionBlock | undefined;
+    return s ? s.children : null;
+  }
+  for (const b of tree.blocks) {
+    if (b.type !== "section") continue;
+    for (const c of b.children) {
+      if (c.type === "row" && c.id === ref.rowId) return c.columns[ref.colIndex]?.children ?? null;
+    }
+  }
+  return null;
+}
+
+function withContainer(tree: PageBlockTree, ref: ContainerRef, items: any[]): PageBlockTree {
+  if (ref.kind === "root") return { ...tree, blocks: items } as PageBlockTree;
+  if (ref.kind === "section") {
+    return {
+      ...tree,
+      blocks: tree.blocks.map((b) => (b.type === "section" && b.id === ref.sectionId ? { ...b, children: items } : b)),
+    } as PageBlockTree;
+  }
+  return {
+    ...tree,
+    blocks: tree.blocks.map((b) => {
+      if (b.type !== "section") return b;
+      return {
+        ...b,
+        children: b.children.map((c) => {
+          if (c.type !== "row" || c.id !== ref.rowId) return c;
+          return { ...c, columns: c.columns.map((col, i) => (i === ref.colIndex ? { ...col, children: items } : col)) };
+        }),
+      };
+    }),
+  } as PageBlockTree;
+}
+
+// Locates a block anywhere in the tree by id — root list, a section's children, or a row's
+// column's children. Returns null for an unknown id (a stale drag event, e.g.).
+export function findBlockLocation(tree: PageBlockTree, blockId: string): { block: Block; ref: ContainerRef; index: number } | null {
+  const rootIdx = tree.blocks.findIndex((b) => b.id === blockId);
+  if (rootIdx !== -1) return { block: tree.blocks[rootIdx], ref: { kind: "root" }, index: rootIdx };
+  for (const b of tree.blocks) {
+    if (b.type !== "section") continue;
+    const idx = b.children.findIndex((c) => c.id === blockId);
+    if (idx !== -1) return { block: b.children[idx], ref: { kind: "section", sectionId: b.id }, index: idx };
+    for (const c of b.children) {
+      if (c.type !== "row") continue;
+      for (let colIndex = 0; colIndex < c.columns.length; colIndex++) {
+        const eIdx = c.columns[colIndex].children.findIndex((e) => e.id === blockId);
+        if (eIdx !== -1) return { block: c.columns[colIndex].children[eIdx], ref: { kind: "column", rowId: c.id, colIndex }, index: eIdx };
+      }
+    }
+  }
+  return null;
+}
+
+// Moves an existing block to a (possibly different) container at a given index. `toIndexRaw` is
+// "insert before whatever is currently at this index in the target container" — for a same-
+// container move this reproduces standard arrayMove semantics (adjusted for the fact that removal
+// shifts later indices down by one before insertion). Structurally invalid moves (a locked block
+// or Section leaving root, a Row leaving section-level, an element trying to sit at root) are
+// silent no-ops — the client only needs a plausible result; validatePageBlockTree.ts is the real
+// boundary and would reject any of these anyway if they somehow reached the server.
+export function moveBlockToContainer(tree: PageBlockTree, blockId: string, toRef: ContainerRef, toIndexRaw: number): PageBlockTree {
+  const loc = findBlockLocation(tree, blockId);
+  if (!loc) return tree;
+  const { block, ref: fromRef, index: fromIndex } = loc;
+
+  if ("locked" in block || block.type === "section") {
+    if (toRef.kind !== "root") return tree;
+  } else if (block.type === "row") {
+    if (toRef.kind !== "section") return tree;
+  } else {
+    if (toRef.kind === "root") return tree;
+  }
+
+  const sameContainer = containerKey(fromRef) === containerKey(toRef);
+  const adjustedIndex = sameContainer && fromIndex < toIndexRaw ? toIndexRaw - 1 : toIndexRaw;
+
+  const fromItems = getContainer(tree, fromRef);
+  if (!fromItems) return tree;
+  let next = withContainer(tree, fromRef, fromItems.filter((b) => b.id !== blockId));
+
+  const toItems = getContainer(next, toRef);
+  if (!toItems) return tree; // target container vanished (e.g. removed mid-drag) — bail out unchanged
+  const clamped = Math.max(0, Math.min(adjustedIndex, toItems.length));
+  next = withContainer(next, toRef, [...toItems.slice(0, clamped), block, ...toItems.slice(clamped)]);
+  return next;
+}
+
+// Default seed content per element type — used when the palette inserts a brand-new instance.
+function defaultElementContent(type: (typeof ELEMENT_BLOCK_TYPES)[number]): ElementBlock["content"] {
+  switch (type) {
+    case "heading":
+      return { text: "New heading" };
+    case "subheading":
+      return { text: "New subheading" };
+    case "paragraph":
+      return { text: "New paragraph text." };
+    case "image":
+      return { dataUrl: null, alt: "" };
+    case "bullet_list":
+      return { items: ["First item"] };
+    case "icon_list":
+      return { items: [{ icon: ALLOWED_ICON_NAMES[0], text: "New item" }] };
+    case "divider":
+      return {};
+    case "image_list":
+      return { items: [{ imageDataUrl: null, caption: "New item" }] };
+    case "button":
+      return { text: "Click here", href: "https://example.com" };
+    case "faq_item":
+      return { question: "New question", answer: "Answer" };
+  }
+}
+
+// Inserts a brand-new element of `type` into a section's or column's children at `index`.
+// `ref.kind === "root"` is rejected (elements never live at root) — returns the tree unchanged.
+export function insertElement(tree: PageBlockTree, ref: ContainerRef, index: number, type: (typeof ELEMENT_BLOCK_TYPES)[number]): PageBlockTree {
+  if (ref.kind === "root") return tree;
+  const items = getContainer(tree, ref);
+  if (!items) return tree;
+  const block: ElementBlock = { id: newBlockId(), type, style: {}, content: defaultElementContent(type) } as ElementBlock;
+  const clamped = Math.max(0, Math.min(index, items.length));
+  return withContainer(tree, ref, [...items.slice(0, clamped), block, ...items.slice(clamped)]);
+}
+
+// Inserts a brand-new Row (with `layout`'s fixed number of empty Columns — 1/2/3, no drag-to-
+// resize, matching the confirmed "fixed presets" decision) into a section's children at `index`.
+export function insertRow(tree: PageBlockTree, sectionId: string, index: number, layout: RowBlock["layout"]): PageBlockTree {
+  const n = layout === "3col" ? 3 : layout === "2col" ? 2 : 1;
+  const row: RowBlock = {
+    id: newBlockId(),
+    type: "row",
+    layout,
+    style: {},
+    columns: Array.from({ length: n }, () => ({ id: newBlockId(), type: "column", style: {}, children: [] })),
+  };
+  const ref: ContainerRef = { kind: "section", sectionId };
+  const items = getContainer(tree, ref);
+  if (!items) return tree;
+  const clamped = Math.max(0, Math.min(index, items.length));
+  return withContainer(tree, ref, [...items.slice(0, clamped), row, ...items.slice(clamped)]);
+}
+
 // The "hero" image shown for Instagram posting / ad-creative fallback / servePublicCampaignImage
 // is derived from the first image block found in document order — same concept as the pre-Phase-O
 // editor's extractImageSrc() regex over rendered HTML, just reading the tree directly instead.
