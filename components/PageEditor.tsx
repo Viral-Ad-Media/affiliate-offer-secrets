@@ -1,19 +1,9 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { Plus, Trash2, Image as ImageIcon, Loader2, CheckCircle2 } from "lucide-react";
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
-import { renderBridgeHtml, resolveSectionOrder, type PageCopy, type SectionKey } from "@/lib/engine/renderPages";
-import SortableSection from "@/components/SortableSection";
-
-const SECTION_TITLES: Record<SectionKey, string> = {
-  lead: "Lead paragraph",
-  mechanism: "How it works",
-  benefits: "Benefits",
-  proof: "Proof / credibility",
-  faq: "FAQ",
-};
+import { useState } from "react";
+import { Loader2, CheckCircle2, Lock } from "lucide-react";
+import { DISCLOSURE, LEAD_CONSENT_TEXT, type PageCopy } from "@/lib/engine/renderPages";
+import WysiwygCanvas from "@/components/WysiwygCanvas";
 
 const MAX_IMAGE_DATA_URL_CHARS = 280_000;
 
@@ -64,7 +54,6 @@ type Props = {
   productTitle: string;
   initialCopy: PageCopy | null;
   initialBridgeHtml: string | null;
-  previewHoplink: string;
   onSaved: (result: { bridge_html: string; page_copy: PageCopy }) => void;
   // Defaults to the control's own save route. A split-test variant's editor (SplitTestPanel)
   // passes /api/bridge-variants/{id} instead — everything else about this component is identical.
@@ -86,7 +75,6 @@ export default function PageEditor({
   productTitle,
   initialCopy,
   initialBridgeHtml,
-  previewHoplink,
   onSaved,
   saveEndpoint,
 }: Props) {
@@ -96,41 +84,12 @@ export default function PageEditor({
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [imageBusy, setImageBusy] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const product = useMemo(() => ({ product_title: productTitle }), [productTitle]);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
-
-  const previewHtml = renderBridgeHtml(product, copy, previewHoplink, imageDataUrl, campaignId);
-  const sectionOrder = resolveSectionOrder(copy.sectionOrder);
 
   function update<K extends keyof PageCopy>(key: K, value: PageCopy[K]) {
     setCopy((c) => ({ ...c, [key]: value }));
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = sectionOrder.indexOf(active.id as SectionKey);
-    const newIndex = sectionOrder.indexOf(over.id as SectionKey);
-    update("sectionOrder", arrayMove(sectionOrder, oldIndex, newIndex));
-  }
-
-  function updateBenefit(i: number, value: string) {
-    const next = [...copy.benefits];
-    next[i] = value;
-    update("benefits", next);
-  }
-
-  function updateFaq(i: number, field: "q" | "a", value: string) {
-    const next = copy.faq.map((f, idx) => (idx === i ? { ...f, [field]: value } : f));
-    update("faq", next);
-  }
-
-  async function handleImagePick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
+  async function handleImageFile(file: File) {
     setImageBusy(true);
     setError(null);
     try {
@@ -159,7 +118,7 @@ export default function PageEditor({
           faq: copy.faq.filter((f) => f.q.trim() && f.a.trim()),
           cta: copy.cta,
           image_data_url: imageDataUrl,
-          section_order: sectionOrder,
+          section_order: copy.sectionOrder,
         }),
       });
       const data = await res.json();
@@ -182,214 +141,52 @@ export default function PageEditor({
     );
   }
 
-  function renderSectionFields(key: SectionKey) {
-    switch (key) {
-      case "lead":
-        return (
-          <textarea
-            value={copy.lead}
-            onChange={(e) => update("lead", e.target.value)}
-            maxLength={1000}
-            rows={3}
-            className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
-          />
-        );
-      case "mechanism":
-        return (
-          <textarea
-            value={copy.mechanism}
-            onChange={(e) => update("mechanism", e.target.value)}
-            maxLength={3000}
-            rows={3}
-            className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
-          />
-        );
-      case "benefits":
-        return (
-          <>
-            <div className="flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => update("benefits", [...copy.benefits, ""])}
-                disabled={copy.benefits.length >= 10}
-                className="btn-ghost !py-1 text-xs"
-              >
-                <Plus className="h-3.5 w-3.5" /> Add
-              </button>
-            </div>
-            <div className="mt-1 space-y-2">
-              {copy.benefits.map((b, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input
-                    value={b}
-                    onChange={(e) => updateBenefit(i, e.target.value)}
-                    maxLength={300}
-                    className="flex-1 rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => update("benefits", copy.benefits.filter((_, idx) => idx !== i))}
-                    className="rounded-lg p-2 text-zinc-500 hover:bg-ink-800 hover:text-red-300"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </>
-        );
-      case "proof":
-        return (
-          <textarea
-            value={copy.proof}
-            onChange={(e) => update("proof", e.target.value)}
-            maxLength={1000}
-            rows={2}
-            className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
-          />
-        );
-      case "faq":
-        return (
-          <>
-            <div className="flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => update("faq", [...copy.faq, { q: "", a: "" }])}
-                disabled={copy.faq.length >= 10}
-                className="btn-ghost !py-1 text-xs"
-              >
-                <Plus className="h-3.5 w-3.5" /> Add
-              </button>
-            </div>
-            <div className="mt-1 space-y-3">
-              {copy.faq.map((f, i) => (
-                <div key={i} className="rounded-lg border border-ink-700 p-2.5">
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={f.q}
-                      onChange={(e) => updateFaq(i, "q", e.target.value)}
-                      placeholder="Question"
-                      maxLength={200}
-                      className="flex-1 rounded-lg border border-ink-600 bg-ink-800 px-3 py-1.5 text-sm text-zinc-100"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => update("faq", copy.faq.filter((_, idx) => idx !== i))}
-                      className="rounded-lg p-2 text-zinc-500 hover:bg-ink-800 hover:text-red-300"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <textarea
-                    value={f.a}
-                    onChange={(e) => updateFaq(i, "a", e.target.value)}
-                    placeholder="Answer"
-                    maxLength={1000}
-                    rows={2}
-                    className="mt-1.5 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-1.5 text-sm text-zinc-100"
-                  />
-                </div>
-              ))}
-            </div>
-          </>
-        );
-    }
-  }
-
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
-      <div className="space-y-4">
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-            Headline
-          </label>
-          <input
-            value={copy.headline}
-            onChange={(e) => update("headline", e.target.value)}
-            maxLength={200}
-            className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
-          />
-        </div>
+    <div className="space-y-4">
+      <p className="text-xs text-zinc-500">
+        Click any text below to edit it in place, drag <span className="text-zinc-400">⠿</span> to
+        reorder a section. The lead-capture form and disclosure are locked — they can't be edited
+        or removed here.
+      </p>
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={sectionOrder} strategy={verticalListSortingStrategy}>
-            <div className="space-y-3">
-              {sectionOrder.map((key) => (
-                <SortableSection key={key} id={key} title={SECTION_TITLES[key]}>
-                  {renderSectionFields(key)}
-                </SortableSection>
-              ))}
+      <WysiwygCanvas
+        copy={copy}
+        onChange={update}
+        imageDataUrl={imageDataUrl}
+        onImageFile={handleImageFile}
+        onImageRemove={() => setImageDataUrl(null)}
+        imageBusy={imageBusy}
+        productTitle={productTitle}
+        belowCta={
+          <div className="mx-auto mt-6 max-w-[420px] rounded-xl border border-[#e5e5e5] bg-white p-6 text-center">
+            <input disabled placeholder="First name" className="mb-2 w-full rounded-lg border border-gray-300 bg-gray-50 px-3.5 py-3 text-[15px] text-gray-400" />
+            <input disabled placeholder="Email address" className="mb-2 w-full rounded-lg border border-gray-300 bg-gray-50 px-3.5 py-3 text-[15px] text-gray-400" />
+            <div className="mt-2 rounded-lg bg-[#16a34a]/40 px-8 py-3.5 text-[15px] font-semibold text-white">
+              {copy.cta || "Get started"}
             </div>
-          </SortableContext>
-        </DndContext>
-
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-            CTA button text
-          </label>
-          <input
-            value={copy.cta}
-            onChange={(e) => update("cta", e.target.value)}
-            maxLength={60}
-            className="mt-1 w-full rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-            Image
-          </label>
-          <div className="mt-1 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={imageBusy}
-              className="btn-ghost !py-1.5 text-xs"
-            >
-              {imageBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
-              {imageDataUrl ? "Replace image" : "Upload image"}
-            </button>
-            {imageDataUrl && (
-              <button
-                type="button"
-                onClick={() => setImageDataUrl(null)}
-                className="text-xs text-zinc-500 hover:text-red-300"
-              >
-                Remove
-              </button>
-            )}
-            <input ref={fileRef} type="file" accept="image/*" onChange={handleImagePick} className="hidden" />
+            <p className="mt-3 flex items-center justify-center gap-1 text-left text-[11px] text-gray-500">
+              <Lock className="h-3 w-3 shrink-0" /> {LEAD_CONSENT_TEXT}
+            </p>
           </div>
-          {imageDataUrl && (
-            <img src={imageDataUrl} alt="" className="mt-2 h-20 rounded-lg border border-ink-700 object-cover" />
-          )}
-        </div>
+        }
+      />
 
-        {error && <p className="text-sm text-red-300">{error}</p>}
+      <p className="mx-auto flex max-w-[680px] items-center gap-1.5 text-xs text-zinc-500">
+        <Lock className="h-3 w-3 shrink-0" /> {DISCLOSURE}
+      </p>
 
-        <div className="flex items-center gap-3">
-          <button onClick={save} disabled={saving || imageBusy} className="btn-primary">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Save &amp; Republish
-          </button>
-          {savedAt && Date.now() - savedAt < 4000 && (
-            <span className="flex items-center gap-1 text-xs text-emerald-300">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Saved
-            </span>
-          )}
-        </div>
-      </div>
+      {error && <p className="text-sm text-red-300">{error}</p>}
 
-      <div>
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-          Live preview
-        </div>
-        <iframe
-          srcDoc={previewHtml}
-          sandbox="allow-scripts"
-          title="Live preview"
-          className="h-[70vh] w-full rounded-lg border border-ink-700 bg-white"
-        />
+      <div className="flex items-center gap-3">
+        <button onClick={save} disabled={saving || imageBusy} className="btn-primary">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          Save &amp; Republish
+        </button>
+        {savedAt && Date.now() - savedAt < 4000 && (
+          <span className="flex items-center gap-1 text-xs text-emerald-300">
+            <CheckCircle2 className="h-3.5 w-3.5" /> Saved
+          </span>
+        )}
       </div>
     </div>
   );

@@ -318,35 +318,57 @@ into the bridge page; see content rule 8.)
   page-copy PATCH route. `campaigns.landing_md` is left as an unread legacy column on old rows
   rather than a destructive migration (same precedent as `profiles.nickname`/`presell_html`).
 
-- **The editor is structured-field, with drag-**_**to-reorder**_**, not a freeform block canvas.**
-  headline/lead/mechanism/benefits/proof/FAQ/CTA/image are editable; the affiliate disclosure, the
-  hoplink, and the bridge page's `LEAD_CAPTURE_ENDPOINT` placeholder marker are not exposed as
-  fields at all, so they can never be edited out. When the user asked for an "Elementor/
-  ClickFunnels style" editor, that was explicitly scoped down via `AskUserQuestion` (flagged as
-  conflicting with the decision above first) to **drag-to-reorder of the 5 existing content
-  sections only** — not new block types, not a style panel, not freeform layout. Confirmed choice:
-  "Drag-to-reorder sections," not "Full visual canvas builder."
-  - **Zero-migration**: `sectionOrder?: SectionKey[]` (`SECTION_KEYS = ["lead", "mechanism",
-    "benefits", "proof", "faq"] as const`, `lib/engine/renderPages.ts`) lives *inside* the existing
-    `page_copy` JSONB blob — already shared by `campaigns`, `bridge_variants`, and `funnel_steps`,
-    so no new DB column was needed for any of the three. Headline, CTA text, and the embedded
-    product image stay fixed/non-reorderable — the hero image is deliberately kept *coupled inside*
-    the `lead` section's own HTML fragment (not a separate fixed block), specifically so the
-    default (no `sectionOrder` set) render output stays byte-for-byte identical to before this
-    feature, and dragging "Lead paragraph" carries its hero image along with it.
-  - **`resolveSectionOrder(order)`** is a defensive resolver — keeps only recognized
-    `SECTION_KEYS`, then appends any missing ones in default order — so corrupt/partial/foreign
-    data always renders all 5 sections exactly once. Called both server-side (every PATCH route
-    that writes `page_copy`) and client-side (`PageEditor.tsx`/`FunnelStepEditor.tsx` reading it
-    back for the drag list), never trusting either direction's shape.
-  - **`@dnd-kit/core`+`/sortable`+`/utilities`** (first DnD library in this codebase) —
-    `DndContext`(sensors + `closestCenter` + `onDragEnd`) → `SortableContext`(items + strategy) →
-    `.map()` of `components/SortableSection.tsx` (wraps `useSortable({id})`, a drag handle, and the
-    section's title). `PointerSensor` uses `activationConstraint: {distance: 4}` so a plain click
-    doesn't misfire as a drag. Factored into its own component specifically to avoid a third copy
-    of the dnd-kit wiring — `components/PageEditor.tsx` and `components/FunnelStepEditor.tsx` both
-    use it identically, each with its own `renderSectionFields(key)` switch returning just that
-    section's form fields (no outer wrapper — `SortableSection` owns that now).
+- **The editor is a locked-down WYSIWYG canvas, not a freeform block builder.** headline/lead/
+  mechanism/benefits/proof/FAQ/CTA/image are editable directly on a rendered page surface that
+  looks like the real thing; the affiliate disclosure, the hoplink, the lead-capture form, and the
+  `LEAD_CAPTURE_ENDPOINT` wiring are rendered as plain static JSX alongside the editable content —
+  structurally impossible to edit or delete (not just visually locked), since they're never wrapped
+  in a `contentEditable` element at all. Scope was negotiated twice with the user before landing
+  here: "Elementor/ClickFunnels style" was first scoped down via `AskUserQuestion` to
+  **drag-to-reorder of the 5 fixed sections** (not a freeform canvas), then — after seeing that
+  version — the user asked for it again and was offered a follow-up choice (freeform canvas /
+  inline WYSIWYG / more block variety / keep drag-to-reorder); **"Inline WYSIWYG editing"** is what
+  shipped: click text on the live-look page itself instead of a separate form panel + iframe
+  preview, still only the same 5 reorderable sections, still no new block types or style panel.
+  - **`components/WysiwygCanvas.tsx`** is the shared surface both `components/PageEditor.tsx`
+    (opt-in page + `bridge_variants`) and `components/FunnelStepEditor.tsx` (funnel steps) render —
+    same "two-component-mirror, shared-piece-for-the-fiddly-part" precedent as the deleted
+    `SortableSection.tsx` before it (this rework replaced that component outright; its drag-handle/
+    `useSortable` wiring now lives inside `WysiwygCanvas.tsx`'s own `Section`). Its typography/
+    colors/spacing are hand-matched to the `<style>` block in `lib/engine/renderPages.ts` — if that
+    template's CSS changes, update this file in the same commit or the editor stops looking like
+    what actually publishes.
+  - **`EditableText`'s "set once at mount, never again" pattern is the load-bearing fix for the
+    classic React+contentEditable cursor-jump bug.** A ref callback sets `el.textContent = value`
+    exactly once (fires only on mount, for a stable-keyed element) and the component never passes
+    `children`/`dangerouslySetInnerHTML` again afterward — meaning React has nothing to reconcile
+    inside that node on future re-renders, so committing one field (which re-renders the whole
+    canvas) can never reset or move the cursor in a sibling field the user is still mid-typing in.
+    `onBlur` is the only point that reads `textContent` back into React state (`setCopy` via the
+    same `update(key, value)` used everywhere else in this codebase). Verified directly: focus
+    field A, set uncommitted text, commit a *different* field B (forcing a full re-render), confirm
+    field A's DOM text survived unchanged. Any future editable field added to this canvas must
+    follow the same mount-once-then-blur-commit shape — a naive `value`+`onChange` controlled
+    contentEditable will re-fight the DOM on every keystroke.
+  - **Zero-migration, unchanged from the drag-to-reorder phase**: `sectionOrder?: SectionKey[]`
+    (`SECTION_KEYS = ["lead", "mechanism", "benefits", "proof", "faq"] as const`,
+    `lib/engine/renderPages.ts`) still lives *inside* the existing `page_copy` JSONB blob, still
+    resolved defensively by `resolveSectionOrder()` both server-side (every PATCH route) and
+    client-side. The embedded product image is still coupled inside the `lead` section (dragging
+    "Lead paragraph" carries the image with it, default order stays byte-for-byte unchanged).
+  - **`@dnd-kit/core`+`/sortable`+`/utilities`** wiring is unchanged in shape (`DndContext` +
+    `SortableContext` + `useSortable` per section, `PointerSensor` with `activationConstraint:
+    {distance: 4}`) — only *where* it lives moved, from the deleted `SortableSection.tsx` into
+    `WysiwygCanvas.tsx`'s `Section`, now with a hover-revealed floating grip handle (top-right of
+    each section) instead of an always-visible dark-panel header, matching the page-like visual.
+  - **`app/api/*/page-copy` and `app/api/funnel-steps/[id]` routes are completely unchanged** — the
+    save payload shape (`headline`/`lead`/`mechanism`/`benefits`/`proof`/`faq`/`cta`/
+    `image_data_url`/`section_order`) is identical to the pre-WYSIWYG editor; only *how* the user
+    populates `copy` state client-side changed, not what gets validated/persisted server-side.
+  - **`previewHoplink` was removed** from `PageEditor`'s props (and its pass-through in
+    `SplitTestPanel.tsx` and `app/(app)/funnels/[campaignId]/page.tsx`, along with the now-unused
+    `hoplink` state/query field there) — it existed only to build a real link for the old separate
+    `<iframe srcDoc>` preview, which no longer exists now that the canvas itself *is* the preview.
 - **`campaigns`' RLS is select-only for `authenticated`** (tightened in
   `supabase/migrations/0009_page_domains.sql`, dropping the original Phase-A `for all` policy).
   This table's HTML fields are served completely raw to real, unauthenticated ad traffic

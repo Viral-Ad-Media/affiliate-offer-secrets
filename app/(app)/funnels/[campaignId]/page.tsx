@@ -25,7 +25,6 @@ type View = { kind: "map" } | { kind: "optin" } | { kind: "step"; stepId: string
 export default function FunnelPage({ params }: { params: { campaignId: string } }) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [productTitle, setProductTitle] = useState("");
-  const [hoplink, setHoplink] = useState<string | null>(null);
   const [steps, setSteps] = useState<FunnelStep[]>([]);
   const [crossSellOptions, setCrossSellOptions] = useState<{ id: string; title: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +35,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
     const supabase = createClient();
     const { data: c } = await supabase
       .from("campaigns")
-      .select("*, products(product_title, hoplink)")
+      .select("*, products(product_title)")
       .eq("id", params.campaignId)
       .maybeSingle();
 
@@ -48,7 +47,6 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
 
     setCampaign(c as unknown as Campaign);
     setProductTitle((c as any).products?.product_title ?? "Untitled");
-    setHoplink((c as any).products?.hoplink ?? null);
 
     const [{ data: stepRows }, { data: products }] = await Promise.all([
       supabase
@@ -137,7 +135,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
         </>
       ) : view.kind === "optin" ? (
         <>
-          <SplitTestPanel campaignId={campaign.id} productTitle={productTitle} previewHoplink={hoplink ?? "#"} />
+          <SplitTestPanel campaignId={campaign.id} productTitle={productTitle} />
 
           <section className="card p-4">
             <PageEditor
@@ -145,7 +143,6 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
               productTitle={productTitle}
               initialCopy={campaign.page_copy}
               initialBridgeHtml={campaign.bridge_html}
-              previewHoplink={hoplink ?? "#"}
               onSaved={({ bridge_html, page_copy }) =>
                 setCampaign((c) => (c ? { ...c, bridge_html, page_copy } : c))
               }

@@ -11,11 +11,9 @@ type LeadCounts = Record<string, number>;
 export default function SplitTestPanel({
   campaignId,
   productTitle,
-  previewHoplink,
 }: {
   campaignId: string;
   productTitle: string;
-  previewHoplink: string;
 }) {
   const [variants, setVariants] = useState<BridgeVariant[] | null>(null);
   const [leadCounts, setLeadCounts] = useState<LeadCounts>({});
@@ -244,7 +242,6 @@ export default function SplitTestPanel({
                 productTitle={productTitle}
                 initialCopy={editingVariant.page_copy}
                 initialBridgeHtml={editingVariant.bridge_html}
-                previewHoplink={previewHoplink}
                 saveEndpoint={`/api/bridge-variants/${editingVariant.id}`}
                 onSaved={() => load()}
               />
