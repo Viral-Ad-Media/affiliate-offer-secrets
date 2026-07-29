@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { IMAGE_DATA_URL_RE } from "@/lib/images/validate";
+import { pickWeightedVariant, readStickyVariantId, buildStickyVariantCookie } from "@/lib/bridgeVariants";
 
 // Serves a campaign's bridge (lead-capture landing) page HTML at a real public URL — needed so a
 // real Meta ad's link_url has somewhere to point (previously this HTML only ever rendered inside
@@ -13,7 +14,14 @@ import { IMAGE_DATA_URL_RE } from "@/lib/images/validate";
 // app/api/campaigns/[id]/publish/route.ts. There used to be a second page variant ("presell", no
 // lead capture) this took a `field` param to pick between — it's been merged into the bridge page
 // (lib/engine/renderPages.ts), so this only ever serves bridge_html now.
-export async function servePublicCampaignPage(campaignId: string): Promise<Response> {
+//
+// Optional A/B split (0022_bridge_variants.sql): after the campaign lookup succeeds, checks for
+// active `bridge_variants` rows. None (the ~100% common case) → behavior is identical to before
+// this feature existed. One or more → a visitor gets a sticky, weighted-random assignment (cookie
+// `bv_{campaignId}`, 30 days) so repeat visits and the post-opt-in "reveal" step stay consistent.
+// `req` is required for this — both callers (app/p/[campaignId]/bridge/route.ts,
+// app/d/[[...path]]/route.ts) already receive the incoming Request and just pass it through.
+export async function servePublicCampaignPage(campaignId: string, req: Request): Promise<Response> {
   const admin = createAdminClient();
   const { data: campaign } = await admin
     .from("campaigns")
@@ -23,9 +31,37 @@ export async function servePublicCampaignPage(campaignId: string): Promise<Respo
     .eq("bridge_published", true)
     .maybeSingle();
 
-  const html = campaign?.bridge_html as string | null | undefined;
-  if (!html) {
+  if (!campaign?.bridge_html) {
     return new Response("Not found", { status: 404 });
+  }
+
+  let html = campaign.bridge_html as string;
+  let setCookie: string | null = null;
+
+  const { data: activeVariants } = await admin
+    .from("bridge_variants")
+    .select("id, weight, is_control, bridge_html")
+    .eq("campaign_id", campaignId)
+    .eq("status", "active");
+
+  if (activeVariants && activeVariants.length > 0) {
+    const stickyId = readStickyVariantId(req, campaignId);
+    let chosen = stickyId ? activeVariants.find((v) => v.id === stickyId) : undefined;
+    if (!chosen) {
+      chosen = pickWeightedVariant(activeVariants);
+      setCookie = buildStickyVariantCookie(campaignId, chosen.id);
+    }
+
+    html = chosen.is_control ? (campaign.bridge_html as string) : ((chosen.bridge_html as string) ?? html);
+
+    // Best-effort, deliberately awaited (not fire-and-forget) — a Vercel serverless function can
+    // drop an unawaited promise once the response is sent. A views-counter hiccup must never
+    // break serving the actual page, hence the try/catch swallowing any error.
+    try {
+      await admin.rpc("increment_bridge_variant_views", { p_variant_id: chosen.id });
+    } catch {
+      // ignore — stats are secondary to serving the page
+    }
   }
 
   return new Response(html, {
@@ -36,6 +72,7 @@ export async function servePublicCampaignPage(campaignId: string): Promise<Respo
       // the full internal URL path.
       "Referrer-Policy": "strict-origin-when-cross-origin",
       "X-Robots-Tag": "noindex",
+      ...(setCookie ? { "Set-Cookie": setCookie } : {}),
     },
   });
 }

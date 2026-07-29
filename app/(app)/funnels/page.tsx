@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Radio, ExternalLink, Inbox } from "lucide-react";
+import { Radio, ExternalLink, Inbox, Beaker } from "lucide-react";
 
 // A "funnel" isn't its own entity — it's a derived view over campaigns that already have a bridge
 // (lead-capture) page generated. A funnel appears here automatically the moment stagePages
@@ -15,7 +15,7 @@ export default async function FunnelsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: campaigns }, { data: routes }, { data: contactRows }] = await Promise.all([
+  const [{ data: campaigns }, { data: routes }, { data: contactRows }, { data: variantRows }] = await Promise.all([
     supabase
       .from("campaigns")
       .select("id, product_id, bridge_published, updated_at, products(product_title)")
@@ -26,11 +26,17 @@ export default async function FunnelsPage() {
       .select("campaign_id, path, custom_domains(domain, status)")
       .eq("destination", "bridge"),
     supabase.from("contacts").select("campaign_id").not("campaign_id", "is", null).limit(1000),
+    supabase.from("bridge_variants").select("campaign_id"),
   ]);
 
   const leadCounts = new Map<string, number>();
   for (const c of contactRows ?? []) {
     leadCounts.set(c.campaign_id as string, (leadCounts.get(c.campaign_id as string) ?? 0) + 1);
+  }
+
+  const variantCounts = new Map<string, number>();
+  for (const v of variantRows ?? []) {
+    variantCounts.set(v.campaign_id as string, (variantCounts.get(v.campaign_id as string) ?? 0) + 1);
   }
 
   // First verified custom-domain route wins if a campaign has more than one — same "just show one
@@ -51,6 +57,7 @@ export default async function FunnelsPage() {
     published: c.bridge_published as boolean,
     leads: leadCounts.get(c.id) ?? 0,
     url: domainUrlByCampaign.get(c.id) ?? `${appUrl}/p/${c.id}/bridge`,
+    variantCount: variantCounts.get(c.id) ?? 0,
   }));
 
   return (
@@ -93,15 +100,22 @@ export default async function FunnelsPage() {
                   <tr key={f.id}>
                     <td className="px-4 py-2.5 font-medium text-zinc-100">{f.title}</td>
                     <td className="px-2 py-2.5">
-                      <span
-                        className={`chip ${
-                          f.published
-                            ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
-                            : "border-ink-600 bg-ink-800 text-zinc-400"
-                        }`}
-                      >
-                        <Radio className="h-3 w-3" /> {f.published ? "Published" : "Draft"}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`chip ${
+                            f.published
+                              ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+                              : "border-ink-600 bg-ink-800 text-zinc-400"
+                          }`}
+                        >
+                          <Radio className="h-3 w-3" /> {f.published ? "Published" : "Draft"}
+                        </span>
+                        {f.variantCount > 0 && (
+                          <span className="chip border-sky-500/30 bg-sky-500/15 text-sky-300">
+                            <Beaker className="h-3 w-3" /> Testing ({f.variantCount})
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="max-w-xs px-2 py-2.5 text-xs text-zinc-400">
                       {f.published ? (

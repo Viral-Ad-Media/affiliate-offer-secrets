@@ -55,6 +55,9 @@ type Props = {
   initialBridgeHtml: string | null;
   previewHoplink: string;
   onSaved: (result: { bridge_html: string; page_copy: PageCopy }) => void;
+  // Defaults to the control's own save route. A split-test variant's editor (SplitTestPanel)
+  // passes /api/bridge-variants/{id} instead — everything else about this component is identical.
+  saveEndpoint?: string;
 };
 
 const emptyCopy: PageCopy = {
@@ -74,6 +77,7 @@ export default function PageEditor({
   initialBridgeHtml,
   previewHoplink,
   onSaved,
+  saveEndpoint,
 }: Props) {
   const [copy, setCopy] = useState<PageCopy>(initialCopy ?? emptyCopy);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(extractImageSrc(initialBridgeHtml));
@@ -122,7 +126,7 @@ export default function PageEditor({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/campaigns/${campaignId}/page-copy`, {
+      const res = await fetch(saveEndpoint ?? `/api/campaigns/${campaignId}/page-copy`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

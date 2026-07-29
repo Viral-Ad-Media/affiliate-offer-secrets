@@ -404,7 +404,57 @@ public link (a verified custom-domain route if one is mapped, else the default `
 and leads captured (`contacts` count by `campaign_id`). Publishing/editing still happens in one
 place, the product page's Bridge page tab (`PublishBridge`/`PageEditor`) — Funnels' "Edit" link
 deep-links there via `?tab=bridge_html`, read by `ProductPage`'s `useSearchParams()` to set the
-initial tab (defaults to `fb_ads_md` if absent/unrecognized).
+initial tab (defaults to `fb_ads_md` if absent/unrecognized). A "Testing (N)" chip appears once a
+campaign has active `bridge_variants` rows (see below).
+
+## Bridge page A/B / split testing
+
+`bridge_variants` (`supabase/migrations/0022_bridge_variants.sql`) lets a tenant run copy variants
+against a campaign's existing bridge URL — no second URL, no changes anywhere ads/domains link to
+the page. The **control** (today's `campaigns.bridge_html`/`page_copy`/`embedded_image_data_url`)
+is never duplicated into a row; it gets a tracking row (`is_control=true`) with its own content
+columns permanently `NULL` (enforced by a `check` constraint), purely so weight/stats/pause and
+`contacts.bridge_variant_id` attribution have one uniform shape across control and real variants.
+No `bridge_variants` rows for a campaign (the default, ~100% of campaigns) → `servePublicCampaignPage`
+(`lib/publicPage.ts`) behaves exactly as before this feature existed — one extra cheap indexed
+lookup, nothing else changes.
+
+- **Assignment is sticky, not re-rolled per request**: a visitor gets a weighted-random pick
+  (`lib/bridgeVariants.ts`'s `pickWeightedVariant`) on first visit, recorded in an `HttpOnly`
+  cookie (`bv_{campaignId}`, 30 days, same `SameSite=Lax`+conditional-`Secure` flags as
+  `app/api/meta/connect/route.ts`'s OAuth state cookie) — every later request for that visitor
+  (including real ad click-throughs, since it's the same URL) keeps seeing the same variant, and
+  `views` increments via a `service_role`-only atomic RPC (`increment_bridge_variant_views`) rather
+  than a read-modify-write from the app.
+- **Lead attribution never trusts client input**: `app/api/public/leads/route.ts` independently
+  reads the same sticky cookie (the browser sends it automatically — confirmed working for both
+  the default `/p/` URL and a custom domain) and re-validates the variant id actually belongs to
+  the posted `campaign_id` before using it; no `variant_id` field exists in the request body at
+  all.
+- **Editing a variant reuses `PageEditor`/`renderBridgeHtml()` unchanged** — the component gained
+  an optional `saveEndpoint` prop (defaults to the existing campaign page-copy route) so the same
+  live-preview-matches-published guarantee holds for variants; a new
+  `app/api/bridge-variants/[id]/route.ts` mirrors `page-copy/route.ts`'s validate/render/write
+  shape exactly, scoped to a `bridge_variants` row. `assert_owns_bridge_variant()` explicitly
+  excludes control rows — editing the control through this path 404s (control edits stay on the
+  existing Bridge tab editor, which writes the `campaigns` row correctly); the DB `check`
+  constraint is a second, independent layer of the same protection.
+- **`start_bridge_split_test`/`add_bridge_variant`** are advisory-locked
+  (`pg_advisory_xact_lock(hashtextextended('bridge_variants:' || campaign_id, 0))`, same idiom as
+  `reserve_ad_credits`) — a double-click can't race two control rows into colliding on the
+  one-control-per-campaign partial unique index, and can't race two "next letter" label
+  computations into a collision either. Both share the same lock key, so they also serialize
+  against each other.
+- **`end_bridge_split_test(campaign_id, promote_variant_id?)`** is the only way a test ends: with
+  a variant id, copies that variant's content onto `campaigns` (declaring it the new control —
+  literally the same write shape the page-copy route already does) then deletes every
+  `bridge_variants` row for the campaign either way; leads already captured keep their row
+  (`contacts.bridge_variant_id` → null via `on delete set null`).
+- **New `components/SplitTestPanel.tsx`**, mounted in the product page's Bridge tab next to
+  `PublishBridge` (both view and edit mode): variant list (weight, pause/resume, delete, leads,
+  views, computed rate), "Add variant" (capped at 5 total rows — nominal UI-sanity limit, not a
+  security boundary), and "End test" with a promote-winner picker. A non-control variant's "Edit"
+  expands an inline `PageEditor` in the panel's own local state.
 
 ## Custom domains
 

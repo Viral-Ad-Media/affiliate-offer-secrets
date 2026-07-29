@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidEmail, clampName } from "@/lib/validate";
+import { readStickyVariantId } from "@/lib/bridgeVariants";
 
 export const dynamic = "force-dynamic";
 
@@ -76,12 +77,32 @@ export async function POST(req: Request) {
   const ipAddress = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || null;
   const userAgent = req.headers.get("user-agent");
 
+  // No client-supplied variant id is ever accepted — the same sticky cookie the page-serving
+  // route (lib/publicPage.ts) set is read independently here (the browser sends it automatically
+  // on this same-origin fetch, for both the default /p/ URL and a custom domain — /api/public/
+  // leads is already exempted from middleware.ts's host-mismatch rewrite for exactly this
+  // reason). Re-validated against this campaign before trusting it, same ownership-reverify
+  // discipline as everywhere else in this codebase — a forged/foreign cookie value just falls
+  // back to null, identical to a non-split-tested campaign's leads today.
+  let bridgeVariantId: string | null = null;
+  const stickyId = readStickyVariantId(req, campaignId);
+  if (stickyId) {
+    const { data: variant } = await admin
+      .from("bridge_variants")
+      .select("id")
+      .eq("id", stickyId)
+      .eq("campaign_id", campaignId)
+      .maybeSingle();
+    bridgeVariantId = variant?.id ?? null;
+  }
+
   await admin
     .from("contacts")
     .upsert(
       {
         user_id: campaign.user_id,
         campaign_id: campaignId,
+        bridge_variant_id: bridgeVariantId,
         first_name: firstName || null,
         email,
         ip_address: ipAddress,

@@ -11,6 +11,7 @@ import SendEmail from "@/components/SendEmail";
 import GenerateVideo from "@/components/GenerateVideo";
 import PageEditor from "@/components/PageEditor";
 import PublishBridge from "@/components/PublishBridge";
+import SplitTestPanel from "@/components/SplitTestPanel";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
 import SocialPostsPanel from "@/components/SocialPostsPanel";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -238,6 +239,11 @@ export default function ProductPage({ params }: { params: { id: string } }) {
               ) : tab === "bridge_html" && editMode ? (
                 <>
                   <PublishBridge campaignId={campaign!.id} initialPublished={campaign?.bridge_published ?? false} />
+                  <SplitTestPanel
+                    campaignId={campaign!.id}
+                    productTitle={product.product_title}
+                    previewHoplink={product.hoplink ?? "#"}
+                  />
                   <PageEditor
                     campaignId={campaign!.id}
                     productTitle={product.product_title}
@@ -252,6 +258,11 @@ export default function ProductPage({ params }: { params: { id: string } }) {
               ) : tab === "bridge_html" ? (
                 <>
                   <PublishBridge campaignId={campaign!.id} initialPublished={campaign?.bridge_published ?? false} />
+                  <SplitTestPanel
+                    campaignId={campaign!.id}
+                    productTitle={product.product_title}
+                    previewHoplink={product.hoplink ?? "#"}
+                  />
                   <p className="mb-2 text-xs text-zinc-500">
                     Preview is interactive — try the opt-in form, leads land on your{" "}
                     <Link href="/contacts" className="underline">

@@ -29,5 +29,5 @@ export async function GET(request: Request, { params }: { params: { path?: strin
     .maybeSingle();
   if (!routeRow) return new Response("Not found", { status: 404 });
 
-  return servePublicCampaignPage(routeRow.campaign_id);
+  return servePublicCampaignPage(routeRow.campaign_id, request);
 }

@@ -71,6 +71,21 @@ export type Campaign = {
   updated_at: string;
 };
 
+export type BridgeVariant = {
+  id: string;
+  campaign_id: string;
+  label: string;
+  is_control: boolean;
+  weight: number;
+  status: "active" | "paused";
+  bridge_html: string | null;
+  page_copy: Campaign["page_copy"];
+  embedded_image_data_url: string | null;
+  views: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CreativeSource = "fb_ad_angle" | "social_post";
 export type CreativeKind = "image" | "video";
 export type CreativeStatus = "none" | "generating" | "ready" | "failed";
