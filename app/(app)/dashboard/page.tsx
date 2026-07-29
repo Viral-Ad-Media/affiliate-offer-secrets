@@ -20,8 +20,19 @@ import type { Job, Product } from "@/lib/shared";
 import { STATUS_COLORS } from "@/lib/shared";
 import { CLICKBANK_CATEGORIES } from "@/lib/categories";
 import ManualAddProduct from "@/components/ManualAddProduct";
+import { DataTableFilter, type FilterOption } from "@/components/ui/data-table-filter";
 
 const NETWORK_LABELS: Record<string, string> = { clickbank: "ClickBank", digistore24: "Digistore24" };
+
+// Empty selection means "no filter applied" (show every status) — matches the old "All" pill's
+// behavior without needing a literal "All" entry in the option list.
+const STATUS_OPTIONS: FilterOption[] = [
+  { value: "New", label: "New" },
+  { value: "Selected", label: "Selected" },
+  { value: "Promoting", label: "Promoting" },
+  { value: "Paused", label: "Paused" },
+  { value: "Dead", label: "Dead" },
+];
 
 const fmtMoney = (v: number | null) => (v == null ? "—" : `$${v.toFixed(2)}`);
 const fmtNum = (v: number | null) => (v == null ? "—" : v.toFixed(1));
@@ -61,7 +72,7 @@ export default function Dashboard() {
   const [subCategory, setSubCategory] = useState("");
   const [keyword, setKeyword] = useState("");
   const [count, setCount] = useState(10);
-  const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -81,8 +92,8 @@ export default function Dashboard() {
   }, [load]);
 
   const filtered = useMemo(
-    () => (statusFilter === "All" ? products : products.filter((p) => p.status === statusFilter)),
-    [products, statusFilter]
+    () => (statusFilters.length === 0 ? products : products.filter((p) => statusFilters.includes(p.status))),
+    [products, statusFilters]
   );
 
   const openJobs = jobs.filter((j) => j.status === "pending" || j.status === "running");
@@ -262,21 +273,13 @@ export default function Dashboard() {
           <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
             <ListChecks className="h-4 w-4 text-emerald-400" /> Products
           </h2>
-          <div className="flex items-center gap-1 text-xs">
-            {["All", "New", "Selected", "Promoting", "Paused", "Dead"].map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`rounded-full px-2.5 py-1 ${
-                  statusFilter === s
-                    ? "bg-emerald-600 text-white"
-                    : "text-zinc-400 hover:bg-ink-700"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          <DataTableFilter
+            label="Status"
+            options={STATUS_OPTIONS}
+            selectedValues={statusFilters}
+            onChange={setStatusFilters}
+            isMultiSelect
+          />
         </div>
         <div className="border-b border-ink-700 px-4 py-2.5">
           <ManualAddProduct onAdded={load} />
@@ -396,10 +399,12 @@ export default function Dashboard() {
                   <td colSpan={8} className="px-4 py-14 text-center">
                     <Inbox className="mx-auto mb-2.5 h-7 w-7 text-zinc-600" />
                     <p className="text-sm text-zinc-400">
-                      {statusFilter === "All" ? "No products yet" : `No ${statusFilter.toLowerCase()} products`}
+                      {statusFilters.length === 0
+                        ? "No products yet"
+                        : `No ${statusFilters.map((s) => s.toLowerCase()).join(", ")} products`}
                     </p>
                     <p className="mt-1 text-xs text-zinc-600">
-                      {statusFilter === "All"
+                      {statusFilters.length === 0
                         ? "Queue a discovery run above to get started."
                         : "Try a different status filter."}
                     </p>

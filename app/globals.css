@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* shadcn/ui semantic tokens (HSL, no alpha) — hand-mapped to this app's actual ink / emerald
+   palette (tailwind.config.ts), not shadcn's default slate/zinc, so any shadcn-registry
+   component (e.g. from 21st.dev) matches the existing dark theme with no per-component
+   recoloring. This app is dark-only (no light variant), so these are the only values defined. */
+:root {
+  --background: 229 84% 5%; /* ink-950 */
+  --foreground: 240 6% 90%; /* zinc-200 */
+  --card: 223 49% 8%; /* ink-900 */
+  --card-foreground: 240 6% 90%;
+  --popover: 223 49% 8%; /* ink-900 */
+  --popover-foreground: 240 6% 90%;
+  --primary: 161 94% 30%; /* emerald-600 */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 222 42% 13%; /* ink-800 */
+  --secondary-foreground: 240 6% 90%;
+  --muted: 222 42% 13%; /* ink-800 */
+  --muted-foreground: 240 4% 46%; /* zinc-500 */
+  --accent: 222 42% 13%; /* ink-800 */
+  --accent-foreground: 240 6% 90%;
+  --destructive: 0 72% 51%; /* red-600 */
+  --destructive-foreground: 0 0% 100%;
+  --border: 217 33% 17%; /* ink-700 */
+  --input: 217 33% 17%; /* ink-700 */
+  --ring: 161 94% 30%; /* emerald-600, matches this app's existing focus:border-emerald-500 inputs */
+  --radius: 0.5rem;
+}
+
 body {
   @apply bg-ink-950 font-sans text-zinc-200 antialiased;
 }

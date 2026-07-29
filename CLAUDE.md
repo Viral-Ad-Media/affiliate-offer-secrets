@@ -905,6 +905,34 @@ manage, not an afterthought.
   safely generalize to audit's fetch-all pattern. Full pagination/search/date-filter is an
   explicit deferred v2, not silently absent.
 
+## shadcn/ui + 21st.dev components
+
+First use of shadcn/ui in this codebase (everything before this was hand-rolled Tailwind classes —
+`.card`/`.chip`/`.btn-*`/`.data-table` in `app/globals.css`, still the primary system for existing
+UI). Added so components sourced from 21st.dev's registry (`components/ui/*`) can drop in without
+per-component recoloring:
+
+- `components.json` — `cssVariables: true`. The semantic tokens (`background`, `card`, `primary`,
+  `border`, etc.) are **not** shadcn's default slate/zinc — they're hand-mapped in
+  `app/globals.css`'s `:root` block to this app's actual `ink-*` scale and emerald accent (exact
+  HSL conversions of the real hex values already in `tailwind.config.ts`). This app is dark-only
+  (no light variant), so there's only one set of values, no `.dark` class toggle.
+- `lib/utils.ts` (`cn()`) and `tailwind.config.ts`'s semantic color/`borderRadius` additions +
+  `tailwindcss-animate` plugin are the other two pieces every shadcn component assumes exist.
+  The pre-existing `ink` color scale is untouched — new shadcn-based components use the semantic
+  tokens (`bg-card`, `border`, etc.), existing hand-rolled components keep using `ink-*` directly;
+  both coexist without conflict.
+- First component installed this way: `components/ui/data-table-filter.tsx` (from 21st.dev's
+  `@uniquesonu/data-table-filter`, plus its registry deps — `button`/`popover`/`command`/`dialog`/
+  `separator` in `components/ui/`) — replaced the dashboard's old single-select status pill row
+  (`app/(app)/dashboard/page.tsx`) with a proper multi-select filter popover.
+- To pull in another 21st.dev component going forward: search/fetch via the 21st.dev MCP
+  connector (registered at `local` scope for this project directory via `claude mcp add-json`,
+  separate from the pre-existing claude.ai-connector version of the same service), write its
+  source + registry dependencies into `components/ui/`, and its `npm` dependencies via `npm
+  install` — the CSS variable mapping above means no manual re-theming should be needed for
+  components that use standard shadcn semantic classes.
+
 ## Dev
 
 ```bash
