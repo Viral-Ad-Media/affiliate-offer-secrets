@@ -1,0 +1,366 @@
+// The real security boundary for the block-tree page model (Phase O) — consumed by all three
+// page-copy PATCH routes (replacing their old flat clamp/validate logic entirely) and by
+// app/api/public/leads/route.ts (via extractLeadFormFields, Phase O.5) to know which extra form
+// fields are currently legitimate for a given page. Mirrors this codebase's established
+// "clamp/tolerate a too-long value, hard-reject a structurally wrong shape" split: a headline
+// that's too long gets truncated (same UX as every prior editor route in this app); a forged
+// block type, a locked block in the wrong place, or a tree past the depth/count caps gets a
+// straight 400 — those only happen via a client bypassing the UI entirely, never normal use.
+
+import {
+  ELEMENT_BLOCK_TYPES,
+  ALLOWED_ICON_NAMES,
+  type PageBlockTree,
+  type SectionBlock,
+  type RowBlock,
+  type ColumnBlock,
+  type ElementBlock,
+  type LockedBlock,
+  type FormInputBlock,
+  type BlockStyle,
+  type BlockType,
+  type FunnelStepType,
+} from "./blockTree";
+import { isValidImageDataUrl } from "@/lib/images/validate";
+import { isValidRedirectUrl } from "@/lib/validate";
+
+export type PageKind = "bridge" | "funnel_step";
+export type ValidatePageBlockTreeOptions = { pageKind: PageKind; stepType?: FunnelStepType };
+export type ValidationResult = { ok: true; tree: PageBlockTree } | { ok: false; error: string };
+
+const MAX_TEXT_SHORT = 200; // headline, subheading, faq question, form label
+const MAX_TEXT_MEDIUM = 1000; // paragraph, faq answer, icon/image-list item text
+const MAX_TEXT_LONG = 3000; // "mechanism"-length paragraphs
+const MAX_CTA = 60;
+const MAX_LIST_ITEMS = 10;
+const MAX_TOTAL_BLOCKS = 300;
+const MAX_DEPTH = 4; // root(section) -> row -> column -> element
+const MAX_SECTION_CHILDREN = 60;
+const MAX_COLUMN_CHILDREN = 20;
+const MAX_FORM_CHILDREN = 10;
+const MAX_ROOT_BLOCKS = 40;
+
+const HEX_RE = /^#[0-9a-f]{6}$/i;
+const ID_RE = /^[a-zA-Z0-9_-]{1,100}$/;
+const FIELD_KEY_RE = /^[a-z0-9_-]{1,60}$/;
+const FONT_FAMILIES = new Set(["system", "serif", "mono"]);
+const FONT_WEIGHTS = new Set([400, 500, 600, 700, 800]);
+const TEXT_ALIGNS = new Set(["left", "center", "right"]);
+
+class BlockCountLimit extends Error {}
+
+function clampStr(v: unknown, max: number): string {
+  if (typeof v !== "string") return "";
+  return v.slice(0, max).trim();
+}
+
+function isValidId(v: unknown): v is string {
+  return typeof v === "string" && ID_RE.test(v);
+}
+
+// Every stored style value passes through here before ever reaching this same object again at
+// render time (styleToInlineCss in blockTree.ts) — belt-and-suspenders, matching this codebase's
+// established habit of not trusting a single validation layer for anything rendered into real
+// HTML served to real visitors.
+function sanitizeStyle(raw: unknown): BlockStyle {
+  const s = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>;
+  const style: BlockStyle = {};
+  const num = (v: unknown, min: number, max: number): number | undefined => {
+    const n = typeof v === "number" ? v : NaN;
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : undefined;
+  };
+  const hex = (v: unknown): string | undefined => (typeof v === "string" && HEX_RE.test(v) ? v.toLowerCase() : undefined);
+
+  if (typeof s.fontFamily === "string" && FONT_FAMILIES.has(s.fontFamily)) style.fontFamily = s.fontFamily as BlockStyle["fontFamily"];
+  const fs = num(s.fontSize, 8, 96);
+  if (fs !== undefined) style.fontSize = fs;
+  if (typeof s.fontWeight === "number" && FONT_WEIGHTS.has(s.fontWeight)) style.fontWeight = s.fontWeight as BlockStyle["fontWeight"];
+  if (typeof s.textAlign === "string" && TEXT_ALIGNS.has(s.textAlign)) style.textAlign = s.textAlign as BlockStyle["textAlign"];
+  const color = hex(s.color);
+  if (color) style.color = color;
+  if (typeof s.lineHeight === "number" && s.lineHeight >= 1 && s.lineHeight <= 2.5) style.lineHeight = s.lineHeight;
+  const bg = hex(s.backgroundColor);
+  if (bg) style.backgroundColor = bg;
+  for (const k of ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginBottom"] as const) {
+    const v = num(s[k], 0, 200);
+    if (v !== undefined) style[k] = v;
+  }
+  const bw = num(s.borderWidth, 0, 16);
+  if (bw !== undefined) style.borderWidth = bw;
+  const bc = hex(s.borderColor);
+  if (bc) style.borderColor = bc;
+  const br = num(s.borderRadius, 0, 64);
+  if (br !== undefined) style.borderRadius = br;
+  const mw = num(s.maxWidth, 100, 1200);
+  if (mw !== undefined) style.maxWidth = mw;
+  return style;
+}
+
+function validateElement(raw: unknown, count: { n: number }): ElementBlock {
+  if (++count.n > MAX_TOTAL_BLOCKS) throw new BlockCountLimit("too many blocks");
+  const b = (raw ?? {}) as Record<string, unknown>;
+  if (!isValidId(b.id)) throw new Error("invalid block id");
+  const type = b.type;
+  if (typeof type !== "string" || !(ELEMENT_BLOCK_TYPES as readonly string[]).includes(type)) {
+    throw new Error(`unknown element block type: ${String(type)}`);
+  }
+  const id = b.id as string;
+  const style = sanitizeStyle(b.style);
+  const content = (b.content ?? {}) as Record<string, unknown>;
+
+  switch (type as BlockType) {
+    case "heading":
+    case "subheading":
+      return { id, type: type as "heading" | "subheading", style, content: { text: clampStr(content.text, MAX_TEXT_SHORT) } };
+    case "paragraph":
+      return { id, type: "paragraph", style, content: { text: clampStr(content.text, MAX_TEXT_LONG) } };
+    case "image": {
+      const dataUrl = typeof content.dataUrl === "string" && content.dataUrl ? content.dataUrl : null;
+      if (dataUrl && !isValidImageDataUrl(dataUrl)) throw new Error("invalid image data url");
+      return { id, type: "image", style, content: { dataUrl, alt: clampStr(content.alt, MAX_TEXT_SHORT) } };
+    }
+    case "bullet_list": {
+      const items = Array.isArray(content.items) ? content.items : [];
+      return {
+        id,
+        type: "bullet_list",
+        style,
+        content: { items: items.slice(0, MAX_LIST_ITEMS).map((i) => clampStr(i, MAX_TEXT_MEDIUM)).filter(Boolean) },
+      };
+    }
+    case "icon_list": {
+      const items = Array.isArray(content.items) ? content.items : [];
+      return {
+        id,
+        type: "icon_list",
+        style,
+        content: {
+          items: items.slice(0, MAX_LIST_ITEMS).map((raw) => {
+            const it = (raw ?? {}) as Record<string, unknown>;
+            const icon = typeof it.icon === "string" && ALLOWED_ICON_NAMES.includes(it.icon) ? it.icon : ALLOWED_ICON_NAMES[0];
+            return { icon, text: clampStr(it.text, MAX_TEXT_MEDIUM) };
+          }),
+        },
+      };
+    }
+    case "divider":
+      return { id, type: "divider", style, content: {} };
+    case "image_list": {
+      const items = Array.isArray(content.items) ? content.items : [];
+      return {
+        id,
+        type: "image_list",
+        style,
+        content: {
+          items: items.slice(0, MAX_LIST_ITEMS).map((raw) => {
+            const it = (raw ?? {}) as Record<string, unknown>;
+            const dataUrl = typeof it.imageDataUrl === "string" && it.imageDataUrl ? it.imageDataUrl : null;
+            if (dataUrl && !isValidImageDataUrl(dataUrl)) throw new Error("invalid image data url");
+            return { imageDataUrl: dataUrl, caption: clampStr(it.caption, MAX_TEXT_MEDIUM) };
+          }),
+        },
+      };
+    }
+    case "button": {
+      const href = clampStr(content.href, 2000);
+      if (!isValidRedirectUrl(href)) throw new Error("invalid button href");
+      return { id, type: "button", style, content: { text: clampStr(content.text, MAX_CTA), href } };
+    }
+    case "faq_item":
+      return {
+        id,
+        type: "faq_item",
+        style,
+        content: { question: clampStr(content.question, MAX_TEXT_SHORT), answer: clampStr(content.answer, MAX_TEXT_MEDIUM) },
+      };
+    default:
+      throw new Error(`unhandled element type: ${type}`);
+  }
+}
+
+function validateFormInput(raw: unknown, count: { n: number }): FormInputBlock {
+  if (++count.n > MAX_TOTAL_BLOCKS) throw new BlockCountLimit("too many blocks");
+  const b = (raw ?? {}) as Record<string, unknown>;
+  if (!isValidId(b.id)) throw new Error("invalid block id");
+  if (b.type !== "form_input") throw new Error("expected form_input block");
+  const content = (b.content ?? {}) as Record<string, unknown>;
+  const fieldKey = typeof content.fieldKey === "string" && FIELD_KEY_RE.test(content.fieldKey) ? content.fieldKey : "";
+  if (!fieldKey) throw new Error("invalid form input fieldKey");
+  const fieldType = content.fieldType === "email" || content.fieldType === "tel" ? content.fieldType : "text";
+  return {
+    id: b.id as string,
+    type: "form_input",
+    style: sanitizeStyle(b.style),
+    content: {
+      label: clampStr(content.label, MAX_TEXT_SHORT),
+      fieldKey,
+      fieldType,
+      placeholder: clampStr(content.placeholder, MAX_TEXT_SHORT),
+      required: content.required === true,
+    },
+  };
+}
+
+function validateColumn(raw: unknown, count: { n: number }): ColumnBlock {
+  if (++count.n > MAX_TOTAL_BLOCKS) throw new BlockCountLimit("too many blocks");
+  const b = (raw ?? {}) as Record<string, unknown>;
+  if (!isValidId(b.id)) throw new Error("invalid block id");
+  if (b.type !== "column") throw new Error("expected column block");
+  const children = Array.isArray(b.children) ? b.children : [];
+  if (children.length > MAX_COLUMN_CHILDREN) throw new Error("too many elements in column");
+  return {
+    id: b.id as string,
+    type: "column",
+    style: sanitizeStyle(b.style),
+    children: children.map((c) => validateElement(c, count)),
+  };
+}
+
+function validateRow(raw: unknown, count: { n: number }): RowBlock {
+  if (++count.n > MAX_TOTAL_BLOCKS) throw new BlockCountLimit("too many blocks");
+  const b = (raw ?? {}) as Record<string, unknown>;
+  if (!isValidId(b.id)) throw new Error("invalid block id");
+  if (b.type !== "row") throw new Error("expected row block");
+  const layout = b.layout === "2col" || b.layout === "3col" ? b.layout : "1col";
+  const expectedCols = layout === "3col" ? 3 : layout === "2col" ? 2 : 1;
+  const columns = Array.isArray(b.columns) ? b.columns : [];
+  if (columns.length !== expectedCols) throw new Error("column count doesn't match row layout");
+  return {
+    id: b.id as string,
+    type: "row",
+    layout,
+    style: sanitizeStyle(b.style),
+    columns: columns.map((c) => validateColumn(c, count)),
+  };
+}
+
+function validateSection(raw: unknown, count: { n: number }): SectionBlock {
+  if (++count.n > MAX_TOTAL_BLOCKS) throw new BlockCountLimit("too many blocks");
+  const b = (raw ?? {}) as Record<string, unknown>;
+  if (!isValidId(b.id)) throw new Error("invalid block id");
+  if (b.type !== "section") throw new Error("expected section block");
+  const children = Array.isArray(b.children) ? b.children : [];
+  if (children.length > MAX_SECTION_CHILDREN) throw new Error("too many blocks in section");
+  return {
+    id: b.id as string,
+    type: "section",
+    style: sanitizeStyle(b.style),
+    children: children.map((c) => {
+      const ct = (c as Record<string, unknown> | null)?.type;
+      return ct === "row" ? validateRow(c, count) : validateElement(c, count);
+    }),
+  };
+}
+
+function validateLockedBlock(raw: unknown, count: { n: number }): LockedBlock {
+  if (++count.n > MAX_TOTAL_BLOCKS) throw new BlockCountLimit("too many blocks");
+  const b = (raw ?? {}) as Record<string, unknown>;
+  if (!isValidId(b.id)) throw new Error("invalid block id");
+  const locked = b.locked;
+  const style = sanitizeStyle(b.style);
+  const content = (b.content ?? {}) as Record<string, unknown>;
+
+  switch (locked) {
+    case "disclosure":
+      if (b.type !== "disclosure") throw new Error("locked-type mismatch");
+      return { id: b.id as string, type: "disclosure", locked: "disclosure", style, content: {} };
+    case "lead_capture_form": {
+      if (b.type !== "lead_capture_form") throw new Error("locked-type mismatch");
+      const children = Array.isArray(b.children) ? b.children : [];
+      if (children.length > MAX_FORM_CHILDREN) throw new Error("too many form fields");
+      const validated = children.map((c) => validateFormInput(c, count));
+      const seen = new Set<string>();
+      for (const f of validated) {
+        if (seen.has(f.content.fieldKey)) throw new Error("duplicate form field key");
+        seen.add(f.content.fieldKey);
+      }
+      return {
+        id: b.id as string,
+        type: "lead_capture_form",
+        locked: "lead_capture_form",
+        style,
+        content: { ctaText: clampStr(content.ctaText, MAX_CTA) || "Get started" },
+        children: validated,
+      };
+    }
+    case "primary_cta":
+      if (b.type !== "primary_cta") throw new Error("locked-type mismatch");
+      return { id: b.id as string, type: "primary_cta", locked: "primary_cta", style, content: { text: clampStr(content.text, MAX_CTA) || "Continue" } };
+    case "decline_link":
+      if (b.type !== "decline_link") throw new Error("locked-type mismatch");
+      return {
+        id: b.id as string,
+        type: "decline_link",
+        locked: "decline_link",
+        style,
+        content: { text: clampStr(content.text, MAX_CTA) || "No thanks, continue" },
+      };
+    default:
+      throw new Error(`unknown locked block kind: ${String(locked)}`);
+  }
+}
+
+type LockedKind = LockedBlock["locked"];
+
+function requiredLockedKinds(opts: ValidatePageBlockTreeOptions): Set<LockedKind> {
+  if (opts.pageKind === "bridge") return new Set<LockedKind>(["disclosure", "lead_capture_form", "primary_cta"]);
+  // funnel_step
+  const kinds = new Set<LockedKind>(["disclosure", "primary_cta"]);
+  if (opts.stepType === "upsell") kinds.add("decline_link");
+  return kinds;
+}
+
+// Consumed by all three page-copy PATCH routes, replacing their old flat clamp/validate logic.
+export function validatePageBlockTree(raw: unknown, opts: ValidatePageBlockTreeOptions): ValidationResult {
+  try {
+    const body = (raw ?? {}) as Record<string, unknown>;
+    const blocksIn = Array.isArray(body.blocks) ? body.blocks : [];
+    if (blocksIn.length === 0) return { ok: false, error: "page has no content" };
+    if (blocksIn.length > MAX_ROOT_BLOCKS) return { ok: false, error: "too many top-level blocks" };
+
+    const count = { n: 0 };
+    const blocks = blocksIn.map((b) => {
+      const t = (b as Record<string, unknown> | null)?.type;
+      if (t === "section") return validateSection(b, count);
+      if ((b as Record<string, unknown> | null)?.locked) return validateLockedBlock(b, count);
+      throw new Error(`root block must be a section or a locked block, got: ${String(t)}`);
+    });
+
+    const seenIds = new Set<string>();
+    for (const b of blocks) {
+      if (seenIds.has(b.id)) return { ok: false, error: "duplicate block id" };
+      seenIds.add(b.id);
+    }
+
+    const lockedKinds = new Set(blocks.filter((b): b is LockedBlock => "locked" in b).map((b) => b.locked));
+    const required = requiredLockedKinds(opts);
+    for (const kind of Array.from(required)) {
+      if (!lockedKinds.has(kind)) return { ok: false, error: `missing required locked block: ${kind}` };
+    }
+    // Exactly one of each required kind (a duplicate primary_cta, say, would be ambiguous for
+    // rendering and CTA-href resolution) — reject rather than silently pick one.
+    for (const kind of Array.from(lockedKinds)) {
+      const n = blocks.filter((b) => "locked" in b && (b as LockedBlock).locked === kind).length;
+      if (n > 1) return { ok: false, error: `duplicate locked block: ${kind}` };
+    }
+    if (!blocks.some((b) => b.type === "section")) return { ok: false, error: "page has no sections" };
+
+    return { ok: true, tree: { version: 2, blocks } };
+  } catch (err) {
+    if (err instanceof BlockCountLimit) return { ok: false, error: err.message };
+    return { ok: false, error: err instanceof Error ? err.message : "invalid page content" };
+  }
+}
+
+// Reads a tree's CURRENT lead_capture_form children — used by app/api/public/leads/route.ts
+// (Phase O.5) to know which extra field keys are legitimate for a submission right now. A
+// fieldKey not returned here must never be trusted, even if it was valid at some point in the
+// past (a field can be removed from the form after being live).
+export function extractLeadFormFields(tree: PageBlockTree): { fieldKey: string; fieldType: string; required: boolean }[] {
+  for (const b of tree.blocks) {
+    if ("locked" in b && b.locked === "lead_capture_form") {
+      return b.children.map((f) => ({ fieldKey: f.content.fieldKey, fieldType: f.content.fieldType, required: f.content.required }));
+    }
+  }
+  return [];
+}

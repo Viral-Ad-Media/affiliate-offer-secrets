@@ -435,3 +435,97 @@ export function renderBlockTree(tree: PageBlockTree, ctx: RenderCtx): string {
     .map((b) => (b.type === "section" ? renderSection(b, ctx) : renderLockedBlock(b, ctx)))
     .join("\n");
 }
+
+// ---------------------------------------------------------------------------------------------
+// Client-side tree mutation helpers — pure, used by the editor (components/WysiwygCanvas.tsx and
+// friends) to produce a new tree after an edit, so call sites don't hand-roll tree-walking logic.
+// NEVER the security boundary (validatePageBlockTree.ts on save is) — these just need to produce
+// a plausible tree for the editor to keep working with locally between saves.
+// ---------------------------------------------------------------------------------------------
+
+export function newBlockId(): string {
+  return `b-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+}
+
+function walkAndUpdate(node: any, blockId: string, fn: (b: any) => any): any {
+  if (!node || typeof node !== "object") return node;
+  if (node.id === blockId) return fn(node);
+  if (Array.isArray(node.children)) {
+    return { ...node, children: node.children.map((c: any) => walkAndUpdate(c, blockId, fn)) };
+  }
+  if (Array.isArray(node.columns)) {
+    return { ...node, columns: node.columns.map((c: any) => walkAndUpdate(c, blockId, fn)) };
+  }
+  return node;
+}
+
+function walkAndUpdateChildren(node: any, containerId: string, fn: (children: any[]) => any[]): any {
+  if (!node || typeof node !== "object") return node;
+  if (node.id === containerId && Array.isArray(node.children)) {
+    return { ...node, children: fn(node.children) };
+  }
+  if (Array.isArray(node.children)) {
+    return { ...node, children: node.children.map((c: any) => walkAndUpdateChildren(c, containerId, fn)) };
+  }
+  if (Array.isArray(node.columns)) {
+    return { ...node, columns: node.columns.map((c: any) => walkAndUpdateChildren(c, containerId, fn)) };
+  }
+  return node;
+}
+
+// Shallow-merges `contentPatch` into whichever block matches `blockId`, anywhere in the tree
+// (root, inside a section, inside a row's column, or a lead-capture-form's fields).
+export function updateBlockContent(tree: PageBlockTree, blockId: string, contentPatch: Record<string, unknown>): PageBlockTree {
+  return {
+    ...tree,
+    blocks: tree.blocks.map((b) => walkAndUpdate(b, blockId, (node) => ({ ...node, content: { ...node.content, ...contentPatch } }))),
+  } as PageBlockTree;
+}
+
+export function updateBlockStyle(tree: PageBlockTree, blockId: string, stylePatch: BlockStyle): PageBlockTree {
+  return {
+    ...tree,
+    blocks: tree.blocks.map((b) => walkAndUpdate(b, blockId, (node) => ({ ...node, style: { ...node.style, ...stylePatch } }))),
+  } as PageBlockTree;
+}
+
+// Removes one child block from whichever container has id === parentId (a section's children,
+// a column's children, or a lead-capture-form's fields) — used by "remove benefit"/"remove FAQ
+// item"/"remove form field" actions. No-op if the parent or child isn't found.
+export function removeChildBlock(tree: PageBlockTree, parentId: string, childId: string): PageBlockTree {
+  return {
+    ...tree,
+    blocks: tree.blocks.map((b) =>
+      walkAndUpdateChildren(b, parentId, (children) => children.filter((c: any) => c.id !== childId))
+    ),
+  } as PageBlockTree;
+}
+
+// Appends one new child block to whichever container has id === parentId — used by "add
+// benefit"/"add FAQ item"/"add form field" actions. Callers build `newChild` with newBlockId().
+export function addChildBlock(tree: PageBlockTree, parentId: string, newChild: unknown): PageBlockTree {
+  return {
+    ...tree,
+    blocks: tree.blocks.map((b) => walkAndUpdateChildren(b, parentId, (children) => [...children, newChild])),
+  } as PageBlockTree;
+}
+
+// The "hero" image shown for Instagram posting / ad-creative fallback / servePublicCampaignImage
+// is derived from the first image block found in document order — same concept as the pre-Phase-O
+// editor's extractImageSrc() regex over rendered HTML, just reading the tree directly instead.
+export function firstImageDataUrl(tree: PageBlockTree): string | null {
+  for (const b of tree.blocks) {
+    if (b.type !== "section") continue;
+    for (const c of b.children) {
+      if (c.type === "image" && c.content.dataUrl) return c.content.dataUrl;
+      if (c.type === "row") {
+        for (const col of c.columns) {
+          for (const el of col.children) {
+            if (el.type === "image" && el.content.dataUrl) return el.content.dataUrl;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}

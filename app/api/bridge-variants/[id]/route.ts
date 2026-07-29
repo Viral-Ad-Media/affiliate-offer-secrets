@@ -1,29 +1,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { renderBridgeHtml, buildHoplink, resolveSectionOrder, type PageCopy } from "@/lib/engine/renderPages";
+import { renderBridgeHtml, buildHoplink } from "@/lib/engine/renderPages";
+import { validatePageBlockTree } from "@/lib/engine/validatePageBlockTree";
 import { isValidImageDataUrl } from "@/lib/images/validate";
 
 export const dynamic = "force-dynamic";
 
 // Identical validate/render/write shape to app/api/campaigns/[id]/page-copy/route.ts, scoped to a
 // bridge_variants row instead of a campaigns row — the same PageEditor component PATCHes either
-// endpoint (see its new saveEndpoint prop). assert_owns_bridge_variant() already excludes control
+// endpoint (see its saveEndpoint prop). assert_owns_bridge_variant() already excludes control
 // rows (design-review fix #1 in the split-testing plan) — a control id 404s here rather than
 // silently writing content into a column nothing ever reads.
-
-const MAX_HEADLINE = 200;
-const MAX_MEDIUM = 1000;
-const MAX_LONG = 3000;
-const MAX_BENEFITS = 10;
-const MAX_BENEFIT_LEN = 300;
-const MAX_FAQ = 10;
-const MAX_CTA = 60;
-
-function clampStr(v: unknown, max: number): string {
-  if (typeof v !== "string") return "";
-  return v.slice(0, max).trim();
-}
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const contentLength = Number(req.headers.get("content-length") ?? 0);
@@ -53,32 +41,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
   }
 
-  const benefitsIn = Array.isArray(body.benefits) ? body.benefits : [];
-  const faqIn = Array.isArray(body.faq) ? body.faq : [];
-
-  const copy: PageCopy = {
-    headline: clampStr(body.headline, MAX_HEADLINE),
-    lead: clampStr(body.lead, MAX_MEDIUM),
-    mechanism: clampStr(body.mechanism, MAX_LONG),
-    benefits: benefitsIn
-      .slice(0, MAX_BENEFITS)
-      .map((b) => clampStr(b, MAX_BENEFIT_LEN))
-      .filter(Boolean),
-    proof: clampStr(body.proof, MAX_MEDIUM),
-    faq: faqIn
-      .slice(0, MAX_FAQ)
-      .map((f) => ({
-        q: clampStr((f as Record<string, unknown>)?.q, MAX_HEADLINE),
-        a: clampStr((f as Record<string, unknown>)?.a, MAX_MEDIUM),
-      }))
-      .filter((f) => f.q && f.a),
-    cta: clampStr(body.cta, MAX_CTA) || "Get started",
-    sectionOrder: resolveSectionOrder(Array.isArray(body.section_order) ? body.section_order : null),
-  };
-
-  if (!copy.headline || !copy.lead) {
-    return NextResponse.json({ error: "headline and lead are required" }, { status: 400 });
+  const result = validatePageBlockTree(body, { pageKind: "bridge" });
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
   }
+  const tree = result.tree;
 
   let imageDataUrl: string | null = null;
   const rawImage = body.image_data_url;
@@ -135,12 +102,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const hoplink = buildHoplink(product.network, connection.affiliate_id, product.vendor_id, "page");
 
-  const bridgeHtml = renderBridgeHtml(product, copy, hoplink, imageDataUrl, variant.campaign_id);
+  const bridgeHtml = renderBridgeHtml(product, tree, hoplink, imageDataUrl, variant.campaign_id);
 
   const { error: updateErr } = await admin
     .from("bridge_variants")
     .update({
-      page_copy: copy,
+      page_copy: tree,
       bridge_html: bridgeHtml,
       embedded_image_data_url: imageDataUrl,
       updated_at: new Date().toISOString(),
@@ -151,5 +118,5 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "failed to save" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, bridge_html: bridgeHtml });
+  return NextResponse.json({ ok: true, bridge_html: bridgeHtml, page_copy: tree });
 }

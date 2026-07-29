@@ -19,3 +19,14 @@ export function clampName(value: unknown): string {
   if (typeof value !== "string") return "";
   return value.slice(0, MAX_NAME_CHARS).trim();
 }
+
+const MAX_REDIRECT_URL = 2000;
+
+// Promoted out of app/api/funnel-steps/[id]/route.ts in Phase O.2 — now needed in three places
+// (funnel-step CTA/decline redirects, and a freeform `button` block's href in
+// lib/engine/validatePageBlockTree.ts). Tenant-supplied, not public input, but still becomes a
+// real <a href> on the tenant's own page, so a cheap scheme allowlist avoids an accidental
+// javascript:/data: self-XSS.
+export function isValidRedirectUrl(v: unknown): v is string {
+  return typeof v === "string" && v.length > 0 && v.length <= MAX_REDIRECT_URL && /^https?:\/\//i.test(v);
+}

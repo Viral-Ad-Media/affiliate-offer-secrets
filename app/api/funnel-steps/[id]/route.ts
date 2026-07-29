@@ -2,32 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rerenderFunnelSequence } from "@/lib/funnelSteps";
-import { resolveSectionOrder } from "@/lib/engine/renderPages";
+import { validatePageBlockTree } from "@/lib/engine/validatePageBlockTree";
 import { isValidImageDataUrl } from "@/lib/images/validate";
+import { isValidRedirectUrl } from "@/lib/validate";
 
 export const dynamic = "force-dynamic";
-
-const MAX_HEADLINE = 200;
-const MAX_MEDIUM = 1000;
-const MAX_LONG = 3000;
-const MAX_BENEFITS = 10;
-const MAX_BENEFIT_LEN = 300;
-const MAX_FAQ = 10;
-const MAX_CTA = 60;
-
-function clampStr(v: unknown, max: number): string {
-  if (typeof v !== "string") return "";
-  return v.slice(0, max).trim();
-}
-
-const MAX_REDIRECT_URL = 2000;
-
-// Admin/tenant-supplied, not public input — but this still becomes a real <a href> on the
-// tenant's own funnel step, so a cheap scheme allowlist avoids an accidental self-XSS via a
-// javascript:/data: URI (copy-pasted from somewhere untrusted, browser autofill, etc.).
-function isValidRedirectUrl(v: unknown): v is string {
-  return typeof v === "string" && v.length > 0 && v.length <= MAX_REDIRECT_URL && /^https?:\/\//i.test(v);
-}
 
 type CtaAction = "next_step" | "hoplink" | "redirect_url";
 
@@ -67,32 +46,24 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
   }
 
-  const benefitsIn = Array.isArray(body.benefits) ? body.benefits : [];
-  const faqIn = Array.isArray(body.faq) ? body.faq : [];
+  const admin = createAdminClient();
 
-  const copy = {
-    headline: clampStr(body.headline, MAX_HEADLINE),
-    lead: clampStr(body.lead, MAX_MEDIUM),
-    mechanism: clampStr(body.mechanism, MAX_LONG),
-    benefits: benefitsIn
-      .slice(0, MAX_BENEFITS)
-      .map((b) => clampStr(b, MAX_BENEFIT_LEN))
-      .filter(Boolean),
-    proof: clampStr(body.proof, MAX_MEDIUM),
-    faq: faqIn
-      .slice(0, MAX_FAQ)
-      .map((f) => ({
-        q: clampStr((f as Record<string, unknown>)?.q, MAX_HEADLINE),
-        a: clampStr((f as Record<string, unknown>)?.a, MAX_MEDIUM),
-      }))
-      .filter((f) => f.q && f.a),
-    cta: clampStr(body.cta, MAX_CTA) || "Get started",
-    sectionOrder: resolveSectionOrder(Array.isArray(body.section_order) ? body.section_order : null),
-  };
-
-  if (!copy.headline || !copy.lead) {
-    return NextResponse.json({ error: "headline and lead are required" }, { status: 400 });
+  const { data: step, error: stepErr } = await admin
+    .from("funnel_steps")
+    .select("campaign_id, step_type")
+    .eq("id", stepId)
+    .single();
+  if (stepErr || !step) {
+    return NextResponse.json({ error: "step not found" }, { status: 404 });
   }
+
+  // The required-locked-block set (decline_link only for upsell) depends on this step's own
+  // type, so it has to be known before validation, not just before rendering.
+  const result = validatePageBlockTree(body, { pageKind: "funnel_step", stepType: step.step_type });
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
+  }
+  const tree = result.tree;
 
   let imageDataUrl: string | null = null;
   const rawImage = body.image_data_url;
@@ -123,17 +94,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     declineRedirectUrl = body.decline_redirect_url;
   }
 
-  const admin = createAdminClient();
-
-  const { data: step, error: stepErr } = await admin
-    .from("funnel_steps")
-    .select("campaign_id, step_type")
-    .eq("id", stepId)
-    .single();
-  if (stepErr || !step) {
-    return NextResponse.json({ error: "step not found" }, { status: 404 });
-  }
-
   let targetProductId: string | null = null;
   if (step.step_type === "upsell" && typeof body.target_product_id === "string" && body.target_product_id) {
     // Cross-sell must point at THIS user's own product — never trust a foreign id.
@@ -152,7 +112,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const { error: updateErr } = await admin
     .from("funnel_steps")
     .update({
-      page_copy: copy,
+      page_copy: tree,
       embedded_image_data_url: imageDataUrl,
       cta_action: ctaAction,
       redirect_url: redirectUrl,
@@ -170,7 +130,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: rendered } = await admin.from("funnel_steps").select("html").eq("id", stepId).single();
 
-  return NextResponse.json({ ok: true, html: rendered?.html ?? null, page_copy: copy });
+  return NextResponse.json({ ok: true, html: rendered?.html ?? null, page_copy: tree });
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {

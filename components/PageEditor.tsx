@@ -2,16 +2,10 @@
 
 import { useState } from "react";
 import { Loader2, CheckCircle2, Lock } from "lucide-react";
-import { DISCLOSURE, LEAD_CONSENT_TEXT, type PageCopy } from "@/lib/engine/renderPages";
+import { DISCLOSURE, normalizePageCopy, firstImageDataUrl, type PageBlockTree } from "@/lib/engine/renderPages";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 
 const MAX_IMAGE_DATA_URL_CHARS = 280_000;
-
-function extractImageSrc(html: string | null): string | null {
-  if (!html) return null;
-  const match = html.match(/<img src="([^"]*)"/);
-  return match ? match[1] : null;
-}
 
 // Downscale/re-encode client-side so most real photos land under the server's size cap without
 // the user having to think about it — the server's own validation (route.ts) is the actual
@@ -52,22 +46,12 @@ async function resizeImageFile(file: File): Promise<string> {
 type Props = {
   campaignId: string;
   productTitle: string;
-  initialCopy: PageCopy | null;
+  initialCopy: unknown;
   initialBridgeHtml: string | null;
-  onSaved: (result: { bridge_html: string; page_copy: PageCopy }) => void;
+  onSaved: (result: { bridge_html: string; page_copy: PageBlockTree }) => void;
   // Defaults to the control's own save route. A split-test variant's editor (SplitTestPanel)
   // passes /api/bridge-variants/{id} instead — everything else about this component is identical.
   saveEndpoint?: string;
-};
-
-const emptyCopy: PageCopy = {
-  headline: "",
-  lead: "",
-  mechanism: "",
-  benefits: [""],
-  proof: "",
-  faq: [{ q: "", a: "" }],
-  cta: "Get started",
 };
 
 export default function PageEditor({
@@ -78,29 +62,11 @@ export default function PageEditor({
   onSaved,
   saveEndpoint,
 }: Props) {
-  const [copy, setCopy] = useState<PageCopy>(initialCopy ?? emptyCopy);
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(extractImageSrc(initialBridgeHtml));
+  const [tree, setTree] = useState<PageBlockTree>(() => normalizePageCopy(initialCopy, null));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [imageBusy, setImageBusy] = useState(false);
-
-  function update<K extends keyof PageCopy>(key: K, value: PageCopy[K]) {
-    setCopy((c) => ({ ...c, [key]: value }));
-  }
-
-  async function handleImageFile(file: File) {
-    setImageBusy(true);
-    setError(null);
-    try {
-      const resized = await resizeImageFile(file);
-      setImageDataUrl(resized);
-    } catch (err: any) {
-      setError(err?.message ?? "Could not process image");
-    } finally {
-      setImageBusy(false);
-    }
-  }
+  const [imageBusyBlockId, setImageBusyBlockId] = useState<string | null>(null);
 
   async function save() {
     setSaving(true);
@@ -110,20 +76,13 @@ export default function PageEditor({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          headline: copy.headline,
-          lead: copy.lead,
-          mechanism: copy.mechanism,
-          benefits: copy.benefits.filter((b) => b.trim()),
-          proof: copy.proof,
-          faq: copy.faq.filter((f) => f.q.trim() && f.a.trim()),
-          cta: copy.cta,
-          image_data_url: imageDataUrl,
-          section_order: copy.sectionOrder,
+          blocks: tree.blocks,
+          image_data_url: firstImageDataUrl(tree),
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
-      onSaved({ bridge_html: data.bridge_html, page_copy: copy });
+      onSaved({ bridge_html: data.bridge_html, page_copy: tree });
       setSavedAt(Date.now());
     } catch (err: any) {
       setError(err?.message ?? "Failed to save");
@@ -145,30 +104,18 @@ export default function PageEditor({
     <div className="space-y-4">
       <p className="text-xs text-zinc-500">
         Click any text below to edit it in place, drag <span className="text-zinc-400">⠿</span> to
-        reorder a section. The lead-capture form and disclosure are locked — they can't be edited
+        reorder a block. The lead-capture form and disclosure are locked — they can't be edited
         or removed here.
       </p>
 
       <WysiwygCanvas
-        copy={copy}
-        onChange={update}
-        imageDataUrl={imageDataUrl}
-        onImageFile={handleImageFile}
-        onImageRemove={() => setImageDataUrl(null)}
-        imageBusy={imageBusy}
+        tree={tree}
+        onChange={setTree}
+        resizeImageFile={resizeImageFile}
+        imageBusyBlockId={imageBusyBlockId}
+        onImageBusyChange={setImageBusyBlockId}
+        onImageError={setError}
         productTitle={productTitle}
-        belowCta={
-          <div className="mx-auto mt-6 max-w-[420px] rounded-xl border border-[#e5e5e5] bg-white p-6 text-center">
-            <input disabled placeholder="First name" className="mb-2 w-full rounded-lg border border-gray-300 bg-gray-50 px-3.5 py-3 text-[15px] text-gray-400" />
-            <input disabled placeholder="Email address" className="mb-2 w-full rounded-lg border border-gray-300 bg-gray-50 px-3.5 py-3 text-[15px] text-gray-400" />
-            <div className="mt-2 rounded-lg bg-[#16a34a]/40 px-8 py-3.5 text-[15px] font-semibold text-white">
-              {copy.cta || "Get started"}
-            </div>
-            <p className="mt-3 flex items-center justify-center gap-1 text-left text-[11px] text-gray-500">
-              <Lock className="h-3 w-3 shrink-0" /> {LEAD_CONSENT_TEXT}
-            </p>
-          </div>
-        }
       />
 
       <p className="mx-auto flex max-w-[680px] items-center gap-1.5 text-xs text-zinc-500">
@@ -178,7 +125,7 @@ export default function PageEditor({
       {error && <p className="text-sm text-red-300">{error}</p>}
 
       <div className="flex items-center gap-3">
-        <button onClick={save} disabled={saving || imageBusy} className="btn-primary">
+        <button onClick={save} disabled={saving || !!imageBusyBlockId} className="btn-primary">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Save &amp; Republish
         </button>

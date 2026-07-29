@@ -2,17 +2,11 @@
 
 import { useState } from "react";
 import { Loader2, CheckCircle2, Lock } from "lucide-react";
-import { DISCLOSURE, type PageCopy, type FunnelStepType } from "@/lib/engine/renderPages";
+import { DISCLOSURE, normalizePageCopy, firstImageDataUrl, type PageBlockTree, type FunnelStepType } from "@/lib/engine/renderPages";
 import type { FunnelStepCtaAction } from "@/lib/shared";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 
 const MAX_IMAGE_DATA_URL_CHARS = 280_000;
-
-function extractImageSrc(html: string | null): string | null {
-  if (!html) return null;
-  const match = html.match(/<img src="([^"]*)"/);
-  return match ? match[1] : null;
-}
 
 // Same client-side downscale as PageEditor.tsx's resizeImageFile — the server's own validation
 // (app/api/funnel-steps/[id]/route.ts) is the actual boundary, this is just UX.
@@ -49,21 +43,11 @@ async function resizeImageFile(file: File): Promise<string> {
   throw new Error("Image is too large even after compression — try a smaller file.");
 }
 
-const emptyCopy: PageCopy = {
-  headline: "",
-  lead: "",
-  mechanism: "",
-  benefits: [""],
-  proof: "",
-  faq: [{ q: "", a: "" }],
-  cta: "Continue",
-};
-
 type Props = {
   stepId: string;
   stepType: FunnelStepType;
   productTitle: string;
-  initialCopy: PageCopy | null;
+  initialCopy: unknown;
   initialHtml: string | null;
   initialCtaAction: FunnelStepCtaAction;
   initialRedirectUrl: string | null;
@@ -71,7 +55,7 @@ type Props = {
   initialDeclineAction: FunnelStepCtaAction;
   initialDeclineRedirectUrl: string | null;
   crossSellOptions: { id: string; title: string }[];
-  onSaved: (result: { html: string; page_copy: PageCopy }) => void;
+  onSaved: (result: { html: string; page_copy: PageBlockTree }) => void;
 };
 
 export default function FunnelStepEditor({
@@ -79,7 +63,6 @@ export default function FunnelStepEditor({
   stepType,
   productTitle,
   initialCopy,
-  initialHtml,
   initialCtaAction,
   initialRedirectUrl,
   initialTargetProductId,
@@ -88,8 +71,7 @@ export default function FunnelStepEditor({
   crossSellOptions,
   onSaved,
 }: Props) {
-  const [copy, setCopy] = useState<PageCopy>(initialCopy ?? emptyCopy);
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(extractImageSrc(initialHtml));
+  const [tree, setTree] = useState<PageBlockTree>(() => normalizePageCopy(initialCopy, null, { stepType }));
   const [ctaAction, setCtaAction] = useState<FunnelStepCtaAction>(initialCtaAction);
   const [redirectUrl, setRedirectUrl] = useState(initialRedirectUrl ?? "");
   const [targetProductId, setTargetProductId] = useState<string>(initialTargetProductId ?? "");
@@ -98,24 +80,7 @@ export default function FunnelStepEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [imageBusy, setImageBusy] = useState(false);
-
-  function update<K extends keyof PageCopy>(key: K, value: PageCopy[K]) {
-    setCopy((c) => ({ ...c, [key]: value }));
-  }
-
-  async function handleImageFile(file: File) {
-    setImageBusy(true);
-    setError(null);
-    try {
-      const resized = await resizeImageFile(file);
-      setImageDataUrl(resized);
-    } catch (err: any) {
-      setError(err?.message ?? "Could not process image");
-    } finally {
-      setImageBusy(false);
-    }
-  }
+  const [imageBusyBlockId, setImageBusyBlockId] = useState<string | null>(null);
 
   async function save() {
     setSaving(true);
@@ -125,25 +90,18 @@ export default function FunnelStepEditor({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          headline: copy.headline,
-          lead: copy.lead,
-          mechanism: copy.mechanism,
-          benefits: copy.benefits.filter((b) => b.trim()),
-          proof: copy.proof,
-          faq: copy.faq.filter((f) => f.q.trim() && f.a.trim()),
-          cta: copy.cta,
-          image_data_url: imageDataUrl,
+          blocks: tree.blocks,
+          image_data_url: firstImageDataUrl(tree),
           cta_action: ctaAction,
           redirect_url: ctaAction === "redirect_url" ? redirectUrl : null,
           target_product_id: targetProductId || null,
           decline_action: declineAction,
           decline_redirect_url: declineAction === "redirect_url" ? declineRedirectUrl : null,
-          section_order: copy.sectionOrder,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
-      onSaved({ html: data.html, page_copy: copy });
+      onSaved({ html: data.html, page_copy: tree });
       setSavedAt(Date.now());
     } catch (err: any) {
       setError(err?.message ?? "Failed to save");
@@ -156,22 +114,17 @@ export default function FunnelStepEditor({
     <div className="space-y-4">
       <p className="text-xs text-zinc-500">
         Click any text below to edit it in place, drag <span className="text-zinc-400">⠿</span> to
-        reorder a section.
+        reorder a block.
       </p>
 
       <WysiwygCanvas
-        copy={copy}
-        onChange={update}
-        imageDataUrl={imageDataUrl}
-        onImageFile={handleImageFile}
-        onImageRemove={() => setImageDataUrl(null)}
-        imageBusy={imageBusy}
+        tree={tree}
+        onChange={setTree}
+        resizeImageFile={resizeImageFile}
+        imageBusyBlockId={imageBusyBlockId}
+        onImageBusyChange={setImageBusyBlockId}
+        onImageError={setError}
         productTitle={productTitle}
-        belowCta={
-          stepType === "upsell" ? (
-            <p className="mt-3 text-center text-[13px] text-gray-500 underline">No thanks, continue</p>
-          ) : null
-        }
       />
 
       <p className="mx-auto flex max-w-[680px] items-center gap-1.5 text-xs text-zinc-500">
@@ -273,7 +226,7 @@ export default function FunnelStepEditor({
       {error && <p className="text-sm text-red-300">{error}</p>}
 
       <div className="flex items-center gap-3">
-        <button onClick={save} disabled={saving || imageBusy} className="btn-primary">
+        <button onClick={save} disabled={saving || !!imageBusyBlockId} className="btn-primary">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Save &amp; Republish
         </button>

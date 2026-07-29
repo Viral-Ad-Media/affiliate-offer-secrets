@@ -1,11 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  renderBridgeHtml,
-  renderFunnelStepHtml,
-  buildHoplink,
-  type PageCopy,
-  type FunnelStepType,
-} from "@/lib/engine/renderPages";
+import { renderBridgeHtml, renderFunnelStepHtml, buildHoplink, type FunnelStepType } from "@/lib/engine/renderPages";
 
 type CtaAction = "next_step" | "hoplink" | "redirect_url";
 
@@ -13,7 +7,9 @@ type FunnelStepRow = {
   id: string;
   step_type: FunnelStepType;
   step_index: number;
-  page_copy: PageCopy | null;
+  // Opaque — could be the legacy flat shape or a version-2 PageBlockTree depending on when this
+  // row was last saved; renderFunnelStepHtml normalizes either via normalizePageCopy() itself.
+  page_copy: unknown;
   embedded_image_data_url: string | null;
   cta_action: CtaAction;
   redirect_url: string | null;
@@ -75,7 +71,7 @@ export async function rerenderFunnelSequence(
     const nextStepUrl = steps.length > 0 ? stepUrl(campaignId, steps[0].step_index) : null;
     const bridgeHtml = renderBridgeHtml(
       product,
-      campaign.page_copy as PageCopy,
+      campaign.page_copy,
       hoplink,
       campaign.embedded_image_data_url,
       campaignId,
@@ -142,7 +138,7 @@ export async function rerenderFunnelSequence(
 
       const html = renderFunnelStepHtml(
         targetProduct,
-        step.page_copy as PageCopy,
+        step.page_copy,
         "upsell",
         acceptHref,
         step.embedded_image_data_url,
@@ -160,7 +156,7 @@ export async function rerenderFunnelSequence(
       }
       const html = renderFunnelStepHtml(
         product,
-        step.page_copy as PageCopy,
+        step.page_copy,
         step.step_type,
         primaryHref,
         step.embedded_image_data_url

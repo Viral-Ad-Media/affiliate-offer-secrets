@@ -1191,7 +1191,7 @@ after this contact signed up", never a shared calendar date). Reuses the existin
   abuse protection on the unsubscribe endpoint (same accepted v1 gap as `/api/public/leads`); no
   manual "send this step now" override or drag-and-drop step reordering.
 
-## Freeform block-based page builder (Phase O — in progress, sub-phase 1 of 5 landed)
+## Freeform block-based page builder (Phase O — in progress, sub-phase 2 of 5 landed)
 
 Replacing the fixed-field bridge/funnel-step content model (headline/lead/mechanism/benefits/
 proof/faq/cta) with a true Elementor-style block tree: sections containing rows/columns containing
@@ -1199,9 +1199,10 @@ elements (heading, subheading, paragraph, image, bullet list, icon list, divider
 button, FAQ item), each with full custom styling, plus a lead-capture form that accepts real
 user-added fields. This is a multi-week rebuild landing in five sub-phases (see
 `/Users/macbookpro/.claude/plans/binary-stirring-brooks.md`'s "Phase O" for the full design) —
-**only sub-phase 1 has landed so far**: the schema and renderer exist, but the editor UI is
-unchanged (still `components/WysiwygCanvas.tsx` over the old flat `PageCopy` shape) — this section
-will grow as sub-phases 2-5 ship.
+**sub-phases 1-2 have landed**: the schema/renderer (O.1) and the validator + rewritten PATCH
+routes + a tree-aware top-level editor (O.2) all exist and are live. Nested drag-and-drop, the
+full element palette, Row/Column insertion, the style panel, and real form-input backend wiring
+are still sub-phases 3-5, not yet built.
 
 - **`lib/engine/blockTree.ts`** (new) defines the block-tree schema (`PageBlockTree`,
   `SectionBlock`/`RowBlock`/`ColumnBlock`/`ElementBlock`/`LockedBlock`/`FormInputBlock`) and
@@ -1270,12 +1271,50 @@ will grow as sub-phases 2-5 ship.
   reading `#leadFirstName`/`#leadEmail` by hardcoded id — laying groundwork for sub-phase 5's real
   form-input fields. `app/api/public/leads/route.ts` doesn't read `extra_fields` yet (harmless
   extra JSON key, ignored) — wiring that up is explicitly sub-phase 5, not this one.
-- **Not yet built** (sub-phases 2-5, see the plan doc): `lib/engine/validatePageBlockTree.ts` (the
-  real server-side validation boundary — until it lands, the three PATCH routes still validate the
-  old flat shape only, so the block-tree renderer/schema aren't reachable from the editor yet);
-  the tree-aware editor UI (nested drag-and-drop, the full element palette, Row/Column insertion);
-  `components/BlockStylePanel.tsx`; the `contacts.extra_fields` migration and real form-input
-  backend wiring.
+- **`lib/engine/validatePageBlockTree.ts`** (new) is now the real server-side validation boundary —
+  all three PATCH routes (`app/api/campaigns/[id]/page-copy/route.ts`,
+  `app/api/bridge-variants/[id]/route.ts`, `app/api/funnel-steps/[id]/route.ts`) call
+  `validatePageBlockTree(body, {pageKind, stepType?})` and persist `result.tree` instead of the old
+  flat-field clamp logic. Recursive walk with hard structural rejection (unknown block type, wrong
+  locked-block placement, depth >4, too many blocks) vs. soft clamping (over-length text truncated,
+  out-of-range style numbers clamped, invalid colors dropped) — mirrors this codebase's established
+  "clamp long input, hard-reject structural tampering" split. `extractLeadFormFields(tree)` is
+  exported for sub-phase 5's leads-route use but not called yet. `isValidRedirectUrl` was promoted
+  from `app/api/funnel-steps/[id]/route.ts` into `lib/validate.ts` (now needed in 3 places: funnel
+  redirects + a `button` block's href). The funnel-steps route fetches the step's `step_type` from
+  the DB *before* validating, since the locked-block requirements differ by step type (a
+  `decline_link` is only required for `upsell` steps).
+- **The editor is now tree-aware, but only at the top level — nested drag-and-drop is sub-phase 3,
+  not this one.** `components/WysiwygCanvas.tsx` was rewritten to edit a `PageBlockTree` directly
+  instead of the old flat `PageCopy`: the same mount-once-then-blur-commit `EditableText` pattern
+  (unchanged — still the load-bearing fix for the React+contentEditable cursor-jump bug);
+  `RootBlockWrapper` provides drag-to-reorder for **root-level blocks only** (Sections and the 4
+  locked blocks), reusing the existing single-level dnd-kit wiring — dragging an element between
+  columns, or a row in/out of a section, doesn't exist yet. Per-image-block upload/replace/remove
+  controls replace the old single "hero image" concept (`firstImageDataUrl(tree)` derives the
+  `embedded_image_data_url` column value automatically). A new **device-preview toggle**
+  (Desktop/Tablet/Mobile icons, `DEVICE_WIDTHS = {desktop:680, tablet:480, mobile:360}`) is a
+  purely client-side preview aid with zero effect on saved data or real rendering.
+- **`components/PageEditor.tsx`/`components/FunnelStepEditor.tsx`** now hold `PageBlockTree` state
+  (`useState(() => normalizePageCopy(initialCopy, null, ...))`) and save
+  `{blocks: tree.blocks, image_data_url: firstImageDataUrl(tree)}` — no separate image-upload UI
+  section anymore, all image editing is in-canvas, per-block.
+- **`lib/shared.ts`**: `Campaign.page_copy` is now typed `PageBlockTree | Record<string, unknown> |
+  null` (was a hand-duplicated inline flat-shape object) — documented as opaque, since a row could
+  be legacy or version-2 shape depending on when it was last saved. `lib/funnelSteps.ts`'s
+  `FunnelStepRow.page_copy` is `unknown`; the 3 `as PageCopy` casts at
+  `renderBridgeHtml`/`renderFunnelStepHtml` call sites are gone (no longer needed since those
+  functions accept `unknown`, per O.1).
+- **A real functional gap was caught and fixed during O.2's own browser verification, not from
+  user feedback**: the rewritten canvas initially had no way to add/remove FAQ items, since
+  `faq_item` is a discrete block per entry now, not an array field like `benefits` — unlike the old
+  editor, which had "+ Add"/remove for FAQ pairs. Fixed by threading a `sectionId` parameter
+  through `renderElement`/`renderSectionChild`/`renderColumn`, adding a remove (X) button on each
+  `faq_item` block and an "+ Add FAQ item" button at the section level.
+- **Not yet built** (sub-phases 3-5, see the plan doc): nested drag-and-drop, the full element
+  palette, Row/Column insertion UI; `components/BlockStylePanel.tsx`; the `contacts.extra_fields`
+  migration and real form-input backend wiring (the submit script already collects fields
+  generically per O.1, but `app/api/public/leads/route.ts` still ignores `extra_fields`).
 
 ## Dev
 

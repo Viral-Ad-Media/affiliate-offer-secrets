@@ -1,5 +1,7 @@
 // Types and constants shared with client components — must stay free of Node/DB imports.
 
+import type { PageBlockTree } from "@/lib/engine/renderPages";
+
 export type Product = {
   id: string;
   user_id: string;
@@ -57,15 +59,11 @@ export type Campaign = {
   email_md: string | null;
   images_json: { source_images: string[] } | null;
   embedded_image_data_url: string | null;
-  page_copy: {
-    headline: string;
-    lead: string;
-    mechanism: string;
-    benefits: string[];
-    proof: string;
-    faq: { q: string; a: string }[];
-    cta: string;
-  } | null;
+  // Opaque from this file's perspective — could be the legacy flat shape (pre-Phase-O rows) or a
+  // version-2 PageBlockTree, depending on when the row was last saved. Was previously a
+  // hand-duplicated inline type here (and had already drifted from PageCopy — missing
+  // sectionOrder); now imports the real type instead of re-declaring a shape that can go stale.
+  page_copy: PageBlockTree | Record<string, unknown> | null;
   notes: string | null;
   created_at: string;
   updated_at: string;

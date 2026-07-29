@@ -1,23 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { renderBridgeHtml, buildHoplink, resolveSectionOrder, type PageCopy } from "@/lib/engine/renderPages";
+import { renderBridgeHtml, buildHoplink } from "@/lib/engine/renderPages";
+import { validatePageBlockTree } from "@/lib/engine/validatePageBlockTree";
 import { isValidImageDataUrl } from "@/lib/images/validate";
 
 export const dynamic = "force-dynamic";
-
-const MAX_HEADLINE = 200;
-const MAX_MEDIUM = 1000;
-const MAX_LONG = 3000;
-const MAX_BENEFITS = 10;
-const MAX_BENEFIT_LEN = 300;
-const MAX_FAQ = 10;
-const MAX_CTA = 60;
-
-function clampStr(v: unknown, max: number): string {
-  if (typeof v !== "string") return "";
-  return v.slice(0, max).trim();
-}
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   // Reject an oversized body before ever parsing it — cheap extra hardening.
@@ -50,39 +38,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
   }
 
-  const benefitsIn = Array.isArray(body.benefits) ? body.benefits : [];
-  const faqIn = Array.isArray(body.faq) ? body.faq : [];
-
-  const copy: PageCopy = {
-    headline: clampStr(body.headline, MAX_HEADLINE),
-    lead: clampStr(body.lead, MAX_MEDIUM),
-    mechanism: clampStr(body.mechanism, MAX_LONG),
-    benefits: benefitsIn
-      .slice(0, MAX_BENEFITS)
-      .map((b) => clampStr(b, MAX_BENEFIT_LEN))
-      .filter(Boolean),
-    proof: clampStr(body.proof, MAX_MEDIUM),
-    faq: faqIn
-      .slice(0, MAX_FAQ)
-      .map((f) => ({
-        q: clampStr((f as Record<string, unknown>)?.q, MAX_HEADLINE),
-        a: clampStr((f as Record<string, unknown>)?.a, MAX_MEDIUM),
-      }))
-      .filter((f) => f.q && f.a),
-    cta: clampStr(body.cta, MAX_CTA) || "Get started",
-    // resolveSectionOrder() also guards against a corrupt/foreign array here — unrecognized
-    // strings are dropped, missing keys appended in default order (never trusts client shape).
-    sectionOrder: resolveSectionOrder(Array.isArray(body.section_order) ? body.section_order : null),
-  };
-
-  if (!copy.headline || !copy.lead) {
-    return NextResponse.json({ error: "headline and lead are required" }, { status: 400 });
+  // The block-tree walker is the real validation boundary now (Phase O) — replaces the old flat
+  // per-field clamp logic entirely. See lib/engine/validatePageBlockTree.ts for the full shape.
+  const result = validatePageBlockTree(body, { pageKind: "bridge" });
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
   }
+  const tree = result.tree;
 
-  // The client always sends this key explicitly — either the unchanged current image (which it
-  // seeds by reading the campaign's existing bridge_html once on load), a freshly picked
-  // replacement, or null if the user removed the image. There's no "omit to keep existing" case
-  // to handle server-side, which keeps this validation branch-free.
+  // The "hero" embedded image is still a dedicated column (feeds Instagram posting, the
+  // ad-creative fallback chain, servePublicCampaignImage) — independent of however many image
+  // blocks the freeform tree itself contains. The client sends it explicitly, same as before.
   let imageDataUrl: string | null = null;
   const rawImage = body.image_data_url;
   if (typeof rawImage === "string" && rawImage.length > 0) {
@@ -143,12 +109,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     ? `${process.env.NEXT_PUBLIC_APP_URL}/p/${campaignId}/step/${firstStep.step_index}`
     : null;
 
-  const bridgeHtml = renderBridgeHtml(product, copy, hoplink, imageDataUrl, campaignId, nextStepUrl);
+  const bridgeHtml = renderBridgeHtml(product, tree, hoplink, imageDataUrl, campaignId, nextStepUrl);
 
   const { error: updateErr } = await admin
     .from("campaigns")
     .update({
-      page_copy: copy,
+      page_copy: tree,
       bridge_html: bridgeHtml,
       embedded_image_data_url: imageDataUrl,
     })
@@ -158,5 +124,5 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "failed to save" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, bridge_html: bridgeHtml });
+  return NextResponse.json({ ok: true, bridge_html: bridgeHtml, page_copy: tree });
 }
