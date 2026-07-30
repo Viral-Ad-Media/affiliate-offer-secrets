@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, LayoutDashboard } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Campaign, FunnelStep, BridgeVariant } from "@/lib/shared";
 import PublishBridge from "@/components/PublishBridge";
@@ -98,37 +98,119 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
   }
 
   const stepInView = view.kind === "step" ? steps.find((s) => s.id === view.stepId) ?? null : null;
-  const backLink =
-    view.kind === "map" ? (
-      <Link href="/funnels" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200">
-        <ArrowLeft className="h-4 w-4" /> Back to Funnels
-      </Link>
-    ) : (
-      <button
-        onClick={() => setView({ kind: "map" })}
-        className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back to funnel map
-      </button>
+
+  // Editing a page takes over the whole viewport (no sidebar/app chrome) — the canvas needs the
+  // room, and a focused editor shouldn't compete with app navigation. Rendered as a fixed overlay
+  // above the (app) layout rather than a separate route, so all the existing view-switching state
+  // stays exactly as it is; the sticky top bar carries the two ways out (funnel map / dashboard).
+  if (view.kind !== "map") {
+    const editorTitle =
+      view.kind === "optin"
+        ? "Opt-in page"
+        : view.kind === "variant"
+          ? variantInView
+            ? `Opt-in page (${variantInView.label})`
+            : "Opt-in page"
+          : stepInView
+            ? STEP_LABELS[stepInView.step_type]
+            : "Step";
+
+    return (
+      <div className="fixed inset-0 z-40 overflow-y-auto bg-ink-950">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-ink-700 bg-ink-900/90 px-4 py-3 backdrop-blur">
+          <button
+            onClick={() => setView({ kind: "map" })}
+            className="inline-flex shrink-0 items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200"
+          >
+            <ArrowLeft className="h-4 w-4" /> Funnel map
+          </button>
+          <div className="min-w-0 truncate text-sm font-medium text-zinc-100">
+            {productTitle} — {editorTitle}
+          </div>
+          <Link
+            href="/dashboard"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-ink-600 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+          >
+            <LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
+          </Link>
+        </div>
+
+        <div className="mx-auto max-w-5xl px-4 py-6">
+          {view.kind === "optin" ? (
+            <>
+              <SplitTestPanel campaignId={campaign.id} productTitle={productTitle} />
+
+              <section className="card p-4">
+                <PageEditor
+                  campaignId={campaign.id}
+                  productTitle={productTitle}
+                  initialCopy={campaign.page_copy}
+                  initialBridgeHtml={campaign.bridge_html}
+                  onSaved={({ bridge_html, page_copy }) =>
+                    setCampaign((c) => (c ? { ...c, bridge_html, page_copy } : c))
+                  }
+                />
+              </section>
+            </>
+          ) : view.kind === "variant" ? (
+            variantInView ? (
+              <section className="card p-4">
+                <PageEditor
+                  campaignId={campaign.id}
+                  productTitle={productTitle}
+                  initialCopy={variantInView.page_copy}
+                  initialBridgeHtml={variantInView.bridge_html}
+                  saveEndpoint={`/api/bridge-variants/${variantInView.id}`}
+                  onSaved={({ bridge_html, page_copy }) =>
+                    setVariantInView((v) => (v ? { ...v, bridge_html, page_copy } : v))
+                  }
+                />
+              </section>
+            ) : (
+              <p className="text-sm text-zinc-500">Loading…</p>
+            )
+          ) : stepInView ? (
+            <section className="card p-4">
+              <FunnelStepEditor
+                stepId={stepInView.id}
+                stepType={stepInView.step_type}
+                productTitle={productTitle}
+                initialCopy={stepInView.page_copy}
+                initialHtml={stepInView.html}
+                initialCtaAction={stepInView.cta_action}
+                initialRedirectUrl={stepInView.redirect_url}
+                initialTargetProductId={stepInView.target_product_id}
+                initialDeclineAction={stepInView.decline_action}
+                initialDeclineRedirectUrl={stepInView.decline_redirect_url}
+                crossSellOptions={crossSellOptions}
+                onSaved={() => load()}
+              />
+            </section>
+          ) : (
+            <p className="text-sm text-zinc-500">
+              That step no longer exists.{" "}
+              <button onClick={() => setView({ kind: "map" })} className="underline">
+                Back to funnel map
+              </button>
+            </p>
+          )}
+        </div>
+      </div>
     );
+  }
 
   return (
     <main className="space-y-5">
-      {backLink}
+      <Link href="/funnels" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200">
+        <ArrowLeft className="h-4 w-4" /> Back to Funnels
+      </Link>
 
       <header>
-        <h1 className="text-2xl font-bold text-zinc-100">
-          {productTitle}
-          {view.kind === "optin" && " — Opt-in page"}
-          {view.kind === "variant" && variantInView && ` — Opt-in page (${variantInView.label})`}
-          {stepInView && ` — ${STEP_LABELS[stepInView.step_type]}`}
-        </h1>
-        {view.kind === "map" && (
-          <p className="text-sm text-zinc-400">
-            Publishing is one switch for the whole funnel — the opt-in page and every step below go
-            live (or offline) together.
-          </p>
-        )}
+        <h1 className="text-2xl font-bold text-zinc-100">{productTitle}</h1>
+        <p className="text-sm text-zinc-400">
+          Publishing is one switch for the whole funnel — the opt-in page and every step below go
+          live (or offline) together.
+        </p>
       </header>
 
       {!campaign.page_copy ? (
@@ -140,7 +222,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
           </Link>{" "}
           page to enable editing.
         </p>
-      ) : view.kind === "map" ? (
+      ) : (
         <>
           <PublishBridge campaignId={campaign.id} initialPublished={campaign.bridge_published} />
 
@@ -154,63 +236,6 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
             onChanged={load}
           />
         </>
-      ) : view.kind === "optin" ? (
-        <>
-          <SplitTestPanel campaignId={campaign.id} productTitle={productTitle} />
-
-          <section className="card p-4">
-            <PageEditor
-              campaignId={campaign.id}
-              productTitle={productTitle}
-              initialCopy={campaign.page_copy}
-              initialBridgeHtml={campaign.bridge_html}
-              onSaved={({ bridge_html, page_copy }) =>
-                setCampaign((c) => (c ? { ...c, bridge_html, page_copy } : c))
-              }
-            />
-          </section>
-        </>
-      ) : view.kind === "variant" ? (
-        variantInView ? (
-          <section className="card p-4">
-            <PageEditor
-              campaignId={campaign.id}
-              productTitle={productTitle}
-              initialCopy={variantInView.page_copy}
-              initialBridgeHtml={variantInView.bridge_html}
-              saveEndpoint={`/api/bridge-variants/${variantInView.id}`}
-              onSaved={({ bridge_html, page_copy }) =>
-                setVariantInView((v) => (v ? { ...v, bridge_html, page_copy } : v))
-              }
-            />
-          </section>
-        ) : (
-          <p className="text-sm text-zinc-500">Loading…</p>
-        )
-      ) : stepInView ? (
-        <section className="card p-4">
-          <FunnelStepEditor
-            stepId={stepInView.id}
-            stepType={stepInView.step_type}
-            productTitle={productTitle}
-            initialCopy={stepInView.page_copy}
-            initialHtml={stepInView.html}
-            initialCtaAction={stepInView.cta_action}
-            initialRedirectUrl={stepInView.redirect_url}
-            initialTargetProductId={stepInView.target_product_id}
-            initialDeclineAction={stepInView.decline_action}
-            initialDeclineRedirectUrl={stepInView.decline_redirect_url}
-            crossSellOptions={crossSellOptions}
-            onSaved={() => load()}
-          />
-        </section>
-      ) : (
-        <p className="text-sm text-zinc-500">
-          That step no longer exists.{" "}
-          <button onClick={() => setView({ kind: "map" })} className="underline">
-            Back to funnel map
-          </button>
-        </p>
       )}
     </main>
   );

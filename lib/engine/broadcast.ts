@@ -17,7 +17,10 @@ export type BroadcastEmailStageOutput = {
 
 // Pooled with mail_sends — matches run_broadcast_sweep()'s own admission-control cap exactly.
 // This is a defensive re-check for the narrow race window between the sweep's admission check
-// and this job actually running, not the primary gate (the sweep is).
+// and this job actually running, not the primary gate (the sweep is). Provider-aware since
+// 0027_provider_aware_send_cap.sql: applies only to personal-mailbox senders (Gmail OAuth, or
+// SMTP pointed at a Gmail/Yahoo host, via the shared is_capped_mail_sender() SQL function) —
+// transactional providers (Resend/SendGrid/Mailgun) are governed by their own plan limits.
 const MAX_SENDS_PER_DAY = 300;
 
 // The real security boundary — jobs' RLS only validates the row's own user_id, not
@@ -71,18 +74,21 @@ async function stageVerify(payload: SendBroadcastEmailPayload, userId: string): 
     return { stageData: {}, skip: true, enrollmentStepPatch: { status: "skipped" } };
   }
 
-  const cutoffIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const [{ count: mailCount }, { count: broadcastCount }] = await Promise.all([
-    db.from("mail_sends").select("id", { count: "exact", head: true }).eq("user_id", userId).gte("created_at", cutoffIso),
-    db
-      .from("broadcast_sends")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("status", "sent")
-      .gte("created_at", cutoffIso),
-  ]);
-  if ((mailCount ?? 0) + (broadcastCount ?? 0) >= MAX_SENDS_PER_DAY) {
-    return { stageData: {}, retry: true };
+  const { data: capped } = await db.rpc("is_capped_mail_sender", { p_user_id: userId });
+  if (capped !== false) {
+    const cutoffIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const [{ count: mailCount }, { count: broadcastCount }] = await Promise.all([
+      db.from("mail_sends").select("id", { count: "exact", head: true }).eq("user_id", userId).gte("created_at", cutoffIso),
+      db
+        .from("broadcast_sends")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("status", "sent")
+        .gte("created_at", cutoffIso),
+    ]);
+    if ((mailCount ?? 0) + (broadcastCount ?? 0) >= MAX_SENDS_PER_DAY) {
+      return { stageData: {}, retry: true };
+    }
   }
 
   return {

@@ -16,9 +16,16 @@ segment) covers Home, About, Pricing, FAQ, Contact, Terms, and Privacy, wrapped 
 authenticated app lives at `/dashboard`, `/connections`, `/domains`, `/contacts`, `/audit`,
 `/product/[id]`, `/billing` — `app/(app)/layout.tsx` is the paywall/auth gate (redirects to
 `/login` with no session, `/billing` without access), renders `components/Sidebar.tsx` (left nav:
-Dashboard/Connections/Domains/Contacts/Audit trail/Billing, active-link highlighting via
-`usePathname`, collapses to a horizontal icon bar below the `sm` breakpoint), and owns the
-`mx-auto max-w-7xl px-4 py-6` content wrapper for everything under it. `app/(app)/audit/page.tsx`
+Overview/Campaigns/Funnels/Connections/Domains/Contacts/Broadcast/Audit trail/Billing, active-link
+highlighting via `usePathname`; on desktop it's collapsible to an icon-only 64px rail — the choice
+persists in `localStorage` under `sidebar_collapsed`, applied one paint after mount since reading
+localStorage during SSR/hydration would mismatch; below the `sm` breakpoint it becomes a slim top
+bar with a hamburger that opens a slide-in drawer carrying the full labeled nav), and owns the
+`mx-auto max-w-7xl px-4 py-6` content wrapper for everything under it. One exception to that
+wrapper: `/funnels/[campaignId]`'s page-editing views (opt-in/variant/step) render as a
+`fixed inset-0 z-40` full-screen overlay above the app chrome — a focused editor with its own
+sticky top bar ("← Funnel map" back button + a Dashboard link) instead of competing with the
+sidebar; the funnel map view itself stays in normal chrome. `app/(app)/audit/page.tsx`
 (+ `components/AuditTrail.tsx`) is a unified, read-only log across `meta_posts`/`instagram_posts`/
 `tiktok_posts`/`youtube_posts`/`mail_sends` — every one of those tables already had owner-`select`
 RLS but no UI ever read them before this; the page fetches all five in parallel, joins
@@ -1227,11 +1234,17 @@ after this contact signed up", never a shared calendar date). Reuses the existin
   the primary gate, this covers the narrow race window between that check and the job running).
   `failJob()` mirrors terminal failure onto `broadcast_enrollment_steps.status='failed'`, the
   `ad_launches`/`campaign_creatives` convention.
-- **Rate cap is pooled across `mail_sends` + `broadcast_sends`** — same Gmail account, same real
-  ~500/day free-tier limit, same pooling idiom Phase I used for `generate_ad_image`+
-  `generate_creative_image`. 300/day is a nominal, revisit-before-scale figure, but unlike the
-  generation caps this one is protecting a real external rate limit (Gmail account
-  flagging/suspension), not just a runaway-loop backstop.
+- **Rate cap is pooled across `mail_sends` + `broadcast_sends`, and provider-aware** — it exists
+  to protect a personal mailbox from being flagged (Gmail's free tier is ~500/day; 300/day is the
+  nominal headroom figure). Since `0027_provider_aware_send_cap.sql`, the shared
+  `is_capped_mail_sender(user_id)` SQL function decides whether it applies: `true` for Gmail OAuth
+  (and for a generic SMTP connection pointed at a Gmail/Yahoo host — same personal-mailbox risk,
+  and the fail-safe default when the host is unknown), `false` for Resend/SendGrid/Mailgun and
+  non-personal SMTP, which are governed by their own plan limits instead. Both enforcement layers
+  consult it: `run_broadcast_sweep()`'s admission control (uncapped senders get an effectively
+  unlimited claim batch) and `lib/engine/broadcast.ts`'s defensive re-check (skipped entirely for
+  uncapped senders; an RPC error fails safe to capped). Verified live: gmail → capped,
+  resend → uncapped.
 - **`getValidMailAccessToken()`** (`lib/google/mailToken.ts`) is the Gmail refresh-or-fetch dance
   (2-minute-early threshold, store-new-then-delete-old Vault hygiene, `needs_reconnect` flip on
   failure), extracted out of `app/api/mail/send/route.ts` (which now calls it, behavior-preserving)
