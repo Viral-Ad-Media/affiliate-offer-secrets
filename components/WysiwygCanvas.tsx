@@ -27,6 +27,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   newBlockId,
   updateBlockContent,
+  updateBlockStyle,
   removeChildBlock,
   addChildBlock,
   findBlockLocation,
@@ -37,6 +38,8 @@ import {
   parseContainerKey,
   ALLOWED_ICON_NAMES,
   ELEMENT_BLOCK_TYPES,
+  styleToInlineCss,
+  STYLE_KEYS_BY_TYPE,
   type PageBlockTree,
   type SectionBlock,
   type RowBlock,
@@ -45,7 +48,33 @@ import {
   type LockedBlock,
   type FormInputBlock,
   type ContainerRef,
+  type Block,
+  type BlockStyle,
 } from "@/lib/engine/renderPages";
+import BlockStylePanel from "@/components/BlockStylePanel";
+
+// Converts the same trusted CSS string styleToInlineCss() produces for the real published page
+// into a React inline-style object, so the canvas preview reflects a block's own custom style —
+// not just what gets saved. Reusing styleToInlineCss (rather than re-deriving the per-key
+// clamping logic here) means the two can never drift: whatever the panel lets you set and the
+// server persists is exactly what both the real page AND this preview render.
+function cssStringToReactStyle(css: string): React.CSSProperties {
+  const style: Record<string, string> = {};
+  for (const rule of css.split(";")) {
+    const idx = rule.indexOf(":");
+    if (idx === -1) continue;
+    const prop = rule.slice(0, idx).trim();
+    const value = rule.slice(idx + 1).trim();
+    if (!prop || !value) continue;
+    style[prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = value;
+  }
+  return style as React.CSSProperties;
+}
+
+function blockInlineStyle(block: { type: string; style: BlockStyle }): React.CSSProperties {
+  const allowed = (STYLE_KEYS_BY_TYPE as Record<string, readonly (keyof BlockStyle)[]>)[block.type] ?? [];
+  return cssStringToReactStyle(styleToInlineCss(block.style, allowed));
+}
 
 type ElementBlockTypeLocal = (typeof ELEMENT_BLOCK_TYPES)[number];
 
@@ -125,7 +154,17 @@ function EditableText({
   );
 }
 
-function RootBlockWrapper({ id, children }: { id: string; children: React.ReactNode }) {
+function RootBlockWrapper({
+  id,
+  isSelected,
+  onSelect,
+  children,
+}: {
+  id: string;
+  isSelected?: boolean;
+  onSelect?: () => void;
+  children: React.ReactNode;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -136,7 +175,16 @@ function RootBlockWrapper({ id, children }: { id: string; children: React.ReactN
     <div
       ref={setNodeRef}
       style={style}
-      className="group relative rounded-md border border-transparent px-1 py-1 hover:border-dashed hover:border-emerald-300"
+      onClick={
+        onSelect &&
+        ((e) => {
+          e.stopPropagation();
+          onSelect();
+        })
+      }
+      className={`group relative rounded-md border px-1 py-1 hover:border-dashed hover:border-emerald-300 ${
+        isSelected ? "border-emerald-400" : "border-transparent"
+      }`}
     >
       <button
         type="button"
@@ -162,11 +210,15 @@ function NestedItemWrapper({
   id,
   onDelete,
   deleteTitle,
+  isSelected,
+  onSelect,
   children,
 }: {
   id: string;
   onDelete?: () => void;
   deleteTitle?: string;
+  isSelected?: boolean;
+  onSelect?: () => void;
   children: React.ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -175,7 +227,16 @@ function NestedItemWrapper({
     <div
       ref={setNodeRef}
       style={style}
-      className="group/nested relative mb-2 rounded-md border border-transparent px-1 py-0.5 hover:border-dashed hover:border-emerald-200"
+      onClick={
+        onSelect &&
+        ((e) => {
+          e.stopPropagation();
+          onSelect();
+        })
+      }
+      className={`group/nested relative mb-2 rounded-md border px-1 py-0.5 hover:border-dashed hover:border-emerald-200 ${
+        isSelected ? "border-emerald-400" : "border-transparent"
+      }`}
     >
       <div className="absolute -left-1 -top-1 z-10 flex gap-0.5 opacity-0 transition-opacity group-hover/nested:opacity-100">
         <button
@@ -190,7 +251,10 @@ function NestedItemWrapper({
         {onDelete && (
           <button
             type="button"
-            onClick={onDelete}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
             title={deleteTitle ?? "Delete"}
             className="flex h-5 w-5 items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-red-500"
           >
@@ -277,6 +341,8 @@ function ColumnEditor({
   renderElement,
   onDeleteElement,
   onAddElement,
+  selectedBlockId,
+  onSelectBlock,
 }: {
   col: ColumnBlock;
   rowId: string;
@@ -284,14 +350,26 @@ function ColumnEditor({
   renderElement: RenderElementFn;
   onDeleteElement: (containerId: string, elementId: string) => void;
   onAddElement: (ref: ContainerRef, type: ElementBlockTypeLocal) => void;
+  selectedBlockId: string | null;
+  onSelectBlock: (id: string) => void;
 }) {
   const ref: ContainerRef = { kind: "column", rowId, colIndex };
   const { setNodeRef } = useDroppable({ id: containerKey(ref) });
   return (
-    <div ref={setNodeRef} className="min-h-[2.5rem] flex-1 rounded-md border border-dashed border-transparent p-0.5 hover:border-gray-200">
+    <div
+      ref={setNodeRef}
+      className="min-h-[2.5rem] flex-1 rounded-md border border-dashed border-transparent p-0.5 hover:border-gray-200"
+      style={blockInlineStyle(col)}
+    >
       <SortableContext items={col.children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
         {col.children.map((el) => (
-          <NestedItemWrapper key={el.id} id={el.id} onDelete={() => onDeleteElement(col.id, el.id)}>
+          <NestedItemWrapper
+            key={el.id}
+            id={el.id}
+            onDelete={() => onDeleteElement(col.id, el.id)}
+            isSelected={selectedBlockId === el.id}
+            onSelect={() => onSelectBlock(el.id)}
+          >
             {renderElement(el, col.id)}
           </NestedItemWrapper>
         ))}
@@ -308,14 +386,18 @@ function RowEditor({
   renderElement,
   onDeleteElement,
   onAddElement,
+  selectedBlockId,
+  onSelectBlock,
 }: {
   row: RowBlock;
   renderElement: RenderElementFn;
   onDeleteElement: (containerId: string, elementId: string) => void;
   onAddElement: (ref: ContainerRef, type: ElementBlockTypeLocal) => void;
+  selectedBlockId: string | null;
+  onSelectBlock: (id: string) => void;
 }) {
   return (
-    <div className="flex gap-6">
+    <div className="flex gap-6" style={blockInlineStyle(row)}>
       {row.columns.map((col, colIndex) => (
         <ColumnEditor
           key={col.id}
@@ -325,6 +407,8 @@ function RowEditor({
           renderElement={renderElement}
           onDeleteElement={onDeleteElement}
           onAddElement={onAddElement}
+          selectedBlockId={selectedBlockId}
+          onSelectBlock={onSelectBlock}
         />
       ))}
     </div>
@@ -339,25 +423,49 @@ function SectionBody({
   onDeleteChild,
   onAddElement,
   onAddRow,
+  selectedBlockId,
+  onSelectBlock,
 }: {
   section: SectionBlock;
   renderElement: RenderElementFn;
   onDeleteChild: (containerId: string, childId: string) => void;
   onAddElement: (ref: ContainerRef, type: ElementBlockTypeLocal) => void;
   onAddRow: (sectionId: string, layout: RowBlock["layout"]) => void;
+  selectedBlockId: string | null;
+  onSelectBlock: (id: string) => void;
 }) {
   const ref: ContainerRef = { kind: "section", sectionId: section.id };
   const { setNodeRef } = useDroppable({ id: containerKey(ref) });
   return (
-    <div ref={setNodeRef}>
+    <div ref={setNodeRef} style={blockInlineStyle(section)}>
       <SortableContext items={section.children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
         {section.children.map((child) =>
           child.type === "row" ? (
-            <NestedItemWrapper key={child.id} id={child.id} onDelete={() => onDeleteChild(section.id, child.id)} deleteTitle="Delete row">
-              <RowEditor row={child} renderElement={renderElement} onDeleteElement={onDeleteChild} onAddElement={onAddElement} />
+            <NestedItemWrapper
+              key={child.id}
+              id={child.id}
+              onDelete={() => onDeleteChild(section.id, child.id)}
+              deleteTitle="Delete row"
+              isSelected={selectedBlockId === child.id}
+              onSelect={() => onSelectBlock(child.id)}
+            >
+              <RowEditor
+                row={child}
+                renderElement={renderElement}
+                onDeleteElement={onDeleteChild}
+                onAddElement={onAddElement}
+                selectedBlockId={selectedBlockId}
+                onSelectBlock={onSelectBlock}
+              />
             </NestedItemWrapper>
           ) : (
-            <NestedItemWrapper key={child.id} id={child.id} onDelete={() => onDeleteChild(section.id, child.id)}>
+            <NestedItemWrapper
+              key={child.id}
+              id={child.id}
+              onDelete={() => onDeleteChild(section.id, child.id)}
+              isSelected={selectedBlockId === child.id}
+              onSelect={() => onSelectBlock(child.id)}
+            >
               {renderElement(child, section.id)}
             </NestedItemWrapper>
           )
@@ -404,6 +512,16 @@ export default function WysiwygCanvas({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  // Phase O.4: which block the style panel is showing. Not persisted, not sent to the server —
+  // purely a client-side "what am I editing right now" pointer, resolved back to the live block
+  // object via findBlockLocation on every render (never stored stale) so it survives edits to
+  // OTHER blocks (a sibling's commit re-renders the tree, but the selected id still resolves).
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const selectedBlock: Block | null = selectedBlockId ? findBlockLocation(tree, selectedBlockId)?.block ?? null : null;
+
+  function updateStyle(blockId: string, patch: Record<string, unknown>) {
+    onChange(updateBlockStyle(tree, blockId, patch));
+  }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -478,6 +596,7 @@ export default function WysiwygCanvas({
             onCommit={(v) => commit(el.id, { text: v })}
             maxLength={200}
             className="mb-4 block text-[32px] font-bold leading-tight"
+            style={blockInlineStyle(el)}
           />
         );
       case "subheading":
@@ -488,9 +607,11 @@ export default function WysiwygCanvas({
             onCommit={(v) => commit(el.id, { text: v })}
             maxLength={200}
             className="mb-2 mt-8 block text-[22px] font-semibold"
+            style={blockInlineStyle(el)}
           />
         );
-      case "paragraph":
+      case "paragraph": {
+        const custom = blockInlineStyle(el);
         return (
           <EditableText
             as="p"
@@ -498,14 +619,20 @@ export default function WysiwygCanvas({
             onCommit={(v) => commit(el.id, { text: v })}
             maxLength={3000}
             multiline
-            style={el.style.fontSize ? undefined : { fontSize: 18, color: "#333" }}
+            style={Object.keys(custom).length > 0 ? custom : { fontSize: 18, color: "#333" }}
           />
         );
+      }
       case "image":
         return (
           <div className="group/img relative">
             {el.content.dataUrl ? (
-              <img src={el.content.dataUrl} alt={el.content.alt || productTitle} className="max-w-full rounded-xl" />
+              <img
+                src={el.content.dataUrl}
+                alt={el.content.alt || productTitle}
+                className="max-w-full rounded-xl"
+                style={blockInlineStyle(el)}
+              />
             ) : (
               <button
                 type="button"
@@ -553,7 +680,7 @@ export default function WysiwygCanvas({
       case "bullet_list":
         return (
           <div>
-            <ul style={{ paddingLeft: 20 }}>
+            <ul style={{ paddingLeft: 20, ...blockInlineStyle(el) }}>
               {el.content.items.map((item, i) => (
                 <li key={i} className="group/item relative pr-6">
                   <EditableText
@@ -588,7 +715,7 @@ export default function WysiwygCanvas({
         );
       case "icon_list":
         return (
-          <div>
+          <div style={blockInlineStyle(el)}>
             {el.content.items.map((item, i) => (
               <div key={i} className="group/item mb-2 flex items-center gap-2 pr-6">
                 <select
@@ -637,10 +764,10 @@ export default function WysiwygCanvas({
           </div>
         );
       case "divider":
-        return <hr className="my-4 border-t border-gray-200" />;
+        return <hr className="my-4 border-t border-gray-200" style={blockInlineStyle(el)} />;
       case "image_list":
         return (
-          <div>
+          <div style={blockInlineStyle(el)}>
             {el.content.items.map((item, i) => (
               <div key={i} className="group/item mb-3 flex items-center gap-3 pr-6">
                 {item.imageDataUrl ? (
@@ -689,6 +816,7 @@ export default function WysiwygCanvas({
               onCommit={(v) => commit(el.id, { text: v })}
               maxLength={60}
               className="inline-block rounded-lg bg-[#16a34a] px-6 py-3 text-[15px] font-semibold text-white"
+              style={blockInlineStyle(el)}
             />
             <input
               type="url"
@@ -701,7 +829,7 @@ export default function WysiwygCanvas({
         );
       case "faq_item":
         return (
-          <div className="mb-1 pr-2">
+          <div className="mb-1 pr-2" style={blockInlineStyle(el)}>
             <EditableText
               as="h3"
               value={el.content.question}
@@ -748,13 +876,16 @@ export default function WysiwygCanvas({
     switch (block.locked) {
       case "disclosure":
         return (
-          <p className="text-[11px] text-gray-400">
+          <p className="text-[11px] text-gray-400" style={blockInlineStyle(block)}>
             Affiliate disclosure — locked, always shown at the bottom of the page.
           </p>
         );
       case "lead_capture_form":
         return (
-          <div className="mx-auto max-w-[420px] rounded-xl border border-[#e5e5e5] bg-gray-50 p-6">
+          <div
+            className="mx-auto max-w-[420px] rounded-xl border border-[#e5e5e5] bg-gray-50 p-6"
+            style={blockInlineStyle(block)}
+          >
             <div className="mb-3 space-y-2">
               <div className="rounded-lg border border-gray-300 bg-white px-3.5 py-3 text-[13px] text-gray-400">First name (required, locked)</div>
               <div className="rounded-lg border border-gray-300 bg-white px-3.5 py-3 text-[13px] text-gray-400">Email address (required, locked)</div>
@@ -798,6 +929,7 @@ export default function WysiwygCanvas({
                 ctaClassName ??
                 "inline-block w-full rounded-lg bg-[#16a34a] px-8 py-4 text-[18px] font-semibold text-white hover:bg-[#15803d]"
               }
+              style={blockInlineStyle(block)}
             />
           </div>
         );
@@ -810,6 +942,7 @@ export default function WysiwygCanvas({
               onCommit={(v) => commit(block.id, { text: v })}
               maxLength={60}
               className="text-[13px] text-gray-500 underline"
+              style={blockInlineStyle(block)}
             />
           </p>
         );
@@ -846,9 +979,17 @@ export default function WysiwygCanvas({
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={tree.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
             {tree.blocks.map((b) => (
-              <RootBlockWrapper key={b.id} id={b.id}>
+              <RootBlockWrapper key={b.id} id={b.id} isSelected={selectedBlockId === b.id} onSelect={() => setSelectedBlockId(b.id)}>
                 {b.type === "section" ? (
-                  <SectionBody section={b} renderElement={renderElement} onDeleteChild={deleteChild} onAddElement={addElement} onAddRow={addRow} />
+                  <SectionBody
+                    section={b}
+                    renderElement={renderElement}
+                    onDeleteChild={deleteChild}
+                    onAddElement={addElement}
+                    onAddRow={addRow}
+                    selectedBlockId={selectedBlockId}
+                    onSelectBlock={setSelectedBlockId}
+                  />
                 ) : (
                   renderLockedBlock(b)
                 )}
@@ -857,6 +998,7 @@ export default function WysiwygCanvas({
           </SortableContext>
         </DndContext>
       </div>
+      <BlockStylePanel block={selectedBlock} onChange={updateStyle} onClose={() => setSelectedBlockId(null)} />
     </div>
   );
 }

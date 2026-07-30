@@ -1191,7 +1191,7 @@ after this contact signed up", never a shared calendar date). Reuses the existin
   abuse protection on the unsubscribe endpoint (same accepted v1 gap as `/api/public/leads`); no
   manual "send this step now" override or drag-and-drop step reordering.
 
-## Freeform block-based page builder (Phase O — in progress, sub-phase 3 of 5 landed)
+## Freeform block-based page builder (Phase O — in progress, sub-phase 4 of 5 landed)
 
 Replacing the fixed-field bridge/funnel-step content model (headline/lead/mechanism/benefits/
 proof/faq/cta) with a true Elementor-style block tree: sections containing rows/columns containing
@@ -1199,10 +1199,10 @@ elements (heading, subheading, paragraph, image, bullet list, icon list, divider
 button, FAQ item), each with full custom styling, plus a lead-capture form that accepts real
 user-added fields. This is a multi-week rebuild landing in five sub-phases (see
 `/Users/macbookpro/.claude/plans/binary-stirring-brooks.md`'s "Phase O" for the full design) —
-**sub-phases 1-3 have landed**: the schema/renderer (O.1), the validator + rewritten PATCH routes +
-a tree-aware top-level editor (O.2), and now nested drag-and-drop + a full element palette +
-Row/Column insertion (O.3). The style panel and real form-input backend wiring are still
-sub-phases 4-5, not yet built.
+**sub-phases 1-4 have landed**: the schema/renderer (O.1), the validator + rewritten PATCH routes +
+a tree-aware top-level editor (O.2), nested drag-and-drop + a full element palette +
+Row/Column insertion (O.3), and now the per-block style panel (O.4). Real form-input backend
+wiring is still sub-phase 5, not yet built.
 
 - **`lib/engine/blockTree.ts`** (new) defines the block-tree schema (`PageBlockTree`,
   `SectionBlock`/`RowBlock`/`ColumnBlock`/`ElementBlock`/`LockedBlock`/`FormInputBlock`) and
@@ -1387,10 +1387,64 @@ sub-phases 4-5, not yet built.
   element between two columns, drag an element out of a row entirely into its section, attempt to
   drag a locked block into a column (should refuse to nest), drag a whole Row to reposition
   relative to another block in its section.
-- **Not yet built** (sub-phases 4-5, see the plan doc): `components/BlockStylePanel.tsx`; the
-  `contacts.extra_fields` migration and real form-input backend wiring (the submit script already
-  collects fields generically per O.1, but `app/api/public/leads/route.ts` still ignores
-  `extra_fields`).
+### O.4: per-block style panel
+
+- **`STYLE_KEYS_BY_TYPE`** (new, `lib/engine/blockTree.ts`) is the single source of truth for
+  "which style keys actually do anything for this block type" — a `Record<BlockType,
+  readonly (keyof BlockStyle)[]>` built from the same `TEXT_STYLE_KEYS`/`BOX_STYLE_KEYS`/
+  `BUTTON_STYLE_KEYS`/`DIVIDER_STYLE_KEYS` arrays the renderer's own `styleAttr()` calls already
+  used (now exported instead of module-private; the two previously-duplicate `HEADING_STYLE_KEYS`/
+  `TEXT_STYLE_KEYS` consts — confirmed byte-identical — were consolidated into one). Both
+  `components/BlockStylePanel.tsx` and the renderer consume this exact table, so a control can
+  never appear in the panel unless setting it would actually change the published page.
+- **`components/BlockStylePanel.tsx`** (new) — `{block, onChange, onClose}`. Four control groups
+  (Typography/Background/Spacing/Border/Layout — only the ones relevant to `block.type` render),
+  built from three small primitives (`NumberField`, `ColorField`, plus inline align/font-weight/
+  font-family selects) that clamp client-side for UX only; `validatePageBlockTree.ts` on save is
+  unchanged and remains the real boundary. Renders `null` if the selected block's type has no
+  stylable keys at all (none currently do, but this keeps the component honest if one is ever
+  added). `STYLE_KEYS_BY_TYPE` deliberately has no `form_input` entry — form fields are never
+  independently selectable/stylable, they only ever render inside the lead-capture form's fixed
+  layout — so the `Record` type is `Exclude<BlockType, "form_input">`, making a missing case a
+  compile error rather than a silent gap.
+- **Selection lives inside `WysiwygCanvas.tsx` itself** (`selectedBlockId` state, resolved back to
+  the live block via `findBlockLocation` on every render — never a stale cached object, so it
+  survives edits to sibling blocks), not threaded through `PageEditor.tsx`/`FunnelStepEditor.tsx`
+  — same "the canvas is the one shared surface" discipline as everything else in this file.
+  Clicking any Section, Row, Element, or locked block selects it (a persistent emerald ring
+  replaces the hover-only dashed border) and opens the panel below the canvas. **Column selection
+  is a deliberate v1 scope cut** — Sections/Rows/Elements/locked blocks all already had a click
+  target from O.2/O.3's `RootBlockWrapper`/`NestedItemWrapper`; giving Columns their own would need
+  a third selection-and-stopPropagation shape for comparatively low value (a Row's own background/
+  padding controls already cover the common case). Click handling uses `stopPropagation()` at the
+  innermost matching wrapper so clicking a nested element selects *it*, not an ancestor Section —
+  standard "click the most specific thing under the cursor" behavior.
+- **A real, self-caught preview-fidelity bug, not a user report**: after wiring the panel in,
+  changing a value (e.g. font size) visibly did nothing in the canvas — confirmed via live testing
+  immediately after building the panel, before calling O.4 done. Root cause: `WysiwygCanvas.tsx`'s
+  render functions never applied a block's own `style` object to its editable preview element at
+  all (the pre-O.4 canvas only ever showed hardcoded Tailwind defaults) — the *data* was saving
+  correctly the whole time (confirmed via SQL), only the *live preview* silently ignored it. Fixed
+  by adding `blockInlineStyle(block)` (`WysiwygCanvas.tsx`) — reuses `styleToInlineCss()` (the
+  exact function that builds the real published page's `style="..."` attribute) and converts its
+  CSS-string output into a React style object via a small kebab-to-camelCase parser, so the two can
+  never independently drift — and applying it to every element/row/column/section/locked-block's
+  own preview node (10 element cases + `ColumnEditor`/`RowEditor`/`SectionBody` + all 4 locked
+  block renders). Confirmed live: setting a heading's font size and color now visibly updates the
+  canvas immediately, and both values round-trip correctly through Save & Republish into the real
+  `bridge_html`.
+- **Real end-to-end verification, live against TedsWoodworking**: selected the headline, set
+  `fontSize:52`/`color:#2563eb` via the panel (native-setter + `input` event dispatch, since a
+  plain `.value =` assignment doesn't trigger React's onChange), confirmed the canvas updated live,
+  saved, confirmed via SQL that both `page_copy` and the rendered `bridge_html` contained the new
+  style, then reverted to the exact original content and confirmed via SQL (`heading_style: {}`,
+  4 root blocks, 12 section children — matching pre-test). Separately selected the locked
+  `primary_cta` block and confirmed the panel correctly shows a *different* control set
+  (Typography/Background/Spacing/Border, no Layout — matching `BUTTON_STYLE_KEYS`, no `maxWidth`)
+  — proving `STYLE_KEYS_BY_TYPE` genuinely varies per type, not just for elements.
+- **Not yet built** (sub-phase 5, see the plan doc): the `contacts.extra_fields` migration and real
+  form-input backend wiring (the submit script already collects fields generically per O.1, but
+  `app/api/public/leads/route.ts` still ignores `extra_fields`).
 
 ## Dev
 

@@ -279,9 +279,11 @@ export type RenderCtx = {
   productTitle: string;
 };
 
-const HEADING_STYLE_KEYS = ["fontFamily", "fontSize", "fontWeight", "textAlign", "color", "lineHeight", "marginTop", "marginBottom"] as const;
-const TEXT_STYLE_KEYS = ["fontFamily", "fontSize", "fontWeight", "textAlign", "color", "lineHeight", "marginTop", "marginBottom"] as const;
-const BOX_STYLE_KEYS = [
+// Exported so components/BlockStylePanel.tsx (Phase O.4) can show exactly the controls that will
+// actually take effect for a given block type — a single source of truth shared with the render
+// call sites below, instead of the panel re-deriving (and risking drifting from) this mapping.
+export const TEXT_STYLE_KEYS = ["fontFamily", "fontSize", "fontWeight", "textAlign", "color", "lineHeight", "marginTop", "marginBottom"] as const;
+export const BOX_STYLE_KEYS = [
   "backgroundColor",
   "paddingTop",
   "paddingRight",
@@ -294,7 +296,7 @@ const BOX_STYLE_KEYS = [
   "borderRadius",
   "maxWidth",
 ] as const;
-const BUTTON_STYLE_KEYS = [
+export const BUTTON_STYLE_KEYS = [
   "fontFamily",
   "fontSize",
   "fontWeight",
@@ -310,14 +312,37 @@ const BUTTON_STYLE_KEYS = [
   "marginTop",
   "marginBottom",
 ] as const;
-const DIVIDER_STYLE_KEYS = ["borderColor", "borderWidth", "marginTop", "marginBottom"] as const;
+export const DIVIDER_STYLE_KEYS = ["borderColor", "borderWidth", "marginTop", "marginBottom"] as const;
+
+// form_input has no entry here — it's never independently selectable/stylable in the editor (it
+// only ever renders inside the lead-capture form's fixed layout), but every other BlockType needs
+// one so this Record stays exhaustive (a missing case is a compile error, not a silent gap).
+export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readonly (keyof BlockStyle)[]> = {
+  heading: TEXT_STYLE_KEYS,
+  subheading: TEXT_STYLE_KEYS,
+  paragraph: TEXT_STYLE_KEYS,
+  image: BOX_STYLE_KEYS,
+  bullet_list: TEXT_STYLE_KEYS,
+  icon_list: TEXT_STYLE_KEYS,
+  divider: DIVIDER_STYLE_KEYS,
+  image_list: TEXT_STYLE_KEYS,
+  button: BUTTON_STYLE_KEYS,
+  faq_item: TEXT_STYLE_KEYS,
+  column: BOX_STYLE_KEYS,
+  row: BOX_STYLE_KEYS,
+  section: BOX_STYLE_KEYS,
+  disclosure: TEXT_STYLE_KEYS,
+  lead_capture_form: BOX_STYLE_KEYS,
+  primary_cta: BUTTON_STYLE_KEYS,
+  decline_link: TEXT_STYLE_KEYS,
+};
 
 function renderElement(block: ElementBlock, ctx: RenderCtx): string {
   switch (block.type) {
     case "heading":
-      return `<h1${styleAttr(block.style, HEADING_STYLE_KEYS)}>${escapeHtml(block.content.text)}</h1>`;
+      return `<h1${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(block.content.text)}</h1>`;
     case "subheading":
-      return `<h2${styleAttr(block.style, HEADING_STYLE_KEYS)}>${escapeHtml(block.content.text)}</h2>`;
+      return `<h2${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(block.content.text)}</h2>`;
     case "paragraph":
       return `<p${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(block.content.text)}</p>`;
     case "image":
