@@ -5,6 +5,7 @@ import ConnectionsPanel from "@/components/ConnectionsPanel";
 import TikTokPanel from "@/components/TikTokPanel";
 import YouTubePanel from "@/components/YouTubePanel";
 import MailPanel from "@/components/MailPanel";
+import MailProvidersPanel, { type MailProvidersStatus } from "@/components/MailProvidersPanel";
 import NetworkConnectionsPanel from "@/components/NetworkConnectionsPanel";
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -25,11 +26,14 @@ export default async function ConnectionsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [metaStatus, tiktokStatus, youtubeStatus, mailStatus, networkRows] = await Promise.all([
+  const [metaStatus, tiktokStatus, youtubeStatus, mailStatus, mailProviders, networkRows] = await Promise.all([
     supabase.rpc("get_meta_connection_status").then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_tiktok_connection_status").then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_youtube_connection_status").then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_mail_connection_status").then((r) => r.data ?? { connected: false }),
+    supabase
+      .rpc("get_mail_provider_connections")
+      .then((r) => (r.data ?? { active_provider: "gmail", providers: [] }) as MailProvidersStatus),
     supabase
       .from("network_connections")
       .select("network, affiliate_id")
@@ -95,9 +99,10 @@ export default async function ConnectionsPage({
         <YouTubePanel status={youtubeStatus} />
       </div>
 
-      <div>
+      <div className="space-y-3">
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Email</h2>
         <MailPanel status={mailStatus} />
+        <MailProvidersPanel status={mailProviders} gmailConnected={!!mailStatus.connected} />
       </div>
     </main>
   );

@@ -21,8 +21,10 @@ export default function SendEmail({
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
+    // "Can this account send email right now, via whatever its active sender is" — Gmail or a
+    // connected Resend/SendGrid/Mailgun/SMTP provider (lib/mail/send.ts dispatches server-side).
     createClient()
-      .rpc("get_mail_connection_status")
+      .rpc("get_active_mail_sender")
       .then(({ data }: { data: any }) => {
         setConnected(!!data?.connected);
         setLoading(false);
@@ -36,7 +38,7 @@ export default function SendEmail({
   if (!connected) {
     return (
       <div className="rounded-lg border border-ink-700 bg-ink-800/50 p-4 text-sm text-zinc-400">
-        Connect Gmail in{" "}
+        Connect an email sender (Gmail, Resend, SendGrid, Mailgun, or SMTP) in{" "}
         <a href="/connections" className="text-emerald-400 underline">
           Connections
         </a>{" "}

@@ -1,7 +1,6 @@
 import { marked } from "marked";
 import { db } from "./core";
-import { sendGmailMessage } from "@/lib/google/client";
-import { getValidMailAccessToken } from "@/lib/google/mailToken";
+import { sendViaActiveSender, isSendFailure } from "@/lib/mail/send";
 import { renderUnsubscribeFooterHtml } from "./broadcastEmail";
 
 export const SEND_BROADCAST_EMAIL_STAGES = ["verify", "send"] as const;
@@ -101,22 +100,25 @@ async function stageVerify(payload: SendBroadcastEmailPayload, userId: string): 
 }
 
 async function stageSend(stageData: Record<string, unknown>, userId: string): Promise<BroadcastEmailStageOutput> {
-  const tokenResult = await getValidMailAccessToken(db, userId);
-  if (!tokenResult.ok) {
-    throw new Error(
-      tokenResult.reason === "not_connected" ? "Gmail is not connected" : "Gmail connection needs to be reconnected"
-    );
-  }
-
   const html =
     (marked.parse(stageData.body_md as string) as string) +
     renderUnsubscribeFooterHtml(stageData.unsub_token as string);
 
-  const sent = await sendGmailMessage(tokenResult.accessToken, {
+  // Dispatches via the account's active sender — Gmail (the default) or a connected
+  // Resend/SendGrid/Mailgun/SMTP provider (lib/mail/send.ts). A not-connected/needs-reconnect
+  // sender throws (normal retry-then-terminal-fail path), same as the Gmail-only era.
+  const result = await sendViaActiveSender(db, userId, {
     to: stageData.to as string,
     subject: stageData.subject as string,
     html,
   });
+  if (isSendFailure(result)) {
+    throw new Error(
+      result.reason === "not_connected"
+        ? "Email sender is not connected"
+        : "Email sender needs to be reconnected"
+    );
+  }
 
   await db.from("broadcast_sends").insert({
     user_id: userId,
@@ -127,7 +129,8 @@ async function stageSend(stageData: Record<string, unknown>, userId: string): Pr
     campaign_id: stageData.campaign_id ?? null,
     to_address: stageData.to,
     subject: stageData.subject,
-    message_id: sent.id,
+    message_id: result.messageId,
+    provider: result.provider,
     status: "sent",
   });
 

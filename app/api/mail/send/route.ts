@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendGmailMessage } from "@/lib/google/client";
-import { getValidMailAccessToken } from "@/lib/google/mailToken";
+import { sendViaActiveSender, isSendFailure } from "@/lib/mail/send";
 
 export const dynamic = "force-dynamic";
 
@@ -40,26 +39,27 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
 
-  const tokenResult = await getValidMailAccessToken(admin, user.id);
-  if (!tokenResult.ok) {
-    if (tokenResult.reason === "not_connected") {
-      return NextResponse.json({ error: "mail not connected" }, { status: 404 });
-    }
-    return NextResponse.json({ error: "mail connection needs to be reconnected" }, { status: 409 });
-  }
-
   try {
-    const sent = await sendGmailMessage(tokenResult.accessToken, { to, subject, html });
+    // Dispatches via the account's active sender — Gmail (the default) or a connected
+    // Resend/SendGrid/Mailgun/SMTP provider. Same 404/409 semantics as the Gmail-only era.
+    const result = await sendViaActiveSender(admin, user.id, { to, subject, html });
+    if (isSendFailure(result)) {
+      if (result.reason === "not_connected") {
+        return NextResponse.json({ error: "mail not connected" }, { status: 404 });
+      }
+      return NextResponse.json({ error: "mail connection needs to be reconnected" }, { status: 409 });
+    }
 
     await admin.from("mail_sends").insert({
       user_id: user.id,
       campaign_id: campaignId ?? null,
       to_address: to,
       subject,
-      message_id: sent.id,
+      message_id: result.messageId,
+      provider: result.provider,
     });
 
-    return NextResponse.json({ ok: true, message_id: sent.id });
+    return NextResponse.json({ ok: true, message_id: result.messageId });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? "Failed to send" }, { status: 502 });
   }

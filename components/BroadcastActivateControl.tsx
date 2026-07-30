@@ -25,8 +25,9 @@ export default function BroadcastActivateControl({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Gates on the account's active sender (Gmail or a connected provider), not Gmail alone.
     createClient()
-      .rpc("get_mail_connection_status")
+      .rpc("get_active_mail_sender")
       .then(({ data }: { data: any }) => setMailConnected(!!data?.connected));
   }, []);
 
@@ -96,7 +97,7 @@ export default function BroadcastActivateControl({
 
       {mailConnected === false && (
         <div className="mb-3 rounded-lg border border-ink-700 bg-ink-800/50 p-3 text-xs text-zinc-400">
-          Connect Gmail in{" "}
+          Connect an email sender (Gmail, Resend, SendGrid, Mailgun, or SMTP) in{" "}
           <a href="/connections" className="text-emerald-400 underline">
             Connections
           </a>{" "}

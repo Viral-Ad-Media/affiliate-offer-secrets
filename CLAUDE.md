@@ -711,6 +711,62 @@ Meta-named ones in `0007_meta_secret_helper.sql` — those stay untouched, zero 
   sufficient for testing, same caveat as Meta's Development Mode; `gmail.send` specifically is a
   "restricted" scope that needs Google's security assessment before a public rollout.
 
+## Mail providers (Resend / SendGrid / Mailgun / generic SMTP)
+
+Tenants can send email through a transactional provider instead of Gmail. `mail_provider_connections`
+(`supabase/migrations/0026_mail_providers.sql`) holds one row per (user, provider ∈ resend/
+sendgrid/mailgun/smtp); the single credential per row (API key, or the SMTP password) lives in
+Vault via the existing generic `store/get/delete_oauth_secret` RPCs — same per-row Vault +
+default-deny-RLS + sanitized-read-RPC (`get_mail_provider_connections()`) pattern as every OAuth
+connector. Gmail's own OAuth connection (`mail_connections`) is untouched.
+
+- **Exactly one active sender per account** (`profiles.active_mail_provider`, default `'gmail'` so
+  nothing changed for existing users; changed only via the `set_active_mail_provider()` RPC, which
+  refuses to point at a provider that isn't actually connected — no general profiles update policy
+  exists, per the 0002_trial.sql precedent). **Every send goes through
+  `sendViaActiveSender()` (`lib/mail/send.ts`)** — both `app/api/mail/send/route.ts` (one-off
+  SendEmail) and `lib/engine/broadcast.ts`'s send stage dispatch through it, so "which provider
+  sends" is decided in exactly one place. `mail_sends`/`broadcast_sends` gained a `provider`
+  column (null = legacy Gmail rows). `SendEmail.tsx`/`BroadcastActivateControl.tsx` gate on the
+  new `get_active_mail_sender()` RPC ("can this account send right now, via whatever's active")
+  instead of the Gmail-specific status RPC.
+- **Credentials are live-verified at connect time, before anything is stored**
+  (`app/api/mail-providers/route.ts` POST): Resend `GET /domains`, SendGrid `GET /v3/scopes`,
+  Mailgun `GET /v3/domains/{domain}` (basic `api:key` auth, US/EU region-aware base URL), SMTP via
+  a real `nodemailer` `verify()` handshake — a bad key is a clear 400 at connect, never a mystery
+  failure on the first real send. All three HTTP APIs' endpoint/auth shapes were live-verified
+  (401 + documented error JSON against each real endpoint) before the client code was written, per
+  the standing external-integration rule. Verified end-to-end that a rejected credential stores
+  nothing: no row, no orphaned Vault secret. Re-connecting replaces the credential with the same
+  store-new-then-delete-old Vault hygiene as `lib/google/mailToken.ts`. **Port 25 is rejected up
+  front** (Vercel blocks outbound 25) with a clear "use 465/587" message instead of a timeout.
+- **Auth-shaped send failures degrade, transient ones throw**: `MailProviderError.isAuthError`
+  (revoked key, rejected SMTP login — SMTP 535/534/530 codes) flips the connection row to
+  `status='error'` so the UI shows "needs reconnect", mirroring Gmail's `needs_reconnect`
+  degradation; anything else propagates to the caller's normal retry semantics (Broadcast's
+  attempts cap, the send route's 502).
+- **The from address is tenant-supplied and must be provider-verified** (a verified domain/sender)
+  — stated in the UI; the provider itself rejects unverified senders, this app doesn't try to
+  pre-validate domain ownership.
+- **Rate cap unchanged**: the pooled 300/day cap (`run_broadcast_sweep` + `lib/engine/broadcast.ts`)
+  still applies regardless of provider. It exists to protect Gmail specifically; per-provider caps
+  (Resend/SendGrid/Mailgun tiers all differ) are an explicit deferred follow-up, not silently
+  handled.
+- **UI**: `components/MailProvidersPanel.tsx` on the Connections page's Email section, under the
+  Gmail panel — provider tabs (existing shadcn Tabs) with per-provider connect forms, and an
+  "Active sender" picker built on `components/ui/radio-group-card.tsx` (from 21st.dev,
+  `@ruixen.ui/radio-group-card` — third 21st.dev-sourced component, fetched via the MCP connector).
+  `components/ui/input.tsx`/`label.tsx` are standard shadcn primitives written directly (the
+  21st.dev fetch API hit its 2/day limit — same documented fallback as the Tabs commit).
+  Unconnected providers' cards are disabled; Gmail stays pickable only when its OAuth connection
+  exists.
+- **Not live-verified: an actual delivered send through each provider** — that needs a real API
+  key/SMTP account, same caveat shape as Meta video ads. What is verified live: all three HTTP
+  endpoint shapes, the full connect-flow rejection paths (bad Resend key against Resend's real
+  API, missing from-address, port 25), advisors (same intentional shapes as every prior Vault
+  table/authenticated RPC), and that failed connects store nothing.
+- **New npm deps**: `nodemailer` (+ types). No new env vars — credentials are per-tenant.
+
 ## AI image + video generation, real TikTok/YouTube/Reels posting
 
 Ad creative images (Facebook/Instagram ads only — the bridge page and Instagram photo posts
