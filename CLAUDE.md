@@ -1191,18 +1191,19 @@ after this contact signed up", never a shared calendar date). Reuses the existin
   abuse protection on the unsubscribe endpoint (same accepted v1 gap as `/api/public/leads`); no
   manual "send this step now" override or drag-and-drop step reordering.
 
-## Freeform block-based page builder (Phase O — in progress, sub-phase 4 of 5 landed)
+## Freeform block-based page builder (Phase O — complete, all 5 sub-phases landed)
 
-Replacing the fixed-field bridge/funnel-step content model (headline/lead/mechanism/benefits/
+Replaces the fixed-field bridge/funnel-step content model (headline/lead/mechanism/benefits/
 proof/faq/cta) with a true Elementor-style block tree: sections containing rows/columns containing
 elements (heading, subheading, paragraph, image, bullet list, icon list, divider, image list,
 button, FAQ item), each with full custom styling, plus a lead-capture form that accepts real
-user-added fields. This is a multi-week rebuild landing in five sub-phases (see
+user-added fields. This was a multi-week rebuild that landed in five sub-phases (see
 `/Users/macbookpro/.claude/plans/binary-stirring-brooks.md`'s "Phase O" for the full design) —
-**sub-phases 1-4 have landed**: the schema/renderer (O.1), the validator + rewritten PATCH routes +
+the schema/renderer (O.1), the validator + rewritten PATCH routes +
 a tree-aware top-level editor (O.2), nested drag-and-drop + a full element palette +
-Row/Column insertion (O.3), and now the per-block style panel (O.4). Real form-input backend
-wiring is still sub-phase 5, not yet built.
+Row/Column insertion (O.3), the per-block style panel (O.4), and now real form-input backend
+wiring (O.5) — dragging a `form_input` block into the lead-capture form produces a genuinely
+saved, exportable field, not a decorative one.
 
 - **`lib/engine/blockTree.ts`** (new) defines the block-tree schema (`PageBlockTree`,
   `SectionBlock`/`RowBlock`/`ColumnBlock`/`ElementBlock`/`LockedBlock`/`FormInputBlock`) and
@@ -1442,9 +1443,55 @@ wiring is still sub-phase 5, not yet built.
   `primary_cta` block and confirmed the panel correctly shows a *different* control set
   (Typography/Background/Spacing/Border, no Layout — matching `BUTTON_STYLE_KEYS`, no `maxWidth`)
   — proving `STYLE_KEYS_BY_TYPE` genuinely varies per type, not just for elements.
-- **Not yet built** (sub-phase 5, see the plan doc): the `contacts.extra_fields` migration and real
-  form-input backend wiring (the submit script already collects fields generically per O.1, but
-  `app/api/public/leads/route.ts` still ignores `extra_fields`).
+### O.5: real form-input backend wiring
+
+- **`contacts.extra_fields jsonb not null default '{}'::jsonb`** (`supabase/migrations/
+  0025_contacts_extra_fields.sql`) — no `CHECK` constraint, same 100%-app-layer-enforced shape as
+  `page_copy`/`stage_data`/`fb_ad_angles`: the set of legitimate keys is dynamic (whatever a
+  tenant's *current* `lead_capture_form` block happens to contain) and is validated at write time,
+  not by the database.
+- **`app/api/public/leads/route.ts` is the real security boundary here, same as everywhere else in
+  this app** — the client already sends `payload.extra_fields` as `{[fieldKey]: value}` (the O.1
+  submit script's generic `querySelectorAll('[name]')` collection was built for exactly this, and
+  needed zero changes). The route re-fetches the campaign's **current** `page_copy` (or, if a
+  sticky `bridge_variants` cookie resolved to a real non-control variant, that variant's own
+  `page_copy` — a variant's `page_copy` is `NULL` by construction for the control row per the
+  `bridge_variants_control_no_content` check constraint, so falling back to the campaign's tree in
+  that case is correct, not a gap), normalizes it, and calls `extractLeadFormFields(tree)`
+  (`lib/engine/validatePageBlockTree.ts`, exported since O.2 for exactly this use) to get the set
+  of `fieldKey`s that are legitimate *right now*. A submitted key not in that set is silently
+  dropped — never a 400, matching this route's established "never block a real conversion over one
+  bad datum" philosophy (same as the burst/daily rate caps). This closes the obvious spam-key
+  vector: a forged `extra_fields` key can never land in the database, and a field the tenant
+  removed from their editor moments ago is never trusted just because it was live a minute earlier.
+- **Two more soft clamps, not hard rejects**: each value is capped at 500 chars (mirrors
+  `validatePageBlockTree.ts`'s own text-length clamping precedent) and, for a field whose
+  `fieldType` is `"email"`, sub-validated with the existing `isValidEmail()` — an invalid value is
+  dropped, not rejected. `MAX_EXTRA_FIELDS = 10` caps the total, mirroring
+  `validatePageBlockTree.ts`'s own `MAX_FORM_CHILDREN = 10` (a form can never legitimately have
+  more fields to begin with).
+- **`lib/shared.ts`**: `Contact.extra_fields: Record<string, string>` — threaded through the two
+  other read sites that already select from `contacts` (`app/(app)/contacts/page.tsx`,
+  `app/(app)/broadcast/[id]/page.tsx`'s manual-audience contact picker), both now selecting the
+  new column instead of leaving it an unused `{}`.
+- **`components/ContactsTable.tsx`**: a flattened `"key: value; key: value"` "Extra" column in
+  both the on-screen table (truncated with a `title` tooltip for the full text) and the CSV export
+  — deliberately no dynamic per-field columns, since the field set varies per campaign/variant and
+  changes over time as a tenant edits their form; this was the plan's own stated v1 scope cut, not
+  an oversight.
+- **Real end-to-end verification, live against TedsWoodworking**: added two real `form_input`
+  blocks to the lead-capture form via a direct PATCH (`phone_o5_test`, type `tel`; and
+  `alt_email_o5_test`, type `email`), confirmed both rendered into the real `bridge_html` with
+  correct `name`/`type` attributes, then POSTed to `/api/public/leads` twice — once with the
+  legitimate `phone_o5_test` key alongside a forged `spam_key_not_real` key (confirmed via SQL:
+  only `phone_o5_test` was stored), once with `phone_o5_test` alongside an invalid value for the
+  `email`-typed `alt_email_o5_test` field (confirmed via SQL: the invalid email value was dropped,
+  the valid phone value kept). Cleaned up both test contacts and reverted the campaign's
+  `page_copy` to its exact original content, confirmed via SQL (4 root blocks, 12 section
+  children, empty form-field array, zero leftover contacts).
+
+This completes **Phase O** — all five sub-phases (schema/renderer, validator + editor, nested
+drag-and-drop + palette, style panel, real form backend) have landed.
 
 ## Dev
 

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidEmail, clampName } from "@/lib/validate";
 import { readStickyVariantId } from "@/lib/bridgeVariants";
+import { normalizePageCopy, type PageBlockTree } from "@/lib/engine/renderPages";
+import { extractLeadFormFields } from "@/lib/engine/validatePageBlockTree";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +16,37 @@ export const dynamic = "force-dynamic";
 const BURST_WINDOW_MS = 10 * 60 * 1000;
 const MAX_LEADS_PER_CAMPAIGN_BURST = 20;
 const MAX_LEADS_PER_CAMPAIGN_PER_DAY = 300;
+
+// Phase O.5: caps for a lead-capture form's user-added fields — mirrors validatePageBlockTree.ts's
+// own MAX_FORM_CHILDREN=10 (a form can never legitimately have more than 10 extra fields to begin
+// with) and MAX_TEXT_MEDIUM-adjacent 500 char cap for a single submitted value.
+const MAX_EXTRA_FIELDS = 10;
+const MAX_EXTRA_FIELD_VALUE_CHARS = 500;
+
+// Filters a submitted extra_fields object down to only the keys that are CURRENTLY real fields on
+// this exact form (per extractLeadFormFields(tree)) — a key that isn't recognized is silently
+// dropped, never a 400: this route's whole philosophy is "never block a real conversion over one
+// bad datum" (see the burst/daily caps above, which silently no-op rather than error). A field
+// whose fieldType is 'email' gets sub-validated with the same isValidEmail() the primary email
+// field uses; an invalid value there is dropped too, not rejected outright.
+function filterExtraFields(raw: unknown, tree: PageBlockTree): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const legitFields = extractLeadFormFields(tree);
+  if (legitFields.length === 0) return {};
+  const fieldTypeByKey = new Map(legitFields.map((f) => [f.fieldKey, f.fieldType]));
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (Object.keys(out).length >= MAX_EXTRA_FIELDS) break;
+    const fieldType = fieldTypeByKey.get(key);
+    if (!fieldType) continue; // not a real, currently-live field on this form — drop silently
+    if (typeof value !== "string") continue;
+    const clamped = value.slice(0, MAX_EXTRA_FIELD_VALUE_CHARS).trim();
+    if (!clamped) continue;
+    if (fieldType === "email" && !isValidEmail(clamped)) continue;
+    out[key] = clamped;
+  }
+  return out;
+}
 
 export async function POST(req: Request) {
   let body: Record<string, unknown>;
@@ -45,7 +78,7 @@ export async function POST(req: Request) {
   // here would reopen that oracle via a new verb.
   const { data: campaign } = await admin
     .from("campaigns")
-    .select("id, user_id")
+    .select("id, user_id, page_copy")
     .eq("id", campaignId)
     .eq("status", "ready")
     .maybeSingle();
@@ -85,16 +118,28 @@ export async function POST(req: Request) {
   // discipline as everywhere else in this codebase — a forged/foreign cookie value just falls
   // back to null, identical to a non-split-tested campaign's leads today.
   let bridgeVariantId: string | null = null;
+  let variantPageCopy: unknown = null;
   const stickyId = readStickyVariantId(req, campaignId);
   if (stickyId) {
     const { data: variant } = await admin
       .from("bridge_variants")
-      .select("id")
+      .select("id, page_copy")
       .eq("id", stickyId)
       .eq("campaign_id", campaignId)
       .maybeSingle();
     bridgeVariantId = variant?.id ?? null;
+    variantPageCopy = variant?.page_copy ?? null;
   }
+
+  // A real (non-control) variant's own page_copy is the CURRENT form this visitor actually saw
+  // and submitted (servePublicCampaignPage serves variant.bridge_html, not the campaign's, once a
+  // variant is assigned) — control rows always have page_copy = null by construction (see the
+  // bridge_variants_control_no_content check constraint), so falling back to the campaign's own
+  // tree there is correct, not a bug. Re-derived fresh on every submission (never cached) so a
+  // field the tenant just removed from the editor is never trusted, even if it was live moments
+  // ago — see extractLeadFormFields()'s own doc comment for the same principle.
+  const tree = normalizePageCopy(variantPageCopy ?? campaign.page_copy, null);
+  const extraFields = filterExtraFields(body.extra_fields, tree);
 
   await admin
     .from("contacts")
@@ -105,6 +150,7 @@ export async function POST(req: Request) {
         bridge_variant_id: bridgeVariantId,
         first_name: firstName || null,
         email,
+        extra_fields: extraFields,
         ip_address: ipAddress,
         user_agent: userAgent,
       },

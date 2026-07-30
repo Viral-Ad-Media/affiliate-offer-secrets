@@ -11,12 +11,22 @@ function csvField(value: string): string {
   return value;
 }
 
+// Flattens a lead's user-added form fields (Phase O.5) into one "key: value; key: value" string —
+// deliberate v1 scope cut, matching the plan's own call: no dynamic per-field columns, since the
+// field set varies per campaign/variant and even changes over time as a tenant edits their form.
+function flattenExtraFields(extraFields: Record<string, string>): string {
+  return Object.entries(extraFields)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join("; ");
+}
+
 function exportCsv(contacts: Contact[]) {
-  const header = ["First name", "Email", "Campaign", "Captured at"];
+  const header = ["First name", "Email", "Campaign", "Extra fields", "Captured at"];
   const rows = contacts.map((c) => [
     csvField(c.first_name ?? ""),
     csvField(c.email),
     csvField(c.campaign_title ?? ""),
+    csvField(flattenExtraFields(c.extra_fields)),
     csvField(c.created_at),
   ]);
   const csv = [header.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -70,6 +80,7 @@ export default function ContactsTable({ contacts }: { contacts: Contact[] }) {
                 <th className="px-2 py-2">Name</th>
                 <th className="px-2 py-2">Email</th>
                 <th className="px-2 py-2">Campaign</th>
+                <th className="px-2 py-2">Extra</th>
                 <th className="px-4 py-2" />
               </tr>
             </thead>
@@ -87,6 +98,9 @@ export default function ContactsTable({ contacts }: { contacts: Contact[] }) {
                   <td className="px-2 py-2 text-zinc-300">{c.first_name || "—"}</td>
                   <td className="px-2 py-2 text-zinc-300">{c.email}</td>
                   <td className="px-2 py-2 text-zinc-400">{c.campaign_title ?? "—"}</td>
+                  <td className="max-w-[16rem] truncate px-2 py-2 text-xs text-zinc-500" title={flattenExtraFields(c.extra_fields)}>
+                    {Object.keys(c.extra_fields).length > 0 ? flattenExtraFields(c.extra_fields) : "—"}
+                  </td>
                   <td className="px-4 py-2 text-right">
                     <button
                       onClick={() => copyEmail(c.id, c.email)}

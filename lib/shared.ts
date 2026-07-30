@@ -188,6 +188,10 @@ export type Contact = {
   campaign_title: string | null;
   first_name: string | null;
   email: string;
+  // Values from any user-added form_input blocks (Phase O.5) in the lead-capture form at
+  // submission time, keyed by the block's stable fieldKey. Empty object for every lead captured
+  // before this shipped, and for any form that never had extra fields to begin with.
+  extra_fields: Record<string, string>;
   created_at: string;
 };
 

@@ -15,7 +15,7 @@ export default async function ContactsPage() {
   const [{ data: rows }, { data: campaigns }] = await Promise.all([
     supabase
       .from("contacts")
-      .select("id, campaign_id, first_name, email, created_at")
+      .select("id, campaign_id, first_name, email, extra_fields, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(MAX_CONTACTS),
@@ -34,6 +34,7 @@ export default async function ContactsPage() {
     campaign_title: r.campaign_id ? (titleByCampaign.get(r.campaign_id) ?? null) : null,
     first_name: r.first_name,
     email: r.email,
+    extra_fields: (r.extra_fields as Record<string, string>) ?? {},
     created_at: r.created_at,
   }));
 

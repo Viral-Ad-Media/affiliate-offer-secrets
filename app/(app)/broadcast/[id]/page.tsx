@@ -34,7 +34,7 @@ export default function BroadcastSequencePage({ params }: { params: { id: string
           .order("step_index", { ascending: true }),
         supabase
           .from("contacts")
-          .select("id, campaign_id, first_name, email, created_at")
+          .select("id, campaign_id, first_name, email, extra_fields, created_at")
           .order("created_at", { ascending: false })
           .limit(1000),
         supabase.from("campaigns").select("id, products(product_title)"),
@@ -62,6 +62,7 @@ export default function BroadcastSequencePage({ params }: { params: { id: string
         campaign_title: r.campaign_id ? (titleByCampaign.get(r.campaign_id) ?? null) : null,
         first_name: r.first_name,
         email: r.email,
+        extra_fields: r.extra_fields ?? {},
         created_at: r.created_at,
       }))
     );
