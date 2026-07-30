@@ -1532,7 +1532,8 @@ saved, exportable field, not a decorative one.
   survives edits to sibling blocks), not threaded through `PageEditor.tsx`/`FunnelStepEditor.tsx`
   — same "the canvas is the one shared surface" discipline as everything else in this file.
   Clicking any Section, Row, Element, or locked block selects it (a persistent emerald ring
-  replaces the hover-only dashed border) and opens the panel below the canvas. **Column selection
+  replaces the hover-only dashed border) and opens the panel (docked to the canvas's right side
+  on lg+ since the editor-chrome rework below; originally below the canvas). **Column selection
   is a deliberate v1 scope cut** — Sections/Rows/Elements/locked blocks all already had a click
   target from O.2/O.3's `RootBlockWrapper`/`NestedItemWrapper`; giving Columns their own would need
   a third selection-and-stopPropagation shape for comparatively low value (a Row's own background/
@@ -1611,6 +1612,40 @@ saved, exportable field, not a decorative one.
 
 This completes **Phase O** — all five sub-phases (schema/renderer, validator + editor, nested
 drag-and-drop + palette, style panel, real form backend) have landed.
+
+### Editor chrome rework: palette rail + side-docked settings (post-Phase-O)
+
+User-requested Elementor-style chrome pass over `components/WysiwygCanvas.tsx` — no data-layer,
+validator, or renderer changes; purely how the existing capabilities are surfaced:
+
+- **Three-zone layout on lg+** (final return of `WysiwygCanvas`): `EditorPalette` rail (left) |
+  device toggle + canvas (center, `min-w-0 flex-1`) | `BlockStylePanel` dock (right, `lg:w-80
+  lg:shrink-0 lg:sticky lg:top-16`, own `overflow-y-auto` capped at `calc(100vh-5rem)`). Below
+  `lg` the palette hides entirely (the inline `AddBlockMenu` popovers still cover insertion) and
+  the style panel falls back to rendering under the canvas — `BlockStylePanel`'s outer `mt-4` is
+  cancelled with `lg:mt-0` and its groups grid became a single-column stack (`grid gap-4`, group
+  headers' `sm:col-span-2` are inert in a 1-col grid) so it reads correctly in both positions.
+- **`EditorPalette`** (module-scope component in `WysiwygCanvas.tsx`, same stable-identity
+  discipline as every other wrapper there): collapsible `w-52`↔`w-12` rail (chevron button,
+  `title="Collapse blocks"`/`"Expand blocks"`, state persisted in
+  `localStorage.editor_palette_collapsed`, applied post-mount to avoid hydration mismatch — same
+  pattern as the app sidebar's `sidebar_collapsed`), `sticky top-16`, `hidden lg:flex`. Contents:
+  ROWS (1/2/3-col insert buttons) + ELEMENTS (all 10 `ELEMENT_PALETTE` entries). Click-to-insert
+  targeting via `paletteTargetRef()`: the selected Section, else the container holding the
+  selected block, else the **last** Section; rows only ever insert into Sections (falling back to
+  the last Section when the selection is inside a Column).
+- **Hover-revealed controls at the block's side, never below**: `RootBlockWrapper`'s top-right
+  hover cluster gained a `Settings2` button (`title="Block settings"`, calls `onSelect`) beside
+  the drag grip; `NestedItemWrapper`'s left-edge cluster is now grip + `Settings2` + delete. All
+  stay `opacity-0 group-hover:opacity-100` — the settings icon is not always visible, per the
+  request.
+- **Verified live** (TedsWoodworking opt-in editor, desktop viewport): palette renders and
+  collapses to icon-only rail with state persisted; clicking a block's side `Settings2` opens the
+  style panel docked right (canvas narrows, panel is a readable single column); palette "Heading"
+  click inserted a `New heading` into the section holding the selection (then deleted via the
+  hover delete button — nothing saved, server data untouched); closing the panel restores the
+  full-width canvas. Same standing caveat as O.3: real drag gestures can't be simulated by this
+  session's tooling.
 
 ## Dev
 

@@ -143,7 +143,7 @@ export default function BlockStylePanel({ block, onChange, onClose }: BlockStyle
   if (!showTypography && !showBackground && !showSpacing && !showBorder && !showLayout) return null;
 
   return (
-    <div className="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4">
+    <div className="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4 lg:mt-0">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
           Style — {BLOCK_TYPE_LABELS[block.type] ?? block.type}
@@ -153,7 +153,10 @@ export default function BlockStylePanel({ block, onChange, onClose }: BlockStyle
         </button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Single-column stack: this panel docks in a ~320px side rail on lg+ (WysiwygCanvas's
+          three-zone layout); each group's own internal 2-col grid fits that width. Below lg it
+          renders under the canvas where a single column also reads fine. */}
+      <div className="grid gap-4">
         {showTypography && (
           <div className="space-y-2 sm:col-span-2">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Typography</div>

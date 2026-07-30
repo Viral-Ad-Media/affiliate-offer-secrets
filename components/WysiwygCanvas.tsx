@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   GripVertical,
   ImagePlus,
@@ -20,6 +20,10 @@ import {
   Images,
   MousePointerClick,
   HelpCircle,
+  Settings2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Columns2,
 } from "lucide-react";
 import { DndContext, closestCenter, useDroppable, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
@@ -186,15 +190,31 @@ function RootBlockWrapper({
         isSelected ? "border-emerald-400" : "border-transparent"
       }`}
     >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        title="Drag to reorder"
-        className="absolute -top-3 right-1 z-10 hidden h-6 w-6 cursor-grab items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-emerald-600 active:cursor-grabbing group-hover:flex"
-      >
-        <GripVertical className="h-3.5 w-3.5" />
-      </button>
+      {/* Hover-revealed controls, at the block's side (top-right edge) — never below it. */}
+      <div className="absolute -top-3 right-1 z-10 hidden gap-0.5 group-hover:flex">
+        {onSelect && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect();
+            }}
+            title="Block settings"
+            className="flex h-6 w-6 items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-emerald-600"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          title="Drag to reorder"
+          className="flex h-6 w-6 cursor-grab items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-emerald-600 active:cursor-grabbing"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
+      </div>
       {children}
     </div>
   );
@@ -238,6 +258,7 @@ function NestedItemWrapper({
         isSelected ? "border-emerald-400" : "border-transparent"
       }`}
     >
+      {/* Hover-revealed controls at the block's side (top-left edge) — never below it. */}
       <div className="absolute -left-1 -top-1 z-10 flex gap-0.5 opacity-0 transition-opacity group-hover/nested:opacity-100">
         <button
           type="button"
@@ -248,6 +269,19 @@ function NestedItemWrapper({
         >
           <GripVertical className="h-3 w-3" />
         </button>
+        {onSelect && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect();
+            }}
+            title="Block settings"
+            className="flex h-5 w-5 items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-emerald-600"
+          >
+            <Settings2 className="h-3 w-3" />
+          </button>
+        )}
         {onDelete && (
           <button
             type="button"
@@ -326,6 +360,88 @@ function AddBlockMenu({ onPick, onPickRow }: { onPick: (type: ElementBlockTypeLo
         </>
       )}
     </div>
+  );
+}
+
+// The editor's own collapsible left rail of reusable block elements — the Elementor-style
+// counterpart to the inline "+ Add block" popovers (which stay, for position-specific inserts).
+// Clicking a palette item appends to wherever the current selection points (the selected
+// section/column, or the container holding the selected element), falling back to the last
+// section. Collapse state persists in localStorage, same pattern as the app sidebar.
+function EditorPalette({
+  onPick,
+  onPickRow,
+}: {
+  onPick: (type: ElementBlockTypeLocal) => void;
+  onPickRow: (layout: RowBlock["layout"]) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(localStorage.getItem("editor_palette_collapsed") === "1");
+  }, []);
+
+  function toggle() {
+    setCollapsed((c) => {
+      localStorage.setItem("editor_palette_collapsed", c ? "0" : "1");
+      return !c;
+    });
+  }
+
+  return (
+    <aside
+      className={`sticky top-16 hidden max-h-[calc(100vh-5rem)] shrink-0 flex-col overflow-y-auto rounded-lg border border-ink-700 bg-ink-900/60 p-2 lg:flex ${
+        collapsed ? "w-12" : "w-52"
+      } transition-[width] duration-200`}
+    >
+      <div className={`mb-1 flex items-center ${collapsed ? "justify-center" : "justify-between px-1"}`}>
+        {!collapsed && <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Blocks</span>}
+        <button
+          onClick={toggle}
+          title={collapsed ? "Expand blocks" : "Collapse blocks"}
+          className="rounded p-1 text-zinc-500 hover:bg-ink-800 hover:text-zinc-200"
+        >
+          {collapsed ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
+        </button>
+      </div>
+
+      {!collapsed && <div className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Rows</div>}
+      <div className={collapsed ? "flex flex-col gap-0.5" : "mb-2 flex gap-1 px-1"}>
+        {(["1col", "2col", "3col"] as const).map((layout) => (
+          <button
+            key={layout}
+            type="button"
+            onClick={() => onPickRow(layout)}
+            title={`Insert ${layout === "1col" ? "1-column" : layout === "2col" ? "2-column" : "3-column"} row`}
+            className={
+              collapsed
+                ? "flex items-center justify-center rounded p-1.5 text-zinc-400 hover:bg-ink-800 hover:text-emerald-300"
+                : "flex-1 rounded border border-ink-600 py-1 text-[11px] text-zinc-400 hover:border-emerald-500 hover:text-emerald-300"
+            }
+          >
+            {collapsed ? <Columns2 className="h-4 w-4" /> : layout === "1col" ? "1 col" : layout === "2col" ? "2 col" : "3 col"}
+          </button>
+        ))}
+      </div>
+
+      {!collapsed && <div className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Elements</div>}
+      <div className="flex flex-col gap-0.5">
+        {ELEMENT_PALETTE.map(({ type, label, icon: Icon }) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => onPick(type)}
+            title={label}
+            className={`flex items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] text-zinc-300 hover:bg-ink-800 hover:text-emerald-300 ${
+              collapsed ? "justify-center px-1" : ""
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+            {!collapsed && label}
+          </button>
+        ))}
+      </div>
+    </aside>
   );
 }
 
@@ -572,6 +688,38 @@ export default function WysiwygCanvas({
 
   function addRow(sectionId: string, layout: RowBlock["layout"]) {
     onChange(insertRow(tree, sectionId, Number.MAX_SAFE_INTEGER, layout));
+  }
+
+  // Where a palette pick lands: the container the current selection points at (a selected
+  // Section/Column directly; the column or section HOLDING a selected element/row), else the
+  // last Section. The inline "+ Add block" menus stay the position-specific alternative.
+  function paletteTargetRef(): ContainerRef | null {
+    if (selectedBlockId) {
+      const loc = findBlockLocation(tree, selectedBlockId);
+      if (loc) {
+        if (loc.block.type === "section") return { kind: "section", sectionId: loc.block.id };
+        if (loc.ref.kind !== "root") return loc.ref;
+      }
+    }
+    const lastSection = [...tree.blocks].reverse().find((b) => b.type === "section");
+    return lastSection ? { kind: "section", sectionId: lastSection.id } : null;
+  }
+
+  function paletteAddElement(type: ElementBlockTypeLocal) {
+    const ref = paletteTargetRef();
+    if (ref) addElement(ref, type);
+  }
+
+  function paletteAddRow(layout: RowBlock["layout"]) {
+    const ref = paletteTargetRef();
+    // Rows live only in sections — a column/section-child target resolves to... the section is
+    // only directly known for kind:"section"; for a column target fall back to the last section.
+    if (ref?.kind === "section") {
+      addRow(ref.sectionId, layout);
+      return;
+    }
+    const lastSection = [...tree.blocks].reverse().find((b) => b.type === "section");
+    if (lastSection) addRow(lastSection.id, layout);
   }
 
   async function pickImage(blockId: string, file: File) {
@@ -949,56 +1097,68 @@ export default function WysiwygCanvas({
     }
   }
 
+  // Elementor-style three-zone layout on lg+: collapsible block palette | canvas | settings dock.
+  // Below lg the palette hides (the inline "+ Add block" menus cover insertion) and the settings
+  // panel falls back to rendering under the canvas.
   return (
-    <div>
-      <div className="mb-3 flex items-center justify-center gap-1">
-        {(
-          [
-            ["desktop", Monitor, "Desktop"],
-            ["tablet", Tablet, "Tablet"],
-            ["mobile", Smartphone, "Mobile"],
-          ] as const
-        ).map(([key, Icon, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setDevice(key)}
-            title={label}
-            className={`rounded-md p-1.5 ${
-              device === key ? "bg-emerald-500/15 text-emerald-400" : "text-zinc-500 hover:bg-ink-800 hover:text-zinc-300"
-            }`}
-          >
-            <Icon className="h-4 w-4" />
-          </button>
-        ))}
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+      <EditorPalette onPick={paletteAddElement} onPickRow={paletteAddRow} />
+
+      <div className="min-w-0 flex-1">
+        <div className="mb-3 flex items-center justify-center gap-1">
+          {(
+            [
+              ["desktop", Monitor, "Desktop"],
+              ["tablet", Tablet, "Tablet"],
+              ["mobile", Smartphone, "Mobile"],
+            ] as const
+          ).map(([key, Icon, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setDevice(key)}
+              title={label}
+              className={`rounded-md p-1.5 ${
+                device === key ? "bg-emerald-500/15 text-emerald-400" : "text-zinc-500 hover:bg-ink-800 hover:text-zinc-300"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          ))}
+        </div>
+        <div
+          className="mx-auto rounded-lg border border-ink-700 bg-white px-6 py-10 text-[#1a1a1a] transition-[max-width] duration-200"
+          style={{ fontFamily: PAGE_FONT, lineHeight: 1.6, maxWidth: DEVICE_WIDTHS[device] }}
+        >
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={tree.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+              {tree.blocks.map((b) => (
+                <RootBlockWrapper key={b.id} id={b.id} isSelected={selectedBlockId === b.id} onSelect={() => setSelectedBlockId(b.id)}>
+                  {b.type === "section" ? (
+                    <SectionBody
+                      section={b}
+                      renderElement={renderElement}
+                      onDeleteChild={deleteChild}
+                      onAddElement={addElement}
+                      onAddRow={addRow}
+                      selectedBlockId={selectedBlockId}
+                      onSelectBlock={setSelectedBlockId}
+                    />
+                  ) : (
+                    renderLockedBlock(b)
+                  )}
+                </RootBlockWrapper>
+              ))}
+            </SortableContext>
+          </DndContext>
+        </div>
       </div>
-      <div
-        className="mx-auto rounded-lg border border-ink-700 bg-white px-6 py-10 text-[#1a1a1a] transition-[max-width] duration-200"
-        style={{ fontFamily: PAGE_FONT, lineHeight: 1.6, maxWidth: DEVICE_WIDTHS[device] }}
-      >
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={tree.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
-            {tree.blocks.map((b) => (
-              <RootBlockWrapper key={b.id} id={b.id} isSelected={selectedBlockId === b.id} onSelect={() => setSelectedBlockId(b.id)}>
-                {b.type === "section" ? (
-                  <SectionBody
-                    section={b}
-                    renderElement={renderElement}
-                    onDeleteChild={deleteChild}
-                    onAddElement={addElement}
-                    onAddRow={addRow}
-                    selectedBlockId={selectedBlockId}
-                    onSelectBlock={setSelectedBlockId}
-                  />
-                ) : (
-                  renderLockedBlock(b)
-                )}
-              </RootBlockWrapper>
-            ))}
-          </SortableContext>
-        </DndContext>
-      </div>
-      <BlockStylePanel block={selectedBlock} onChange={updateStyle} onClose={() => setSelectedBlockId(null)} />
+
+      {selectedBlock && (
+        <div className="lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:w-80 lg:shrink-0 lg:overflow-y-auto">
+          <BlockStylePanel block={selectedBlock} onChange={updateStyle} onClose={() => setSelectedBlockId(null)} />
+        </div>
+      )}
     </div>
   );
 }
