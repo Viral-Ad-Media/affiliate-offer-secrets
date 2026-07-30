@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MAX_POST_TITLE, MAX_POST_CONTENT } from "@/lib/blog";
+import { MAX_POST_TITLE, blogRenderCtx, renderBlockTree } from "@/lib/blog";
+import { validatePageBlockTree } from "@/lib/engine/validatePageBlockTree";
 
 export const dynamic = "force-dynamic";
 
-// Edit a post (title/content/category/status). Every write is scoped to (id, user_id) on the
-// admin client — 0 rows updated means not-yours-or-nonexistent, generic 404 either way. Note
-// there is deliberately NO server-side HTML sanitization of content_md at save time: the public
-// route escapes at render time (lib/blog.ts's renderPostContentHtml — the same
-// re-validate-at-render discipline as tracking snippets), so a hostile stored value can never
-// reach a visitor as live HTML regardless of how it got stored.
+// Edit a post. Content arrives as a block tree (`blocks`, same shape the funnel page-copy routes
+// take) and is validated with the "blog" profile — locked disclosure required, campaign-shaped
+// locked blocks (lead form / CTA / decline) rejected — then rendered to html at write time, the
+// same page_copy→html relationship campaigns.bridge_html has. Every write is scoped to
+// (id, user_id) on the admin client — 0 rows updated means not-yours-or-nonexistent, generic 404.
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
   const {
@@ -26,11 +26,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (!title) return NextResponse.json({ error: "title can't be empty" }, { status: 400 });
     patch.title = title;
   }
-  if (typeof body.content_md === "string") {
-    if (body.content_md.length > MAX_POST_CONTENT) {
-      return NextResponse.json({ error: "post is too long" }, { status: 400 });
-    }
-    patch.content_md = body.content_md;
+  if (Array.isArray(body.blocks)) {
+    const result = validatePageBlockTree({ blocks: body.blocks }, { pageKind: "blog" });
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+    patch.page_copy = result.tree;
+    patch.html = renderBlockTree(result.tree, blogRenderCtx());
   }
   if (body.category_id === null) {
     patch.category_id = null;

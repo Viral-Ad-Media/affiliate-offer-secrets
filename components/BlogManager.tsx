@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Newspaper, Plus, Loader2, Tag, X, Import, ExternalLink, Trash2 } from "lucide-react";
+import { Newspaper, Plus, Loader2, Tag, Import, ExternalLink, Trash2 } from "lucide-react";
 
 type PostRow = {
   id: string;
@@ -30,7 +30,6 @@ export default function BlogManager({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [newCategory, setNewCategory] = useState("");
   const [importCampaignId, setImportCampaignId] = useState("");
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
 
@@ -57,18 +56,6 @@ export default function BlogManager({
     }
   }
 
-  async function addCategory(e: React.FormEvent) {
-    e.preventDefault();
-    const name = newCategory.trim();
-    if (!name) return;
-    const data = await call("add-category", "/api/blog/categories", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    if (data) setNewCategory("");
-  }
-
   async function createPost(campaignId?: string) {
     const data = await call(campaignId ? "import" : "new", "/api/blog/posts", {
       method: "POST",
@@ -90,10 +77,7 @@ export default function BlogManager({
         </p>
       </div>
 
-      <section className="card p-4">
-        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-100">
-          <Tag className="h-4 w-4 text-emerald-400" /> Categories
-        </div>
+      {categories.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -107,45 +91,24 @@ export default function BlogManager({
             All
           </button>
           {categories.map((c) => (
-            <span
+            <button
               key={c.id}
-              className={`group flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${
+              type="button"
+              onClick={() => setFilterCategory(filterCategory === c.id ? null : c.id)}
+              className={`rounded-full border px-3 py-1 text-xs ${
                 filterCategory === c.id
                   ? "border-emerald-500 bg-emerald-500/15 text-emerald-300"
-                  : "border-ink-600 text-zinc-400"
+                  : "border-ink-600 text-zinc-400 hover:border-ink-500"
               }`}
             >
-              <button type="button" onClick={() => setFilterCategory(filterCategory === c.id ? null : c.id)}>
-                {c.name}
-              </button>
-              <button
-                type="button"
-                title="Delete category (posts are kept)"
-                onClick={() => {
-                  if (window.confirm(`Delete category "${c.name}"? Posts in it are kept, just uncategorized.`)) {
-                    call(`del-cat-${c.id}`, `/api/blog/categories/${c.id}`, { method: "DELETE" });
-                    if (filterCategory === c.id) setFilterCategory(null);
-                  }
-                }}
-                className="text-zinc-600 hover:text-red-400"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-          <form onSubmit={addCategory} className="flex items-center gap-1">
-            <input
-              value={newCategory}
-              onChange={(e) => setNewCategory(e.target.value)}
-              placeholder="New category"
-              className="w-36 rounded-full border border-ink-600 bg-ink-900 px-3 py-1 text-xs outline-none placeholder:text-zinc-600 focus:border-emerald-500"
-            />
-            <button type="submit" disabled={busy === "add-category"} className="text-zinc-400 hover:text-emerald-400" title="Add category">
-              {busy === "add-category" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {c.name}
             </button>
-          </form>
+          ))}
+          <Link href="/blog/categories" className="flex items-center gap-1 text-xs text-zinc-500 hover:text-emerald-300">
+            <Tag className="h-3 w-3" /> Manage
+          </Link>
         </div>
-      </section>
+      )}
 
       <section className="card p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">

@@ -12,18 +12,27 @@ export async function GET(_req: Request, { params }: { params: { postId: string 
   const admin = createAdminClient();
   const { data: post } = await admin
     .from("blog_posts")
-    .select("title, content_md, published_at, blog_categories(name)")
+    .select("user_id, title, content_md, html, published_at, blog_categories(name)")
     .eq("id", params.postId)
     .eq("status", "published")
     .maybeSingle();
 
   if (!post) return new Response("Not found", { status: 404 });
 
+  const { data: settings } = await admin
+    .from("blog_settings")
+    .select("blog_title, author_name")
+    .eq("user_id", post.user_id as string)
+    .maybeSingle();
+
   const html = renderPublicPostHtml({
+    id: params.postId,
     title: post.title as string,
     content_md: post.content_md as string,
+    html: post.html as string | null,
     published_at: post.published_at as string | null,
     category_name: (post.blog_categories as unknown as { name: string } | null)?.name ?? null,
+    settings: settings ?? null,
   });
 
   return new Response(html, {

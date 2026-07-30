@@ -1,4 +1,8 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { Menu, X } from "lucide-react";
 
 const LINKS = [
   { href: "/about", label: "About" },
@@ -7,14 +11,20 @@ const LINKS = [
   { href: "/contact", label: "Contact" },
 ];
 
+// Marketing-site header. Desktop (md+): inline links + auth buttons. Mobile: hamburger toggling a
+// dropdown panel — previously the three flex groups wrapped into a messy multi-row header on
+// narrow screens.
 export default function MarketingNav() {
+  const [open, setOpen] = useState(false);
+
   return (
     <header className="border-b border-ink-700 bg-ink-950/80 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4">
-        <Link href="/" className="font-heading text-lg font-bold text-zinc-100">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4">
+        <Link href="/" className="font-heading text-lg font-bold text-zinc-100" onClick={() => setOpen(false)}>
           ClickBank <span className="text-emerald-400">Studio</span>
         </Link>
-        <nav className="flex flex-wrap items-center gap-1">
+
+        <nav className="hidden items-center gap-1 md:flex">
           {LINKS.map((l) => (
             <Link
               key={l.href}
@@ -25,7 +35,8 @@ export default function MarketingNav() {
             </Link>
           ))}
         </nav>
-        <div className="flex items-center gap-2">
+
+        <div className="hidden items-center gap-2 md:flex">
           <Link href="/login" className="btn-ghost">
             Sign in
           </Link>
@@ -33,7 +44,42 @@ export default function MarketingNav() {
             Get started
           </Link>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="rounded-lg p-2 text-zinc-300 hover:bg-ink-800 md:hidden"
+          aria-label={open ? "Close menu" : "Open menu"}
+          aria-expanded={open}
+        >
+          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
       </div>
+
+      {open && (
+        <div className="border-t border-ink-800 px-4 pb-4 pt-2 md:hidden">
+          <nav className="flex flex-col">
+            {LINKS.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                onClick={() => setOpen(false)}
+                className="rounded-lg px-3 py-2.5 text-sm text-zinc-300 hover:bg-ink-800 hover:text-zinc-100"
+              >
+                {l.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="mt-3 flex items-center gap-2">
+            <Link href="/login" onClick={() => setOpen(false)} className="btn-ghost flex-1 justify-center">
+              Sign in
+            </Link>
+            <Link href="/login" onClick={() => setOpen(false)} className="btn-primary flex-1 justify-center">
+              Get started
+            </Link>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

@@ -24,7 +24,7 @@ import {
 import { isValidImageDataUrl } from "@/lib/images/validate";
 import { isValidRedirectUrl } from "@/lib/validate";
 
-export type PageKind = "bridge" | "funnel_step";
+export type PageKind = "bridge" | "funnel_step" | "blog";
 export type ValidatePageBlockTreeOptions = { pageKind: PageKind; stepType?: FunnelStepType };
 export type ValidationResult = { ok: true; tree: PageBlockTree } | { ok: false; error: string };
 
@@ -304,10 +304,22 @@ type LockedKind = LockedBlock["locked"];
 
 function requiredLockedKinds(opts: ValidatePageBlockTreeOptions): Set<LockedKind> {
   if (opts.pageKind === "bridge") return new Set<LockedKind>(["disclosure", "lead_capture_form", "primary_cta"]);
+  // Blog posts carry affiliate links, so the disclosure stays locked-and-mandatory (content rule
+  // 3) — but none of the campaign-shaped blocks (lead form, CTA, decline) exist on this page kind.
+  if (opts.pageKind === "blog") return new Set<LockedKind>(["disclosure"]);
   // funnel_step
   const kinds = new Set<LockedKind>(["disclosure", "primary_cta"]);
   if (opts.stepType === "upsell") kinds.add("decline_link");
   return kinds;
+}
+
+// Blog pages have no campaign to resolve hrefs/lead-endpoints against — a lead_capture_form or
+// primary_cta smuggled into a blog tree would render with empty/meaningless ctx values, so they
+// are rejected outright rather than rendered broken. Other page kinds allow extra locked kinds
+// (e.g. a funnel step keeps its decline_link when switching step types).
+function allowedLockedKinds(opts: ValidatePageBlockTreeOptions): Set<LockedKind> | null {
+  if (opts.pageKind === "blog") return new Set<LockedKind>(["disclosure"]);
+  return null; // no restriction beyond the required-set check
 }
 
 // Consumed by all three page-copy PATCH routes, replacing their old flat clamp/validate logic.
@@ -336,6 +348,12 @@ export function validatePageBlockTree(raw: unknown, opts: ValidatePageBlockTreeO
     const required = requiredLockedKinds(opts);
     for (const kind of Array.from(required)) {
       if (!lockedKinds.has(kind)) return { ok: false, error: `missing required locked block: ${kind}` };
+    }
+    const allowed = allowedLockedKinds(opts);
+    if (allowed) {
+      for (const kind of Array.from(lockedKinds)) {
+        if (!allowed.has(kind)) return { ok: false, error: `locked block not allowed on this page kind: ${kind}` };
+      }
     }
     // Exactly one of each required kind (a duplicate primary_cta, say, would be ambiguous for
     // rendering and CTA-href resolution) — reject rather than silently pick one.

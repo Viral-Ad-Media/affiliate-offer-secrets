@@ -268,7 +268,10 @@ function renderIcon(name: string): string {
 export type FunnelStepType = "thank_you" | "upsell" | "order";
 
 export type RenderCtx = {
-  pageKind: "bridge" | "funnel_step";
+  // "blog" (blog posts, lib/blog.ts) uses only disclosureText/productTitle — its validator
+  // profile (validatePageBlockTree.ts) forbids the lead-capture/CTA/decline locked blocks, so
+  // the campaign-shaped ctx fields are never read on that path.
+  pageKind: "bridge" | "funnel_step" | "blog";
   stepType?: FunnelStepType;
   disclosureText: string;
   leadConsentText: string;
@@ -278,6 +281,31 @@ export type RenderCtx = {
   nextStepUrl?: string | null;
   productTitle: string;
 };
+
+// Inline markdown for paragraph/bullet text: [text](https://url) links and **bold** only.
+// Everything is escapeHtml'd FIRST and the tags below are code-built — user text can never open
+// a tag itself. Links get rel="sponsored noopener" (these are overwhelmingly affiliate links —
+// imported blog articles carry their hoplinks as markdown links, which is why this exists) and
+// hrefs must be http(s). Applies everywhere the block tree renders (funnel pages included) —
+// additive there, since generated funnel copy never contained markdown link syntax.
+const INLINE_LINK_RE = /\[([^\]\n]{1,300})\]\((https?:\/\/[^)\s]{1,600})\)/;
+
+function inlineBold(escaped: string): string {
+  return escaped.replace(/\*\*([^*\n]{1,300})\*\*/g, "<strong>$1</strong>");
+}
+
+export function renderInline(text: string): string {
+  let out = "";
+  let rest = text;
+  for (let i = 0; i < 100; i++) {
+    const m = INLINE_LINK_RE.exec(rest);
+    if (!m) break;
+    out += inlineBold(escapeHtml(rest.slice(0, m.index)));
+    out += `<a href="${escapeHtml(m[2])}" target="_blank" rel="sponsored noopener">${inlineBold(escapeHtml(m[1]))}</a>`;
+    rest = rest.slice(m.index + m[0].length);
+  }
+  return out + inlineBold(escapeHtml(rest));
+}
 
 // Exported so components/BlockStylePanel.tsx (Phase O.4) can show exactly the controls that will
 // actually take effect for a given block type — a single source of truth shared with the render
@@ -344,7 +372,7 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
     case "subheading":
       return `<h2${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(block.content.text)}</h2>`;
     case "paragraph":
-      return `<p${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(block.content.text)}</p>`;
+      return `<p${styleAttr(block.style, TEXT_STYLE_KEYS)}>${renderInline(block.content.text)}</p>`;
     case "image":
       return block.content.dataUrl
         ? `<img src="${escapeHtml(block.content.dataUrl)}" alt="${escapeHtml(block.content.alt || ctx.productTitle)}"${styleAttr(
@@ -354,7 +382,7 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
         : "";
     case "bullet_list":
       return `<ul${styleAttr(block.style, TEXT_STYLE_KEYS)}>${block.content.items
-        .map((i) => `<li>${escapeHtml(i)}</li>`)
+        .map((i) => `<li>${renderInline(i)}</li>`)
         .join("")}</ul>`;
     case "icon_list":
       return `<div class="icon-list"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${block.content.items

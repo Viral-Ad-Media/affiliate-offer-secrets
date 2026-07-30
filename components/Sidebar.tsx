@@ -32,7 +32,19 @@ const NAV = [
   { href: "/domains", label: "Domains", icon: Globe, match: (p: string) => p.startsWith("/domains") },
   { href: "/contacts", label: "Contacts", icon: Users, match: (p: string) => p === "/contacts" },
   { href: "/broadcast", label: "Broadcast", icon: Send, match: (p: string) => p.startsWith("/broadcast") },
-  { href: "/blog", label: "Blog", icon: Newspaper, match: (p: string) => p.startsWith("/blog") },
+  {
+    href: "/blog",
+    label: "Blog",
+    icon: Newspaper,
+    match: (p: string) => p.startsWith("/blog"),
+    // Shown indented under the parent whenever any /blog route is active (expanded rail + mobile
+    // drawer only — the icon-only collapsed rail keeps just the parent icon).
+    children: [
+      { href: "/blog", label: "Posts", match: (p: string) => p.startsWith("/blog") && p !== "/blog/categories" && p !== "/blog/settings" },
+      { href: "/blog/categories", label: "Categories", match: (p: string) => p === "/blog/categories" },
+      { href: "/blog/settings", label: "Settings", match: (p: string) => p === "/blog/settings" },
+    ],
+  },
   { href: "/audit", label: "Audit trail", icon: History, match: (p: string) => p === "/audit" },
   { href: "/billing", label: "Billing", icon: CreditCard, match: (p: string) => p === "/billing" },
 ];
@@ -82,19 +94,40 @@ export default function Sidebar({ email, onTrial, trialDaysLeft, creditBalance }
   const navLinks = (iconOnly: boolean) =>
     NAV.map((item) => {
       const active = item.match(pathname);
+      const children = "children" in item ? item.children : undefined;
       return (
-        <Link
-          key={item.href}
-          href={item.href}
-          title={iconOnly ? item.label : undefined}
-          onClick={() => setMobileOpen(false)}
-          className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${
-            iconOnly ? "justify-center" : ""
-          } ${active ? "bg-emerald-600/15 text-emerald-300" : "text-zinc-400 hover:bg-ink-800 hover:text-zinc-100"}`}
-        >
-          <item.icon className="h-4 w-4 shrink-0" />
-          {!iconOnly && <span>{item.label}</span>}
-        </Link>
+        <div key={item.href}>
+          <Link
+            href={item.href}
+            title={iconOnly ? item.label : undefined}
+            onClick={() => setMobileOpen(false)}
+            className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${
+              iconOnly ? "justify-center" : ""
+            } ${active ? "bg-emerald-600/15 text-emerald-300" : "text-zinc-400 hover:bg-ink-800 hover:text-zinc-100"}`}
+          >
+            <item.icon className="h-4 w-4 shrink-0" />
+            {!iconOnly && <span>{item.label}</span>}
+          </Link>
+          {!iconOnly && active && children && (
+            <div className="ml-4 mt-0.5 space-y-0.5 border-l border-ink-700 pl-3">
+              {children.map((c) => {
+                const childActive = c.match(pathname);
+                return (
+                  <Link
+                    key={c.href}
+                    href={c.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`block rounded-md px-2 py-1.5 text-[13px] transition-colors ${
+                      childActive ? "text-emerald-300" : "text-zinc-500 hover:text-zinc-200"
+                    }`}
+                  >
+                    {c.label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
       );
     });
 
