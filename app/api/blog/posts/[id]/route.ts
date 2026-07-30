@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MAX_POST_TITLE, blogRenderCtx, renderBlockTree } from "@/lib/blog";
 import { validatePageBlockTree } from "@/lib/engine/validatePageBlockTree";
+import { seoPatchFrom } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (!cat) return NextResponse.json({ error: "category not found" }, { status: 404 });
     patch.category_id = cat.id;
   }
+  if ("seo_title" in body || "seo_description" in body) {
+    Object.assign(patch, seoPatchFrom(body));
+  }
+  if (typeof body.seo_index === "boolean") patch.seo_index = body.seo_index;
   if (body.status === "draft" || body.status === "published") {
     patch.status = body.status;
     if (body.status === "published") patch.published_at = new Date().toISOString();

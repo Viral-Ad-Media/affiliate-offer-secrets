@@ -22,6 +22,9 @@ type FunnelStepRow = {
   target_product_id: string | null;
   decline_action: CtaAction;
   decline_redirect_url: string | null;
+  // Per-step SEO overrides (0032) — passed straight to renderFunnelStepHtml's `seo` param.
+  seo_title: string | null;
+  seo_description: string | null;
 };
 
 function stepUrl(campaignId: string, stepIndex: number): string {
@@ -41,7 +44,7 @@ export async function rerenderFunnelSequence(
 ): Promise<void> {
   const { data: campaign } = await admin
     .from("campaigns")
-    .select("product_id, page_copy, embedded_image_data_url, tracking")
+    .select("product_id, page_copy, embedded_image_data_url, tracking, seo_title, seo_description")
     .eq("id", campaignId)
     .single();
   if (!campaign) return;
@@ -65,7 +68,7 @@ export async function rerenderFunnelSequence(
   const { data: stepsRaw } = await admin
     .from("funnel_steps")
     .select(
-      "id, step_type, step_index, page_copy, embedded_image_data_url, cta_action, redirect_url, target_product_id, decline_action, decline_redirect_url"
+      "id, step_type, step_index, page_copy, embedded_image_data_url, cta_action, redirect_url, target_product_id, decline_action, decline_redirect_url, seo_title, seo_description"
     )
     .eq("campaign_id", campaignId)
     .order("step_index", { ascending: true });
@@ -83,7 +86,8 @@ export async function rerenderFunnelSequence(
       campaign.embedded_image_data_url,
       campaignId,
       nextStepUrl,
-      tracking
+      tracking,
+      campaign
     );
     await admin.from("campaigns").update({ bridge_html: bridgeHtml }).eq("id", campaignId);
 
@@ -106,7 +110,8 @@ export async function rerenderFunnelSequence(
         v.embedded_image_data_url,
         campaignId,
         nextStepUrl,
-        tracking
+        tracking,
+        campaign
       );
       await admin.from("bridge_variants").update({ bridge_html: variantHtml }).eq("id", v.id);
     }
@@ -175,7 +180,8 @@ export async function rerenderFunnelSequence(
         acceptHref,
         step.embedded_image_data_url,
         declineHref,
-        tracking
+        tracking,
+        step
       );
       await admin.from("funnel_steps").update({ html }).eq("id", step.id);
     } else {
@@ -194,7 +200,8 @@ export async function rerenderFunnelSequence(
         primaryHref,
         step.embedded_image_data_url,
         null,
-        tracking
+        tracking,
+        step
       );
       await admin.from("funnel_steps").update({ html }).eq("id", step.id);
     }

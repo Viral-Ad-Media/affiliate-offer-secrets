@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { seoPatchFrom } from "@/lib/seo";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderBridgeHtml, buildHoplink } from "@/lib/engine/renderPages";
@@ -125,6 +126,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       page_copy: tree,
       bridge_html: bridgeHtml,
       embedded_image_data_url: imageDataUrl,
+      ...seoPatchFrom(body),
     })
     .eq("id", campaignId);
 

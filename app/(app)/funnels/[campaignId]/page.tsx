@@ -148,6 +148,9 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
                   productTitle={productTitle}
                   initialCopy={campaign.page_copy}
                   initialBridgeHtml={campaign.bridge_html}
+                  showSeo
+                  initialSeoTitle={(campaign as any).seo_title ?? null}
+                  initialSeoDescription={(campaign as any).seo_description ?? null}
                   onSaved={({ bridge_html, page_copy }) =>
                     setCampaign((c) => (c ? { ...c, bridge_html, page_copy } : c))
                   }
@@ -184,6 +187,8 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
                 initialTargetProductId={stepInView.target_product_id}
                 initialDeclineAction={stepInView.decline_action}
                 initialDeclineRedirectUrl={stepInView.decline_redirect_url}
+                initialSeoTitle={(stepInView as any).seo_title ?? null}
+                initialSeoDescription={(stepInView as any).seo_description ?? null}
                 crossSellOptions={crossSellOptions}
                 onSaved={() => load()}
               />

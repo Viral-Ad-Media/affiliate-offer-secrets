@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, CheckCircle2, Lock } from "lucide-react";
 import { DISCLOSURE, normalizePageCopy, firstImageDataUrl, type PageBlockTree } from "@/lib/engine/renderPages";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
+import SeoFields, { type SeoValues } from "@/components/SeoFields";
 
 const MAX_IMAGE_DATA_URL_CHARS = 280_000;
 
@@ -52,6 +53,11 @@ type Props = {
   // Defaults to the control's own save route. A split-test variant's editor (SplitTestPanel)
   // passes /api/bridge-variants/{id} instead — everything else about this component is identical.
   saveEndpoint?: string;
+  // Opt-in page SEO lives on the campaign row; split-test variants share the campaign's values,
+  // so the variant editor (SplitTestPanel) simply doesn't pass these.
+  initialSeoTitle?: string | null;
+  initialSeoDescription?: string | null;
+  showSeo?: boolean;
 };
 
 export default function PageEditor({
@@ -61,12 +67,19 @@ export default function PageEditor({
   initialBridgeHtml,
   onSaved,
   saveEndpoint,
+  initialSeoTitle,
+  initialSeoDescription,
+  showSeo = false,
 }: Props) {
   const [tree, setTree] = useState<PageBlockTree>(() => normalizePageCopy(initialCopy, null));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [imageBusyBlockId, setImageBusyBlockId] = useState<string | null>(null);
+  const [seo, setSeo] = useState<SeoValues>({
+    seo_title: initialSeoTitle ?? "",
+    seo_description: initialSeoDescription ?? "",
+  });
 
   async function save() {
     setSaving(true);
@@ -78,6 +91,7 @@ export default function PageEditor({
         body: JSON.stringify({
           blocks: tree.blocks,
           image_data_url: firstImageDataUrl(tree),
+          ...(showSeo ? seo : {}),
         }),
       });
       const data = await res.json();
@@ -107,6 +121,15 @@ export default function PageEditor({
         reorder a block. The lead-capture form and disclosure are locked — they can't be edited
         or removed here.
       </p>
+
+      {showSeo && (
+        <SeoFields
+          values={seo}
+          onChange={setSeo}
+          fallbackTitle={productTitle}
+          noteWhenNoindex="Funnel pages are never indexed by search engines — these control how the page looks when the URL is shared."
+        />
+      )}
 
       <WysiwygCanvas
         tree={tree}

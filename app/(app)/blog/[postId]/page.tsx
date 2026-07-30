@@ -15,7 +15,7 @@ export default async function BlogPostPage({ params }: { params: { postId: strin
     // RLS-scoped — another tenant's post id reads as nonexistent.
     supabase
       .from("blog_posts")
-      .select("id, title, content_md, page_copy, status, category_id, published_at")
+      .select("id, title, content_md, page_copy, status, category_id, published_at, seo_title, seo_description, seo_index")
       .eq("id", params.postId)
       .maybeSingle(),
     supabase.from("blog_categories").select("id, name").eq("user_id", user.id).order("name"),

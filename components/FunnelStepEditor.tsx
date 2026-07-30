@@ -5,6 +5,7 @@ import { Loader2, CheckCircle2, Lock } from "lucide-react";
 import { DISCLOSURE, normalizePageCopy, firstImageDataUrl, type PageBlockTree, type FunnelStepType } from "@/lib/engine/renderPages";
 import type { FunnelStepCtaAction } from "@/lib/shared";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
+import SeoFields, { type SeoValues } from "@/components/SeoFields";
 
 const MAX_IMAGE_DATA_URL_CHARS = 280_000;
 
@@ -54,6 +55,8 @@ type Props = {
   initialTargetProductId: string | null;
   initialDeclineAction: FunnelStepCtaAction;
   initialDeclineRedirectUrl: string | null;
+  initialSeoTitle: string | null;
+  initialSeoDescription: string | null;
   crossSellOptions: { id: string; title: string }[];
   onSaved: (result: { html: string; page_copy: PageBlockTree }) => void;
 };
@@ -68,6 +71,8 @@ export default function FunnelStepEditor({
   initialTargetProductId,
   initialDeclineAction,
   initialDeclineRedirectUrl,
+  initialSeoTitle,
+  initialSeoDescription,
   crossSellOptions,
   onSaved,
 }: Props) {
@@ -77,6 +82,10 @@ export default function FunnelStepEditor({
   const [targetProductId, setTargetProductId] = useState<string>(initialTargetProductId ?? "");
   const [declineAction, setDeclineAction] = useState<FunnelStepCtaAction>(initialDeclineAction);
   const [declineRedirectUrl, setDeclineRedirectUrl] = useState(initialDeclineRedirectUrl ?? "");
+  const [seo, setSeo] = useState<SeoValues>({
+    seo_title: initialSeoTitle ?? "",
+    seo_description: initialSeoDescription ?? "",
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -97,6 +106,7 @@ export default function FunnelStepEditor({
           target_product_id: targetProductId || null,
           decline_action: declineAction,
           decline_redirect_url: declineAction === "redirect_url" ? declineRedirectUrl : null,
+          ...seo,
         }),
       });
       const data = await res.json();
@@ -116,6 +126,13 @@ export default function FunnelStepEditor({
         Click any text below to edit it in place, drag <span className="text-zinc-400">⠿</span> to
         reorder a block.
       </p>
+
+      <SeoFields
+        values={seo}
+        onChange={setSeo}
+        fallbackTitle={productTitle}
+        noteWhenNoindex="Funnel pages are never indexed by search engines — these control how the page looks when the URL is shared."
+      />
 
       <WysiwygCanvas
         tree={tree}

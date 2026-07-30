@@ -12,7 +12,7 @@ export async function GET(_req: Request, { params }: { params: { postId: string 
   const admin = createAdminClient();
   const { data: post } = await admin
     .from("blog_posts")
-    .select("user_id, title, content_md, html, published_at, blog_categories(name)")
+    .select("user_id, title, content_md, html, published_at, seo_title, seo_description, seo_index, blog_categories(name)")
     .eq("id", params.postId)
     .eq("status", "published")
     .maybeSingle();
@@ -33,6 +33,9 @@ export async function GET(_req: Request, { params }: { params: { postId: string 
     published_at: post.published_at as string | null,
     category_name: (post.blog_categories as unknown as { name: string } | null)?.name ?? null,
     settings: settings ?? null,
+    seo_title: post.seo_title as string | null,
+    seo_description: post.seo_description as string | null,
+    seo_index: post.seo_index as boolean,
   });
 
   return new Response(html, {

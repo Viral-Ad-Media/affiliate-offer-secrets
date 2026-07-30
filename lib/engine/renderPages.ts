@@ -246,7 +246,8 @@ export function renderBridgeHtml(
   imageDataUrl: string | null,
   campaignId: string,
   nextStepUrl?: string | null,
-  tracking?: TrackingSettings | null
+  tracking?: TrackingSettings | null,
+  seo?: SeoMeta | null
 ): string {
   const tree = normalizePageCopy(copy, imageDataUrl);
   const ctx: RenderCtx = {
@@ -258,7 +259,7 @@ export function renderBridgeHtml(
     nextStepUrl: nextStepUrl ?? null,
     productTitle: product.product_title,
   };
-  const title = titleOf(tree);
+  const meta = seoMetaTags(seo, titleOf(tree));
   const body = renderBlockTree(tree, ctx);
   const t = renderTrackingHtml(tracking);
 
@@ -267,7 +268,8 @@ export function renderBridgeHtml(
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${escapeHtml(title)}</title>
+<title>${escapeHtml(meta.title)}</title>
+${meta.head}
 ${t.head}
 <style>${PAGE_STYLE}</style>
 </head>
@@ -311,6 +313,25 @@ ${t.bodyStart}
 </html>`;
 }
 
+export type SeoMeta = { seo_title?: string | null; seo_description?: string | null };
+
+// Per-page SEO overrides (0032_seo_meta.sql). Funnel pages stay noindex regardless — these only
+// control how the page presents when a tenant shares the URL directly (title, social preview).
+// Every value is escapeHtml'd; empty falls back to the page's own first heading.
+export function seoMetaTags(seo: SeoMeta | null | undefined, fallbackTitle: string): { title: string; head: string } {
+  const title = (seo?.seo_title || "").trim() || fallbackTitle;
+  const description = (seo?.seo_description || "").trim();
+  const head = [
+    description ? `<meta name="description" content="${escapeHtml(description)}" />` : "",
+    `<meta property="og:title" content="${escapeHtml(title)}" />`,
+    description ? `<meta property="og:description" content="${escapeHtml(description)}" />` : "",
+    `<meta name="twitter:card" content="summary" />`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return { title, head };
+}
+
 function titleOf(tree: PageBlockTree): string {
   for (const b of tree.blocks) {
     if (b.type === "section") {
@@ -335,7 +356,8 @@ export function renderFunnelStepHtml(
   primaryHref: string,
   imageDataUrl: string | null,
   declineHref?: string | null,
-  tracking?: TrackingSettings | null
+  tracking?: TrackingSettings | null,
+  seo?: SeoMeta | null
 ): string {
   const tree = normalizePageCopy(copy, imageDataUrl, { stepType });
   const ctx: RenderCtx = {
@@ -348,7 +370,7 @@ export function renderFunnelStepHtml(
     declineHref: declineHref ?? null,
     productTitle: product.product_title,
   };
-  const title = titleOf(tree);
+  const meta = seoMetaTags(seo, titleOf(tree));
   const body = renderBlockTree(tree, ctx);
   const t = renderTrackingHtml(tracking);
 
@@ -357,7 +379,8 @@ export function renderFunnelStepHtml(
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${escapeHtml(title)}</title>
+<title>${escapeHtml(meta.title)}</title>
+${meta.head}
 ${t.head}
 <style>${PAGE_STYLE}
   .cta-wrap { max-width: 420px; margin: 40px auto 0; text-align:center; }

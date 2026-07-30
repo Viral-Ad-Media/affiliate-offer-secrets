@@ -5,6 +5,7 @@ import { rerenderFunnelSequence } from "@/lib/funnelSteps";
 import { validatePageBlockTree } from "@/lib/engine/validatePageBlockTree";
 import { isValidImageDataUrl } from "@/lib/images/validate";
 import { isValidRedirectUrl } from "@/lib/validate";
+import { seoPatchFrom } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -119,6 +120,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       target_product_id: targetProductId,
       decline_action: declineAction,
       decline_redirect_url: declineRedirectUrl,
+      ...seoPatchFrom(body),
       updated_at: new Date().toISOString(),
     })
     .eq("id", stepId);

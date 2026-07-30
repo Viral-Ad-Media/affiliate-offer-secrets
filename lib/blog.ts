@@ -176,10 +176,14 @@ export function renderPublicPostHtml(post: {
   published_at: string | null;
   category_name?: string | null;
   settings?: BlogSettings | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  seo_index?: boolean;
 }): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://clickbank-studio.vercel.app";
   const canonical = post.id ? `${appUrl}/b/${post.id}` : null;
-  const description = postExcerpt(post);
+  // Per-post SEO overrides (0032) win over the derived title/excerpt.
+  const description = (post.seo_description || "").trim() || postExcerpt(post);
   const date = post.published_at
     ? new Date(post.published_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : "";
@@ -188,7 +192,8 @@ export function renderPublicPostHtml(post: {
     .filter(Boolean)
     .map((v) => escapeHtml(String(v)))
     .join(" · ");
-  const titleTag = post.settings?.blog_title ? `${post.title} — ${post.settings.blog_title}` : post.title;
+  const seoTitle = (post.seo_title || "").trim() || post.title;
+  const titleTag = post.settings?.blog_title ? `${seoTitle} — ${post.settings.blog_title}` : seoTitle;
   const body = post.html ?? renderPostContentHtml(post.content_md);
   return `<!doctype html>
 <html lang="en">
@@ -199,12 +204,13 @@ export function renderPublicPostHtml(post: {
 ${description ? `<meta name="description" content="${escapeHtml(description)}">` : ""}
 ${canonical ? `<link rel="canonical" href="${escapeHtml(canonical)}">` : ""}
 <meta property="og:type" content="article">
-<meta property="og:title" content="${escapeHtml(post.title)}">
+<meta property="og:title" content="${escapeHtml(seoTitle)}">
 ${description ? `<meta property="og:description" content="${escapeHtml(description)}">` : ""}
 ${canonical ? `<meta property="og:url" content="${escapeHtml(canonical)}">` : ""}
 ${post.settings?.blog_title ? `<meta property="og:site_name" content="${escapeHtml(post.settings.blog_title)}">` : ""}
 ${post.published_at ? `<meta property="article:published_time" content="${escapeHtml(post.published_at)}">` : ""}
 <meta name="twitter:card" content="summary">
+${post.seo_index === false ? '<meta name="robots" content="noindex, nofollow">' : ""}
 <style>
   body { margin: 0; background: #fff; color: #1a1a1a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.7; }
   main { max-width: 720px; margin: 0 auto; padding: 48px 20px 80px; }

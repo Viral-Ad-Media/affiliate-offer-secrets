@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2, CheckCircle2, ExternalLink, Copy } from "lucide-rea
 import type { PageBlockTree } from "@/lib/engine/renderPages";
 import { markdownToBlockTree } from "@/lib/blog";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
+import SeoFields, { type SeoValues } from "@/components/SeoFields";
 
 type Post = {
   id: string;
@@ -16,6 +17,9 @@ type Post = {
   status: string;
   category_id: string | null;
   published_at: string | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  seo_index: boolean;
 };
 type Category = { id: string; name: string };
 
@@ -76,6 +80,11 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [imageBusyBlockId, setImageBusyBlockId] = useState<string | null>(null);
+  const [seo, setSeo] = useState<SeoValues>({
+    seo_title: post.seo_title ?? "",
+    seo_description: post.seo_description ?? "",
+    seo_index: post.seo_index,
+  });
 
   async function patch(key: string, body: Record<string, unknown>): Promise<boolean> {
     setBusy(key);
@@ -103,13 +112,13 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
   }
 
   async function save() {
-    await patch("save", { title, blocks: tree.blocks, category_id: categoryId || null });
+    await patch("save", { title, blocks: tree.blocks, category_id: categoryId || null, ...seo });
   }
 
   async function togglePublish() {
     const next = status === "published" ? "draft" : "published";
     // Publishing always saves current edits too — publishing stale content would be surprising.
-    const ok = await patch("publish", { title, blocks: tree.blocks, category_id: categoryId || null, status: next });
+    const ok = await patch("publish", { title, blocks: tree.blocks, category_id: categoryId || null, ...seo, status: next });
     if (ok) setStatus(next);
   }
 
@@ -191,6 +200,13 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
           ))}
         </select>
       </div>
+
+      <SeoFields
+        values={seo}
+        onChange={setSeo}
+        fallbackTitle={title}
+        showIndexToggle
+      />
 
       <p className="text-xs text-zinc-500">
         Click any text below to edit it in place, drag <span className="text-zinc-400">⠿</span> to
