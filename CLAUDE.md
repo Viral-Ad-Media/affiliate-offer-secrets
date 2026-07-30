@@ -1338,6 +1338,43 @@ after this contact signed up", never a shared calendar date). Reuses the existin
   abuse protection on the unsubscribe endpoint (same accepted v1 gap as `/api/public/leads`); no
   manual "send this step now" override or drag-and-drop step reordering.
 
+## Blog (sidebar)
+
+Tenant blog manager (`/blog`) — posts written from scratch or imported from a campaign's
+generated `blog_md` (importing COPIES the markdown into a `blog_posts` row; `campaigns.blog_md`
+itself is never modified), organized into user-created categories, published at a public per-post
+URL.
+
+- **Schema** (`supabase/migrations/0030_blog.sql`): `blog_categories` (`unique(user_id, name)`),
+  `blog_posts` (`campaign_id` on-delete-set-null history pointer, `category_id`
+  on-delete-set-null so deleting a category keeps its posts, `status` draft/published,
+  `published_at`). Owner-select RLS, writes via the `/api/blog/*` routes on the admin client
+  only — same shape as every domain table since 0009.
+- **Public serving** (`app/b/[postId]/route.ts`): same access model as `/p/{campaignId}` — the
+  post UUID + `status='published'` scoping is the access control, generic 404 for
+  draft/nonexistent. Deliberately **no `X-Robots-Tag: noindex`** (unlike funnel pages): blog
+  posts are content marketing and should be crawlable. `/b/` is in `PUBLIC_PREFIX_PATHS`.
+- **XSS boundary — render-time, not save-time** (`lib/blog.ts`): post content is arbitrary
+  tenant-edited markdown served raw to anonymous visitors on the app's shared origin, and
+  `marked` passes embedded HTML straight through by design. `renderPostContentHtml()` escapes
+  `&` and `<` in the source BEFORE parsing — disables every raw-HTML construct while leaving real
+  markdown intact. The editor's preview (`components/BlogPostEditor.tsx`) applies the identical
+  pre-escaping so preview always matches the published page. Verified live: `<script>`/`onerror`
+  probes render as inert escaped text, bold/links render normally. Never replace this with a
+  "sanitize later" approach without a real sanitizer.
+- **Import** (`POST /api/blog/posts` with `campaign_id`): RLS-scoped campaign read doubles as the
+  ownership check; the post title comes from `blog_md`'s first `# H1` (falling back to
+  "<product> review").
+- **UI**: `components/BlogManager.tsx` (category chips with inline create/delete + filter, posts
+  list, import dropdown of campaigns with `blog_md`), `components/BlogPostEditor.tsx`
+  (title/category, Write↔Preview markdown editor, Save, Publish/Unpublish — publishing always
+  saves current edits first — live-URL bar with copy). Note: the editor's public-URL origin is
+  applied post-mount via `useEffect` — reading `window.location` during render was a real
+  hydration mismatch caught live.
+- **Deferred, explicitly**: no public blog index/archive page (per-post URLs only — no tenant
+  enumeration surface), no custom-domain serving for posts (`custom_domain_routes` still maps
+  funnel pages only), no SEO slugs in the URL.
+
 ## Freeform block-based page builder (Phase O — complete, all 5 sub-phases landed)
 
 Replaces the fixed-field bridge/funnel-step content model (headline/lead/mechanism/benefits/

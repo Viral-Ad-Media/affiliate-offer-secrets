@@ -11,6 +11,7 @@ import {
   Globe,
   Users,
   Send,
+  Newspaper,
   History,
   CreditCard,
   Clock,
@@ -31,6 +32,7 @@ const NAV = [
   { href: "/domains", label: "Domains", icon: Globe, match: (p: string) => p.startsWith("/domains") },
   { href: "/contacts", label: "Contacts", icon: Users, match: (p: string) => p === "/contacts" },
   { href: "/broadcast", label: "Broadcast", icon: Send, match: (p: string) => p.startsWith("/broadcast") },
+  { href: "/blog", label: "Blog", icon: Newspaper, match: (p: string) => p.startsWith("/blog") },
   { href: "/audit", label: "Audit trail", icon: History, match: (p: string) => p === "/audit" },
   { href: "/billing", label: "Billing", icon: CreditCard, match: (p: string) => p === "/billing" },
 ];
