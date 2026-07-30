@@ -23,6 +23,7 @@ const PUBLIC_PREFIX_PATHS = [
   "/api/public/leads", // bridge-page lead capture — anonymous visitors, no auth
   "/api/public/unsubscribe", // one-click email unsubscribe link — anonymous visitors, no auth
   "/api/broadcast/sweep", // pg_cron backstop for Broadcast drip sequences, x-engine-secret gated
+  "/api/marketplace/refresh", // pg_cron daily marketplace-cache sweep, x-engine-secret gated
 ];
 
 export async function middleware(request: NextRequest) {

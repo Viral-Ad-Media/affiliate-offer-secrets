@@ -1,4 +1,5 @@
 import { searchMarketplace, type DiscoverPayload } from "./clickbank";
+import { getCachedMarketplaceHits } from "./marketplaceCache";
 import { fetchSalesPage } from "./salespage";
 import { completeJSON, COMPLIANCE_SYSTEM } from "./anthropic";
 import { upsertProduct, db } from "./core";
@@ -22,7 +23,11 @@ export async function runDiscoverProducts(
   affiliateId: string,
   payload: DiscoverJobPayload
 ): Promise<{ saved: number }> {
-  const hits = await searchMarketplace(payload);
+  // Cache-first: the daily marketplace preload (lib/engine/marketplaceCache.ts) usually already
+  // holds this category's top listings — a hit skips the live ClickBank round trip entirely and
+  // matches whatever the jobs route just instant-seeded. Miss (keyword mode, stale, or a request
+  // the sweep window can't fully satisfy) → the same live fetch as before.
+  const hits = (await getCachedMarketplaceHits(payload)) ?? (await searchMarketplace(payload));
 
   for (const hit of hits) {
     const vendorId = hit.site;

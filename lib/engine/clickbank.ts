@@ -35,6 +35,9 @@ export type DiscoverPayload = {
   subCategory?: string;
   keyword?: string;
   count: number;
+  // The endpoint hard-caps every page at 50 rows regardless of resultsPerPage (measured live:
+  // resultsPerPage 100/200/500 all return exactly 50) — deeper reads must page via offset.
+  offset?: number;
 };
 
 export type MarketplaceHit = {
@@ -60,7 +63,7 @@ export async function searchMarketplace(payload: DiscoverPayload): Promise<Marke
     sortField: "gravity",
     sortDescending: true,
     resultsPerPage: payload.count,
-    offset: 0,
+    offset: payload.offset ?? 0,
   };
   if (payload.mode === "keyword") {
     parameters.includeKeywords = payload.keyword;

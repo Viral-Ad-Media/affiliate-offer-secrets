@@ -82,6 +82,34 @@ design rationale. Mechanics:
   useful for inspecting a job's context or manually driving/failing something stuck — but it is
   no longer the primary path.
 
+### Marketplace preload cache (instant discovery)
+
+The products analogue of `lib/categories.ts`'s static category snapshot — kept in a table
+(`marketplace_products`, `supabase/migrations/0029_marketplace_cache.sql`) rather than a
+checked-in file because gravity/$-stats drift daily. Shared, NOT tenant data: no `user_id`,
+authenticated-select RLS (public marketplace data), writes service_role-only.
+
+- **Refresh**: `refreshMarketplaceCache()` (`lib/engine/marketplaceCache.ts`) sweeps every
+  top-level category, top-100 by gravity, **paged in 50s — the GraphQL endpoint hard-caps every
+  page at 50 rows regardless of `resultsPerPage` (measured live: 100/200/500 all return exactly
+  50); deeper reads page via `offset`**. Strictly sequential with a 300ms gap — the WAF tolerates
+  normal cadence but was observed (live) to temporarily block rapid bursts. Stale rows are pruned
+  only after a fully clean sweep, so one flaky category can't mass-delete the catalog. Exposed at
+  `POST /api/marketplace/refresh` (`x-engine-secret`, `maxDuration = 60`), run daily by pg_cron
+  `marketplace-refresh-backstop` (04:15 UTC; `marketplace_refresh_url` Vault secret, registered
+  via `execute_sql`, never committed — same convention as every other cron here).
+- **Instant seeding**: `app/api/jobs/route.ts` (category mode), right after inserting the
+  discovery job, reads `getCachedMarketplaceHits()` and upserts bare product rows for the caller
+  **concurrently** (sequential was measured at ~1s/row) — products appear on the dashboard's next
+  5s poll instead of waiting the full job round trip (measured: 12.7s sequential → 2.9s parallel
+  locally, faster on Vercel). Best-effort try/catch — a cache miss or failure never blocks the
+  queue, since the job re-upserts the same rows idempotently anyway.
+- **Worker**: `runDiscoverProducts` (`lib/engine/discover.ts`) is cache-first, falling back to
+  the live fetch on any miss. `getCachedMarketplaceHits()` returns null (miss) for: keyword mode
+  (ClickBank's own relevance search isn't replicable with `ilike`), rows older than 30h, or fewer
+  cached rows than requested (a big subCategory whose top-N falls outside its parent's top-100
+  sweep window) — a miss is never a wrong answer, just the old latency.
+
 ## Database
 
 Supabase Postgres, schema in `supabase/migrations/0001_init.sql` + `0002_trial.sql` +
