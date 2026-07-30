@@ -64,7 +64,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: campaign, error: campaignErr } = await admin
     .from("campaigns")
-    .select("product_id")
+    .select("product_id, tracking")
     .eq("id", campaignId)
     .single();
   if (campaignErr || !campaign) {
@@ -109,7 +109,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     ? `${process.env.NEXT_PUBLIC_APP_URL}/p/${campaignId}/step/${firstStep.step_index}`
     : null;
 
-  const bridgeHtml = renderBridgeHtml(product, tree, hoplink, imageDataUrl, campaignId, nextStepUrl);
+  const bridgeHtml = renderBridgeHtml(
+    product,
+    tree,
+    hoplink,
+    imageDataUrl,
+    campaignId,
+    nextStepUrl,
+    (campaign.tracking ?? null) as import("@/lib/engine/renderPages").TrackingSettings | null
+  );
 
   const { error: updateErr } = await admin
     .from("campaigns")

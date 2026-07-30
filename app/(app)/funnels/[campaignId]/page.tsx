@@ -10,6 +10,8 @@ import PageEditor from "@/components/PageEditor";
 import SplitTestPanel from "@/components/SplitTestPanel";
 import FunnelMap from "@/components/FunnelMap";
 import FunnelStepEditor from "@/components/FunnelStepEditor";
+import TrackingPanel from "@/components/TrackingPanel";
+import type { TrackingSettings } from "@/lib/engine/renderPages";
 
 const STEP_LABELS: Record<FunnelStep["step_type"], string> = {
   thank_you: "Thank-you",
@@ -234,6 +236,11 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
             onSelectVariant={(variantId) => setView({ kind: "variant", variantId })}
             onSelectStep={(stepId) => setView({ kind: "step", stepId })}
             onChanged={load}
+          />
+
+          <TrackingPanel
+            campaignId={campaign.id}
+            initialTracking={((campaign as unknown as { tracking?: TrackingSettings | null }).tracking ?? null)}
           />
         </>
       )}

@@ -1,5 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { renderBridgeHtml, renderFunnelStepHtml, buildHoplink, type FunnelStepType } from "@/lib/engine/renderPages";
+import {
+  renderBridgeHtml,
+  renderFunnelStepHtml,
+  buildHoplink,
+  type FunnelStepType,
+  type TrackingSettings,
+} from "@/lib/engine/renderPages";
 
 type CtaAction = "next_step" | "hoplink" | "redirect_url";
 
@@ -35,10 +41,11 @@ export async function rerenderFunnelSequence(
 ): Promise<void> {
   const { data: campaign } = await admin
     .from("campaigns")
-    .select("product_id, page_copy, embedded_image_data_url")
+    .select("product_id, page_copy, embedded_image_data_url, tracking")
     .eq("id", campaignId)
     .single();
   if (!campaign) return;
+  const tracking = (campaign.tracking ?? null) as TrackingSettings | null;
 
   const { data: product } = await admin
     .from("products")
@@ -75,9 +82,34 @@ export async function rerenderFunnelSequence(
       hoplink,
       campaign.embedded_image_data_url,
       campaignId,
-      nextStepUrl
+      nextStepUrl,
+      tracking
     );
     await admin.from("campaigns").update({ bridge_html: bridgeHtml }).eq("id", campaignId);
+
+    // Split-test variants serve at the same URL as the control, so they need the same
+    // nextStepUrl (and tracking) baked in. This closes a pre-existing gap: before this,
+    // rerenderFunnelSequence only rewrote campaigns.bridge_html — a non-control variant's page
+    // never picked up funnel-step redirects, so visitors assigned to B+ on a multi-step funnel
+    // got the in-place reveal instead of step 1.
+    const { data: variants } = await admin
+      .from("bridge_variants")
+      .select("id, page_copy, embedded_image_data_url, is_control")
+      .eq("campaign_id", campaignId)
+      .eq("is_control", false);
+    for (const v of variants ?? []) {
+      if (!v.page_copy) continue;
+      const variantHtml = renderBridgeHtml(
+        product,
+        v.page_copy,
+        hoplink,
+        v.embedded_image_data_url,
+        campaignId,
+        nextStepUrl,
+        tracking
+      );
+      await admin.from("bridge_variants").update({ bridge_html: variantHtml }).eq("id", v.id);
+    }
   }
 
   if (!affiliateId) return; // can't resolve hoplinks without an affiliate id — leave step html as-is
@@ -142,7 +174,8 @@ export async function rerenderFunnelSequence(
         "upsell",
         acceptHref,
         step.embedded_image_data_url,
-        declineHref
+        declineHref,
+        tracking
       );
       await admin.from("funnel_steps").update({ html }).eq("id", step.id);
     } else {
@@ -159,7 +192,9 @@ export async function rerenderFunnelSequence(
         step.page_copy,
         step.step_type,
         primaryHref,
-        step.embedded_image_data_url
+        step.embedded_image_data_url,
+        null,
+        tracking
       );
       await admin.from("funnel_steps").update({ html }).eq("id", step.id);
     }

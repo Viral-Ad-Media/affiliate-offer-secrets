@@ -524,6 +524,44 @@ lookup, nothing else changes.
   (start/add/weight/toggle/delete/end) extracted into one hook once this became two consumers, so
   neither can drift from the other's read-after-write/error-handling behavior.
 
+## Funnel tracking integrations (GA4 / GTM / Clarity / Meta Pixel)
+
+`campaigns.tracking jsonb` (`supabase/migrations/0028_campaign_tracking.sql`) holds per-funnel
+analytics IDs (`ga4_id`/`gtm_id`/`clarity_id`/`meta_pixel_id`), injected into every publicly
+served page of that funnel — opt-in, split-test variants, and steps. Configured via the Tracking
+panel (`components/TrackingPanel.tsx`) on the funnel map view; saved through
+`app/api/campaigns/[id]/tracking/route.ts`, which re-renders everything the funnel serves (page
+HTML is baked at write time in this codebase, never templated at serve time).
+
+- **`lib/engine/tracking.ts` is the security boundary, and pasted snippets are never stored or
+  rendered.** Each field accepts a bare ID or the full "paste before </head>" install snippet the
+  platform hands out — `extractTrackingId()` pulls the ID out via provider-specific contextual
+  regexes and discards the markup; the app then renders its own canonical, code-owned version of
+  each snippet (`renderTrackingHtml()`). Raw tenant-pasted `<script>` HTML must NEVER be injected
+  into served pages: funnel pages serve on the app's shared origin (`/p/...`), where the app's own
+  session cookies live — verbatim injection would be cross-tenant XSS by construction (a visiting
+  logged-in user's session exposed to another tenant's script). Extraction + code-owned snippets
+  gives the paste-the-code UX without that. Every ID is validated against a strict anchored
+  per-provider pattern at save time (hard 400 with a field-specific message on failure — a typo'd
+  ID silently dropped would read as "tracking is broken") AND re-checked at render time — a stored
+  value that doesn't match renders nothing. Verified directly: script-injection-shaped IDs are
+  rejected at validation and render nothing even when force-stored.
+- **Threading**: `renderBridgeHtml`/`renderFunnelStepHtml` gained an optional `tracking` param
+  (spliced into `<head>` + a body-start fragment for GTM's/the Pixel's noscript blocks); passed by
+  every render call site — `stagePages` (fetches the row's `tracking` so a campaign REBUILD keeps
+  its snippets), both page-copy PATCH routes, and `rerenderFunnelSequence`. The opt-in submit
+  handler fires `fbq('track','Lead')` when the Pixel is installed (guarded no-op otherwise).
+- **A pre-existing gap got fixed in the same pass**: `rerenderFunnelSequence` never re-rendered
+  `bridge_variants` — a non-control variant's page (served at the same URL as the control) never
+  picked up funnel-step redirects, so visitors assigned to B+ on a multi-step funnel got the
+  in-place reveal instead of step 1. It now re-renders every non-control variant with the same
+  `nextStepUrl` + tracking as the control; the bridge-variants PATCH route also resolves
+  `nextStepUrl` now (it previously always baked the reveal behavior).
+- **Verified end-to-end at the DB level** (service-role script mirroring exactly what the route
+  does after auth): save tracking → re-render → GA4/Pixel/noscript/Lead-event all present in the
+  real stored `bridge_html`; clear tracking → re-render → all snippets gone, page content intact.
+  Extraction verified against each platform's real verbatim install snippet shape.
+
 ## Multi-step funnels
 
 `funnel_steps` (`supabase/migrations/0023_funnel_steps.sql`) lets a tenant chain fixed-type pages

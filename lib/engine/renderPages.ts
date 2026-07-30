@@ -29,9 +29,11 @@ import {
   type FormInputBlock,
   type FunnelStepType,
 } from "./blockTree";
+import { renderTrackingHtml, type TrackingSettings } from "./tracking";
 
 export { escapeHtml };
 export * from "./blockTree";
+export { validateTracking, renderTrackingHtml, TRACKING_FIELDS, type TrackingSettings } from "./tracking";
 
 // ---------------------------------------------------------------------------------------------
 // Legacy flat shape — the permanent Anthropic authoring schema. Never remove; normalizePageCopy()
@@ -243,7 +245,8 @@ export function renderBridgeHtml(
   hoplink: string,
   imageDataUrl: string | null,
   campaignId: string,
-  nextStepUrl?: string | null
+  nextStepUrl?: string | null,
+  tracking?: TrackingSettings | null
 ): string {
   const tree = normalizePageCopy(copy, imageDataUrl);
   const ctx: RenderCtx = {
@@ -257,6 +260,7 @@ export function renderBridgeHtml(
   };
   const title = titleOf(tree);
   const body = renderBlockTree(tree, ctx);
+  const t = renderTrackingHtml(tracking);
 
   return `<!doctype html>
 <html lang="en">
@@ -264,9 +268,11 @@ export function renderBridgeHtml(
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(title)}</title>
+${t.head}
 <style>${PAGE_STYLE}</style>
 </head>
 <body>
+${t.bodyStart}
   <div class="wrap">
     ${body}
   </div>
@@ -280,6 +286,9 @@ export function renderBridgeHtml(
         else if (el.name === 'email') payload.email = el.value;
         else if (el.name) payload.extra_fields[el.name] = el.value;
       });
+      // Meta Pixel Lead event — only fires when the funnel's tracking settings installed the
+      // pixel (window.fbq exists); a harmless no-op check otherwise.
+      if (window.fbq) { try { window.fbq('track', 'Lead'); } catch (err) {} }
       function advance() {
         if (form.dataset.nextStepUrl) {
           window.location.href = form.dataset.nextStepUrl;
@@ -325,7 +334,8 @@ export function renderFunnelStepHtml(
   stepType: FunnelStepType,
   primaryHref: string,
   imageDataUrl: string | null,
-  declineHref?: string | null
+  declineHref?: string | null,
+  tracking?: TrackingSettings | null
 ): string {
   const tree = normalizePageCopy(copy, imageDataUrl, { stepType });
   const ctx: RenderCtx = {
@@ -340,6 +350,7 @@ export function renderFunnelStepHtml(
   };
   const title = titleOf(tree);
   const body = renderBlockTree(tree, ctx);
+  const t = renderTrackingHtml(tracking);
 
   return `<!doctype html>
 <html lang="en">
@@ -347,11 +358,13 @@ export function renderFunnelStepHtml(
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(title)}</title>
+${t.head}
 <style>${PAGE_STYLE}
   .cta-wrap { max-width: 420px; margin: 40px auto 0; text-align:center; }
 </style>
 </head>
 <body>
+${t.bodyStart}
   <div class="wrap">
     <div class="cta-wrap">
       ${body}

@@ -71,7 +71,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: campaign, error: campaignErr } = await admin
     .from("campaigns")
-    .select("product_id")
+    .select("product_id, tracking")
     .eq("id", variant.campaign_id)
     .single();
   if (campaignErr || !campaign) {
@@ -102,7 +102,29 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const hoplink = buildHoplink(product.network, connection.affiliate_id, product.vendor_id, "page");
 
-  const bridgeHtml = renderBridgeHtml(product, tree, hoplink, imageDataUrl, variant.campaign_id);
+  // Variants serve at the same URL as the control, so they carry the same post-submit
+  // redirect (multi-step funnels) and the same tracking snippets — part of the same gap fix as
+  // rerenderFunnelSequence's variant pass (a variant page previously never picked up either).
+  const { data: firstStep } = await admin
+    .from("funnel_steps")
+    .select("step_index")
+    .eq("campaign_id", variant.campaign_id)
+    .order("step_index", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const nextStepUrl = firstStep
+    ? `${process.env.NEXT_PUBLIC_APP_URL}/p/${variant.campaign_id}/step/${firstStep.step_index}`
+    : null;
+
+  const bridgeHtml = renderBridgeHtml(
+    product,
+    tree,
+    hoplink,
+    imageDataUrl,
+    variant.campaign_id,
+    nextStepUrl,
+    (campaign.tracking ?? null) as import("@/lib/engine/renderPages").TrackingSettings | null
+  );
 
   const { error: updateErr } = await admin
     .from("bridge_variants")

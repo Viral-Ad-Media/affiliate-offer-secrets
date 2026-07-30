@@ -1,7 +1,8 @@
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { fetchSalesPage, type ImageCandidate } from "./salespage";
 import { pickProductImage, fetchImageAsDataUrl } from "./images";
-import { renderBridgeHtml, buildHoplink, normalizePageCopy, type PageCopy, type Network } from "./renderPages";
+import { renderBridgeHtml, buildHoplink, normalizePageCopy, type PageCopy, type Network, type TrackingSettings } from "./renderPages";
+import { db } from "./core";
 import type { FbAdAngle, SocialPost } from "@/lib/shared";
 
 export const BUILD_CAMPAIGN_STAGES = ["context", "image", "ads", "pages", "content", "social"] as const;
@@ -170,7 +171,11 @@ async function stagePages(
   // every newly-built campaign persists version-2 page_copy going forward, rather than relying on
   // renderBridgeHtml's own internal (idempotent) normalization at every future read.
   const tree = normalizePageCopy(copy, imageDataUrl);
-  const bridgeHtml = renderBridgeHtml(product, tree, hoplink, imageDataUrl, campaignId);
+  // A REBUILD of a campaign whose funnel already has tracking settings must keep its snippets —
+  // fresh builds just read null here (the column defaults to null until funnel settings set it).
+  const { data: trackingRow } = await db.from("campaigns").select("tracking").eq("id", campaignId).maybeSingle();
+  const tracking = (trackingRow?.tracking ?? null) as TrackingSettings | null;
+  const bridgeHtml = renderBridgeHtml(product, tree, hoplink, imageDataUrl, campaignId, null, tracking);
 
   return {
     stageData: prior,
