@@ -498,12 +498,24 @@ lookup, nothing else changes.
   literally the same write shape the page-copy route already does) then deletes every
   `bridge_variants` row for the campaign either way; leads already captured keep their row
   (`contacts.bridge_variant_id` → null via `on delete set null`).
-- **New `components/SplitTestPanel.tsx`**, mounted on the funnel's own `/funnels/[campaignId]`
-  page (moved here from the product page — see "Multi-step funnels" below) next to
-  `PublishBridge`: variant list (weight, pause/resume, delete, leads, views, computed rate), "Add
-  variant" (capped at 5 total rows — nominal UI-sanity limit, not a security boundary), and "End
-  test" with a promote-winner picker. A non-control variant's "Edit" expands an inline `PageEditor`
-  in the panel's own local state.
+- **The split test renders as a visual branch directly on the funnel map** —
+  `components/SplitTestBranch.tsx` replaces the plain opt-in `MapNode` in
+  `components/FunnelMap.tsx`. With no test running (the default), it renders the same single
+  opt-in node as before plus an inline "Split test" start button; once a test exists, the node
+  visually splits into parallel variant cards (Control/B/… side by side — each with weight input,
+  views/leads/computed rate, preview, edit, pause/resume, delete) that merge back into the single
+  funnel path below, mirroring the real weighted-random split a visitor experiences. A variant
+  card's "Edit copy" switches the parent page (`app/(app)/funnels/[campaignId]/page.tsx`) to a new
+  `{kind: "variant", variantId}` view — a focused `PageEditor` with
+  `saveEndpoint=/api/bridge-variants/{id}` (the variant row is fetched on demand there, not
+  preloaded with the page); the control card's edit routes to the existing `optin` view, which
+  writes the `campaigns` row correctly.
+- **`components/SplitTestPanel.tsx`** (the detailed vertical list — variant rows, "Add variant"
+  capped at 5 total, "End test" with a promote-winner picker, inline variant `PageEditor`) still
+  exists, shown on the opt-in page's own focused editor view. **Both components share
+  `lib/useSplitTest.ts`** — the variants/leadCounts state and every RPC call
+  (start/add/weight/toggle/delete/end) extracted into one hook once this became two consumers, so
+  neither can drift from the other's read-after-write/error-handling behavior.
 
 ## Multi-step funnels
 

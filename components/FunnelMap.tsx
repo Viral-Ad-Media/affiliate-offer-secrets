@@ -8,7 +8,6 @@ import {
   Trash2,
   Pencil,
   Eye,
-  LogIn,
   CheckCircle2,
   TrendingUp,
   CreditCard,
@@ -16,6 +15,7 @@ import {
 } from "lucide-react";
 import type { FunnelStep, FunnelStepType } from "@/lib/shared";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import SplitTestBranch from "@/components/SplitTestBranch";
 
 const STEP_LABELS: Record<FunnelStepType, string> = {
   thank_you: "Thank-you",
@@ -34,6 +34,7 @@ export default function FunnelMap({
   bridgeHtml,
   steps,
   onSelectOptin,
+  onSelectVariant,
   onSelectStep,
   onChanged,
 }: {
@@ -41,6 +42,7 @@ export default function FunnelMap({
   bridgeHtml: string | null;
   steps: FunnelStep[];
   onSelectOptin: () => void;
+  onSelectVariant: (variantId: string) => void;
   onSelectStep: (stepId: string) => void;
   onChanged: () => void;
 }) {
@@ -99,12 +101,12 @@ export default function FunnelMap({
       {error && <p className="mb-2 text-sm text-red-300">{error}</p>}
 
       <div className="flex flex-col items-stretch gap-1">
-        <MapNode
-          icon={LogIn}
-          label="Opt-in page"
-          sublabel="Every funnel's entry point — lead capture"
-          onPreview={() => preview(bridgeHtml, "Opt-in page")}
-          onEdit={onSelectOptin}
+        <SplitTestBranch
+          campaignId={campaignId}
+          bridgeHtml={bridgeHtml}
+          onPreview={preview}
+          onEditControl={onSelectOptin}
+          onEditVariant={onSelectVariant}
         />
 
         {steps.map((step, i) => {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import type { Campaign, FunnelStep } from "@/lib/shared";
+import type { Campaign, FunnelStep, BridgeVariant } from "@/lib/shared";
 import PublishBridge from "@/components/PublishBridge";
 import PageEditor from "@/components/PageEditor";
 import SplitTestPanel from "@/components/SplitTestPanel";
@@ -20,7 +20,7 @@ const STEP_LABELS: Record<FunnelStep["step_type"], string> = {
 // "map" (default) shows the funnel as a sequence of pages; selecting one switches to a focused
 // editor view for just that page — mirrors picking a slide before editing it, not everything
 // inline on one long scroll.
-type View = { kind: "map" } | { kind: "optin" } | { kind: "step"; stepId: string };
+type View = { kind: "map" } | { kind: "optin" } | { kind: "variant"; variantId: string } | { kind: "step"; stepId: string };
 
 export default function FunnelPage({ params }: { params: { campaignId: string } }) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -30,6 +30,25 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [view, setView] = useState<View>({ kind: "map" });
+  const [variantInView, setVariantInView] = useState<BridgeVariant | null>(null);
+
+  // Fetched on demand (not preloaded with the rest of the page) since a variant is only ever
+  // reachable by clicking it in components/SplitTestBranch.tsx's own map-integrated fetch — no
+  // other part of this page needs the full variant row otherwise.
+  useEffect(() => {
+    if (view.kind !== "variant") {
+      setVariantInView(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await createClient().from("bridge_variants").select("*").eq("id", view.variantId).maybeSingle();
+      if (!cancelled) setVariantInView(data as BridgeVariant | null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [view]);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -101,6 +120,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
         <h1 className="text-2xl font-bold text-zinc-100">
           {productTitle}
           {view.kind === "optin" && " — Opt-in page"}
+          {view.kind === "variant" && variantInView && ` — Opt-in page (${variantInView.label})`}
           {stepInView && ` — ${STEP_LABELS[stepInView.step_type]}`}
         </h1>
         {view.kind === "map" && (
@@ -129,6 +149,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
             bridgeHtml={campaign.bridge_html}
             steps={steps}
             onSelectOptin={() => setView({ kind: "optin" })}
+            onSelectVariant={(variantId) => setView({ kind: "variant", variantId })}
             onSelectStep={(stepId) => setView({ kind: "step", stepId })}
             onChanged={load}
           />
@@ -149,6 +170,23 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
             />
           </section>
         </>
+      ) : view.kind === "variant" ? (
+        variantInView ? (
+          <section className="card p-4">
+            <PageEditor
+              campaignId={campaign.id}
+              productTitle={productTitle}
+              initialCopy={variantInView.page_copy}
+              initialBridgeHtml={variantInView.bridge_html}
+              saveEndpoint={`/api/bridge-variants/${variantInView.id}`}
+              onSaved={({ bridge_html, page_copy }) =>
+                setVariantInView((v) => (v ? { ...v, bridge_html, page_copy } : v))
+              }
+            />
+          </section>
+        ) : (
+          <p className="text-sm text-zinc-500">Loading…</p>
+        )
       ) : stepInView ? (
         <section className="card p-4">
           <FunnelStepEditor

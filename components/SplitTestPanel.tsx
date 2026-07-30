@@ -1,12 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Beaker, Loader2, Pause, Play, Plus, Trash2, Pencil, X, Eye } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import type { BridgeVariant } from "@/lib/shared";
+import { useSplitTest } from "@/lib/useSplitTest";
 import PageEditor from "@/components/PageEditor";
-
-type LeadCounts = Record<string, number>;
 
 export default function SplitTestPanel({
   campaignId,
@@ -15,107 +12,35 @@ export default function SplitTestPanel({
   campaignId: string;
   productTitle: string;
 }) {
-  const [variants, setVariants] = useState<BridgeVariant[] | null>(null);
-  const [leadCounts, setLeadCounts] = useState<LeadCounts>({});
-  const [weights, setWeights] = useState<Record<string, number>>({});
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    variants,
+    leadCounts,
+    weights,
+    setWeights,
+    busy,
+    error,
+    load,
+    startTest,
+    addVariant,
+    commitWeight,
+    toggleStatus,
+    deleteVariant: deleteVariantRaw,
+    endTest: endTestRaw,
+  } = useSplitTest(campaignId);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [promoteId, setPromoteId] = useState<string>("");
 
-  const load = useCallback(async () => {
-    const supabase = createClient();
-    const [{ data: rows }, { data: contacts }] = await Promise.all([
-      supabase.from("bridge_variants").select("*").eq("campaign_id", campaignId).order("created_at"),
-      supabase.from("contacts").select("bridge_variant_id").eq("campaign_id", campaignId),
-    ]);
-    const v = (rows ?? []) as BridgeVariant[];
-    setVariants(v);
-    setWeights(Object.fromEntries(v.map((r) => [r.id, r.weight])));
-    const counts: LeadCounts = {};
-    for (const c of contacts ?? []) {
-      if (!c.bridge_variant_id) continue;
-      counts[c.bridge_variant_id] = (counts[c.bridge_variant_id] ?? 0) + 1;
-    }
-    setLeadCounts(counts);
-  }, [campaignId]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  async function startTest() {
-    setBusy("start");
-    setError(null);
-    const { error: err } = await createClient().rpc("start_bridge_split_test", { p_campaign_id: campaignId });
-    setBusy(null);
-    if (err) {
-      setError(err.message);
-      return;
-    }
-    await load();
-  }
-
-  async function addVariant() {
-    setBusy("add");
-    setError(null);
-    const { error: err } = await createClient().rpc("add_bridge_variant", { p_campaign_id: campaignId });
-    setBusy(null);
-    if (err) {
-      setError(err.message);
-      return;
-    }
-    await load();
-  }
-
-  async function commitWeight(variantId: string) {
-    const weight = weights[variantId];
-    setBusy(variantId);
-    const { error: err } = await createClient().rpc("update_bridge_variant_weight", {
-      p_variant_id: variantId,
-      p_weight: weight,
-    });
-    setBusy(null);
-    if (err) setError(err.message);
-    else await load();
-  }
-
-  async function toggleStatus(variant: BridgeVariant) {
-    setBusy(variant.id);
-    const fn = variant.status === "active" ? "pause_bridge_variant" : "resume_bridge_variant";
-    const { error: err } = await createClient().rpc(fn, { p_variant_id: variant.id });
-    setBusy(null);
-    if (err) setError(err.message);
-    else await load();
-  }
-
   async function deleteVariant(variantId: string) {
-    setBusy(variantId);
-    const { error: err } = await createClient().rpc("delete_bridge_variant", { p_variant_id: variantId });
-    setBusy(null);
-    if (err) {
-      setError(err.message);
-      return;
-    }
-    if (editingId === variantId) setEditingId(null);
-    await load();
+    const ok = await deleteVariantRaw(variantId);
+    if (ok && editingId === variantId) setEditingId(null);
   }
 
   async function endTest() {
-    setBusy("end");
-    setError(null);
-    const { error: err } = await createClient().rpc("end_bridge_split_test", {
-      p_campaign_id: campaignId,
-      p_promote_variant_id: promoteId || null,
-    });
-    setBusy(null);
-    if (err) {
-      setError(err.message);
-      return;
+    const ok = await endTestRaw(promoteId || null);
+    if (ok) {
+      setEditingId(null);
+      setPromoteId("");
     }
-    setEditingId(null);
-    setPromoteId("");
-    await load();
   }
 
   if (variants === null) return null;
