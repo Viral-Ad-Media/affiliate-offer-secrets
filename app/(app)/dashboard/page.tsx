@@ -61,7 +61,7 @@ const QUICK_LINKS = [
     description: "See leads captured from your bridge pages.",
   },
   {
-    href: "/broadcast",
+    href: "/emails/sequences",
     icon: Send,
     label: "Broadcast",
     description: "Send and schedule email sequences to your contacts.",

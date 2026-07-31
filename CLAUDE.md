@@ -1286,7 +1286,40 @@ per-component recoloring:
   install` — the CSS variable mapping above means no manual re-theming should be needed for
   components that use standard shadcn semantic classes.
 
-## Broadcast (drip sequences)
+## Emails (Broadcast + Sequences)
+
+Sidebar parent **Emails** with two children — **Broadcast** (`/emails/broadcast`, one-off send)
+and **Sequences** (`/emails/sequences`, the multi-step drip that used to live at `/broadcast`).
+
+- **A broadcast IS a sequence.** `broadcast_sequences.kind` (0035, `'sequence' | 'broadcast'`) is
+  the ONLY difference: a broadcast is a `kind='broadcast'` row with a single `delay_days = 0`
+  step, created-and-activated in one call by `app/api/broadcast/send-now/route.ts`. Nothing in
+  the delivery path reads `kind` — enrollment, `run_broadcast_sweep()`'s pooled daily cap, the
+  `send_broadcast_email` job, the code-owned unsubscribe footer, `broadcast_sends` auditing and
+  terminal-failure handling all apply unchanged. The column exists purely so the two list
+  separately in the UI.
+- **`create_broadcast_sequence` gained a defaulted `p_kind`** — and the old 3-arg function was
+  DROPPED rather than left alongside it. Keeping both would make every existing 3-arg call
+  ambiguous to Postgres's resolver (matches the old exactly AND the new via its default); with
+  the old dropped, today's 3-arg call sites resolve to the new function with `kind='sequence'`,
+  behaviour unchanged.
+- **send-now is pure orchestration**: it calls the three existing RPCs (create → upsert step →
+  activate) and rolls the draft back with `delete_broadcast_sequence` if either later step fails,
+  so a half-built broadcast never lingers in the history list. Campaign-audience ownership is
+  re-checked inside `create_broadcast_sequence` via `assert_owns_campaign` — this route is never
+  the boundary.
+- **The composer gates on the active sender**: Gmail needs a live OAuth connection, so Send is
+  disabled with an explicit reason when it is missing or `needs_reconnect`; the API-key providers
+  (Resend/SendGrid/Mailgun/SMTP) are always ready.
+- **Verified live**: the Emails submenu renders and highlights correctly, a real send-now call
+  produced exactly `kind='broadcast'` / `status='active'` / 1 step at `delay_days=0` with the
+  right subject, that row did NOT appear on the Sequences list, and both validation guards
+  (missing subject, campaign audience with no campaign) rejected. Test row deleted afterward.
+- Route move: `/broadcast` → `/emails/sequences` (all internal links, the Overview quick-link and
+  `robots.ts` updated). No redirect from the old path — it was only ever reachable from the
+  in-app sidebar, never linked externally.
+
+## Broadcast delivery internals (drip sequences)
 
 Full autoresponder/drip-sequence email feature — a client picks an audience (a specific
 campaign's contacts, all contacts, or a manually chosen subset) and a named sequence of N steps,

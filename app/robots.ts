@@ -19,7 +19,7 @@ export default function robots(): MetadataRoute.Robots {
           "/connections",
           "/domains",
           "/contacts",
-          "/broadcast",
+          "/emails",
           "/blog",
           "/audit",
           "/billing",

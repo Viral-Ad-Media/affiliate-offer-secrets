@@ -45,7 +45,7 @@ export default function BroadcastSequenceForm({
     if (!confirm(`Delete "${sequence.name}"? This can't be undone.`)) return;
     setBusy(true);
     await createClient().rpc("delete_broadcast_sequence", { p_sequence_id: sequence.id });
-    router.push("/broadcast");
+    router.push("/emails/sequences");
   }
 
   return (

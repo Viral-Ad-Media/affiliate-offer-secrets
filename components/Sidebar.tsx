@@ -32,7 +32,16 @@ const NAV = [
   { href: "/connections", label: "Connections", icon: Link2, match: (p: string) => p === "/connections" },
   { href: "/domains", label: "Domains", icon: Globe, match: (p: string) => p.startsWith("/domains") },
   { href: "/contacts", label: "Contacts", icon: Users, match: (p: string) => p === "/contacts" },
-  { href: "/broadcast", label: "Broadcast", icon: Send, match: (p: string) => p.startsWith("/broadcast") },
+  {
+    href: "/emails/broadcast",
+    label: "Emails",
+    icon: Send,
+    match: (p: string) => p.startsWith("/emails"),
+    children: [
+      { href: "/emails/broadcast", label: "Broadcast", match: (p: string) => p === "/emails/broadcast" },
+      { href: "/emails/sequences", label: "Sequences", match: (p: string) => p.startsWith("/emails/sequences") },
+    ],
+  },
   {
     href: "/blog",
     label: "Blog",

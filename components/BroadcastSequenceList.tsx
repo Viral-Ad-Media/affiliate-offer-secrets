@@ -54,7 +54,7 @@ export default function BroadcastSequenceList({
       setError(err?.message ?? "Failed to create sequence");
       return;
     }
-    router.push(`/broadcast/${data}`);
+    router.push(`/emails/sequences/${data}`);
   }
 
   return (
@@ -142,7 +142,7 @@ export default function BroadcastSequenceList({
               {rows.map(({ sequence, campaignTitle, stepCount, enrolledCount }) => (
                 <tr key={sequence.id}>
                   <td className="px-4 py-2.5">
-                    <Link href={`/broadcast/${sequence.id}`} className="font-medium text-zinc-100 hover:text-emerald-400">
+                    <Link href={`/emails/sequences/${sequence.id}`} className="font-medium text-zinc-100 hover:text-emerald-400">
                       <span className="inline-flex items-center gap-1.5">
                         <Send className="h-3.5 w-3.5 text-zinc-500" /> {sequence.name}
                       </span>

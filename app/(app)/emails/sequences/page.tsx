@@ -15,6 +15,8 @@ export default async function BroadcastPage() {
       .from("broadcast_sequences")
       .select("id, name, audience_type, campaign_id, status, created_at, updated_at")
       .eq("user_id", user.id)
+      // Only multi-step drips — one-off sends (kind='broadcast', 0035) have their own page.
+      .eq("kind", "sequence")
       .order("created_at", { ascending: false }),
     supabase.from("campaigns").select("id, products(product_title)"),
     supabase.from("broadcast_steps").select("id, sequence_id").eq("user_id", user.id),
@@ -50,9 +52,10 @@ export default async function BroadcastPage() {
   return (
     <main className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold text-zinc-100">Broadcast</h1>
+        <h1 className="text-2xl font-bold text-zinc-100">Sequences</h1>
         <p className="text-sm text-zinc-400">
-          Automated email drip sequences sent to your captured contacts.
+          Automated drip sequences — each step fires a set number of days after that contact&apos;s
+          own signup. For a single email sent now, use Broadcast.
         </p>
       </header>
       <BroadcastSequenceList rows={rows} campaignOptions={campaignOptions} />

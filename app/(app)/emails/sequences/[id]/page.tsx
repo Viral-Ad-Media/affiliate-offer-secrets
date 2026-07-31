@@ -98,7 +98,7 @@ export default function BroadcastSequencePage({ params }: { params: { id: string
   if (notFound || !sequence) {
     return (
       <main className="space-y-4">
-        <Link href="/broadcast" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200">
+        <Link href="/emails/sequences" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200">
           <ArrowLeft className="h-4 w-4" /> Back to Broadcast
         </Link>
         <p className="text-sm text-zinc-500">Sequence not found.</p>
@@ -111,7 +111,7 @@ export default function BroadcastSequencePage({ params }: { params: { id: string
 
   return (
     <main className="space-y-5">
-      <Link href="/broadcast" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200">
+      <Link href="/emails/sequences" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200">
         <ArrowLeft className="h-4 w-4" /> Back to Broadcast
       </Link>
 
