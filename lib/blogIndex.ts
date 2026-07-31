@@ -1,5 +1,38 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { POSTS_PER_PAGE, type BlogIndexPost, type BlogIndexCategory } from "@/lib/blog";
+import { POSTS_PER_PAGE, MAX_FEED_POSTS, type BlogIndexPost, type BlogIndexCategory } from "@/lib/blog";
+
+const POST_COLUMNS =
+  "id, title, slug, excerpt, content_md, html, featured_image_url, published_at, blog_categories(name)";
+
+function toIndexPost(r: any): BlogIndexPost {
+  return {
+    id: r.id as string,
+    title: r.title as string,
+    slug: r.slug as string | null,
+    excerpt: r.excerpt as string | null,
+    content_md: (r.content_md as string) ?? "",
+    html: r.html as string | null,
+    featured_image_url: r.featured_image_url as string | null,
+    published_at: r.published_at as string | null,
+    category_name: (r.blog_categories as { name: string } | null)?.name ?? null,
+  };
+}
+
+// Every published post, newest first — the feed views (RSS, sitemap) are unpaginated and
+// unfiltered by design, so they share this rather than loadBlogIndex's paged query.
+export async function loadAllPublishedPosts(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string
+): Promise<BlogIndexPost[]> {
+  const { data } = await admin
+    .from("blog_posts")
+    .select(POST_COLUMNS)
+    .eq("user_id", userId)
+    .eq("status", "published")
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .limit(MAX_FEED_POSTS);
+  return (data ?? []).map(toIndexPost);
+}
 
 export type BlogIndexData = {
   posts: BlogIndexPost[];
@@ -61,27 +94,11 @@ export async function loadBlogIndex(
   if (page > totalPages && total > 0) return null;
 
   const from = (page - 1) * POSTS_PER_PAGE;
-  const { data: rows } = await applyFilters(
-    admin
-      .from("blog_posts")
-      .select(
-        "id, title, slug, excerpt, content_md, html, featured_image_url, published_at, blog_categories(name)"
-      ) as any
-  )
+  const { data: rows } = await applyFilters(admin.from("blog_posts").select(POST_COLUMNS) as any)
     .order("published_at", { ascending: false, nullsFirst: false })
     .range(from, from + POSTS_PER_PAGE - 1);
 
-  const posts: BlogIndexPost[] = (rows ?? []).map((r: any) => ({
-    id: r.id as string,
-    title: r.title as string,
-    slug: r.slug as string | null,
-    excerpt: r.excerpt as string | null,
-    content_md: (r.content_md as string) ?? "",
-    html: r.html as string | null,
-    featured_image_url: r.featured_image_url as string | null,
-    published_at: r.published_at as string | null,
-    category_name: (r.blog_categories as { name: string } | null)?.name ?? null,
-  }));
+  const posts: BlogIndexPost[] = (rows ?? []).map(toIndexPost);
 
   return {
     posts,

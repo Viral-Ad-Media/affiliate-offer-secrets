@@ -1,6 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { renderPublicPostHtml, renderBlogIndexHtml, blogPostPath } from "@/lib/blog";
-import { loadBlogIndex } from "@/lib/blogIndex";
+import { renderPublicPostHtml, renderBlogIndexHtml, renderRssXml, renderSitemapXml, blogPostPath } from "@/lib/blog";
+import { loadBlogIndex, loadAllPublishedPosts } from "@/lib/blogIndex";
+
+// Feeds are cheap to regenerate but change only on publish — a short shared cache keeps crawler
+// and reader-app polling off the database without making a new post wait long to appear.
+const xmlHeaders = (name: string) => ({
+  "Content-Type": name === "rss.xml" ? "application/rss+xml; charset=utf-8" : "application/xml; charset=utf-8",
+  "Cache-Control": "public, max-age=300, s-maxage=300",
+});
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +73,19 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
       status: 200,
       headers: HTML_HEADERS,
     });
+  }
+
+  // Feeds live under the blog's own prefix. Safe to reserve these names: slugify() strips dots,
+  // so no post slug can ever be "rss.xml" or "sitemap.xml".
+  if (segments[1] === "rss.xml" || segments[1] === "sitemap.xml") {
+    const posts = await loadAllPublishedPosts(admin, settings.user_id as string);
+    const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+    const base = `/b/${settings.slug}`;
+    const body =
+      segments[1] === "rss.xml"
+        ? renderRssXml(settings, posts, origin, base)
+        : renderSitemapXml(posts, origin, base);
+    return new Response(body, { status: 200, headers: xmlHeaders(segments[1]) });
   }
 
   // /b/{blogSlug}/{postSlug}

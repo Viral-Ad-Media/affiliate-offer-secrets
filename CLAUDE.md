@@ -1455,7 +1455,17 @@ The blog is a real published site, not just per-post links.
 - **Verified live** with 15 published posts across 2 categories: 12 + 3 across two pages, correct
   per-category counts (7 + 8), active chip marked `aria-current`, `rel` links present/absent at
   the right ends, and 404s for `?page=99` and `?category=nope`. Test data reverted afterward.
-- **Still deferred**: no RSS feed, no sitemap.
+- **Feeds**: `/b/{blog}/rss.xml` and `/b/{blog}/sitemap.xml` (root-level on a custom domain, which
+  also gets its own `robots.txt` pointing at that sitemap — the app-wide `app/robots.ts` only
+  answers for the app's own host). Reserving those names is safe because `slugify()` strips dots,
+  so no post slug can ever collide. Both are unpaginated/unfiltered (`loadAllPublishedPosts`,
+  capped at `MAX_FEED_POSTS` = 1000) and 5-minute cached. Escaped with the same `escapeHtml()`
+  used everywhere else — it covers `& < > "`, exactly what XML text and double-quoted attributes
+  need, so a tenant title can't break the document; deliberately no CDATA (which would need its
+  own `]]>` escaping). Index and post pages advertise the feed via `<link rel="alternate">`.
+  Verified live against a post titled `Feed Post & One <tagged>`: both documents parse as
+  well-formed XML with the entities escaped.
+- **Still deferred**: no paginated sitemap index (irrelevant under 1000 posts).
 
 ## Freeform block-based page builder (Phase O — complete, all 5 sub-phases landed)
 

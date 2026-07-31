@@ -329,6 +329,7 @@ export function renderPublicPostHtml(post: {
 <title>${escapeHtml(titleTag)}</title>
 ${description ? `<meta name="description" content="${escapeHtml(description)}">` : ""}
 ${canonical ? `<link rel="canonical" href="${escapeHtml(canonical)}">` : ""}
+${post.settings?.blog_title ? `<link rel="alternate" type="application/rss+xml" title="${escapeHtml(post.settings.blog_title)}" href="${escapeHtml(`${base}/rss.xml`)}">` : ""}
 <meta property="og:type" content="article">
 <meta property="og:title" content="${escapeHtml(seoTitle)}">
 ${description ? `<meta property="og:description" content="${escapeHtml(description)}">` : ""}
@@ -469,6 +470,7 @@ ${description ? `<meta name="description" content="${escapeHtml(description)}">`
 <link rel="canonical" href="${escapeHtml(origin + urlFor(activeCategory?.slug ?? null, page))}">
 ${page > 1 ? `<link rel="prev" href="${escapeHtml(origin + urlFor(activeCategory?.slug ?? null, page - 1))}">` : ""}
 ${page < totalPages ? `<link rel="next" href="${escapeHtml(origin + urlFor(activeCategory?.slug ?? null, page + 1))}">` : ""}
+<link rel="alternate" type="application/rss+xml" title="${escapeHtml(baseTitle)}" href="${escapeHtml(`${base}/rss.xml`)}">
 <meta property="og:type" content="website">
 <meta property="og:title" content="${escapeHtml(title)}">
 ${description ? `<meta property="og:description" content="${escapeHtml(description)}">` : ""}
@@ -492,6 +494,79 @@ ${siteHeader(settings, base)}
 </div>
 </body>
 </html>`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Feeds. Both are plain strings built with the same escapeHtml() used everywhere else — it
+// escapes & < > " which is exactly what XML text nodes and double-quoted attributes need, so
+// tenant-authored titles/excerpts can't break out of the document. No CDATA (which would need
+// its own ]]> escaping); escaped text is the safer choice.
+// ---------------------------------------------------------------------------------------------
+
+// Cap well under the 50k sitemap limit — a blog this size wants a paginated sitemap index, which
+// is deferred. Both feeds share the cap so they can't disagree about what exists.
+export const MAX_FEED_POSTS = 1000;
+
+function rfc822(date: string | null): string {
+  return date ? new Date(date).toUTCString() : new Date(0).toUTCString();
+}
+
+// `base` is "" on a custom domain (blog is the site root) and "/b/{blog-slug}" on the app path —
+// same convention as the HTML renderers.
+export function renderRssXml(
+  settings: BlogSettings,
+  posts: BlogIndexPost[],
+  origin: string,
+  base: string
+): string {
+  const title = settings.blog_title || "Blog";
+  const selfUrl = `${origin}${base}/rss.xml`;
+  const items = posts
+    .map((p) => {
+      const url = `${origin}${base}/${p.slug ?? p.id}`;
+      const desc = (p.excerpt || "").trim() || postExcerpt(p);
+      return `  <item>
+    <title>${escapeHtml(p.title)}</title>
+    <link>${escapeHtml(url)}</link>
+    <guid isPermaLink="true">${escapeHtml(url)}</guid>
+    <pubDate>${escapeHtml(rfc822(p.published_at))}</pubDate>
+    ${p.category_name ? `<category>${escapeHtml(p.category_name)}</category>` : ""}
+    ${desc ? `<description>${escapeHtml(desc)}</description>` : ""}
+  </item>`;
+    })
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+  <title>${escapeHtml(title)}</title>
+  <link>${escapeHtml(origin + (base || "/"))}</link>
+  <atom:link href="${escapeHtml(selfUrl)}" rel="self" type="application/rss+xml" />
+  <description>${escapeHtml((settings.description || "").trim() || title)}</description>
+  <language>en</language>
+  <lastBuildDate>${escapeHtml(rfc822(posts[0]?.published_at ?? null))}</lastBuildDate>
+${items}
+</channel>
+</rss>`;
+}
+
+export function renderSitemapXml(posts: BlogIndexPost[], origin: string, base: string): string {
+  const indexUrl = `${origin}${base || "/"}`;
+  const urls = [
+    `  <url><loc>${escapeHtml(indexUrl)}</loc><changefreq>daily</changefreq></url>`,
+    ...posts.map((p) => {
+      const url = `${origin}${base}/${p.slug ?? p.id}`;
+      const lastmod = p.published_at ? new Date(p.published_at).toISOString().slice(0, 10) : null;
+      return `  <url><loc>${escapeHtml(url)}</loc>${
+        lastmod ? `<lastmod>${escapeHtml(lastmod)}</lastmod>` : ""
+      }</url>`;
+    }),
+  ].join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`;
 }
 
 export { renderBlockTree };

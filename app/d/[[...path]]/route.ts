@@ -1,12 +1,17 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { servePublicCampaignPage } from "@/lib/publicPage";
-import { renderPublicPostHtml, renderBlogIndexHtml } from "@/lib/blog";
-import { loadBlogIndex } from "@/lib/blogIndex";
+import { renderPublicPostHtml, renderBlogIndexHtml, renderRssXml, renderSitemapXml } from "@/lib/blog";
+import { loadBlogIndex, loadAllPublishedPosts } from "@/lib/blogIndex";
 
 const HTML_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
   "Referrer-Policy": "strict-origin-when-cross-origin",
 };
+
+const xmlHeaders = (name: string) => ({
+  "Content-Type": name === "rss.xml" ? "application/rss+xml; charset=utf-8" : "application/xml; charset=utf-8",
+  "Cache-Control": "public, max-age=300, s-maxage=300",
+});
 
 // Serves the domain owner's blog at the domain root. Returns null (not a 404) when nothing
 // matches so the caller can fall through to its own generic 404 — keeps one not-found shape.
@@ -31,6 +36,23 @@ async function serveBlogOnDomain(
       status: 200,
       headers: HTML_HEADERS,
     });
+  }
+
+  // On a custom domain the blog is the site root, so its feeds sit at the root too. Reserving
+  // these names is safe: slugify() strips dots, so no post slug can collide with them.
+  if (path === "rss.xml" || path === "sitemap.xml" || path === "robots.txt") {
+    if (path === "robots.txt") {
+      // The app-wide app/robots.ts only answers for the app's own host — a connected domain needs
+      // its own, pointing crawlers at this blog's sitemap.
+      return new Response(`User-agent: *\nAllow: /\n\nSitemap: ${siteOrigin}/sitemap.xml\n`, {
+        status: 200,
+        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" },
+      });
+    }
+    const posts = await loadAllPublishedPosts(admin, userId);
+    const body =
+      path === "rss.xml" ? renderRssXml(settings, posts, siteOrigin, "") : renderSitemapXml(posts, siteOrigin, "");
+    return new Response(body, { status: 200, headers: xmlHeaders(path) });
   }
 
   const { data: post } = await admin
