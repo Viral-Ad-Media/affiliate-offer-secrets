@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import ManualSendPanel, { type ManualContact } from "@/components/ManualSendPanel";
 import { Send, Loader2, CheckCircle2, AlertTriangle, Users, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/lib/toast";
 
 type HistoryRow = {
   id: string;
@@ -65,6 +66,7 @@ export default function BroadcastComposer({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to send");
+      toast.success("Broadcast queued — delivery starts within a minute");
       setSentAt(Date.now());
       setName("");
       setSubject("");
@@ -73,6 +75,7 @@ export default function BroadcastComposer({
       router.refresh();
     } catch (err: any) {
       setError(err?.message ?? String(err));
+      toast.error(err?.message ?? String(err));
     } finally {
       setBusy(false);
     }

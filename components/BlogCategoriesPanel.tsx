@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Tag, Plus, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
+import { toast } from "@/lib/toast";
 
 type Category = { id: string; name: string; description: string | null; postCount: number };
 
@@ -24,7 +25,9 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
       const res = await fetch(url, init);
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Something went wrong");
+        const message = data.error ?? "Something went wrong";
+        setError(message);
+        toast.error(message);
         return null;
       }
       router.refresh();
@@ -49,6 +52,7 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
     if (data) {
       setName("");
       setNewDescription("");
+      toast.success(`Category "${trimmed}" added`);
     }
   }
 
@@ -61,7 +65,10 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: trimmed, description: editDescription.trim() || null }),
     });
-    if (data) setEditingId(null);
+    if (data) {
+      setEditingId(null);
+      toast.success("Category updated");
+    }
   }
 
   return (
@@ -175,7 +182,9 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
                   title="Delete category (posts are kept)"
                   onClick={() => {
                     if (window.confirm(`Delete category "${c.name}"? Posts in it are kept, just uncategorized.`)) {
-                      call(`del-${c.id}`, `/api/blog/categories/${c.id}`, { method: "DELETE" });
+                      call(`del-${c.id}`, `/api/blog/categories/${c.id}`, { method: "DELETE" }).then(
+                        (ok) => ok && toast.success(`Category "${c.name}" deleted`)
+                      );
                     }
                   }}
                   className="text-zinc-600 hover:text-red-400"

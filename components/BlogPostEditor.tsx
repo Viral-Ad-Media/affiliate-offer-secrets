@@ -8,6 +8,7 @@ import type { PageBlockTree } from "@/lib/engine/renderPages";
 import { markdownToBlockTree, blogRenderCtx, renderBlockTree, renderPublicPostHtml } from "@/lib/blog";
 import EditorPreviewButton from "@/components/EditorPreview";
 import StatusDropdownButton from "@/components/StatusDropdownButton";
+import { toast } from "@/lib/toast";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
 import FeaturedImageField from "@/components/FeaturedImageField";
@@ -108,7 +109,9 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to save");
+        const message = data.error ?? "Failed to save";
+        setError(message);
+        toast.error(message);
         return false;
       }
       setSavedAt(Date.now());
@@ -123,7 +126,8 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
   }
 
   async function save() {
-    await patch("save", { title, blocks: tree.blocks, category_id: categoryId || null, slug, excerpt, featured_image_url: featuredImage, ...seo });
+    const ok = await patch("save", { title, blocks: tree.blocks, category_id: categoryId || null, slug, excerpt, featured_image_url: featuredImage, ...seo });
+    if (ok) toast.success("Post saved");
   }
 
   // Set the post's status explicitly rather than toggling: the split button's menu can pick
@@ -131,7 +135,10 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
   async function setPostStatus(next: "published" | "draft") {
     // Publishing always saves current edits too — publishing stale content would be surprising.
     const ok = await patch("publish", { title, blocks: tree.blocks, category_id: categoryId || null, slug, excerpt, featured_image_url: featuredImage, ...seo, status: next });
-    if (ok) setStatus(next);
+    if (ok) {
+      setStatus(next);
+      toast.success(next === "published" ? "Post published" : "Post moved back to draft");
+    }
   }
 
   // Origin is applied post-mount only — reading window.location during render makes the client's

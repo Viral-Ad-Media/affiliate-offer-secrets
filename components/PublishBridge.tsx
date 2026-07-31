@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Globe, Copy, CheckCircle2, Loader2, Plus, Trash2, Radio } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import StatusDropdownButton from "@/components/StatusDropdownButton";
+import { toast } from "@/lib/toast";
 
 type Domain = { id: string; domain: string };
 type Route = { id: string; domain_id: string; domain: string; path: string };
@@ -65,10 +66,13 @@ export default function PublishBridge({
     const data = await res.json();
     setBusy(false);
     if (!res.ok) {
-      setError(data.error ?? "Failed to update");
+      const message = data.error ?? "Failed to update";
+      setError(message);
+      toast.error(message);
       return;
     }
     setPublished(data.published);
+    toast.success(data.published ? "Funnel published" : "Funnel moved back to draft");
   }
 
   function copyLink() {
@@ -89,6 +93,7 @@ export default function PublishBridge({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to add link");
+      toast.success("Domain link added");
       const domain = domains.find((d) => d.id === selectedDomainId);
       setRoutes((r) => [
         ...r,
@@ -97,6 +102,7 @@ export default function PublishBridge({
       setPath("");
     } catch (err: any) {
       setRouteError(err?.message ?? "Failed to add link");
+      toast.error(err?.message ?? "Failed to add link");
     } finally {
       setAddingRoute(false);
     }

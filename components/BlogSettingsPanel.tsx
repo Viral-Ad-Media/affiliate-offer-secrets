@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Settings, Loader2, CheckCircle2, ExternalLink, ImagePlus, Trash2 } from "lucide-react";
 import { PERMALINK_STYLES, type PermalinkStyle } from "@/lib/blog";
+import { toast } from "@/lib/toast";
 
 export type Settings = {
   blog_title: string | null;
@@ -59,6 +60,7 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      toast.success("Blog settings saved");
       if (data.settings?.slug) setSlug(data.settings.slug);
       setSavedAt(Date.now());
       router.refresh();

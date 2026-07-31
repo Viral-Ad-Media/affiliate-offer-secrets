@@ -16,6 +16,7 @@ import {
   Star,
   BookOpen,
 } from "lucide-react";
+import { toast } from "@/lib/toast";
 
 type DomainRoute = {
   id: string;
@@ -259,8 +260,16 @@ function DomainRow({
         body: JSON.stringify({ [flag]: value }),
       });
       const data = await res.json();
-      if (!res.ok) setFlagError(data.error ?? "Could not update this domain");
-      else onFlagChange(domain.id, flag, value);
+      if (!res.ok) {
+        setFlagError(data.error ?? "Could not update this domain");
+        toast.error(data.error ?? "Could not update this domain");
+      } else {
+        onFlagChange(domain.id, flag, value);
+        const what = flag === "serves_blog" ? "blog" : "primary domain";
+        toast.success(
+          value ? `${domain.domain} is now your ${what}` : `${domain.domain} is no longer your ${what}`
+        );
+      }
     } catch (err: any) {
       setFlagError(err?.message ?? String(err));
     } finally {
@@ -273,7 +282,16 @@ function DomainRow({
     try {
       const res = await fetch(`/api/domains/${domain.id}/verify`, { method: "POST" });
       const data = await res.json();
-      if (res.ok) onUpdate({ ...domain, ...data.domain });
+      if (res.ok) {
+        onUpdate({ ...domain, ...data.domain });
+        toast[data.domain?.status === "verified" ? "success" : "info"](
+          data.domain?.status === "verified"
+            ? `${domain.domain} is verified`
+            : `${domain.domain} isn't pointing here yet — DNS can take a few minutes`
+        );
+      } else {
+        toast.error(data.error ?? "Could not check this domain");
+      }
     } finally {
       setVerifying(false);
     }
