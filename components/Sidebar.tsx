@@ -7,15 +7,12 @@ import {
   LayoutDashboard,
   Megaphone,
   Filter,
-  Link2,
-  Globe,
   Users,
   Send,
   Newspaper,
   History,
   Gift,
   Award,
-  CreditCard,
   Settings,
   Clock,
   Coins,
@@ -33,8 +30,6 @@ const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: (p: string) => p === "/dashboard" },
   { href: "/marketplace", label: "Marketplace", icon: Megaphone, match: (p: string) => p === "/marketplace" || p.startsWith("/product/") },
   { href: "/funnels", label: "Funnels", icon: Filter, match: (p: string) => p.startsWith("/funnels") },
-  { href: "/connections", label: "Connections", icon: Link2, match: (p: string) => p === "/connections" },
-  { href: "/domains", label: "Domains", icon: Globe, match: (p: string) => p.startsWith("/domains") },
   { href: "/contacts", label: "Contacts", icon: Users, match: (p: string) => p === "/contacts" },
   {
     href: "/emails/broadcast",
@@ -62,8 +57,27 @@ const NAV = [
   { href: "/referrals", label: "Referrals", icon: Gift, match: (p: string) => p === "/referrals" },
   { href: "/rewards", label: "Rewards", icon: Award, match: (p: string) => p === "/rewards" },
   { href: "/audit", label: "Audit trail", icon: History, match: (p: string) => p === "/audit" },
-  { href: "/billing", label: "Billing", icon: CreditCard, match: (p: string) => p === "/billing" },
-  { href: "/settings", label: "Settings", icon: Settings, match: (p: string) => p === "/settings" },
+  // Connections / Domains / Billing keep their own top-level URLs — they're referenced from OAuth
+  // callbacks, the access gate, and a dozen in-app links, so renaming the routes would be churn
+  // with no user-visible gain. Grouping them here is a navigation decision, not a URL one; the
+  // parent match therefore has to recognise those paths explicitly.
+  {
+    href: "/settings/profile",
+    label: "Settings",
+    icon: Settings,
+    match: (p: string) =>
+      p.startsWith("/settings") ||
+      p === "/connections" ||
+      p.startsWith("/domains") ||
+      p === "/billing",
+    children: [
+      { href: "/settings/profile", label: "Profile", match: (p: string) => p === "/settings/profile" },
+      { href: "/settings/security", label: "Security", match: (p: string) => p === "/settings/security" },
+      { href: "/connections", label: "Connections", match: (p: string) => p === "/connections" },
+      { href: "/domains", label: "Domains", match: (p: string) => p.startsWith("/domains") },
+      { href: "/billing", label: "Billing", match: (p: string) => p === "/billing" },
+    ],
+  },
 ];
 
 type Props = {

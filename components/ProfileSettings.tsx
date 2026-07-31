@@ -91,7 +91,12 @@ export default function ProfileSettings({
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <span className="mb-1 block text-xs font-medium text-zinc-400">Email</span>
-          <div className="rounded-lg border border-ink-700 bg-ink-800/50 px-3 py-2 text-sm text-zinc-400">
+          {/* truncate + title: a long address otherwise overflows the grid cell and collides with
+              the adjacent column rather than clipping. */}
+          <div
+            className="truncate rounded-lg border border-ink-700 bg-ink-800/50 px-3 py-2 text-sm text-zinc-400"
+            title={email}
+          >
             {email}
           </div>
           {/* Changing the sign-in email needs a confirmation round trip to both the old and new

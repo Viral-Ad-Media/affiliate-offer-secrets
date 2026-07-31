@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Bell, CheckCheck, AlertTriangle, Sparkles, Gift, Globe, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -50,7 +51,14 @@ function relativeTime(iso: string): string {
 export default function NotificationsBell({ iconOnly = false }: { iconOnly?: boolean }) {
   const [items, setItems] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
+  // The panel renders in a portal because the sidebar that hosts this button is a scroll
+  // container (`sm:overflow-y-auto`) narrower than the panel — an absolutely-positioned dropdown
+  // gets clipped at the sidebar's edge. Anchoring to the button's measured rect keeps it visually
+  // attached while escaping that clip entirely.
+  const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     // RLS scopes this to the caller — no user_id filter needed, and none is trusted from here.
@@ -72,7 +80,10 @@ export default function NotificationsBell({ iconOnly = false }: { iconOnly?: boo
   useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      // The panel lives outside wrapRef (portal), so both roots must be checked.
+      if (wrapRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -106,7 +117,19 @@ export default function NotificationsBell({ iconOnly = false }: { iconOnly?: boo
   return (
     <div ref={wrapRef} className="relative">
       <button
-        onClick={() => setOpen((o) => !o)}
+        ref={btnRef}
+        onClick={() => {
+          const r = btnRef.current?.getBoundingClientRect();
+          if (r) {
+            const width = Math.min(320, window.innerWidth - 16);
+            // Clamp to the viewport so the panel never hangs off-screen on a narrow window.
+            setAnchor({
+              top: r.bottom + 8,
+              left: Math.min(Math.max(8, r.left), window.innerWidth - width - 8),
+            });
+          }
+          setOpen((o) => !o);
+        }}
         title={unread > 0 ? `${unread} unread notification${unread === 1 ? "" : "s"}` : "Notifications"}
         aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
         className={`relative flex items-center gap-1.5 rounded-lg p-1.5 text-zinc-400 hover:bg-ink-800 hover:text-zinc-200 ${
@@ -121,8 +144,12 @@ export default function NotificationsBell({ iconOnly = false }: { iconOnly?: boo
         )}
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-ink-600 bg-ink-900 shadow-xl">
+      {open && anchor && createPortal(
+        <div
+          ref={panelRef}
+          style={{ top: anchor.top, left: anchor.left }}
+          className="fixed z-50 w-80 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-ink-600 bg-ink-900 shadow-xl"
+        >
           <div className="flex items-center justify-between border-b border-ink-700 px-3 py-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
               Notifications
@@ -192,7 +219,8 @@ export default function NotificationsBell({ iconOnly = false }: { iconOnly?: boo
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

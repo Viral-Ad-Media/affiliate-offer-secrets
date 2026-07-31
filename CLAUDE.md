@@ -1855,11 +1855,18 @@ validator, or renderer changes; purely how the existing capabilities are surface
   full-width canvas. Same standing caveat as O.3: real drag gestures can't be simulated by this
   session's tooling.
 
-## Settings (Profile + Security)
+## Settings
 
-`/settings` — one page, three cards: Profile, Security, and links out to things that already have
-a home (Billing, Connections, the sidebar theme toggle). Preferences are linked rather than
-duplicated; two places to set the same thing is how they drift.
+Sidebar **Settings** is a submenu, one page per item: **Profile** (`/settings/profile`, also hosts
+Appearance), **Security** (`/settings/security`), **Connections**, **Domains**, **Billing**.
+`/settings` itself just redirects to `/settings/profile`.
+
+**Connections, Domains and Billing keep their own top-level URLs** — they're referenced from the
+OAuth callbacks, the access gate (`hasAppAccess` → `/billing`), and a dozen in-app links, so
+renaming the routes would be churn with no user-visible gain. Grouping them under Settings is a
+navigation decision, not a URL one, which is why the parent nav entry's `match` has to recognise
+`/connections`, `/domains` and `/billing` explicitly — miss that and the submenu collapses when
+you're standing on one of those pages.
 
 **`profiles` is SELECT-only for clients and must stay that way.** The general update policy was
 dropped in 0002_trial.sql because it let a user self-grant `access_granted`. Profile edits go
