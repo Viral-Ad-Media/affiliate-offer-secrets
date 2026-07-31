@@ -1,4 +1,5 @@
 import { db } from "./core";
+import { notify, jobLabel } from "@/lib/notifications";
 import { runBuildCampaignStage, BUILD_CAMPAIGN_STAGES } from "./build";
 import { runDiscoverProducts, type DiscoverJobPayload } from "./discover";
 import { runLaunchAdStage, LAUNCH_AD_STAGES, type LaunchAdPayload } from "./adlaunch";
@@ -139,6 +140,14 @@ async function failJob(job: JobRow, message: string) {
       .from("jobs")
       .update({ status: "error", result: message, updated_at: new Date().toISOString() })
       .eq("id", job.id);
+    // Only TERMINAL failures notify (attempts exhausted) — a job that will still retry is not yet
+    // something the tenant needs to act on, and notifying per attempt would be pure noise.
+    await notify(db, job.user_id, {
+      kind: "job_failed",
+      title: `${jobLabel(job.type)} failed`,
+      body: message,
+      href: "/audit",
+    });
     if (job.type === "build_campaign" && job.payload?.product_id) {
       await db
         .from("campaigns")
@@ -304,6 +313,20 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
       .from("products")
       .update({ status: "Promoting", updated_at: new Date().toISOString() })
       .eq("id", productId);
+    // Fire-and-forget by design: notify() never throws, so a notification problem can't turn a
+    // successfully built kit into a failed job.
+    const { data: readyCampaign } = await db
+      .from("campaigns")
+      .select("products(product_title)")
+      .eq("user_id", job.user_id)
+      .eq("product_id", productId)
+      .maybeSingle();
+    await notify(db, job.user_id, {
+      kind: "campaign_ready",
+      title: "Campaign kit ready",
+      body: (readyCampaign as any)?.products?.product_title ?? null,
+      href: `/product/${productId}`,
+    });
     await markDone(job.id, "campaign ready");
     return { done: true };
   }

@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import ThemeToggle from "@/components/ThemeToggle";
+import NotificationsBell from "@/components/NotificationsBell";
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: (p: string) => p === "/dashboard" },
@@ -203,13 +204,16 @@ export default function Sidebar({ email, onTrial, trialDaysLeft, creditBalance }
                 Affiliate <span className="text-emerald-400">Studio</span>
               </Link>
             )}
-            <button
-              onClick={toggleCollapsed}
-              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="rounded-lg p-1.5 text-zinc-500 hover:bg-ink-800 hover:text-zinc-200"
-            >
-              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-            </button>
+            <div className="flex items-center gap-0.5">
+              <NotificationsBell iconOnly={collapsed} />
+              <button
+                onClick={toggleCollapsed}
+                title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                className="rounded-lg p-1.5 text-zinc-500 hover:bg-ink-800 hover:text-zinc-200"
+              >
+                {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
           <nav className="flex flex-col gap-0.5">{navLinks(collapsed)}</nav>
         </div>
@@ -222,6 +226,7 @@ export default function Sidebar({ email, onTrial, trialDaysLeft, creditBalance }
           Affiliate <span className="text-emerald-400">Studio</span>
         </Link>
         <div className="flex items-center gap-2">
+          <NotificationsBell />
           <Link
             href="/billing"
             className="flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-1 text-xs text-emerald-300"

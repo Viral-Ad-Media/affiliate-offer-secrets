@@ -1855,6 +1855,41 @@ validator, or renderer changes; purely how the existing capabilities are surface
   full-width canvas. Same standing caveat as O.3: real drag gestures can't be simulated by this
   session's tooling.
 
+## Notifications
+
+Bell in the sidebar header (and the mobile top bar), `components/NotificationsBell.tsx`, backed by
+`notifications` (0038). Polled every 60s — the events come from background jobs that take tens of
+seconds to minutes, so realtime buys nothing and there is no other websocket usage to amortize.
+
+**Deliberately not an activity feed.** Only events a tenant must *act* on get a row:
+terminally-failed jobs, finished campaign kits, referral payouts, domain/mail-sender errors.
+Per-post and per-lead events are excluded — Audit trail and Contacts already list those, and
+adding them would bury the actionable ones. Don't add a high-volume kind without a digest design.
+
+- Writers are server-side only (`notify()` in `lib/notifications.ts`, or in-database inside
+  `reward_referral`). `notifications` has no client insert policy.
+- `notify()` **never throws** — a notification is layered on top of something more important
+  (finishing/failing a job), and letting an insert error propagate could turn "built fine but we
+  couldn't tell you" into "the job failed".
+- Only TERMINAL job failures notify (attempts exhausted); a job that will still retry isn't
+  actionable yet.
+- `href` is CHECK-constrained to an in-app path (`^/...`). These render as real links, so allowing
+  arbitrary URLs would make any future writer an open-redirect vector.
+- Marking read goes through `mark_notifications_read(p_ids)` (NULL = all), not a general UPDATE
+  policy — which would also let a client rewrite title/href/kind.
+
+## App icon
+
+`app/icon.svg` (favicon) + `app/apple-icon.png` (180px, Safari home screen) — an emerald "A",
+replacing the old "C" (ClickBank) mark. The PNG is generated, not hand-drawn: no SVG rasterizer is
+installed on this machine, so it was rendered by a small distance-field script. Regenerate it if
+the SVG changes; they are not linked automatically.
+
+**`ICON_PATHS` in `middleware.ts` must include every icon route.** App Router serves these as real
+top-level routes, not from `/_next`, so without the exemption the auth gate 307s them to `/login`
+and every logged-out visitor — the whole marketing site, every public funnel and blog page — gets
+a broken favicon. That was live until it was caught here.
+
 ## Email sending (providers + manual)
 
 **Gmail OAuth was removed in 0037_retire_gmail_sender.sql.** `gmail.send` is a Google RESTRICTED

@@ -13,6 +13,10 @@ const PUBLIC_EXACT_PATHS = [
   "/privacy",
 ];
 
+// Icon files App Router generates as top-level routes. Browsers fetch these before (and without)
+// any session, so they must never hit the auth gate.
+const ICON_PATHS = ["/icon.svg", "/apple-icon.png", "/favicon.ico"];
+
 // Prefix-match — dynamic sub-paths (e.g. /p/[campaignId]/bridge) or server-to-server webhooks.
 const PUBLIC_PREFIX_PATHS = [
   "/api/billing/webhook",
@@ -90,7 +94,11 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isPublic =
     PUBLIC_EXACT_PATHS.includes(pathname) || PUBLIC_PREFIX_PATHS.some((p) => pathname.startsWith(p));
-  const isAsset = pathname.startsWith("/_next");
+  // App Router serves these icon conventions as real routes, NOT from /_next — so the auth gate
+  // was 307'ing them to /login for every logged-out visitor, i.e. the marketing site and every
+  // public funnel/blog page had a broken favicon. (`favicon.ico` is already excluded by this
+  // middleware's own matcher; these are not.) Confirmed live before fixing.
+  const isAsset = pathname.startsWith("/_next") || ICON_PATHS.includes(pathname);
 
   if (!user && !isPublic && !isAsset) {
     const url = request.nextUrl.clone();
