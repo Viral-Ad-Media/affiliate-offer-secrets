@@ -6,7 +6,7 @@ import { sendViaActiveSender, isSendFailure } from "@/lib/mail/send";
 export const dynamic = "force-dynamic";
 
 // This route never operates on another tenant's resource — the mailbox used is always the
-// caller's own connected mail_connections row (user_id = auth.uid()), and to/subject/html are
+// caller's own active mail provider (user_id = auth.uid()), and to/subject/html are
 // freeform values the caller controls for their own send. No foreign resource-id parameter, so
 // none of the cross-tenant-IDOR pattern seen elsewhere (Page IDs, IG account IDs) applies here.
 export async function POST(req: Request) {
@@ -40,8 +40,8 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
 
   try {
-    // Dispatches via the account's active sender — Gmail (the default) or a connected
-    // Resend/SendGrid/Mailgun/SMTP provider. Same 404/409 semantics as the Gmail-only era.
+    // Dispatches via the account's active sender — one of the connected
+    // Resend/SendGrid/Mailgun/SMTP providers, or none configured.
     const result = await sendViaActiveSender(admin, user.id, { to, subject, html });
     if (isSendFailure(result)) {
       if (result.reason === "not_connected") {

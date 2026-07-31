@@ -140,8 +140,10 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true });
 }
 
-// DELETE disconnects one provider: row + Vault secret gone; if it was the active sender, fall
-// back to 'gmail' (the pre-provider default) so the active pointer never dangles.
+// DELETE disconnects one provider: row + Vault secret gone; if it was the active sender, clear
+// the pointer to NULL so it never dangles. (Was 'gmail' before 0037 retired that provider — a
+// value the CHECK constraint now rejects outright.) NULL = no sender configured, which every
+// caller already handles as not-connected.
 export async function DELETE(req: Request) {
   const supabase = createClient();
   const {
@@ -175,7 +177,7 @@ export async function DELETE(req: Request) {
   await admin.rpc("delete_oauth_secret", { p_secret_id: existing.secret_id });
   await admin
     .from("profiles")
-    .update({ active_mail_provider: "gmail" })
+    .update({ active_mail_provider: null })
     .eq("id", user.id)
     .eq("active_mail_provider", provider);
 

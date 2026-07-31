@@ -1855,6 +1855,33 @@ validator, or renderer changes; purely how the existing capabilities are surface
   full-width canvas. Same standing caveat as O.3: real drag gestures can't be simulated by this
   session's tooling.
 
+## Email sending (providers + manual)
+
+**Gmail OAuth was removed in 0037_retire_gmail_sender.sql.** `gmail.send` is a Google RESTRICTED
+scope — fine for one operator in Testing mode, but shipping it publicly needs a security
+assessment that can require a third-party audit. That is the wrong dependency under a
+multi-tenant product's email backbone. Do not re-add it without revisiting that.
+
+Two ways to send, deliberately distinct:
+
+1. **Automatic** — `profiles.active_mail_provider` names one of the `mail_provider_connections`
+   rows (Resend / SendGrid / Mailgun / SMTP, per-tenant API key in Vault, 0026). Everything routes
+   through `sendViaActiveSender()` in `lib/mail/send.ts` — one-off sends and Broadcast alike.
+   Gets the unsubscribe footer, `broadcast_sends` audit rows, and the pooled daily cap.
+2. **Manual** — `components/ManualSendPanel.tsx` on Emails → Broadcast, modelled on
+   visibility-studio's `EmailQueue`: builds `mailto:` links and clipboard copies in the browser
+   and the user's own mail client does the send. Zero setup, works with no provider connected.
+   **No unsubscribe footer, no audit row, no delivery tracking** — which is exactly why it is a
+   separate panel rather than a mode of "Send now". `{{first_name}}` is interpolated per contact
+   (falling back to "there"), and drafts over ~1800 chars show "too long to open" instead of
+   producing a silently truncated mailto (a real failure mode of naive mailto builders).
+
+`active_mail_provider` is now NULLABLE, and NULL means "no sender configured" — the same
+not-connected state a new account has. Anything that used to fall back to `'gmail'` must use NULL
+instead; the CHECK constraint rejects `'gmail'` outright, so a stale fallback fails loudly rather
+than silently mis-routing. `mail_connections` (the old Gmail token table) is intentionally left in
+place, unread, same call as `profiles.nickname`.
+
 ## Referrals + Rewards
 
 Sidebar entries **Referrals** (`/referrals`) and **Rewards** (`/rewards`), schema in

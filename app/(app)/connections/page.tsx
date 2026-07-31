@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import ConnectionsPanel from "@/components/ConnectionsPanel";
 import TikTokPanel from "@/components/TikTokPanel";
 import YouTubePanel from "@/components/YouTubePanel";
-import MailPanel from "@/components/MailPanel";
 import MailProvidersPanel, { type MailProvidersStatus } from "@/components/MailProvidersPanel";
 import NetworkConnectionsPanel from "@/components/NetworkConnectionsPanel";
 
@@ -12,13 +11,12 @@ const PROVIDER_LABELS: Record<string, string> = {
   meta: "Facebook",
   tiktok: "TikTok",
   youtube: "YouTube",
-  mail: "Gmail",
 };
 
 export default async function ConnectionsPage({
   searchParams,
 }: {
-  searchParams: { meta?: string; tiktok?: string; youtube?: string; mail?: string };
+  searchParams: { meta?: string; tiktok?: string; youtube?: string };
 }) {
   const supabase = createClient();
   const {
@@ -26,14 +24,13 @@ export default async function ConnectionsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [metaStatus, tiktokStatus, youtubeStatus, mailStatus, mailProviders, networkRows] = await Promise.all([
+  const [metaStatus, tiktokStatus, youtubeStatus, mailProviders, networkRows] = await Promise.all([
     supabase.rpc("get_meta_connection_status").then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_tiktok_connection_status").then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_youtube_connection_status").then((r) => r.data ?? { connected: false }),
-    supabase.rpc("get_mail_connection_status").then((r) => r.data ?? { connected: false }),
     supabase
       .rpc("get_mail_provider_connections")
-      .then((r) => (r.data ?? { active_provider: "gmail", providers: [] }) as MailProvidersStatus),
+      .then((r) => (r.data ?? { active_provider: null, providers: [] }) as MailProvidersStatus),
     supabase
       .from("network_connections")
       .select("network, affiliate_id")
@@ -41,7 +38,7 @@ export default async function ConnectionsPage({
   ]);
   const networkConnections = Object.fromEntries(networkRows.map((r) => [r.network, r.affiliate_id]));
 
-  const banners = (["meta", "tiktok", "youtube", "mail"] as const)
+  const banners = (["meta", "tiktok", "youtube"] as const)
     .map((key) => ({ key, value: searchParams[key] }))
     .filter((b) => b.value);
 
@@ -76,7 +73,7 @@ export default async function ConnectionsPage({
           >
             <span className="font-medium">{PROVIDER_LABELS[key]} isn&apos;t configured on this
             deployment.</span>{" "}
-            Gmail and YouTube share one Google OAuth client — set{" "}
+            Set{" "}
             <code className="text-amber-200">GOOGLE_CLIENT_ID</code> and{" "}
             <code className="text-amber-200">GOOGLE_CLIENT_SECRET</code>, then redeploy.
           </div>
@@ -112,8 +109,7 @@ export default async function ConnectionsPage({
 
       <div className="space-y-3">
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Email</h2>
-        <MailPanel status={mailStatus} />
-        <MailProvidersPanel status={mailProviders} gmailConnected={!!mailStatus.connected} />
+        <MailProvidersPanel status={mailProviders} />
       </div>
     </main>
   );

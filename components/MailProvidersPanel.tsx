@@ -20,28 +20,25 @@ type ProviderRow = {
 };
 
 export type MailProvidersStatus = {
-  active_provider: "gmail" | "resend" | "sendgrid" | "mailgun" | "smtp";
+  active_provider: "resend" | "sendgrid" | "mailgun" | "smtp" | null;
   providers: ProviderRow[];
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
-  gmail: "Gmail",
   resend: "Resend",
   sendgrid: "SendGrid",
   mailgun: "Mailgun",
   smtp: "SMTP",
 };
 
-// The "Email sending" section of the Connections page: which providers are connected (Gmail's
+// The "Email sending" section of the Connections page: which providers are connected (each's
 // own OAuth panel stays separate above this), per-provider connect forms, and the active-sender
 // picker — exactly one provider sends at a time; every send surface (SendEmail, Broadcast)
 // dispatches through it server-side (lib/mail/send.ts).
 export default function MailProvidersPanel({
   status,
-  gmailConnected,
 }: {
   status: MailProvidersStatus;
-  gmailConnected: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -184,7 +181,7 @@ export default function MailProvidersPanel({
       <div>
         <h2 className="mb-1 text-sm font-semibold text-zinc-100">Email providers</h2>
         <p className="text-sm text-zinc-400">
-          Connect a transactional provider to send from your own domain instead of Gmail — one sender is active at a
+          Connect a transactional provider to send from your own domain — one sender is active at a
           time, and every send (one-off emails and Broadcast sequences) uses it.
         </p>
       </div>
@@ -275,18 +272,11 @@ export default function MailProvidersPanel({
       <div>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Active sender</h3>
         <RadioGroup
-          value={status.active_provider}
+          value={status.active_provider ?? ""}
           onValueChange={(v) => setActive(v)}
           disabled={busy === "active"}
           className="sm:grid-cols-3"
         >
-          <RadioCard
-            value="gmail"
-            title="Gmail"
-            description={gmailConnected ? "Sends from your connected Gmail inbox." : "Not connected yet."}
-            icon={<Mail size={18} />}
-            disabled={!gmailConnected}
-          />
           {(["resend", "sendgrid", "mailgun", "smtp"] as const).map((p) => {
             const row = byProvider.get(p);
             return (

@@ -15,7 +15,7 @@ export default async function BroadcastPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: campaigns }, { data: sent }, { data: mail }, { data: provider }] = await Promise.all([
+  const [{ data: campaigns }, { data: sent }, { data: provider }, { data: contactRows }] = await Promise.all([
     supabase.from("campaigns").select("id, products(product_title)"),
     supabase
       .from("broadcast_sequences")
@@ -24,8 +24,16 @@ export default async function BroadcastPage() {
       .eq("kind", "broadcast")
       .order("created_at", { ascending: false })
       .limit(25),
-    supabase.from("mail_connections").select("email_address, status").eq("user_id", user.id).maybeSingle(),
     supabase.from("profiles").select("active_mail_provider").eq("id", user.id).maybeSingle(),
+    // Manual send needs the real recipient list client-side (mailto/copy happen in the browser).
+    // Capped for the same reason /contacts is: a busy funnel can accumulate these fast.
+    supabase
+      .from("contacts")
+      .select("id, email, first_name, campaign_id")
+      .eq("user_id", user.id)
+      .is("unsubscribed_at", null)
+      .order("created_at", { ascending: false })
+      .limit(500),
   ]);
 
   const campaignOptions = (campaigns ?? [])
@@ -50,9 +58,13 @@ export default async function BroadcastPage() {
         created_at: s.created_at as string,
         sent_count: sentCount.get(s.id as string) ?? 0,
       }))}
-      senderEmail={(mail?.email_address as string) ?? null}
-      senderStatus={(mail?.status as string) ?? null}
-      activeProvider={(provider?.active_mail_provider as string) ?? "gmail"}
+      activeProvider={(provider?.active_mail_provider as string) ?? null}
+      contacts={(contactRows ?? []).map((c) => ({
+        id: c.id as string,
+        email: c.email as string,
+        first_name: (c.first_name as string) ?? null,
+        campaign_id: (c.campaign_id as string) ?? null,
+      }))}
     />
   );
 }

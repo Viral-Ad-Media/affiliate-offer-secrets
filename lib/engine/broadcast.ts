@@ -18,8 +18,8 @@ export type BroadcastEmailStageOutput = {
 // Pooled with mail_sends — matches run_broadcast_sweep()'s own admission-control cap exactly.
 // This is a defensive re-check for the narrow race window between the sweep's admission check
 // and this job actually running, not the primary gate (the sweep is). Provider-aware since
-// 0027_provider_aware_send_cap.sql: applies only to personal-mailbox senders (Gmail OAuth, or
-// SMTP pointed at a Gmail/Yahoo host, via the shared is_capped_mail_sender() SQL function) —
+// 0027_provider_aware_send_cap.sql: applies only to personal-mailbox senders (SMTP pointed at a
+// Gmail/Yahoo/consumer host, via the shared is_capped_mail_sender() SQL function) —
 // transactional providers (Resend/SendGrid/Mailgun) are governed by their own plan limits.
 const MAX_SENDS_PER_DAY = 300;
 
@@ -110,9 +110,9 @@ async function stageSend(stageData: Record<string, unknown>, userId: string): Pr
     (marked.parse(stageData.body_md as string) as string) +
     renderUnsubscribeFooterHtml(stageData.unsub_token as string);
 
-  // Dispatches via the account's active sender — Gmail (the default) or a connected
+  // Dispatches via the account's active sender — a connected
   // Resend/SendGrid/Mailgun/SMTP provider (lib/mail/send.ts). A not-connected/needs-reconnect
-  // sender throws (normal retry-then-terminal-fail path), same as the Gmail-only era.
+  // sender throws (normal retry-then-terminal-fail path).
   const result = await sendViaActiveSender(db, userId, {
     to: stageData.to as string,
     subject: stageData.subject as string,

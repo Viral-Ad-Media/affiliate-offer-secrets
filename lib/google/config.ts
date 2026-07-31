@@ -1,28 +1,23 @@
-// One Google Cloud OAuth client shared between YouTube-connect and Mail-connect, each with its
-// own callback route, own state-cookie name, and own disjoint scope list — never combined, so
-// the YouTube flow can never accidentally request (and receive consent for) gmail.send, or vice
-// versa. A code issued for one flow can't be exchanged at the other's callback regardless: Google
-// requires the exchange's redirect_uri to exactly match the one used to obtain the code.
+// Google OAuth client for the YouTube connector. Gmail sending was retired in 0037 (gmail.send is
+// a Google RESTRICTED scope requiring a security assessment to ship publicly) — outgoing mail now
+// goes through the Resend/SendGrid/Mailgun/SMTP providers instead, so this client requests only
+// YouTube scopes.
 export const GOOGLE_OAUTH_BASE = "https://accounts.google.com/o/oauth2/v2/auth";
 export const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 // youtube.upload added now that video generation exists — broader/more sensitive than
 // youtube.readonly, existing connections need one re-auth. Flag clearly: this is a more
 // sensitive scope than youtube.readonly and would need Google's stricter OAuth verification
-// before a public rollout beyond your own testing — same caveat shape as gmail.send.
+// before a public rollout beyond your own testing.
 export const YOUTUBE_SCOPES = [
   "https://www.googleapis.com/auth/youtube.readonly",
   "https://www.googleapis.com/auth/youtube.upload",
 ];
-// Deliberately not a read scope.
-export const MAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.send"];
 
-// Both Google connectors (Gmail + YouTube) share one OAuth client, so one missing credential
-// takes out both. Checked BEFORE the connect routes build an auth URL: without this the routes
-// threw an unhandled 500 with a raw stack trace at anyone who clicked "Connect Gmail", which is
-// both a bad failure mode and genuinely hard to diagnose from the outside — the Connections page
-// looked fine and the button simply exploded. Note the empty-string case is deliberately treated
-// as unconfigured: a declared-but-blank var in .env.local is the exact shape this hit in practice.
+// Checked BEFORE the connect route builds an auth URL: without this it threw an unhandled 500
+// with a raw stack trace at anyone who clicked Connect, which is both a bad failure mode and hard
+// to diagnose from outside. The empty-string case is deliberately treated as unconfigured — a
+// declared-but-blank var in .env.local is the exact shape this hit in practice.
 export function isGoogleOAuthConfigured(): boolean {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 }
@@ -49,6 +44,3 @@ export function getYoutubeRedirectUri(): string {
   return `${appUrl()}/api/youtube/callback`;
 }
 
-export function getMailRedirectUri(): string {
-  return `${appUrl()}/api/mail/callback`;
-}

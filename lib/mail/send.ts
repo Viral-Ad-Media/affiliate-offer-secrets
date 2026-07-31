@@ -1,13 +1,11 @@
 // The one place every outgoing tenant email is dispatched from — both the one-off send route
 // (app/api/mail/send/route.ts) and the Broadcast engine (lib/engine/broadcast.ts) call
-// sendViaActiveSender() instead of talking to Gmail/providers directly, so "which provider does
-// this account send with" is decided in exactly one place: profiles.active_mail_provider
-// ('gmail' default — the pre-provider behavior — or one of the mail_provider_connections rows).
+// sendViaActiveSender() instead of talking to providers directly, so "which provider does
+// this account send with" is decided in exactly one place: profiles.active_mail_provider, which
+// names one of the mail_provider_connections rows (Gmail was retired as a sender in 0037).
 // Server-only (admin client + Vault RPCs); never import from client components.
 
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { sendGmailMessage } from "@/lib/google/client";
-import { getValidMailAccessToken } from "@/lib/google/mailToken";
 import {
   MailProviderError,
   sendResendEmail,
@@ -18,7 +16,7 @@ import {
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-export type MailProvider = "gmail" | "resend" | "sendgrid" | "mailgun" | "smtp";
+export type MailProvider = "resend" | "sendgrid" | "mailgun" | "smtp";
 
 export type SendResult = { messageId: string | null; provider: MailProvider };
 
@@ -38,14 +36,11 @@ export async function sendViaActiveSender(
     .select("active_mail_provider")
     .eq("id", userId)
     .maybeSingle();
-  const provider = (profile?.active_mail_provider ?? "gmail") as MailProvider;
+  const provider = profile?.active_mail_provider as MailProvider | null | undefined;
 
-  if (provider === "gmail") {
-    const tokenResult = await getValidMailAccessToken(admin, userId);
-    if (!tokenResult.ok) return { ok: false, reason: tokenResult.reason };
-    const sent = await sendGmailMessage(tokenResult.accessToken, args);
-    return { messageId: sent.id, provider };
-  }
+  // Null = no sender configured (0037 retired Gmail and dropped it as the implicit default).
+  // Same "not_connected" outcome a brand-new account gets, so callers need no new branch.
+  if (!provider) return { ok: false, reason: "not_connected" };
 
   const { data: conn } = await admin
     .from("mail_provider_connections")

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import ManualSendPanel, { type ManualContact } from "@/components/ManualSendPanel";
 import { Send, Loader2, CheckCircle2, AlertTriangle, Users } from "lucide-react";
 
 type HistoryRow = {
@@ -21,15 +22,13 @@ type HistoryRow = {
 export default function BroadcastComposer({
   campaigns,
   history,
-  senderEmail,
-  senderStatus,
   activeProvider,
+  contacts,
 }: {
   campaigns: { id: string; title: string }[];
   history: HistoryRow[];
-  senderEmail: string | null;
-  senderStatus: string | null;
-  activeProvider: string;
+  activeProvider: string | null;
+  contacts: ManualContact[];
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -41,10 +40,10 @@ export default function BroadcastComposer({
   const [error, setError] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState<number | null>(null);
 
-  // Gmail is the only provider that needs an OAuth connection; the API-key providers
-  // (Resend/SendGrid/Mailgun/SMTP) are configured on Connections and always "ready" here.
-  const gmailBroken = activeProvider === "gmail" && (!senderEmail || senderStatus === "needs_reconnect");
-  const canSend = !busy && subject.trim() && body.trim() && (audience !== "campaign" || campaignId) && !gmailBroken;
+  // No active provider means nothing can be sent automatically — the manual path below still
+  // works, since that only needs the composed text and the visitor's own mail client.
+  const noSender = !activeProvider;
+  const canSend = !busy && subject.trim() && body.trim() && (audience !== "campaign" || campaignId) && !noSender;
 
   async function send() {
     if (!window.confirm("Send this email to the selected audience now? This can't be undone.")) return;
@@ -88,12 +87,13 @@ export default function BroadcastComposer({
         </p>
       </div>
 
-      {gmailBroken && (
+      {noSender && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
-            Your Gmail sender isn&apos;t connected{senderStatus === "needs_reconnect" ? " any more" : ""}. Reconnect it
-            on Connections before sending.
+            No email sender is connected, so automatic sending is off. Connect Resend, SendGrid,
+            Mailgun or SMTP on Connections — or use <strong>Send manually</strong> below, which
+            needs no setup.
           </span>
         </div>
       )}
@@ -176,9 +176,19 @@ export default function BroadcastComposer({
               <CheckCircle2 className="h-3.5 w-3.5" /> Queued — delivery starts within a minute
             </span>
           )}
-          {senderEmail && <span className="text-xs text-zinc-500">Sending as {senderEmail}</span>}
+          {activeProvider && (
+            <span className="text-xs text-zinc-500">Sending via {activeProvider}</span>
+          )}
         </div>
       </section>
+
+      <ManualSendPanel
+        contacts={audience === "campaign" && campaignId
+          ? contacts.filter((c) => c.campaign_id === campaignId)
+          : contacts}
+        subject={subject}
+        body={body}
+      />
 
       <section className="card p-4">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
