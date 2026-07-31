@@ -214,6 +214,14 @@ const PUBLIC_CSS = `
   .author-box .bio { color: var(--muted); font-size: .92rem; margin: 4px 0 0; }
   /* Index */
   .index-wrap { max-width: 1040px; margin: 0 auto; padding: 40px 20px 80px; }
+  .cat-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 32px; }
+  .cat-bar a { display: inline-block; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: .85rem; text-decoration: none; color: var(--muted); }
+  .cat-bar a:hover { border-color: var(--accent); color: var(--accent); }
+  .cat-bar a[aria-current="page"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .pager { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 48px; }
+  .pager a { padding: 8px 16px; border: 1px solid var(--line); border-radius: 8px; text-decoration: none; font-size: .9rem; }
+  .pager a:hover { border-color: var(--accent); }
+  .pager .page-of { color: var(--muted); font-size: .85rem; }
   .post-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 32px; list-style: none; padding: 0; margin: 0; }
   .post-card a.thumb { display: block; }
   .post-card img { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: 12px; display: block; }
@@ -357,20 +365,51 @@ export type BlogIndexPost = {
   category_name?: string | null;
 };
 
-// The blog index — every published post, newest first. Same self-contained/no-scripts shape as
-// the post page, sharing PUBLIC_CSS so the two never drift. `siteOrigin` is set on custom-domain
-// requests: there the blog is the site root, so cards link to /{post-slug} instead of
-// /b/{blog-slug}/{post-slug}.
+export const POSTS_PER_PAGE = 12;
+
+export type BlogIndexCategory = { name: string; slug: string | null };
+
+// The blog index — published posts, newest first, paginated and optionally filtered to one
+// category. Same self-contained/no-scripts shape as the post page (filter chips and the pager are
+// plain links, no JS), sharing PUBLIC_CSS so the two never drift. `siteOrigin` is set on
+// custom-domain requests: there the blog is the site root, so cards link to /{post-slug} instead
+// of /b/{blog-slug}/{post-slug}.
 export function renderBlogIndexHtml(
   settings: BlogSettings,
   posts: BlogIndexPost[],
-  opts?: { siteOrigin?: string | null }
+  opts?: {
+    siteOrigin?: string | null;
+    categories?: BlogIndexCategory[];
+    activeCategory?: BlogIndexCategory | null;
+    page?: number;
+    totalPages?: number;
+  }
 ): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://clickbank-studio.vercel.app";
   const onDomain = !!opts?.siteOrigin;
   const origin = opts?.siteOrigin || appUrl;
   const base = onDomain ? "" : blogIndexPath(settings.slug) ?? "";
-  const title = settings.blog_title || "Blog";
+  const page = Math.max(1, opts?.page ?? 1);
+  const totalPages = Math.max(1, opts?.totalPages ?? 1);
+  const activeCategory = opts?.activeCategory ?? null;
+  const categories = opts?.categories ?? [];
+
+  // Filter and page live in the query string rather than the path — avoids any chance of a
+  // category slug shadowing a post slug, and keeps one canonical route per blog.
+  const urlFor = (categorySlug: string | null, p: number) => {
+    const qs = new URLSearchParams();
+    if (categorySlug) qs.set("category", categorySlug);
+    if (p > 1) qs.set("page", String(p));
+    const q = qs.toString();
+    return `${base || "/"}${q ? `?${q}` : ""}`;
+  };
+
+  const baseTitle = settings.blog_title || "Blog";
+  // Filtered/paged views get a distinct <title> so search results and browser tabs aren't a wall
+  // of identical entries.
+  const title = [baseTitle, activeCategory ? activeCategory.name : null, page > 1 ? `Page ${page}` : null]
+    .filter(Boolean)
+    .join(" — ");
   const description = (settings.description || "").trim();
 
   const cards = posts
@@ -393,6 +432,33 @@ export function renderBlogIndexHtml(
     })
     .join("\n");
 
+  // Only rendered when the tenant actually has categories in use — a single "All" chip on its own
+  // is noise.
+  const categoryBar =
+    categories.length > 0
+      ? `<nav class="cat-bar">
+  <a href="${escapeHtml(urlFor(null, 1))}"${!activeCategory ? ' aria-current="page"' : ""}>All</a>
+  ${categories
+    .filter((c) => c.slug)
+    .map(
+      (c) =>
+        `<a href="${escapeHtml(urlFor(c.slug, 1))}"${
+          activeCategory?.slug === c.slug ? ' aria-current="page"' : ""
+        }>${escapeHtml(c.name)}</a>`
+    )
+    .join("\n  ")}
+</nav>`
+      : "";
+
+  const pager =
+    totalPages > 1
+      ? `<nav class="pager">
+  ${page > 1 ? `<a rel="prev" href="${escapeHtml(urlFor(activeCategory?.slug ?? null, page - 1))}">← Newer</a>` : "<span></span>"}
+  <span class="page-of">Page ${page} of ${totalPages}</span>
+  ${page < totalPages ? `<a rel="next" href="${escapeHtml(urlFor(activeCategory?.slug ?? null, page + 1))}">Older →</a>` : "<span></span>"}
+</nav>`
+      : "";
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -400,18 +466,28 @@ export function renderBlogIndexHtml(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 ${description ? `<meta name="description" content="${escapeHtml(description)}">` : ""}
-<link rel="canonical" href="${escapeHtml(origin + base)}">
+<link rel="canonical" href="${escapeHtml(origin + urlFor(activeCategory?.slug ?? null, page))}">
+${page > 1 ? `<link rel="prev" href="${escapeHtml(origin + urlFor(activeCategory?.slug ?? null, page - 1))}">` : ""}
+${page < totalPages ? `<link rel="next" href="${escapeHtml(origin + urlFor(activeCategory?.slug ?? null, page + 1))}">` : ""}
 <meta property="og:type" content="website">
 <meta property="og:title" content="${escapeHtml(title)}">
 ${description ? `<meta property="og:description" content="${escapeHtml(description)}">` : ""}
-<meta property="og:url" content="${escapeHtml(origin + base)}">
+<meta property="og:url" content="${escapeHtml(origin + urlFor(activeCategory?.slug ?? null, page))}">
 <meta name="twitter:card" content="summary">
 <style>${PUBLIC_CSS}</style>
 </head>
 <body>
 ${siteHeader(settings, base)}
 <div class="index-wrap">
-  ${posts.length === 0 ? `<p class="empty">No posts published yet.</p>` : `<ul class="post-grid">${cards}</ul>`}
+  ${categoryBar}
+  ${
+    posts.length === 0
+      ? `<p class="empty">${
+          activeCategory ? `No posts in ${escapeHtml(activeCategory.name)} yet.` : "No posts published yet."
+        }</p>`
+      : `<ul class="post-grid">${cards}</ul>`
+  }
+  ${pager}
   ${authorBox(settings)}
 </div>
 </body>

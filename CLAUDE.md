@@ -1440,8 +1440,22 @@ The blog is a real published site, not just per-post links.
   → `woodworking-reviews`), featured-image hero + card thumbnail + `og:image`, author box,
   canonical, and that unpublishing removes a post from BOTH its own URL (404) and the index. An
   SVG featured image and a reserved slug are both rejected. All test data reverted afterward.
-- **Still deferred**: no category filter/pagination on the index (caps at 200 posts, newest
-  first), no RSS feed, no sitemap.
+- **Pagination + category filter** (0034): both are query params on the index —
+  `?category={slug}&page={n}` — deliberately NOT path segments, which would risk a category slug
+  shadowing a post slug under `/b/{blog}/{...}`. 12 posts per page (`POSTS_PER_PAGE`).
+  `lib/blogIndex.ts`'s `loadBlogIndex()` is shared by the app-domain and custom-domain routes so
+  the two can't drift; it returns `null` for an unknown category or a page past the end, which
+  both callers turn into a 404 (a typo'd filter must not silently render everything). Chips only
+  list categories that actually contain a published post — an empty chip is a dead end.
+  `blog_categories.slug` is unique per blog, backfilled from existing names in the migration.
+- **Paginated SEO**: each page self-canonicalises and carries `rel="prev"`/`rel="next"`; filtered
+  and paged views get distinct `<title>`s ("Blog — Tool Reviews", "Blog — Page 2") so search
+  results aren't a wall of identical entries. Filter/pager are plain links — the public pages
+  still ship zero JS.
+- **Verified live** with 15 published posts across 2 categories: 12 + 3 across two pages, correct
+  per-category counts (7 + 8), active chip marked `aria-current`, `rel` links present/absent at
+  the right ends, and 404s for `?page=99` and `?category=nope`. Test data reverted afterward.
+- **Still deferred**: no RSS feed, no sitemap.
 
 ## Freeform block-based page builder (Phase O — complete, all 5 sub-phases landed)
 

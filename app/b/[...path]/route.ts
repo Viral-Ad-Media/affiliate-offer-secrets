@@ -1,10 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { renderPublicPostHtml, renderBlogIndexHtml, blogPostPath, type BlogIndexPost } from "@/lib/blog";
+import { renderPublicPostHtml, renderBlogIndexHtml, blogPostPath } from "@/lib/blog";
+import { loadBlogIndex } from "@/lib/blogIndex";
 
 export const dynamic = "force-dynamic";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_INDEX_POSTS = 200;
 
 const HTML_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
@@ -22,7 +22,7 @@ const notFound = () => new Response("Not found", { status: 404 });
 // access control and every miss is the same generic 404 (no draft/ownership oracle). Deliberately
 // indexable — blog posts are content marketing, unlike funnel pages which send noindex.
 // The custom-domain equivalent lives in app/d/[[...path]]/route.ts and shares the same renderers.
-export async function GET(_req: Request, { params }: { params: { path?: string[] } }) {
+export async function GET(req: Request, { params }: { params: { path?: string[] } }) {
   const segments = (params.path ?? []).filter(Boolean);
   if (segments.length === 0 || segments.length > 2) return notFound();
   const admin = createAdminClient();
@@ -59,27 +59,13 @@ export async function GET(_req: Request, { params }: { params: { path?: string[]
   if (!settings) return notFound();
 
   if (segments.length === 1) {
-    const { data: rows } = await admin
-      .from("blog_posts")
-      .select("id, title, slug, excerpt, content_md, html, featured_image_url, published_at, blog_categories(name)")
-      .eq("user_id", settings.user_id as string)
-      .eq("status", "published")
-      .order("published_at", { ascending: false, nullsFirst: false })
-      .limit(MAX_INDEX_POSTS);
-
-    const posts: BlogIndexPost[] = (rows ?? []).map((r) => ({
-      id: r.id as string,
-      title: r.title as string,
-      slug: r.slug as string | null,
-      excerpt: r.excerpt as string | null,
-      content_md: (r.content_md as string) ?? "",
-      html: r.html as string | null,
-      featured_image_url: r.featured_image_url as string | null,
-      published_at: r.published_at as string | null,
-      category_name: (r.blog_categories as unknown as { name: string } | null)?.name ?? null,
-    }));
-
-    return new Response(renderBlogIndexHtml(settings, posts), { status: 200, headers: HTML_HEADERS });
+    const index = await loadBlogIndex(admin, settings.user_id as string, new URL(req.url).searchParams);
+    // Unknown category slug or a page past the end — 404 rather than silently showing everything.
+    if (!index) return notFound();
+    return new Response(renderBlogIndexHtml(settings, index.posts, index), {
+      status: 200,
+      headers: HTML_HEADERS,
+    });
   }
 
   // /b/{blogSlug}/{postSlug}

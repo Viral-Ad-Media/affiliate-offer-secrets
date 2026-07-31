@@ -1,12 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { servePublicCampaignPage } from "@/lib/publicPage";
-import { renderPublicPostHtml, renderBlogIndexHtml, type BlogIndexPost } from "@/lib/blog";
+import { renderPublicPostHtml, renderBlogIndexHtml } from "@/lib/blog";
+import { loadBlogIndex } from "@/lib/blogIndex";
 
 const HTML_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
   "Referrer-Policy": "strict-origin-when-cross-origin",
 };
-const MAX_INDEX_POSTS = 200;
 
 // Serves the domain owner's blog at the domain root. Returns null (not a 404) when nothing
 // matches so the caller can fall through to its own generic 404 — keeps one not-found shape.
@@ -14,7 +14,8 @@ async function serveBlogOnDomain(
   admin: ReturnType<typeof createAdminClient>,
   userId: string,
   path: string,
-  siteOrigin: string
+  siteOrigin: string,
+  searchParams: URLSearchParams
 ): Promise<Response | null> {
   const { data: settings } = await admin
     .from("blog_settings")
@@ -24,25 +25,12 @@ async function serveBlogOnDomain(
   if (!settings) return null;
 
   if (path === "") {
-    const { data: rows } = await admin
-      .from("blog_posts")
-      .select("id, title, slug, excerpt, content_md, html, featured_image_url, published_at, blog_categories(name)")
-      .eq("user_id", userId)
-      .eq("status", "published")
-      .order("published_at", { ascending: false, nullsFirst: false })
-      .limit(MAX_INDEX_POSTS);
-    const posts: BlogIndexPost[] = (rows ?? []).map((r) => ({
-      id: r.id as string,
-      title: r.title as string,
-      slug: r.slug as string | null,
-      excerpt: r.excerpt as string | null,
-      content_md: (r.content_md as string) ?? "",
-      html: r.html as string | null,
-      featured_image_url: r.featured_image_url as string | null,
-      published_at: r.published_at as string | null,
-      category_name: (r.blog_categories as unknown as { name: string } | null)?.name ?? null,
-    }));
-    return new Response(renderBlogIndexHtml(settings, posts, { siteOrigin }), { status: 200, headers: HTML_HEADERS });
+    const index = await loadBlogIndex(admin, userId, searchParams);
+    if (!index) return null; // unknown category / page past the end → caller's generic 404
+    return new Response(renderBlogIndexHtml(settings, index.posts, { ...index, siteOrigin }), {
+      status: 200,
+      headers: HTML_HEADERS,
+    });
   }
 
   const { data: post } = await admin
@@ -107,7 +95,13 @@ export async function GET(request: Request, { params }: { params: { path?: strin
   // funnel pages AND serve the owner's blog on every other path — "" is the index, anything else
   // is treated as a post slug.
   if (domainRow.serves_blog) {
-    const blog = await serveBlogOnDomain(admin, domainRow.user_id as string, path, `https://${host}`);
+    const blog = await serveBlogOnDomain(
+      admin,
+      domainRow.user_id as string,
+      path,
+      `https://${host}`,
+      new URL(request.url).searchParams
+    );
     if (blog) return blog;
   }
 
