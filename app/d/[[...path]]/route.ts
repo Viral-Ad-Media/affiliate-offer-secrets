@@ -31,7 +31,7 @@ async function serveBlogOnDomain(
 ): Promise<Response | null> {
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style")
+    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html")
     .eq("user_id", userId)
     .maybeSingle();
   if (!settings) return null;

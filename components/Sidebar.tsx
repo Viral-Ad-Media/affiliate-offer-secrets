@@ -53,7 +53,13 @@ const NAV = [
     // Shown indented under the parent whenever any /blog route is active (expanded rail + mobile
     // drawer only — the icon-only collapsed rail keeps just the parent icon).
     children: [
-      { href: "/blog", label: "Posts", match: (p: string) => p.startsWith("/blog") && p !== "/blog/categories" && p !== "/blog/settings" },
+      {
+        href: "/blog",
+        label: "Posts",
+        match: (p: string) =>
+          p.startsWith("/blog") && !["/blog/home", "/blog/categories", "/blog/settings"].includes(p),
+      },
+      { href: "/blog/home", label: "Home page", match: (p: string) => p === "/blog/home" },
       { href: "/blog/categories", label: "Categories", match: (p: string) => p === "/blog/categories" },
       { href: "/blog/settings", label: "Settings", match: (p: string) => p === "/blog/settings" },
     ],

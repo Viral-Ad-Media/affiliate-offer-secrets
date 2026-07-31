@@ -158,6 +158,10 @@ export type BlogSettings = {
   author_bio?: string | null;
   author_avatar_url?: string | null;
   permalink_style?: PermalinkStyle | null;
+  // Editable intro band on the blog home (0045). intro_html is the write-time render of
+  // intro_copy — the index never renders the tree directly, same as posts.
+  intro_copy?: unknown;
+  intro_html?: string | null;
 };
 
 // URL structure for the path AFTER the blog root — the same on the app domain (under
@@ -259,6 +263,8 @@ const PUBLIC_CSS = `
   .site-title { font-size: 1.15rem; font-weight: 700; text-decoration: none; color: var(--ink); }
   .site-desc { color: var(--muted); font-size: .9rem; margin: 0; }
   .cat-desc { color: var(--muted); font-size: .95rem; margin: 0 0 24px; max-width: 640px; }
+  .home-intro { max-width: 720px; margin: 0 0 32px; }
+  .home-intro > :first-child { margin-top: 0; }
   h1.post-title { font-size: 2.1rem; line-height: 1.2; margin: 0 0 8px; }
   .post-meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 32px; }
   .featured { width: 100%; height: auto; border-radius: 14px; margin: 0 0 32px; display: block; }
@@ -543,6 +549,7 @@ ${description ? `<meta property="og:description" content="${escapeHtml(descripti
 <body>
 ${siteHeader(settings, base)}
 <div class="index-wrap">
+  ${settings.intro_html ? `<div class="home-intro">${settings.intro_html}</div>` : ""}
   ${categoryBar}
   ${
     activeCategory?.description

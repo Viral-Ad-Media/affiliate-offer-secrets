@@ -74,7 +74,7 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
   // Everything else is keyed off the blog slug.
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("user_id, blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style")
+    .select("user_id, blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html")
     .ilike("slug", segments[0])
     .maybeSingle();
   if (!settings) return notFound();

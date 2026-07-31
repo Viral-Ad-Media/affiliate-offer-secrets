@@ -27,7 +27,7 @@ export async function GET() {
   const [{ data: settings }, { data: rows }, { data: cats }] = await Promise.all([
     supabase
       .from("blog_settings")
-      .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style")
+      .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html")
       .maybeSingle(),
     supabase
       .from("blog_posts")
