@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Tag, Plus, Loader2, Trash2 } from "lucide-react";
+import { Tag, Plus, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
 
 type Category = { id: string; name: string; postCount: number };
 
@@ -12,6 +12,8 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
   const [name, setName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
 
   async function call(key: string, url: string, init: RequestInit) {
     setBusy(key);
@@ -45,6 +47,18 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
     if (data) setName("");
   }
 
+  async function rename(e: React.FormEvent, id: string) {
+    e.preventDefault();
+    const trimmed = editName.trim();
+    if (!trimmed) return;
+    const data = await call(`edit-${id}`, `/api/blog/categories/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    });
+    if (data) setEditingId(null);
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -52,7 +66,9 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
           <Tag className="h-5 w-5 text-emerald-400" /> Blog categories
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Organize your posts. Deleting a category keeps its posts — they just become uncategorized.
+          Organize your posts. Renaming one keeps its public filter link working — the link uses the
+          slug from when it was created, not the current name. Deleting a category keeps its posts —
+          they just become uncategorized.
         </p>
       </div>
 
@@ -78,10 +94,56 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
           <div className="divide-y divide-ink-800">
             {categories.map((c) => (
               <div key={c.id} className="flex items-center gap-3 py-2.5">
-                <span className="flex-1 text-sm text-zinc-100">{c.name}</span>
+                {editingId === c.id ? (
+                  <form onSubmit={(e) => rename(e, c.id)} className="flex flex-1 items-center gap-2">
+                    <input
+                      autoFocus
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Escape" && setEditingId(null)}
+                      className="w-64 rounded-lg border border-ink-600 bg-ink-900 py-1.5 px-2.5 text-sm outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="submit"
+                      title="Save name"
+                      disabled={busy === `edit-${c.id}` || !editName.trim()}
+                      className="text-emerald-400 hover:text-emerald-300 disabled:opacity-40"
+                    >
+                      {busy === `edit-${c.id}` ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      title="Cancel"
+                      onClick={() => setEditingId(null)}
+                      className="text-zinc-600 hover:text-zinc-300"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </form>
+                ) : (
+                  <span className="flex-1 text-sm text-zinc-100">{c.name}</span>
+                )}
                 <span className="text-xs text-zinc-500">
                   {c.postCount} {c.postCount === 1 ? "post" : "posts"}
                 </span>
+                {editingId !== c.id && (
+                  <button
+                    type="button"
+                    title="Rename category"
+                    onClick={() => {
+                      setEditingId(c.id);
+                      setEditName(c.name);
+                      setError(null);
+                    }}
+                    className="text-zinc-600 hover:text-zinc-300"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                )}
                 <button
                   type="button"
                   title="Delete category (posts are kept)"

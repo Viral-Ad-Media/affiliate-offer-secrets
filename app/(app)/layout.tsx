@@ -4,6 +4,7 @@ import { hasAppAccess } from "@/lib/shared";
 import Sidebar from "@/components/Sidebar";
 import ReferralClaimer from "@/components/ReferralClaimer";
 import NotificationsBell from "@/components/NotificationsBell";
+import CreditsChip from "@/components/CreditsChip";
 import TopBarAccount from "@/components/TopBarAccount";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -49,7 +50,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* Desktop-only top bar. The bell lives here rather than in the sidebar: it's a global
             status affordance, and the sidebar is navigation. Mobile already has its own top bar
             inside Sidebar, which carries the bell there. */}
-        <div className="hidden items-center justify-end gap-1 border-b border-ink-700 px-4 py-2 sm:flex">
+        <div className="hidden items-center justify-end gap-2 border-b border-ink-700 px-4 py-2 sm:flex">
+          <CreditsChip creditBalance={creditBalance} />
           <NotificationsBell />
           <TopBarAccount
             email={user.email ?? ""}

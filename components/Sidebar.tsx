@@ -16,7 +16,6 @@ import {
   Award,
   Settings,
   Clock,
-  Coins,
   LogOut,
   Menu,
   X,
@@ -26,6 +25,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import ThemeToggle from "@/components/ThemeToggle";
 import NotificationsBell from "@/components/NotificationsBell";
+import CreditsChip from "@/components/CreditsChip";
 import AppLogo from "@/components/AppLogo";
 import TopBarAccount from "@/components/TopBarAccount";
 
@@ -214,14 +214,6 @@ export default function Sidebar({
           )}
         </Link>
       )}
-      <Link
-        href="/settings/billing"
-        title={iconOnly ? `${creditBalance} credits` : undefined}
-        className="flex items-center justify-center gap-1.5 rounded-lg border border-ink-600 px-2.5 py-1.5 text-xs text-emerald-300 hover:border-emerald-500"
-      >
-        <Coins className="h-3.5 w-3.5 shrink-0" />
-        {!iconOnly && <span>{creditBalance} credits</span>}
-      </Link>
     </>
   );
 
@@ -267,6 +259,7 @@ export default function Sidebar({
           <AppLogo />
         </Link>
         <div className="flex items-center gap-2">
+          <CreditsChip creditBalance={creditBalance} />
           <NotificationsBell />
           <TopBarAccount
             email={email}
@@ -274,13 +267,6 @@ export default function Sidebar({
             lastName={lastName}
             avatarUrl={avatarUrl}
           />
-          <Link
-            href="/settings/billing"
-            className="flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-1 text-xs text-emerald-300"
-          >
-            <Coins className="h-3.5 w-3.5" />
-            {creditBalance}
-          </Link>
           <button
             onClick={() => setMobileOpen(true)}
             title="Open menu"

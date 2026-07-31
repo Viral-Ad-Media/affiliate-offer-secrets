@@ -34,3 +34,64 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   await admin.from("custom_domains").delete().eq("id", domainRow.id);
   return NextResponse.json({ ok: true });
 }
+
+// Flip this domain's role flags: serves_blog (which domain the blog is published on) and
+// is_primary (which domain the app treats as this tenant's public home). Both are one-per-tenant
+// — enforced by partial unique indexes in 0042 — so setting one clears the same flag on every
+// other domain first. Both writes are (id, user_id)-scoped, same as DELETE above.
+//
+// Only a verified domain can hold either flag: an unverified one isn't serving traffic yet, and
+// the 0042 trigger clears both if a domain later drops out of 'verified' (the reverify sweep can
+// do that at any time).
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+
+  const body = await req.json().catch(() => ({}));
+  const patch: { serves_blog?: boolean; is_primary?: boolean } = {};
+  if (typeof body.serves_blog === "boolean") patch.serves_blog = body.serves_blog;
+  if (typeof body.is_primary === "boolean") patch.is_primary = body.is_primary;
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: "nothing to update" }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+  const { data: domainRow } = await admin
+    .from("custom_domains")
+    .select("id, status")
+    .eq("id", params.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!domainRow) return NextResponse.json({ error: "domain not found" }, { status: 404 });
+  if (domainRow.status !== "verified" && (patch.serves_blog || patch.is_primary)) {
+    return NextResponse.json(
+      { error: "Verify this domain before using it for your blog or as your primary domain" },
+      { status: 409 }
+    );
+  }
+
+  // Clear first, then set — the partial unique indexes would reject the set otherwise. Two
+  // statements rather than one, so a crash between them leaves NO domain holding the flag (a
+  // recoverable state the UI shows plainly) instead of two domains holding it.
+  for (const flag of ["serves_blog", "is_primary"] as const) {
+    if (patch[flag] === true) {
+      await admin
+        .from("custom_domains")
+        .update({ [flag]: false })
+        .eq("user_id", user.id)
+        .neq("id", domainRow.id)
+        .eq(flag, true);
+    }
+  }
+
+  const { error } = await admin
+    .from("custom_domains")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", domainRow.id)
+    .eq("user_id", user.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}

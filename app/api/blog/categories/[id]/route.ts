@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { MAX_CATEGORY_NAME } from "@/lib/blog";
 
 export const dynamic = "force-dynamic";
 
@@ -24,4 +25,39 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data || data.length === 0) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
+}
+
+// Rename a category. Same (id, user_id)-scoped write as DELETE — 0 rows means
+// not-yours-or-nonexistent, one generic 404 either way.
+//
+// The slug is deliberately NOT regenerated from the new name. It's the public filter key
+// (/b/{blog}?category={slug}) and lib/blogIndex.ts 404s an unrecognized one, so re-slugging would
+// turn every already-shared or indexed filter link into a dead end for a cosmetic gain.
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+
+  const body = await req.json().catch(() => ({}));
+  const name = typeof body.name === "string" ? body.name.trim().slice(0, MAX_CATEGORY_NAME) : "";
+  if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("blog_categories")
+    .update({ name })
+    .eq("id", params.id)
+    .eq("user_id", user.id)
+    .select("id, name, slug");
+  if (error) {
+    const dup = error.message.includes("duplicate") || error.code === "23505";
+    return NextResponse.json(
+      { error: dup ? "You already have a category with that name" : error.message },
+      { status: dup ? 409 : 500 }
+    );
+  }
+  if (!data || data.length === 0) return NextResponse.json({ error: "not found" }, { status: 404 });
+  return NextResponse.json({ ok: true, category: data[0] });
 }
