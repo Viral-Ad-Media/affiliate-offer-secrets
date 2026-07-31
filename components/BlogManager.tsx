@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Newspaper, Plus, Loader2, Tag, Import, ExternalLink, Trash2, Layers } from "lucide-react";
+import { Newspaper, Plus, Loader2, Tag, Import, ExternalLink, Trash2, Layers, Eye } from "lucide-react";
 import { toast } from "@/lib/toast";
 
 type PostRow = {
@@ -154,6 +154,15 @@ export default function BlogManager({
               {busy === "import" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Import className="h-3.5 w-3.5" />}
               Import
             </button>
+            <a
+              href="/api/blog/preview"
+              target="_blank"
+              rel="noreferrer"
+              title="Preview your blog home page — drafts included, so you can see the layout before publishing"
+              className="btn-ghost text-xs"
+            >
+              <Eye className="h-3.5 w-3.5" /> Preview blog
+            </a>
             <button
               type="button"
               disabled={busy === "import-all"}
@@ -201,6 +210,15 @@ export default function BlogManager({
                     <span>Updated {new Date(p.updated_at).toLocaleDateString()}</span>
                   </div>
                 </div>
+                <a
+                  href={`/api/blog/preview/post/${p.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Preview this post as it will look published"
+                  className="text-zinc-500 hover:text-zinc-200"
+                >
+                  <Eye className="h-4 w-4" />
+                </a>
                 {p.status === "published" && (
                   <a
                     href={`/b/${p.id}`}

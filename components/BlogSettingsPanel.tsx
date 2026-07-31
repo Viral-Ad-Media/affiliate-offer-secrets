@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Settings, Loader2, CheckCircle2, ExternalLink, ImagePlus, Trash2 } from "lucide-react";
+import { Settings, Loader2, CheckCircle2, ExternalLink, ImagePlus, Trash2, Eye } from "lucide-react";
 import { PERMALINK_STYLES, type PermalinkStyle } from "@/lib/blog";
 import { toast } from "@/lib/toast";
 
@@ -92,6 +92,20 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
           Your public blog&apos;s address and identity. These appear on the blog index and on every
           published post.
         </p>
+      </div>
+
+      {/* Preview works before a slug exists — the live link below can't, since without a slug the
+          public blog has no address yet. */}
+      <div>
+        <a
+          href="/api/blog/preview"
+          target="_blank"
+          rel="noreferrer"
+          className="btn-ghost inline-flex items-center gap-1.5 text-xs"
+          title="Preview your blog home page — drafts included"
+        >
+          <Eye className="h-3.5 w-3.5" /> Preview blog home
+        </a>
       </div>
 
       {liveUrl && (
