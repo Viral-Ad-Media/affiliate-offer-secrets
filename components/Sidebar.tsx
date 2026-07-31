@@ -57,25 +57,20 @@ const NAV = [
   { href: "/referrals", label: "Referrals", icon: Gift, match: (p: string) => p === "/referrals" },
   { href: "/rewards", label: "Rewards", icon: Award, match: (p: string) => p === "/rewards" },
   { href: "/audit", label: "Audit trail", icon: History, match: (p: string) => p === "/audit" },
-  // Connections / Domains / Billing keep their own top-level URLs — they're referenced from OAuth
-  // callbacks, the access gate, and a dozen in-app links, so renaming the routes would be churn
-  // with no user-visible gain. Grouping them here is a navigation decision, not a URL one; the
-  // parent match therefore has to recognise those paths explicitly.
+  // Billing lives OUTSIDE the (app) route group (app/settings/billing) even though its URL nests
+  // under /settings — (app)/layout.tsx redirects to it when access is missing, so nesting it
+  // inside that layout would infinite-loop for exactly the users who need to reach it.
   {
     href: "/settings/profile",
     label: "Settings",
     icon: Settings,
-    match: (p: string) =>
-      p.startsWith("/settings") ||
-      p === "/connections" ||
-      p.startsWith("/domains") ||
-      p === "/billing",
+    match: (p: string) => p.startsWith("/settings"),
     children: [
       { href: "/settings/profile", label: "Profile", match: (p: string) => p === "/settings/profile" },
       { href: "/settings/security", label: "Security", match: (p: string) => p === "/settings/security" },
-      { href: "/connections", label: "Connections", match: (p: string) => p === "/connections" },
-      { href: "/domains", label: "Domains", match: (p: string) => p.startsWith("/domains") },
-      { href: "/billing", label: "Billing", match: (p: string) => p === "/billing" },
+      { href: "/settings/connections", label: "Connections", match: (p: string) => p === "/settings/connections" },
+      { href: "/settings/domains", label: "Domains", match: (p: string) => p.startsWith("/settings/domains") },
+      { href: "/settings/billing", label: "Billing", match: (p: string) => p === "/settings/billing" },
     ],
   },
 ];
@@ -85,6 +80,9 @@ type Props = {
   onTrial: boolean;
   trialDaysLeft: number;
   creditBalance: number;
+  firstName: string | null;
+  lastName: string | null;
+  avatarUrl: string | null;
 };
 
 // Desktop (sm+): a persistent left sidebar, collapsible to an icon-only rail — the choice is
@@ -93,7 +91,15 @@ type Props = {
 // applies one paint later — a standard, acceptable flash).
 // Mobile (<sm): a slim top bar (logo, credits, hamburger) with a slide-in drawer carrying the
 // full labeled nav — replaces the old cramped horizontal icon strip.
-export default function Sidebar({ email, onTrial, trialDaysLeft, creditBalance }: Props) {
+export default function Sidebar({
+  email,
+  onTrial,
+  trialDaysLeft,
+  creditBalance,
+  firstName,
+  lastName,
+  avatarUrl,
+}: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
@@ -162,12 +168,17 @@ export default function Sidebar({ email, onTrial, trialDaysLeft, creditBalance }
       );
     });
 
+  const displayName = [firstName, lastName].filter(Boolean).join(" ").trim();
+  const initials =
+    ((firstName?.trim()?.[0] ?? "") + (lastName?.trim()?.[0] ?? "")).toUpperCase() ||
+    (email.trim()[0] ?? "?").toUpperCase();
+
   const accountChips = (iconOnly: boolean) => (
     <>
       <ThemeToggle iconOnly={iconOnly} />
       {onTrial && (
         <Link
-          href="/billing"
+          href="/settings/billing"
           title={iconOnly ? `Trial: ${trialDaysLeft} ${trialDaysLeft === 1 ? "day" : "days"} left` : undefined}
           className={`flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-300 hover:border-amber-500 ${
             iconOnly ? "justify-center" : "justify-center"
@@ -182,18 +193,35 @@ export default function Sidebar({ email, onTrial, trialDaysLeft, creditBalance }
         </Link>
       )}
       <Link
-        href="/billing"
+        href="/settings/billing"
         title={iconOnly ? `${creditBalance} credits` : undefined}
         className="flex items-center justify-center gap-1.5 rounded-lg border border-ink-600 px-2.5 py-1.5 text-xs text-emerald-300 hover:border-emerald-500"
       >
         <Coins className="h-3.5 w-3.5 shrink-0" />
         {!iconOnly && <span>{creditBalance} credits</span>}
       </Link>
-      {!iconOnly && (
-        <div className="truncate px-2 text-xs text-zinc-500" title={email}>
-          {email}
-        </div>
-      )}
+      {/* Identity chip — links to Profile, which is where you'd go to change any of it. */}
+      <Link
+        href="/settings/profile"
+        title={displayName ? `${displayName} · ${email}` : email}
+        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-ink-800 ${
+          iconOnly ? "justify-center" : ""
+        }`}
+      >
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-ink-600 bg-ink-800 text-[10px] font-semibold text-zinc-400">
+          {avatarUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element -- data: URL, nothing to optimise */
+            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initials
+          )}
+        </span>
+        {!iconOnly && (
+          <span className="min-w-0 flex-1 truncate text-xs text-zinc-500">
+            {displayName || email}
+          </span>
+        )}
+      </Link>
       <button
         onClick={logout}
         title={iconOnly ? "Log out" : undefined}
@@ -244,7 +272,7 @@ export default function Sidebar({ email, onTrial, trialDaysLeft, creditBalance }
         <div className="flex items-center gap-2">
           <NotificationsBell />
           <Link
-            href="/billing"
+            href="/settings/billing"
             className="flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-1 text-xs text-emerald-300"
           >
             <Coins className="h-3.5 w-3.5" />

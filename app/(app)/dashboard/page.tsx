@@ -43,13 +43,13 @@ const QUICK_LINKS = [
     description: "Discover products and build campaign kits.",
   },
   {
-    href: "/connections",
+    href: "/settings/connections",
     icon: Link2,
     label: "Connections",
     description: "Connect affiliate networks, Meta, and other platforms.",
   },
   {
-    href: "/domains",
+    href: "/settings/domains",
     icon: Globe,
     label: "Domains",
     description: "Publish presell and bridge pages on your own domain.",

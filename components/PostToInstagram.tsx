@@ -45,7 +45,7 @@ export default function PostToInstagram({
     return (
       <div className="rounded-lg border border-ink-700 bg-ink-800/50 p-4 text-sm text-zinc-400">
         No Instagram Business account linked. Connect Facebook in{" "}
-        <a href="/connections" className="text-emerald-400 underline">
+        <a href="/settings/connections" className="text-emerald-400 underline">
           Connections
         </a>{" "}
         with a Page that has a linked Instagram Business account.

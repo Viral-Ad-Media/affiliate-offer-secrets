@@ -29,10 +29,10 @@ export async function GET(req: Request) {
   }
 
   if (errorParam) {
-    return redirectClearingCookie("/connections?youtube=cancelled");
+    return redirectClearingCookie("/settings/connections?youtube=cancelled");
   }
   if (!code || !state || !cookieState || state !== cookieState) {
-    return redirectClearingCookie("/connections?youtube=error");
+    return redirectClearingCookie("/settings/connections?youtube=error");
   }
 
   const supabase = createClient();
@@ -90,9 +90,9 @@ export async function GET(req: Request) {
       await admin.from("youtube_connections").insert(row);
     }
 
-    return redirectClearingCookie("/connections?youtube=connected");
+    return redirectClearingCookie("/settings/connections?youtube=connected");
   } catch (err: any) {
     console.error("YouTube OAuth callback failed:", err?.message ?? err);
-    return redirectClearingCookie("/connections?youtube=error");
+    return redirectClearingCookie("/settings/connections?youtube=error");
   }
 }

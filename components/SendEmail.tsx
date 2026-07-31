@@ -39,7 +39,7 @@ export default function SendEmail({
     return (
       <div className="rounded-lg border border-ink-700 bg-ink-800/50 p-4 text-sm text-zinc-400">
         Connect an email sender (Resend, SendGrid, Mailgun, or SMTP) in{" "}
-        <a href="/connections" className="text-emerald-400 underline">
+        <a href="/settings/connections" className="text-emerald-400 underline">
           Connections
         </a>{" "}
         to send this directly.

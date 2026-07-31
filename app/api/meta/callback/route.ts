@@ -42,10 +42,10 @@ export async function GET(req: Request) {
   }
 
   if (errorParam) {
-    return redirectClearingCookie("/connections?meta=cancelled");
+    return redirectClearingCookie("/settings/connections?meta=cancelled");
   }
   if (!code || !state || !cookieState || state !== cookieState) {
-    return redirectClearingCookie("/connections?meta=error");
+    return redirectClearingCookie("/settings/connections?meta=error");
   }
 
   const supabase = createClient();
@@ -220,9 +220,9 @@ export async function GET(req: Request) {
       }
     }
 
-    return redirectClearingCookie("/connections?meta=connected");
+    return redirectClearingCookie("/settings/connections?meta=connected");
   } catch (err: any) {
     console.error("Meta OAuth callback failed:", err?.message ?? err);
-    return redirectClearingCookie("/connections?meta=error");
+    return redirectClearingCookie("/settings/connections?meta=error");
   }
 }

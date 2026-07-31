@@ -167,7 +167,7 @@ export default function PublishBridge({
             {domains.length === 0 ? (
               <p className="mt-1.5 text-xs text-zinc-500">
                 No connected domains yet —{" "}
-                <a href="/domains" className="underline">
+                <a href="/settings/domains" className="underline">
                   connect one
                 </a>{" "}
                 for a branded link, or just use the default link above.

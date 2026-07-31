@@ -28,10 +28,10 @@ export async function GET(req: Request) {
   }
 
   if (errorParam) {
-    return redirectClearingCookie("/connections?tiktok=cancelled");
+    return redirectClearingCookie("/settings/connections?tiktok=cancelled");
   }
   if (!code || !state || !cookieState || state !== cookieState) {
-    return redirectClearingCookie("/connections?tiktok=error");
+    return redirectClearingCookie("/settings/connections?tiktok=error");
   }
 
   const supabase = createClient();
@@ -82,9 +82,9 @@ export async function GET(req: Request) {
       await admin.from("tiktok_connections").insert(row);
     }
 
-    return redirectClearingCookie("/connections?tiktok=connected");
+    return redirectClearingCookie("/settings/connections?tiktok=connected");
   } catch (err: any) {
     console.error("TikTok OAuth callback failed:", err?.message ?? err);
-    return redirectClearingCookie("/connections?tiktok=error");
+    return redirectClearingCookie("/settings/connections?tiktok=error");
   }
 }

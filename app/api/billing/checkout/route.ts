@@ -49,8 +49,8 @@ export async function POST(req: Request) {
       type: lineItem.type,
       credits: lineItem.credits ? String(lineItem.credits) : "",
     },
-    success_url: `${origin}/billing?success=1`,
-    cancel_url: `${origin}/billing?canceled=1`,
+    success_url: `${origin}/settings/billing?success=1`,
+    cancel_url: `${origin}/settings/billing?canceled=1`,
   });
 
   return NextResponse.json({ url: session.url });

@@ -14,11 +14,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("access_granted, nickname, trial_ends_at")
+    .select("access_granted, nickname, trial_ends_at, first_name, last_name, avatar_url")
     .eq("id", user.id)
     .single();
 
-  if (!hasAppAccess(profile)) redirect("/billing");
+  if (!hasAppAccess(profile)) redirect("/settings/billing");
 
   const onTrial = !profile?.access_granted && !!profile?.trial_ends_at;
   const trialDaysLeft = onTrial
@@ -39,6 +39,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         onTrial={onTrial}
         trialDaysLeft={trialDaysLeft}
         creditBalance={creditBalance}
+        firstName={profile?.first_name ?? null}
+        lastName={profile?.last_name ?? null}
+        avatarUrl={profile?.avatar_url ?? null}
       />
       <div className="min-w-0 flex-1">
         <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>

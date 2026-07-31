@@ -19,7 +19,7 @@ export async function GET() {
   // say so on the Connections page instead of throwing an unhandled 500 at whoever clicked
   // Connect — that failure was invisible from the UI and reported nothing actionable.
   if (!isGoogleOAuthConfigured()) {
-    return NextResponse.redirect(appUrl("/connections?youtube=not_configured"));
+    return NextResponse.redirect(appUrl("/settings/connections?youtube=not_configured"));
   }
 
   const state = crypto.randomUUID().replace(/-/g, "");
