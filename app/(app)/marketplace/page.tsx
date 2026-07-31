@@ -6,7 +6,6 @@ import {
   Rocket,
   Search,
   RefreshCw,
-  Trash2,
   ExternalLink,
   CheckCircle2,
   Copy,
@@ -17,9 +16,9 @@ import {
   Inbox,
 } from "lucide-react";
 import type { Job, Product } from "@/lib/shared";
-import { STATUS_COLORS } from "@/lib/shared";
 import { CLICKBANK_CATEGORIES } from "@/lib/categories";
 import ManualAddProduct from "@/components/ManualAddProduct";
+import ProductStatusSelect from "@/components/ProductStatusSelect";
 import { DataTableFilter, type FilterOption } from "@/components/ui/data-table-filter";
 
 const NETWORK_LABELS: Record<string, string> = { clickbank: "ClickBank", digistore24: "Digistore24" };
@@ -42,13 +41,16 @@ function StatTile({
   label,
   value,
   sub,
+  href,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
   sub?: string;
+  /** Makes the whole tile a link — used by "Open jobs", whose detail now lives in Settings. */
+  href?: string;
 }) {
-  return (
+  const body = (
     <div className="stat-tile">
       <div className="rounded-lg border border-ink-700 bg-ink-800 p-2.5 text-emerald-400">
         {icon}
@@ -61,6 +63,13 @@ function StatTile({
         </div>
       </div>
     </div>
+  );
+  return href ? (
+    <Link href={href} className="block transition-opacity hover:opacity-80">
+      {body}
+    </Link>
+  ) : (
+    body
   );
 }
 
@@ -135,11 +144,6 @@ export default function Marketplace() {
 
   const subCategoryOptions =
     CLICKBANK_CATEGORIES.find((c) => c.name === category)?.subCategories ?? [];
-
-  async function deleteJob(id: string) {
-    await fetch(`/api/jobs/${id}`, { method: "DELETE" });
-    await load();
-  }
 
   function copyHoplink(p: Product) {
     if (!p.hoplink) return;
@@ -263,6 +267,7 @@ export default function Marketplace() {
           label="Open jobs"
           value={openJobs.length}
           sub={openJobs.some((j) => j.status === "running") ? "engine running" : undefined}
+          href="/settings/jobs"
         />
       </section>
 
@@ -340,9 +345,7 @@ export default function Marketplace() {
                     </span>
                   </td>
                   <td className="px-2 py-2.5">
-                    <span className={`chip ${STATUS_COLORS[p.status] ?? STATUS_COLORS.New}`}>
-                      {p.status}
-                    </span>
+                    <ProductStatusSelect productId={p.id} status={p.status} onChanged={load} />
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center justify-end gap-1.5">
@@ -412,66 +415,6 @@ export default function Marketplace() {
             </tbody>
           </table>
         </div>
-      </section>
-
-      <section className="card">
-        <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">
-          <h2 className="text-sm font-semibold text-zinc-100">Jobs queue</h2>
-          <button onClick={load} className="btn-ghost !py-1 text-xs">
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh
-          </button>
-        </div>
-        <ul className="divide-y divide-ink-800">
-          {jobs.slice(0, 12).map((j) => {
-            const payload = j.payload;
-            return (
-              <li key={j.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`chip ${
-                      j.status === "done"
-                        ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
-                        : j.status === "running"
-                          ? "border-sky-500/30 bg-sky-500/15 text-sky-300"
-                          : j.status === "error"
-                            ? "border-red-500/30 bg-red-500/15 text-red-300"
-                            : "border-amber-500/30 bg-amber-500/15 text-amber-300"
-                    }`}
-                  >
-                    {j.status}
-                  </span>
-                  <span className="text-zinc-300">
-                    {j.type === "discover_products"
-                      ? `Discover: ${payload.niche}`
-                      : `Build campaign: ${payload.vendor_id ?? payload.product_id}`}
-                  </span>
-                  {j.result && j.status === "error" && (
-                    <span className="text-xs text-red-400">{j.result}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <span title={j.id}>#{j.id.slice(0, 8)}</span>
-                  <button
-                    onClick={() => deleteJob(j.id)}
-                    title="Delete job"
-                    className="rounded p-1 text-zinc-500 hover:bg-ink-700 hover:text-red-400"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-          {jobs.length === 0 && (
-            <li className="flex flex-col items-center px-4 py-8 text-center">
-              <Hourglass className="mb-2 h-6 w-6 text-zinc-600" />
-              <p className="text-sm text-zinc-400">No jobs yet</p>
-              <p className="mt-1 text-xs text-zinc-600">
-                Queued discovery and campaign jobs will show up here.
-              </p>
-            </li>
-          )}
-        </ul>
       </section>
     </main>
   );

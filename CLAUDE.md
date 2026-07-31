@@ -1946,6 +1946,27 @@ Three read surfaces over data other code already writes — no new tables for th
   (`/api/contacts/export`), not the client-side CSV builder** — `ContactsTable` only holds the
   current page since pagination landed, so a client-built file would silently export 50 rows.
 
+## Product status, and where the jobs queue lives
+
+- **`products.status` is now settable by hand** (`components/ProductStatusSelect.tsx` — the status
+  chip itself is the dropdown, on both the Marketplace row and the product page). Before this,
+  Selected/Paused/Dead appeared in the Marketplace filter but nothing could ever set them: the
+  engine only writes `New` on discovery and `Promoting` when a kit finishes, so three of the five
+  statuses were unreachable. `app/api/products/[id]/status/route.ts` uses the **RLS-scoped**
+  client, not the admin client — `products`' own policy (`for all using (auth.uid() = user_id)`)
+  already scopes the write, and an admin client would only widen what a bug could reach. That's
+  the opposite call from `campaigns`, whose policy is select-only precisely because its HTML is
+  served to real ad traffic.
+- **The route's enum check is a UX nicety; migration 0048's `products_status_check` is the
+  boundary** — this table is directly PATCH-able through PostgREST, so a constraint is the only
+  thing that actually stops a garbage status being stored. Verified before applying that only
+  `New` and `Promoting` existed.
+- **The jobs queue moved off Marketplace to `/settings/jobs`** (`components/JobsQueue.tsx`, now
+  self-contained with its own fetch+poll). Jobs process automatically within seconds and retry
+  themselves — the list is something you consult when something looks stuck, not part of the
+  discovery loop. Marketplace keeps its own `/api/jobs` call for the per-row "Queued" indicator
+  and the "Open jobs" stat tile, which now links to the new page.
+
 ## Top bar: credits and trial countdown
 
 `CreditsChip` and `TrialChip` both live in the desktop top bar rather than the sidebar — account

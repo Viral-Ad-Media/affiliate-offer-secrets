@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { marked } from "marked";
 import { ArrowLeft, Copy, CheckCircle2, ExternalLink, Download, Layers } from "lucide-react";
 import type { Campaign, Product } from "@/lib/shared";
-import { STATUS_COLORS } from "@/lib/shared";
+import ProductStatusSelect from "@/components/ProductStatusSelect";
 import SendEmail from "@/components/SendEmail";
 import GenerateVideo from "@/components/GenerateVideo";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
@@ -101,7 +101,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
               {product.vendor_id} · {product.niche}
             </p>
           </div>
-          <span className={`chip ${STATUS_COLORS[product.status]}`}>{product.status}</span>
+          <ProductStatusSelect productId={product.id} status={product.status} onChanged={load} />
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
           <div>
