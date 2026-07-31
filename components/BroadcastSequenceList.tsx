@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, Loader2, Send } from "lucide-react";
+import { Plus, Loader2, Send , Layers} from "lucide-react";
+import { toast } from "@/lib/toast";
 import { createClient } from "@/lib/supabase/client";
 import type { BroadcastSequence } from "@/lib/shared";
 
@@ -35,6 +36,7 @@ export default function BroadcastSequenceList({
 }) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [name, setName] = useState("");
   const [audienceType, setAudienceType] = useState<"campaign" | "all" | "manual">("campaign");
   const [campaignId, setCampaignId] = useState(campaignOptions[0]?.id ?? "");
@@ -57,6 +59,32 @@ export default function BroadcastSequenceList({
     router.push(`/emails/sequences/${data}`);
   }
 
+  // Every campaign kit already contains a 3-email swipe; this turns each one into a real drip
+  // sequence. Draft only — activating starts sending to real people, which stays a deliberate act.
+  async function importAll() {
+    setImporting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/broadcast/sequences/import-all", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Import failed");
+      if (data.created > 0) {
+        toast.success(
+          `${data.created} draft ${data.created === 1 ? "sequence" : "sequences"} created from your campaign swipes`
+        );
+      } else {
+        toast.info("Every campaign with an email swipe already has a sequence");
+      }
+      if (data.failed > 0) toast.error(`${data.failed} couldn't be imported`);
+      router.refresh();
+    } catch (err: any) {
+      setError(err?.message ?? String(err));
+      toast.error(err?.message ?? String(err));
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <div className="card overflow-hidden">
       <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">
@@ -64,9 +92,20 @@ export default function BroadcastSequenceList({
           <h2 className="text-sm font-semibold text-zinc-100">Sequences</h2>
           <p className="text-xs text-zinc-500">Named drip sequences, each with its own audience and steps.</p>
         </div>
-        <button onClick={() => setCreating((v) => !v)} className="btn-ghost !py-1.5 text-xs">
-          <Plus className="h-3.5 w-3.5" /> New sequence
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={importAll}
+            disabled={importing}
+            title="Create a draft sequence from every campaign kit's generated email swipe"
+            className="btn-ghost !py-1.5 text-xs"
+          >
+            {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Layers className="h-3.5 w-3.5" />}
+            Import all swipes
+          </button>
+          <button onClick={() => setCreating((v) => !v)} className="btn-ghost !py-1.5 text-xs">
+            <Plus className="h-3.5 w-3.5" /> New sequence
+          </button>
+        </div>
       </div>
 
       {creating && (

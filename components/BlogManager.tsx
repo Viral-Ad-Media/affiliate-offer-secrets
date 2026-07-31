@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Newspaper, Plus, Loader2, Tag, Import, ExternalLink, Trash2 } from "lucide-react";
+import { Newspaper, Plus, Loader2, Tag, Import, ExternalLink, Trash2, Layers } from "lucide-react";
+import { toast } from "@/lib/toast";
 
 type PostRow = {
   id: string;
@@ -63,6 +64,22 @@ export default function BlogManager({
       body: JSON.stringify(campaignId ? { campaign_id: campaignId } : {}),
     });
     if (data?.post_id) router.push(`/blog/${data.post_id}`);
+  }
+
+  // Backfill for campaigns built before posts were created automatically. Idempotent, so the
+  // button stays useful (and harmless) afterwards.
+  async function importAll() {
+    const data = await call("import-all", "/api/blog/posts/import-all", { method: "POST" });
+    if (!data) return;
+    if (data.created > 0) {
+      toast.success(
+        `${data.created} draft ${data.created === 1 ? "post" : "posts"} created from your campaigns`
+      );
+    } else {
+      toast.info("Every campaign with an article already has a post");
+    }
+    if (data.failed > 0) toast.error(`${data.failed} couldn't be imported — check the campaign kits`);
+    router.refresh();
   }
 
   return (
@@ -136,6 +153,20 @@ export default function BlogManager({
             >
               {busy === "import" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Import className="h-3.5 w-3.5" />}
               Import
+            </button>
+            <button
+              type="button"
+              disabled={busy === "import-all"}
+              onClick={importAll}
+              title="Create a draft post from every campaign that has a generated article"
+              className="btn-ghost text-xs"
+            >
+              {busy === "import-all" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Layers className="h-3.5 w-3.5" />
+              )}
+              Import all
             </button>
             <button type="button" disabled={busy === "new"} onClick={() => createPost()} className="btn-primary text-xs">
               {busy === "new" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
