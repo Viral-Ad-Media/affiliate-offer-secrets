@@ -14,7 +14,7 @@ export default async function BlogSettingsPage() {
 
   const { data: settings } = await supabase
     .from("blog_settings")
-    .select("blog_title, author_name, slug, description, author_bio, author_avatar_url")
+    .select("blog_title, author_name, slug, description, author_bio, author_avatar_url, permalink_style")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -28,6 +28,7 @@ export default async function BlogSettingsPage() {
           description: null,
           author_bio: null,
           author_avatar_url: null,
+          permalink_style: null,
         }
       }
     />

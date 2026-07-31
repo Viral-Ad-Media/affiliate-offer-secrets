@@ -1,5 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { renderPublicPostHtml, renderBlogIndexHtml, renderRssXml, renderSitemapXml, blogPostPath } from "@/lib/blog";
+import {
+  renderPublicPostHtml,
+  renderBlogIndexHtml,
+  renderRssXml,
+  renderSitemapXml,
+  blogPostPath,
+  type PermalinkStyle,
+} from "@/lib/blog";
 import { loadBlogIndex, loadAllPublishedPosts } from "@/lib/blogIndex";
 
 // Feeds are cheap to regenerate but change only on publish — a short shared cache keeps crawler
@@ -22,7 +29,12 @@ const notFound = () => new Response("Not found", { status: 404 });
 
 // Public blog on the app's own domain:
 //   /b/{blogSlug}             → index of that tenant's published posts
-//   /b/{blogSlug}/{postSlug}  → one post
+//   /b/{blogSlug}/…/{postSlug} → one post; the segments before the slug come from the tenant's
+//                                permalink structure (0044) — date or category — and are not used
+//                                to find the post: it's resolved by its final slug segment alone.
+//                                Anything that isn't the canonical path for the CURRENT structure
+//                                301s to it, so changing the structure never breaks a shared link
+//                                and search engines consolidate on one address.
 //   /b/{postId}               → legacy UUID link, 301s to the canonical slug URL
 //
 // Access model is unchanged from the original single-post route: published-only scoping is the
@@ -31,7 +43,9 @@ const notFound = () => new Response("Not found", { status: 404 });
 // The custom-domain equivalent lives in app/d/[[...path]]/route.ts and shares the same renderers.
 export async function GET(req: Request, { params }: { params: { path?: string[] } }) {
   const segments = (params.path ?? []).filter(Boolean);
-  if (segments.length === 0 || segments.length > 2) return notFound();
+  // blogSlug + at most a 3-segment permalink (yyyy/mm/slug) — anything longer is not a shape this
+  // app can produce.
+  if (segments.length === 0 || segments.length > 4) return notFound();
   const admin = createAdminClient();
 
   // Legacy /b/{uuid} — resolve and redirect to the canonical slug URL so previously-shared links
@@ -60,7 +74,7 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
   // Everything else is keyed off the blog slug.
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("user_id, blog_title, slug, description, author_name, author_bio, author_avatar_url")
+    .select("user_id, blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style")
     .ilike("slug", segments[0])
     .maybeSingle();
   if (!settings) return notFound();
@@ -84,19 +98,37 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
     const body =
       segments[1] === "rss.xml"
         ? renderRssXml(settings, posts, origin, base)
-        : renderSitemapXml(posts, origin, base);
+        : renderSitemapXml(posts, origin, base, settings.permalink_style as PermalinkStyle | null);
     return new Response(body, { status: 200, headers: xmlHeaders(segments[1]) });
   }
 
-  // /b/{blogSlug}/{postSlug}
+  // The post is keyed off the LAST segment; any date/category segments before it are decoration
+  // from whatever structure was in force when the link was made.
   const { data: post } = await admin
     .from("blog_posts")
-    .select("id")
+    .select("id, slug, published_at, blog_categories(slug)")
     .eq("user_id", settings.user_id as string)
-    .ilike("slug", segments[1])
+    .ilike("slug", segments[segments.length - 1])
     .eq("status", "published")
     .maybeSingle();
   if (!post) return notFound();
+
+  const canonical = blogPostPath(
+    settings.slug as string | null,
+    post.slug as string | null,
+    post.id as string,
+    {
+      published_at: post.published_at as string | null,
+      category_slug: (post.blog_categories as unknown as { slug: string | null } | null)?.slug ?? null,
+    },
+    settings.permalink_style as PermalinkStyle | null
+  );
+  // Compare against the full incoming path — blogPostPath() returns "/b/…", so leaving the /b
+  // prefix off here makes every canonical URL redirect to itself forever.
+  const requested = `/b/${segments.join("/")}`;
+  if (requested !== canonical) {
+    return new Response(null, { status: 301, headers: { Location: canonical } });
+  }
   return renderPost(admin, post.id as string);
 }
 
@@ -113,7 +145,7 @@ async function renderPost(admin: ReturnType<typeof createAdminClient>, postId: s
 
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url")
+    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style")
     .eq("user_id", post.user_id as string)
     .maybeSingle();
 

@@ -2,7 +2,7 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { POSTS_PER_PAGE, MAX_FEED_POSTS, type BlogIndexPost, type BlogIndexCategory } from "@/lib/blog";
 
 const POST_COLUMNS =
-  "id, title, slug, excerpt, content_md, html, featured_image_url, published_at, blog_categories(name)";
+  "id, title, slug, excerpt, content_md, html, featured_image_url, published_at, blog_categories(name, slug)";
 
 function toIndexPost(r: any): BlogIndexPost {
   return {
@@ -14,7 +14,9 @@ function toIndexPost(r: any): BlogIndexPost {
     html: r.html as string | null,
     featured_image_url: r.featured_image_url as string | null,
     published_at: r.published_at as string | null,
-    category_name: (r.blog_categories as { name: string } | null)?.name ?? null,
+    category_name: (r.blog_categories as { name: string; slug: string | null } | null)?.name ?? null,
+    // Needed by the "category-post" permalink structure (0044).
+    category_slug: (r.blog_categories as { name: string; slug: string | null } | null)?.slug ?? null,
   };
 }
 
@@ -60,7 +62,7 @@ export async function loadBlogIndex(
   // posts" is a dead end for a reader.
   const { data: catRows } = await admin
     .from("blog_categories")
-    .select("id, name, slug, blog_posts!inner(id)")
+    .select("id, name, slug, description, blog_posts!inner(id)")
     .eq("user_id", userId)
     .eq("blog_posts.status", "published")
     .order("name");
@@ -70,7 +72,12 @@ export async function loadBlogIndex(
   for (const c of catRows ?? []) {
     if (seen.has(c.id as string)) continue;
     seen.add(c.id as string);
-    categories.push({ id: c.id as string, name: c.name as string, slug: c.slug as string | null });
+    categories.push({
+      id: c.id as string,
+      name: c.name as string,
+      slug: c.slug as string | null,
+      description: (c.description as string | null) ?? null,
+    });
   }
 
   let activeCategory: (BlogIndexCategory & { id: string }) | null = null;
@@ -102,8 +109,10 @@ export async function loadBlogIndex(
 
   return {
     posts,
-    categories: categories.map(({ name, slug }) => ({ name, slug })),
-    activeCategory: activeCategory ? { name: activeCategory.name, slug: activeCategory.slug } : null,
+    categories: categories.map(({ name, slug, description }) => ({ name, slug, description })),
+    activeCategory: activeCategory
+      ? { name: activeCategory.name, slug: activeCategory.slug, description: activeCategory.description }
+      : null,
     page,
     totalPages,
   };

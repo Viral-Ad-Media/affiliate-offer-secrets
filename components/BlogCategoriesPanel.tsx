@@ -4,16 +4,18 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Tag, Plus, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
 
-type Category = { id: string; name: string; postCount: number };
+type Category = { id: string; name: string; description: string | null; postCount: number };
 
 // Blog → Categories submenu page. Writes via /api/blog/categories (admin-client routes).
 export default function BlogCategoriesPanel({ categories }: { categories: Category[] }) {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [newDescription, setNewDescription] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
 
   async function call(key: string, url: string, init: RequestInit) {
     setBusy(key);
@@ -42,9 +44,12 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
     const data = await call("add", "/api/blog/categories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: trimmed }),
+      body: JSON.stringify({ name: trimmed, description: newDescription.trim() || null }),
     });
-    if (data) setName("");
+    if (data) {
+      setName("");
+      setNewDescription("");
+    }
   }
 
   async function rename(e: React.FormEvent, id: string) {
@@ -54,7 +59,7 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
     const data = await call(`edit-${id}`, `/api/blog/categories/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: trimmed }),
+      body: JSON.stringify({ name: trimmed, description: editDescription.trim() || null }),
     });
     if (data) setEditingId(null);
   }
@@ -73,12 +78,18 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
       </div>
 
       <section className="card p-4">
-        <form onSubmit={add} className="mb-4 flex items-center gap-2">
+        <form onSubmit={add} className="mb-4 flex flex-wrap items-center gap-2">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="New category name"
-            className="w-64 rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+            className="w-52 rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+          />
+          <input
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+            placeholder="Description (optional)"
+            className="min-w-[200px] flex-1 rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
           />
           <button type="submit" disabled={busy === "add" || !name.trim()} className="btn-primary text-xs">
             {busy === "add" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
@@ -95,14 +106,23 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
             {categories.map((c) => (
               <div key={c.id} className="flex items-center gap-3 py-2.5">
                 {editingId === c.id ? (
-                  <form onSubmit={(e) => rename(e, c.id)} className="flex flex-1 items-center gap-2">
-                    <input
-                      autoFocus
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      onKeyDown={(e) => e.key === "Escape" && setEditingId(null)}
-                      className="w-64 rounded-lg border border-ink-600 bg-ink-900 py-1.5 px-2.5 text-sm outline-none focus:border-emerald-500"
-                    />
+                  <form onSubmit={(e) => rename(e, c.id)} className="flex flex-1 items-start gap-2">
+                    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                      <input
+                        autoFocus
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Escape" && setEditingId(null)}
+                        className="w-full rounded-lg border border-ink-600 bg-ink-900 py-1.5 px-2.5 text-sm outline-none focus:border-emerald-500"
+                      />
+                      <input
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        onKeyDown={(e) => e.key === "Escape" && setEditingId(null)}
+                        placeholder="Description (optional) — shown on the blog when this filter is active"
+                        className="w-full rounded-lg border border-ink-600 bg-ink-900 py-1.5 px-2.5 text-xs outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+                      />
+                    </div>
                     <button
                       type="submit"
                       title="Save name"
@@ -125,7 +145,12 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
                     </button>
                   </form>
                 ) : (
-                  <span className="flex-1 text-sm text-zinc-100">{c.name}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm text-zinc-100">{c.name}</div>
+                    {c.description && (
+                      <div className="mt-0.5 text-xs text-zinc-500">{c.description}</div>
+                    )}
+                  </div>
                 )}
                 <span className="text-xs text-zinc-500">
                   {c.postCount} {c.postCount === 1 ? "post" : "posts"}
@@ -137,6 +162,7 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
                     onClick={() => {
                       setEditingId(c.id);
                       setEditName(c.name);
+                      setEditDescription(c.description ?? "");
                       setError(null);
                     }}
                     className="text-zinc-600 hover:text-zinc-300"

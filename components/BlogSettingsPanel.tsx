@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Settings, Loader2, CheckCircle2, ExternalLink, ImagePlus, Trash2 } from "lucide-react";
+import { PERMALINK_STYLES, type PermalinkStyle } from "@/lib/blog";
 
 export type Settings = {
   blog_title: string | null;
@@ -11,6 +12,7 @@ export type Settings = {
   description: string | null;
   author_bio: string | null;
   author_avatar_url: string | null;
+  permalink_style: PermalinkStyle | null;
 };
 
 const MAX_AVATAR_CHARS = 900_000;
@@ -27,6 +29,7 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
   const [description, setDescription] = useState(initial.description ?? "");
   const [authorBio, setAuthorBio] = useState(initial.author_bio ?? "");
   const [avatar, setAvatar] = useState<string | null>(initial.author_avatar_url);
+  const [permalink, setPermalink] = useState<PermalinkStyle>(initial.permalink_style ?? "post");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -48,6 +51,7 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
           blog_title: blogTitle,
           author_name: authorName,
           slug,
+          permalink_style: permalink,
           description,
           author_bio: authorBio,
           author_avatar_url: avatar,
@@ -114,6 +118,34 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
             Needed before your blog index is reachable. Letters, numbers and dashes.
           </span>
         </label>
+        <fieldset className="block">
+          <legend className="mb-1 block text-xs font-medium text-zinc-400">Permalink structure</legend>
+          <div className="space-y-1.5">
+            {PERMALINK_STYLES.map((o) => (
+              <label key={o.value} className="flex items-center gap-2 text-sm text-zinc-300">
+                <input
+                  type="radio"
+                  name="permalink_style"
+                  value={o.value}
+                  checked={permalink === o.value}
+                  onChange={() => setPermalink(o.value)}
+                  className="accent-emerald-500"
+                />
+                <span>{o.label}</span>
+                <code className="text-xs text-zinc-500">
+                  {slug ? `/b/${slug}` : "/b/your-blog"}
+                  {o.example}
+                </code>
+              </label>
+            ))}
+          </div>
+          <span className="mt-1 block text-[11px] text-zinc-500">
+            Applies to post URLs. Changing it doesn&apos;t break links you&apos;ve already shared —
+            old addresses redirect to the new structure. A post with no publish date or no category
+            falls back to just its name.
+          </span>
+        </fieldset>
+
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-zinc-400">Blog name</span>
           <input

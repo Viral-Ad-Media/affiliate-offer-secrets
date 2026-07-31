@@ -1,6 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { servePublicCampaignPage } from "@/lib/publicPage";
-import { renderPublicPostHtml, renderBlogIndexHtml, renderRssXml, renderSitemapXml } from "@/lib/blog";
+import {
+  renderPublicPostHtml,
+  renderBlogIndexHtml,
+  renderRssXml,
+  renderSitemapXml,
+  blogPostPathOnDomain,
+  type PermalinkStyle,
+} from "@/lib/blog";
 import { loadBlogIndex, loadAllPublishedPosts } from "@/lib/blogIndex";
 
 const HTML_HEADERS = {
@@ -24,7 +31,7 @@ async function serveBlogOnDomain(
 ): Promise<Response | null> {
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url")
+    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style")
     .eq("user_id", userId)
     .maybeSingle();
   if (!settings) return null;
@@ -51,20 +58,39 @@ async function serveBlogOnDomain(
     }
     const posts = await loadAllPublishedPosts(admin, userId);
     const body =
-      path === "rss.xml" ? renderRssXml(settings, posts, siteOrigin, "") : renderSitemapXml(posts, siteOrigin, "");
+      path === "rss.xml"
+        ? renderRssXml(settings, posts, siteOrigin, "")
+        : renderSitemapXml(posts, siteOrigin, "", settings.permalink_style as PermalinkStyle | null);
     return new Response(body, { status: 200, headers: xmlHeaders(path) });
   }
 
+  // Resolved by the LAST path segment: the segments before it come from the tenant's permalink
+  // structure (0044) and are decoration, so a link made under an older structure still finds its
+  // post — and gets 301'd to the current canonical path below.
+  const segments = path.split("/").filter(Boolean);
   const { data: post } = await admin
     .from("blog_posts")
     .select(
-      "id, title, slug, content_md, html, excerpt, featured_image_url, published_at, seo_title, seo_description, seo_index, blog_categories(name)"
+      "id, title, slug, content_md, html, excerpt, featured_image_url, published_at, seo_title, seo_description, seo_index, blog_categories(name, slug)"
     )
     .eq("user_id", userId)
-    .ilike("slug", path)
+    .ilike("slug", segments[segments.length - 1] ?? path)
     .eq("status", "published")
     .maybeSingle();
   if (!post) return null;
+
+  const canonical = blogPostPathOnDomain(
+    {
+      slug: post.slug as string | null,
+      id: post.id as string,
+      published_at: post.published_at as string | null,
+      category_slug: (post.blog_categories as unknown as { slug: string | null } | null)?.slug ?? null,
+    },
+    settings.permalink_style as PermalinkStyle | null
+  );
+  if (`/${path}` !== canonical) {
+    return new Response(null, { status: 301, headers: { Location: canonical } });
+  }
 
   const html = renderPublicPostHtml({
     id: post.id as string,

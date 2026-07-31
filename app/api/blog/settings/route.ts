@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MAX_BLOG_SETTING, MAX_BLOG_BIO, MAX_FEATURED_IMAGE_CHARS, slugify } from "@/lib/blog";
+import { MAX_BLOG_SETTING, MAX_BLOG_BIO, MAX_FEATURED_IMAGE_CHARS, slugify, isPermalinkStyle } from "@/lib/blog";
 import { isValidImageDataUrl } from "@/lib/images/validate";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +32,10 @@ export async function POST(req: Request) {
     author_bio: clean(body.author_bio, MAX_BLOG_BIO),
     updated_at: new Date().toISOString(),
   };
+
+  // Permalink structure (0044). Only set when the body names a known style — an unrecognized value
+  // is ignored rather than 400ing, so an older client can keep saving the rest of the form.
+  if (isPermalinkStyle(body.permalink_style)) patch.permalink_style = body.permalink_style;
 
   // Slug is the public handle in /b/{slug} and is globally unique (0033) — validate, reserve-check
   // and collision-check before writing so the tenant gets a clear message instead of a 500.

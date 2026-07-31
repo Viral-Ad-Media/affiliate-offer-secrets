@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MAX_CATEGORY_NAME, slugify } from "@/lib/blog";
+import { MAX_CATEGORY_NAME, MAX_CATEGORY_DESCRIPTION, slugify } from "@/lib/blog";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,10 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const name = typeof body.name === "string" ? body.name.trim().slice(0, MAX_CATEGORY_NAME) : "";
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+  const description =
+    typeof body.description === "string" && body.description.trim()
+      ? body.description.trim().slice(0, MAX_CATEGORY_DESCRIPTION)
+      : null;
 
   const admin = createAdminClient();
   // Slug is the public filter key (/b/{blog}?category={slug}), unique per blog (0034). A name
@@ -36,8 +40,8 @@ export async function POST(req: Request) {
 
   const { data, error } = await admin
     .from("blog_categories")
-    .insert({ user_id: user.id, name, slug })
-    .select("id, name, slug")
+    .insert({ user_id: user.id, name, slug, description })
+    .select("id, name, slug, description")
     .single();
   if (error) {
     const dup = error.message.includes("duplicate") || error.code === "23505";

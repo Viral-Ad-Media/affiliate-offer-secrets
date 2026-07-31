@@ -157,9 +157,50 @@ export type BlogSettings = {
   description?: string | null;
   author_bio?: string | null;
   author_avatar_url?: string | null;
+  permalink_style?: PermalinkStyle | null;
 };
 
+// URL structure for the path AFTER the blog root — the same on the app domain (under
+// /b/{blogSlug}) and on a connected domain (where the blog IS the root).
+export type PermalinkStyle = "post" | "date-post" | "category-post";
+
+export const PERMALINK_STYLES: { value: PermalinkStyle; label: string; example: string }[] = [
+  { value: "post", label: "Post name", example: "/my-first-post" },
+  { value: "date-post", label: "Date and name", example: "/2026/07/my-first-post" },
+  { value: "category-post", label: "Category and name", example: "/health/my-first-post" },
+];
+
+export function isPermalinkStyle(v: unknown): v is PermalinkStyle {
+  return v === "post" || v === "date-post" || v === "category-post";
+}
+
+// A post's path relative to its blog root, WITHOUT a leading slash — e.g. "2026/07/my-post".
+// Falls back to just the slug whenever the prefix can't be built (an unscheduled post has no
+// date; an uncategorized one has no category), so a post always has a working URL rather than a
+// path with an empty segment in it.
+export function postPathSuffix(
+  style: PermalinkStyle | null | undefined,
+  post: { slug?: string | null; id?: string | null; published_at?: string | null; category_slug?: string | null }
+): string {
+  const leaf = post.slug || post.id || "";
+  switch (style) {
+    case "date-post": {
+      if (!post.published_at) return leaf;
+      const d = new Date(post.published_at);
+      if (Number.isNaN(d.getTime())) return leaf;
+      const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+      return `${d.getUTCFullYear()}/${mm}/${leaf}`;
+    }
+    case "category-post":
+      return post.category_slug ? `${post.category_slug}/${leaf}` : leaf;
+    default:
+      return leaf;
+  }
+}
+
 export const MAX_BLOG_BIO = 600;
+// Category descriptions are a line or two under the filter chips, not an article.
+export const MAX_CATEGORY_DESCRIPTION = 300;
 export const MAX_POST_EXCERPT = 300;
 // Featured images are full-width hero art, so they get a larger cap than the inline
 // MAX_AD_IMAGE/page-block images; still a data URL, same validated-format convention.
@@ -179,11 +220,27 @@ export function slugify(input: string): string {
     .replace(/-+$/g, "");
 }
 
-// Canonical public URL for a post. Prefers the pretty slug pair and falls back to the legacy
-// /b/{uuid} form when the blog or the post hasn't been given a slug yet, so a post is always
-// reachable at *some* stable URL.
-export function blogPostPath(blogSlug: string | null | undefined, postSlug: string | null | undefined, postId: string): string {
-  return blogSlug && postSlug ? `/b/${blogSlug}/${postSlug}` : `/b/${postId}`;
+// Canonical public URL for a post on the app's own domain. Prefers the pretty slug pair and falls
+// back to the legacy /b/{uuid} form when the blog or the post hasn't been given a slug yet, so a
+// post is always reachable at *some* stable URL. `post` carries the extra fields the date/category
+// permalink styles need; omitting it keeps the plain post-name structure.
+export function blogPostPath(
+  blogSlug: string | null | undefined,
+  postSlug: string | null | undefined,
+  postId: string,
+  post?: { published_at?: string | null; category_slug?: string | null },
+  style?: PermalinkStyle | null
+): string {
+  if (!blogSlug || !postSlug) return `/b/${postId}`;
+  return `/b/${blogSlug}/${postPathSuffix(style, { ...post, slug: postSlug, id: postId })}`;
+}
+
+// Same, for a blog served at a connected domain's root.
+export function blogPostPathOnDomain(
+  post: { slug?: string | null; id?: string | null; published_at?: string | null; category_slug?: string | null },
+  style?: PermalinkStyle | null
+): string {
+  return `/${postPathSuffix(style, post)}`;
 }
 
 export function blogIndexPath(blogSlug: string | null | undefined): string | null {
@@ -201,6 +258,7 @@ const PUBLIC_CSS = `
   .site-head-inner { max-width: 1040px; margin: 0 auto; padding: 20px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .site-title { font-size: 1.15rem; font-weight: 700; text-decoration: none; color: var(--ink); }
   .site-desc { color: var(--muted); font-size: .9rem; margin: 0; }
+  .cat-desc { color: var(--muted); font-size: .95rem; margin: 0 0 24px; max-width: 640px; }
   h1.post-title { font-size: 2.1rem; line-height: 1.2; margin: 0 0 8px; }
   .post-meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 32px; }
   .featured { width: 100%; height: auto; border-radius: 14px; margin: 0 0 32px; display: block; }
@@ -304,9 +362,10 @@ export function renderPublicPostHtml(post: {
   // On a custom domain the blog lives at the root, so paths drop the /b/{blogSlug} prefix.
   const onDomain = !!post.siteOrigin;
   const base = onDomain ? "" : blogIndexPath(post.settings?.slug) ?? "";
+  const style = post.settings?.permalink_style ?? "post";
   const postPath = onDomain
-    ? `/${post.slug ?? post.id ?? ""}`
-    : blogPostPath(post.settings?.slug, post.slug, post.id ?? "");
+    ? blogPostPathOnDomain(post, style)
+    : blogPostPath(post.settings?.slug, post.slug, post.id ?? "", post, style);
   const canonical = post.id || post.slug ? `${origin}${postPath}` : null;
   // Per-post SEO overrides (0032) win over the derived title/excerpt.
   const description = (post.seo_description || "").trim() || (post.excerpt || "").trim() || postExcerpt(post);
@@ -364,11 +423,12 @@ export type BlogIndexPost = {
   featured_image_url: string | null;
   published_at: string | null;
   category_name?: string | null;
+  category_slug?: string | null;
 };
 
 export const POSTS_PER_PAGE = 12;
 
-export type BlogIndexCategory = { name: string; slug: string | null };
+export type BlogIndexCategory = { name: string; slug: string | null; description?: string | null };
 
 // The blog index — published posts, newest first, paginated and optionally filtered to one
 // category. Same self-contained/no-scripts shape as the post page (filter chips and the pager are
@@ -415,7 +475,9 @@ export function renderBlogIndexHtml(
 
   const cards = posts
     .map((p) => {
-      const href = onDomain ? `/${p.slug ?? p.id}` : blogPostPath(settings.slug, p.slug, p.id);
+      const href = onDomain
+        ? blogPostPathOnDomain(p, settings.permalink_style)
+        : blogPostPath(settings.slug, p.slug, p.id, p, settings.permalink_style);
       const excerpt = (p.excerpt || "").trim() || postExcerpt(p);
       const date = p.published_at
         ? new Date(p.published_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
@@ -483,6 +545,11 @@ ${siteHeader(settings, base)}
 <div class="index-wrap">
   ${categoryBar}
   ${
+    activeCategory?.description
+      ? `<p class="cat-desc">${escapeHtml(activeCategory.description)}</p>`
+      : ""
+  }
+  ${
     posts.length === 0
       ? `<p class="empty">${
           activeCategory ? `No posts in ${escapeHtml(activeCategory.name)} yet.` : "No posts published yet."
@@ -523,7 +590,7 @@ export function renderRssXml(
   const selfUrl = `${origin}${base}/rss.xml`;
   const items = posts
     .map((p) => {
-      const url = `${origin}${base}/${p.slug ?? p.id}`;
+      const url = `${origin}${base}/${postPathSuffix(settings.permalink_style, p)}`;
       const desc = (p.excerpt || "").trim() || postExcerpt(p);
       return `  <item>
     <title>${escapeHtml(p.title)}</title>
@@ -550,12 +617,17 @@ ${items}
 </rss>`;
 }
 
-export function renderSitemapXml(posts: BlogIndexPost[], origin: string, base: string): string {
+export function renderSitemapXml(
+  posts: BlogIndexPost[],
+  origin: string,
+  base: string,
+  style?: PermalinkStyle | null
+): string {
   const indexUrl = `${origin}${base || "/"}`;
   const urls = [
     `  <url><loc>${escapeHtml(indexUrl)}</loc><changefreq>daily</changefreq></url>`,
     ...posts.map((p) => {
-      const url = `${origin}${base}/${p.slug ?? p.id}`;
+      const url = `${origin}${base}/${postPathSuffix(style, p)}`;
       const lastmod = p.published_at ? new Date(p.published_at).toISOString().slice(0, 10) : null;
       return `  <url><loc>${escapeHtml(url)}</loc>${
         lastmod ? `<lastmod>${escapeHtml(lastmod)}</lastmod>` : ""

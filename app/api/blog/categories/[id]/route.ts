@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MAX_CATEGORY_NAME } from "@/lib/blog";
+import { MAX_CATEGORY_NAME, MAX_CATEGORY_DESCRIPTION } from "@/lib/blog";
 
 export const dynamic = "force-dynamic";
 
@@ -43,14 +43,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const body = await req.json().catch(() => ({}));
   const name = typeof body.name === "string" ? body.name.trim().slice(0, MAX_CATEGORY_NAME) : "";
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+  // Absent = leave as-is; present-but-empty = clear it.
+  const patch: { name: string; description?: string | null } = { name };
+  if ("description" in body) {
+    patch.description =
+      typeof body.description === "string" && body.description.trim()
+        ? body.description.trim().slice(0, MAX_CATEGORY_DESCRIPTION)
+        : null;
+  }
 
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("blog_categories")
-    .update({ name })
+    .update(patch)
     .eq("id", params.id)
     .eq("user_id", user.id)
-    .select("id, name, slug");
+    .select("id, name, slug, description");
   if (error) {
     const dup = error.message.includes("duplicate") || error.code === "23505";
     return NextResponse.json(
