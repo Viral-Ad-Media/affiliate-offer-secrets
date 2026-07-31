@@ -72,7 +72,7 @@ const NAV = [
       { href: "/settings/profile", label: "Profile", match: (p: string) => p === "/settings/profile" },
       { href: "/settings/security", label: "Security", match: (p: string) => p === "/settings/security" },
       { href: "/settings/team", label: "Team", match: (p: string) => p === "/settings/team" },
-      { href: "/settings/connections", label: "Connections", match: (p: string) => p === "/settings/connections" },
+      { href: "/settings/integrations", label: "Integrations", match: (p: string) => p === "/settings/integrations" },
       { href: "/settings/domains", label: "Domains", match: (p: string) => p.startsWith("/settings/domains") },
       { href: "/settings/billing", label: "Billing", match: (p: string) => p === "/settings/billing" },
     ],

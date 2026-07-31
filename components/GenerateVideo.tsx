@@ -173,7 +173,7 @@ export default function GenerateVideo({
                   }
                   disabled={!t.available || busy === t.key || !caption.trim()}
                   className="btn-ghost text-xs"
-                  title={t.available ? undefined : `Connect ${t.label} in Connections first`}
+                  title={t.available ? undefined : `Connect ${t.label} in Integrations first`}
                 >
                   {busy === t.key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <t.icon className="h-3.5 w-3.5" />}
                   Post to {t.label}

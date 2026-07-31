@@ -20,7 +20,7 @@ const MENU: { href: string; label: string; icon: typeof User }[] = [
   { href: "/settings/profile", label: "Profile", icon: User },
   { href: "/settings/security", label: "Security", icon: ShieldCheck },
   { href: "/settings/team", label: "Team", icon: Users },
-  { href: "/settings/connections", label: "Connections", icon: Link2 },
+  { href: "/settings/integrations", label: "Integrations", icon: Link2 },
   { href: "/settings/billing", label: "Plan & credits", icon: CreditCard },
 ];
 

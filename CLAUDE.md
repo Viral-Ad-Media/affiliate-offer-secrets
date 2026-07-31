@@ -1888,14 +1888,14 @@ DNS label later.
 ## Settings
 
 Sidebar **Settings** is a submenu, one page per item: **Profile** (`/settings/profile`, also hosts
-Appearance), **Security** (`/settings/security`), **Connections**, **Domains**, **Billing**.
+Appearance), **Security** (`/settings/security`), **Integrations**, **Domains**, **Billing**.
 `/settings` itself just redirects to `/settings/profile`.
 
-**Connections, Domains and Billing keep their own top-level URLs** — they're referenced from the
+**Integrations, Domains and Billing keep their own top-level URLs** — they're referenced from the
 OAuth callbacks, the access gate (`hasAppAccess` → `/billing`), and a dozen in-app links, so
 renaming the routes would be churn with no user-visible gain. Grouping them under Settings is a
 navigation decision, not a URL one, which is why the parent nav entry's `match` has to recognise
-`/connections`, `/domains` and `/billing` explicitly — miss that and the submenu collapses when
+their paths explicitly — miss that and the submenu collapses when
 you're standing on one of those pages.
 
 **`profiles` is SELECT-only for clients and must stay that way.** The general update policy was

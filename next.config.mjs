@@ -7,7 +7,11 @@ const nextConfig = {
   // 308 so the query string survives.
   async redirects() {
     return [
-      { source: "/connections", destination: "/settings/connections", permanent: true },
+      // Two hops of history: the original top-level /connections, and /settings/connections from
+      // before it was renamed to Integrations. Both point straight at the final path rather than
+      // chaining, so an old bookmark costs one redirect, not two.
+      { source: "/connections", destination: "/settings/integrations", permanent: true },
+      { source: "/settings/connections", destination: "/settings/integrations", permanent: true },
       { source: "/domains", destination: "/settings/domains", permanent: true },
       { source: "/domains/:path*", destination: "/settings/domains/:path*", permanent: true },
       { source: "/billing", destination: "/settings/billing", permanent: true },

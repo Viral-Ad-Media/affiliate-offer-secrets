@@ -46,8 +46,8 @@ export default function PostToFacebook({
     return (
       <div className="rounded-lg border border-ink-700 bg-ink-800/50 p-4 text-sm text-zinc-400">
         Connect Facebook in{" "}
-        <a href="/settings/connections" className="text-emerald-400 underline">
-          Connections
+        <a href="/settings/integrations" className="text-emerald-400 underline">
+          Integrations
         </a>{" "}
         to publish this directly.
       </div>

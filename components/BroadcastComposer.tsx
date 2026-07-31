@@ -92,7 +92,7 @@ export default function BroadcastComposer({
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
             No email sender is connected, so automatic sending is off. Connect Resend, SendGrid,
-            Mailgun or SMTP on Connections — or use <strong>Send manually</strong> below, which
+            Mailgun or SMTP on Integrations — or use <strong>Send manually</strong> below, which
             needs no setup.
           </span>
         </div>

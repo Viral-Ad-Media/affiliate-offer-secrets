@@ -133,8 +133,8 @@ export default function LaunchAd({
     return (
       <div className="mt-2 rounded-lg border border-ink-700 bg-ink-800/50 p-3 text-xs text-zinc-400">
         Connect Facebook with ad permissions in{" "}
-        <a href="/settings/connections" className="text-emerald-400 underline">
-          Connections
+        <a href="/settings/integrations" className="text-emerald-400 underline">
+          Integrations
         </a>{" "}
         to launch this angle as a real ad.
       </div>
@@ -144,8 +144,8 @@ export default function LaunchAd({
     return (
       <div className="mt-2 rounded-lg border border-ink-700 bg-ink-800/50 p-3 text-xs text-zinc-400">
         Connect a Facebook Page and ad account in{" "}
-        <a href="/settings/connections" className="text-emerald-400 underline">
-          Connections
+        <a href="/settings/integrations" className="text-emerald-400 underline">
+          Integrations
         </a>{" "}
         to launch this angle as a real ad.
       </div>

@@ -16,7 +16,7 @@ export default function robots(): MetadataRoute.Robots {
           "/dashboard",
           "/marketplace",
           "/funnels",
-          "/settings/connections",
+          "/settings/integrations",
           "/settings/domains",
           "/contacts",
           "/emails",

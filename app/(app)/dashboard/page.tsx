@@ -43,9 +43,9 @@ const QUICK_LINKS = [
     description: "Discover products and build campaign kits.",
   },
   {
-    href: "/settings/connections",
+    href: "/settings/integrations",
     icon: Link2,
-    label: "Connections",
+    label: "Integrations",
     description: "Connect affiliate networks, Meta, and other platforms.",
   },
   {

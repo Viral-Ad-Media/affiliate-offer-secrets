@@ -101,7 +101,7 @@ export async function sendViaActiveSender(
         kind: "mail_sender_error",
         title: `${provider} rejected your credentials`,
         body: "Email sending is paused until you reconnect this provider.",
-        href: "/settings/connections",
+        href: "/settings/integrations",
       });
       return { ok: false, reason: "needs_reconnect" };
     }

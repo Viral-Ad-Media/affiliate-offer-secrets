@@ -16,10 +16,10 @@ export async function GET() {
   if (!user) return NextResponse.redirect(appUrl("/login"));
 
   // Both Google connectors share one OAuth client. If it isn't configured on this deployment,
-  // say so on the Connections page instead of throwing an unhandled 500 at whoever clicked
+  // say so on the Integrations page instead of throwing an unhandled 500 at whoever clicked
   // Connect — that failure was invisible from the UI and reported nothing actionable.
   if (!isGoogleOAuthConfigured()) {
-    return NextResponse.redirect(appUrl("/settings/connections?youtube=not_configured"));
+    return NextResponse.redirect(appUrl("/settings/integrations?youtube=not_configured"));
   }
 
   const state = crypto.randomUUID().replace(/-/g, "");

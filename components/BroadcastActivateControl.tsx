@@ -98,8 +98,8 @@ export default function BroadcastActivateControl({
       {mailConnected === false && (
         <div className="mb-3 rounded-lg border border-ink-700 bg-ink-800/50 p-3 text-xs text-zinc-400">
           Connect an email sender (Resend, SendGrid, Mailgun, or SMTP) in{" "}
-          <a href="/settings/connections" className="text-emerald-400 underline">
-            Connections
+          <a href="/settings/integrations" className="text-emerald-400 underline">
+            Integrations
           </a>{" "}
           before activating a sequence.
         </div>

@@ -31,7 +31,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   smtp: "SMTP",
 };
 
-// The "Email sending" section of the Connections page: which providers are connected (each's
+// The "Email sending" section of the Integrations page: which providers are connected (each's
 // own OAuth panel stays separate above this), per-provider connect forms, and the active-sender
 // picker — exactly one provider sends at a time; every send surface (SendEmail, Broadcast)
 // dispatches through it server-side (lib/mail/send.ts).
