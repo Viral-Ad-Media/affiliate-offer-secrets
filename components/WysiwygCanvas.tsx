@@ -92,7 +92,16 @@ const PAGE_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ari
 // same column so a Row's `.row { flex-wrap: wrap }` columns (lib/engine/blockTree.ts) actually
 // demonstrate stacking — purely a preview aid, not stored anywhere; it never affects what's saved
 // or how the real page renders at a real width.
-const DEVICE_WIDTHS: Record<"desktop" | "tablet" | "mobile", number> = { desktop: 680, tablet: 480, mobile: 360 };
+// Desktop fills whatever width the editor's centre column gives it (Elementor-style) — the
+// tablet/mobile presets stay pinned to real device widths, which is what the toggle is for.
+// Fidelity note: the PUBLISHED page still renders inside its own max-width container
+// (lib/engine/renderPages.ts), so a very wide monitor shows longer lines here than a visitor
+// gets — switch to Tablet to check real line lengths.
+const DEVICE_WIDTHS: Record<"desktop" | "tablet" | "mobile", number | string> = {
+  desktop: "100%",
+  tablet: 480,
+  mobile: 360,
+};
 
 const ELEMENT_PALETTE: { type: ElementBlockTypeLocal; label: string; icon: any }[] = [
   { type: "heading", label: "Heading", icon: Heading1 },

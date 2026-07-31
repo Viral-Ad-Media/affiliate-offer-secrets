@@ -137,7 +137,8 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
           </Link>
         </div>
 
-        <div className="mx-auto max-w-5xl px-4 py-6">
+        {/* Full-bleed: the editor overlay owns the whole viewport, no centered max-width column. */}
+        <div className="px-4 py-6">
           {view.kind === "optin" ? (
             <>
               <SplitTestPanel campaignId={campaign.id} productTitle={productTitle} />

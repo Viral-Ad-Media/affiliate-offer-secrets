@@ -1739,6 +1739,14 @@ validator, or renderer changes; purely how the existing capabilities are surface
   the drag grip; `NestedItemWrapper`'s left-edge cluster is now grip + `Settings2` + delete. All
   stay `opacity-0 group-hover:opacity-100` — the settings icon is not always visible, per the
   request.
+- **Full-bleed by design**: both editor overlays (`app/(app)/funnels/[campaignId]/page.tsx`,
+  `components/BlogPostEditor.tsx`) use a plain `px-4 py-6` wrapper — no `mx-auto max-w-*` column.
+  The desktop device preset is `width: 100%` so the canvas fills whatever the centre column
+  gives it; tablet (480) and mobile (360) stay pinned to real device widths, which is what the
+  toggle is for. Remaining left inset is the palette rail (collapsible), right inset is 33px of
+  page padding. Fidelity caveat: the PUBLISHED page renders inside its own max-width container,
+  so a very wide monitor shows longer lines in the editor than a visitor gets — switch to Tablet
+  to judge real line length.
 - **Verified live** (TedsWoodworking opt-in editor, desktop viewport): palette renders and
   collapses to icon-only rail with state persisted; clicking a block's side `Settings2` opens the
   style panel docked right (canvas narrows, panel is a readable single column); palette "Heading"

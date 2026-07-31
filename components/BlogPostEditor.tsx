@@ -155,7 +155,8 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
+      {/* Full-bleed: the editor overlay owns the whole viewport, no centered max-width column. */}
+      <div className="space-y-4 px-4 py-6">
       {status === "published" && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-300">
           <span className="font-medium">Live:</span>
