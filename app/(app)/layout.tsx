@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasAppAccess } from "@/lib/shared";
 import Sidebar from "@/components/Sidebar";
+import ReferralClaimer from "@/components/ReferralClaimer";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
@@ -32,6 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen flex-col sm:flex-row">
+      <ReferralClaimer />
       <Sidebar
         email={user.email ?? ""}
         onTrial={onTrial}

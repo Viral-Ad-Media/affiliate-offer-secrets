@@ -225,8 +225,8 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
         <p className="rounded-lg bg-ink-800 p-4 text-sm text-zinc-400">
           This campaign was generated before the no-code editor existed, so there's no structured
           copy to edit yet. Regenerate the campaign kit from the{" "}
-          <Link href="/campaigns" className="underline">
-            Campaigns
+          <Link href="/marketplace" className="underline">
+            Marketplace
           </Link>{" "}
           page to enable editing.
         </p>

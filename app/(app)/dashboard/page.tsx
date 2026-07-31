@@ -37,9 +37,9 @@ function StatTile({
 
 const QUICK_LINKS = [
   {
-    href: "/campaigns",
+    href: "/marketplace",
     icon: Megaphone,
-    label: "Campaigns",
+    label: "Marketplace",
     description: "Discover products and build campaign kits.",
   },
   {

@@ -86,8 +86,8 @@ export default async function FunnelsPage() {
             <p className="text-sm text-zinc-400">No funnels yet</p>
             <p className="mt-1 text-xs text-zinc-600">
               Build a campaign kit from the{" "}
-              <Link href="/campaigns" className="underline">
-                Campaigns
+              <Link href="/marketplace" className="underline">
+                Marketplace
               </Link>{" "}
               page — its bridge page becomes a funnel here the moment it's generated.
             </p>

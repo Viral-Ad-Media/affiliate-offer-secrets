@@ -25,6 +25,7 @@ const PUBLIC_PREFIX_PATHS = [
   "/api/broadcast/sweep", // pg_cron backstop for Broadcast drip sequences, x-engine-secret gated
   "/api/marketplace/refresh", // pg_cron daily marketplace-cache sweep, x-engine-secret gated
   "/b/", // public blog post pages — anonymous readers, no auth
+  "/r/", // referral link capture — the visitor has no account yet, that's the point
 ];
 
 export async function middleware(request: NextRequest) {

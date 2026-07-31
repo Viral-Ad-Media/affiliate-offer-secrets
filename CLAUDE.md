@@ -1855,6 +1855,43 @@ validator, or renderer changes; purely how the existing capabilities are surface
   full-width canvas. Same standing caveat as O.3: real drag gestures can't be simulated by this
   session's tooling.
 
+## Referrals + Rewards
+
+Sidebar entries **Referrals** (`/referrals`) and **Rewards** (`/rewards`), schema in
+`supabase/migrations/0036_referrals_rewards.sql`.
+
+Flow: `/r/{CODE}` (public, in `middleware.ts` PUBLIC_PREFIX_PATHS) drops a `ref_code` cookie and
+redirects to signup → `components/ReferralClaimer.tsx`, mounted in the `(app)` layout, POSTs
+`/api/referrals/claim` on first app load if that cookie exists → `claim_referral()` attributes the
+account → when that account later pays the **access fee**, the Stripe webhook calls
+`reward_referral()` and the referrer gets `REFERRAL_REWARD_POINTS` (25, in `lib/referrals.ts`) →
+`redeem_rewards()` converts points 1:1 into `credits_ledger`.
+
+Load-bearing details, none of them incidental:
+
+- **`referrals.referred_user_id` is UNIQUE.** One referrer per account, forever — this is what
+  makes re-attribution and double-rewarding structurally impossible, not just app-checked.
+- **The access fee is the qualifying event**, not signup. A fake referral costs the referrer's
+  friend real money, so the program can't be farmed with throwaway accounts.
+- **`reward_referral` is service_role-only and idempotent** via its `status = 'pending'`
+  predicate — a replayed Stripe webhook updates zero rows and writes no second ledger entry. It
+  sits *after* the `payments` insert, whose unique constraint already short-circuits replays.
+  It also never fails the webhook: access is granted first, and a non-2xx would make Stripe retry
+  a fully-processed payment.
+- **These are NOT Vault-pattern tables** (a referral code is public — it's in a shareable URL),
+  but writes still go through RPCs rather than an owner-writable policy like
+  `network_connections` has, because the anti-gaming invariants are only enforceable server-side.
+- **`redeem_rewards` takes `pg_advisory_xact_lock('rewards:' || uid)`** — same reasoning as
+  `reserve_ad_credits`: SELECT SUM → IF → INSERT is not safe under READ COMMITTED. Namespaced
+  `rewards:` so it never contends with that function's `credits:` lock.
+- **The claim route reads the code only from the cookie**, never the request body, and returns 200
+  for every rejection (stale cookie, self-referral, already attributed) — all ordinary states for
+  someone who just signed up.
+- **`/referrals` shows signup date + status only** — never the referred account's name or email.
+  Those are other people; the referrer doesn't need their PII.
+- Claims expire 7 days after signup, so an established account can't retroactively attribute
+  itself to a friend's code.
+
 ## Dev
 
 ```bash

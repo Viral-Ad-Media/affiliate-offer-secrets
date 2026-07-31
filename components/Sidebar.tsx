@@ -13,6 +13,8 @@ import {
   Send,
   Newspaper,
   History,
+  Gift,
+  Award,
   CreditCard,
   Clock,
   Coins,
@@ -27,7 +29,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: (p: string) => p === "/dashboard" },
-  { href: "/campaigns", label: "Campaigns", icon: Megaphone, match: (p: string) => p === "/campaigns" || p.startsWith("/product/") },
+  { href: "/marketplace", label: "Marketplace", icon: Megaphone, match: (p: string) => p === "/marketplace" || p.startsWith("/product/") },
   { href: "/funnels", label: "Funnels", icon: Filter, match: (p: string) => p.startsWith("/funnels") },
   { href: "/connections", label: "Connections", icon: Link2, match: (p: string) => p === "/connections" },
   { href: "/domains", label: "Domains", icon: Globe, match: (p: string) => p.startsWith("/domains") },
@@ -55,6 +57,8 @@ const NAV = [
       { href: "/blog/settings", label: "Settings", match: (p: string) => p === "/blog/settings" },
     ],
   },
+  { href: "/referrals", label: "Referrals", icon: Gift, match: (p: string) => p === "/referrals" },
+  { href: "/rewards", label: "Rewards", icon: Award, match: (p: string) => p === "/rewards" },
   { href: "/audit", label: "Audit trail", icon: History, match: (p: string) => p === "/audit" },
   { href: "/billing", label: "Billing", icon: CreditCard, match: (p: string) => p === "/billing" },
 ];
