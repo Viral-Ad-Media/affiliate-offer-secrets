@@ -4,13 +4,6 @@ import { useState } from "react";
 import { Copy, CheckCircle2, Download } from "lucide-react";
 import type { Contact } from "@/lib/shared";
 
-function csvField(value: string): string {
-  if (/[",\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
-
 // Flattens a lead's user-added form fields (Phase O.5) into one "key: value; key: value" string —
 // deliberate v1 scope cut, matching the plan's own call: no dynamic per-field columns, since the
 // field set varies per campaign/variant and even changes over time as a tenant edits their form.
@@ -18,25 +11,6 @@ function flattenExtraFields(extraFields: Record<string, string>): string {
   return Object.entries(extraFields)
     .map(([k, v]) => `${k}: ${v}`)
     .join("; ");
-}
-
-function exportCsv(contacts: Contact[]) {
-  const header = ["First name", "Email", "Campaign", "Extra fields", "Captured at"];
-  const rows = contacts.map((c) => [
-    csvField(c.first_name ?? ""),
-    csvField(c.email),
-    csvField(c.campaign_title ?? ""),
-    csvField(flattenExtraFields(c.extra_fields)),
-    csvField(c.created_at),
-  ]);
-  const csv = [header.join(","), ...rows.map((r) => r.join(","))].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `contacts-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 export default function ContactsTable({ contacts }: { contacts: Contact[] }) {
@@ -58,12 +32,13 @@ export default function ContactsTable({ contacts }: { contacts: Contact[] }) {
           </p>
         </div>
         {contacts.length > 0 && (
-          <button
-            onClick={() => exportCsv(contacts)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-ink-600 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+          <a
+            href="/api/contacts/export"
+            title="Download every contact, not just this page"
+            className="btn-ghost text-xs"
           >
             <Download className="h-3.5 w-3.5" /> Export CSV
-          </button>
+          </a>
         )}
       </div>
       {contacts.length === 0 ? (

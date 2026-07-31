@@ -4,6 +4,13 @@ import type { AuditEntry, UsageEntry } from "@/lib/shared";
 import AuditTrail from "@/components/AuditTrail";
 import UsageLedger from "@/components/UsageLedger";
 
+// The audit view merges six different tables client-side, so it can't page a single query. Each
+// source is bounded and the merged result is trimmed to the newest RECENT_LIMIT — before this,
+// every row of all six was fetched on every page load, which grows without limit as a tenant
+// posts and sends. True cross-table paging wants a Postgres view UNION-ing them; noted, not built.
+const SOURCE_LIMIT = 200;
+const RECENT_LIMIT = 200;
+
 function truncate(text: string | null, max = 80): string {
   if (!text) return "";
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -26,14 +33,49 @@ export default async function AuditPage() {
     { data: campaigns },
     { data: usageRows },
   ] = await Promise.all([
-    supabase.from("meta_posts").select("*").eq("user_id", user.id),
-    supabase.from("instagram_posts").select("*").eq("user_id", user.id),
-    supabase.from("tiktok_posts").select("*").eq("user_id", user.id),
-    supabase.from("youtube_posts").select("*").eq("user_id", user.id),
-    supabase.from("mail_sends").select("*").eq("user_id", user.id),
-    supabase.from("broadcast_sends").select("*").eq("user_id", user.id),
+    supabase
+      .from("meta_posts")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(SOURCE_LIMIT),
+    supabase
+      .from("instagram_posts")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(SOURCE_LIMIT),
+    supabase
+      .from("tiktok_posts")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(SOURCE_LIMIT),
+    supabase
+      .from("youtube_posts")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(SOURCE_LIMIT),
+    supabase
+      .from("mail_sends")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(SOURCE_LIMIT),
+    supabase
+      .from("broadcast_sends")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(SOURCE_LIMIT),
     supabase.from("campaigns").select("id, products(product_title)"),
-    supabase.from("usage_ledger").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+    supabase
+      .from("usage_ledger")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(SOURCE_LIMIT),
   ]);
 
   const usage = (usageRows ?? []) as UsageEntry[];
@@ -106,7 +148,9 @@ export default async function AuditPage() {
       detail: `to ${p.to_address}${p.status === "failed" ? " — failed" : ""}`,
       externalUrl: null,
     })),
-  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  ]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, RECENT_LIMIT);
 
   return (
     <main className="space-y-6">
@@ -118,6 +162,11 @@ export default async function AuditPage() {
         </p>
       </header>
       <AuditTrail entries={entries} />
+      {entries.length >= RECENT_LIMIT && (
+        <p className="text-xs text-zinc-500">
+          Showing the {RECENT_LIMIT} most recent events.
+        </p>
+      )}
       {usage.length > 0 && <UsageLedger entries={usage} totalCostUsd={totalCostUsd} />}
     </main>
   );

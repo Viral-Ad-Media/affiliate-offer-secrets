@@ -2,15 +2,28 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Contact } from "@/lib/shared";
 import ContactsTable from "@/components/ContactsTable";
+import Pager, { PAGE_SIZE, pageFromParam, pageRange } from "@/components/Pager";
 
-const MAX_CONTACTS = 1000;
-
-export default async function ContactsPage() {
+// Real paid traffic accumulates leads fast — this list was capped at 1000 with no way to reach
+// anything past it. Now paged, so the whole table is reachable and each page is one bounded query.
+export default async function ContactsPage({
+  searchParams,
+}: {
+  searchParams: { page?: string };
+}) {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  const { count } = await supabase
+    .from("contacts")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id);
+  const total = count ?? 0;
+  const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
+  const [from, to] = pageRange(page);
 
   const [{ data: rows }, { data: campaigns }] = await Promise.all([
     supabase
@@ -18,7 +31,7 @@ export default async function ContactsPage() {
       .select("id, campaign_id, first_name, email, extra_fields, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(MAX_CONTACTS),
+      .range(from, to),
     supabase.from("campaigns").select("id, products(product_title)"),
   ]);
 
@@ -47,6 +60,7 @@ export default async function ContactsPage() {
         </p>
       </header>
       <ContactsTable contacts={contacts} />
+      <Pager page={page} total={total} basePath="/contacts" label="contacts" />
     </main>
   );
 }

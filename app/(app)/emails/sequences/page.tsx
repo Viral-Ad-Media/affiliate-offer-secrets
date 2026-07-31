@@ -2,13 +2,23 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { BroadcastSequence } from "@/lib/shared";
 import BroadcastSequenceList from "@/components/BroadcastSequenceList";
+import Pager, { PAGE_SIZE, pageFromParam, pageRange } from "@/components/Pager";
 
-export default async function BroadcastPage() {
+export default async function BroadcastPage({ searchParams }: { searchParams: { page?: string } }) {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  const { count } = await supabase
+    .from("broadcast_sequences")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("kind", "sequence");
+  const total = count ?? 0;
+  const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
+  const [from, to] = pageRange(page);
 
   const [{ data: sequences }, { data: campaigns }, { data: steps }, { data: enrollments }] = await Promise.all([
     supabase
@@ -17,7 +27,8 @@ export default async function BroadcastPage() {
       .eq("user_id", user.id)
       // Only multi-step drips — one-off sends (kind='broadcast', 0035) have their own page.
       .eq("kind", "sequence")
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .range(from, to),
     supabase.from("campaigns").select("id, products(product_title)"),
     supabase.from("broadcast_steps").select("id, sequence_id").eq("user_id", user.id),
     supabase.from("broadcast_enrollments").select("id, sequence_id").eq("user_id", user.id),
@@ -59,6 +70,7 @@ export default async function BroadcastPage() {
         </p>
       </header>
       <BroadcastSequenceList rows={rows} campaignOptions={campaignOptions} />
+      <Pager page={page} total={total} basePath="/emails/sequences" label="sequences" />
     </main>
   );
 }

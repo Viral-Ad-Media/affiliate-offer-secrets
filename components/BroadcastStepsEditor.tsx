@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Plus, Trash2, Save, Loader2 } from "lucide-react";
+import EditorPreviewButton from "@/components/EditorPreview";
+import { renderEmailPreviewHtml } from "@/lib/engine/broadcastEmail";
 import { createClient } from "@/lib/supabase/client";
 import type { BroadcastStep } from "@/lib/shared";
 
@@ -124,6 +126,12 @@ export default function BroadcastStepsEditor({
               />
               {editable && (
                 <div className="mt-2 flex items-center gap-2">
+                  <EditorPreviewButton
+                    className="btn-ghost flex items-center gap-1.5 text-xs"
+                    label="Preview"
+                    title={`Preview — ${d.subject || "email"}`}
+                    render={() => renderEmailPreviewHtml({ subject: d.subject, body_md: d.body_md })}
+                  />
                   <button
                     onClick={() => saveStep(d)}
                     disabled={busyKey === d.key || !d.subject.trim()}
