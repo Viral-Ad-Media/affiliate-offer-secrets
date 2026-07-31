@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { Loader2, CheckCircle2, Lock } from "lucide-react";
-import { DISCLOSURE, normalizePageCopy, firstImageDataUrl, type PageBlockTree } from "@/lib/engine/renderPages";
+import { DISCLOSURE, normalizePageCopy, firstImageDataUrl, type PageBlockTree , renderBridgeHtml} from "@/lib/engine/renderPages";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
+import EditorPreviewButton from "@/components/EditorPreview";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
 
 const MAX_IMAGE_DATA_URL_CHARS = 280_000;
@@ -148,6 +149,21 @@ export default function PageEditor({
       {error && <p className="text-sm text-red-300">{error}</p>}
 
       <div className="flex items-center gap-3">
+        <EditorPreviewButton
+          title={`Preview — ${productTitle}`}
+          render={() =>
+            renderBridgeHtml(
+              { product_title: productTitle },
+              tree,
+              // Inert placeholder: the real hoplink is built server-side from the tenant's own
+              // affiliate id at save time, so inventing one here would preview a link that isn't
+              // what ships.
+              "#",
+              firstImageDataUrl(tree),
+              campaignId
+            )
+          }
+        />
         <button onClick={save} disabled={saving || !!imageBusyBlockId} className="btn-primary">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Save &amp; Republish

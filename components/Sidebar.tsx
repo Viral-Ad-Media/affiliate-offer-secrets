@@ -26,6 +26,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import ThemeToggle from "@/components/ThemeToggle";
 import NotificationsBell from "@/components/NotificationsBell";
+import AppLogo from "@/components/AppLogo";
 import TopBarAccount from "@/components/TopBarAccount";
 
 const NAV = [
@@ -234,9 +235,15 @@ export default function Sidebar({
       >
         <div className="flex flex-col gap-6">
           <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between px-2"}`}>
-            {!collapsed && (
-              <Link href="/dashboard" className="font-heading text-base font-bold text-zinc-100">
-                Affiliate <span className="text-emerald-400">Studio</span>
+            {collapsed ? (
+              // Collapsed rail: the mark alone still identifies the app and keeps a "go home"
+              // target where the wordmark link would be.
+              <Link href="/dashboard" title="Affiliate Studio">
+                <AppLogo wordmark={false} markClassName="h-7 w-7" />
+              </Link>
+            ) : (
+              <Link href="/dashboard">
+                <AppLogo />
               </Link>
             )}
             <div className="flex items-center gap-0.5">
@@ -256,8 +263,8 @@ export default function Sidebar({
 
       {/* Mobile top bar */}
       <header className="flex items-center justify-between border-b border-ink-700 bg-ink-900/60 px-4 py-3 sm:hidden">
-        <Link href="/dashboard" className="font-heading text-base font-bold text-zinc-100">
-          Affiliate <span className="text-emerald-400">Studio</span>
+        <Link href="/dashboard">
+          <AppLogo />
         </Link>
         <div className="flex items-center gap-2">
           <NotificationsBell />
@@ -291,8 +298,8 @@ export default function Sidebar({
           <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col justify-between overflow-y-auto border-r border-ink-700 bg-ink-900 px-4 py-6">
             <div className="flex flex-col gap-6">
               <div className="flex items-center justify-between px-2">
-                <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="font-heading text-base font-bold text-zinc-100">
-                  Affiliate <span className="text-emerald-400">Studio</span>
+                <Link href="/dashboard" onClick={() => setMobileOpen(false)}>
+                  <AppLogo />
                 </Link>
                 <button
                   onClick={() => setMobileOpen(false)}

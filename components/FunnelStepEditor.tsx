@@ -2,7 +2,15 @@
 
 import { useState } from "react";
 import { Loader2, CheckCircle2, Lock } from "lucide-react";
-import { DISCLOSURE, normalizePageCopy, firstImageDataUrl, type PageBlockTree, type FunnelStepType } from "@/lib/engine/renderPages";
+import {
+  DISCLOSURE,
+  normalizePageCopy,
+  firstImageDataUrl,
+  renderFunnelStepHtml,
+  type PageBlockTree,
+  type FunnelStepType,
+} from "@/lib/engine/renderPages";
+import EditorPreviewButton from "@/components/EditorPreview";
 import type { FunnelStepCtaAction } from "@/lib/shared";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
@@ -243,6 +251,21 @@ export default function FunnelStepEditor({
       {error && <p className="text-sm text-red-300">{error}</p>}
 
       <div className="flex items-center gap-3">
+        <EditorPreviewButton
+          title={`Preview — ${productTitle}`}
+          render={() =>
+            renderFunnelStepHtml(
+              { product_title: productTitle },
+              tree,
+              stepType,
+              // The real CTA href is resolved server-side from cta_action/redirect_url at save
+              // time; "#" keeps the preview inert rather than inventing a hoplink that isn't what
+              // will actually ship.
+              "#",
+              firstImageDataUrl(tree)
+            )
+          }
+        />
         <button onClick={save} disabled={saving || !!imageBusyBlockId} className="btn-primary">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Save &amp; Republish

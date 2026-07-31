@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2, CheckCircle2, ExternalLink, Copy } from "lucide-react";
 import type { PageBlockTree } from "@/lib/engine/renderPages";
-import { markdownToBlockTree } from "@/lib/blog";
+import { markdownToBlockTree, blogRenderCtx, renderBlockTree, renderPublicPostHtml } from "@/lib/blog";
+import EditorPreviewButton from "@/components/EditorPreview";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
 import FeaturedImageField from "@/components/FeaturedImageField";
@@ -153,6 +154,31 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
               <CheckCircle2 className="h-3.5 w-3.5" /> Saved
             </span>
           )}
+          <EditorPreviewButton
+            className="btn-ghost flex items-center gap-1.5 text-xs"
+            title={`Preview — ${title || "Untitled post"}`}
+            render={() =>
+              renderPublicPostHtml({
+                id: post.id,
+                title,
+                slug,
+                content_md: "",
+                // The public page renders the block tree's write-time html, so the preview has to
+                // re-render the CURRENT tree the same way the save route does — passing the saved
+                // html would show the last save, not what's on screen.
+                html: renderBlockTree(tree, blogRenderCtx()),
+                excerpt,
+                featured_image_url: featuredImage,
+                // A draft has no published_at yet; today's date is closer to how it will look once
+                // published than an empty date line.
+                published_at: post.published_at ?? new Date().toISOString(),
+                category_name: categories.find((c) => c.id === categoryId)?.name ?? null,
+                seo_title: seo.seo_title,
+                seo_description: seo.seo_description,
+                seo_index: seo.seo_index,
+              })
+            }
+          />
           <button type="button" onClick={save} disabled={busy !== null} className="btn-ghost text-xs">
             {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Save

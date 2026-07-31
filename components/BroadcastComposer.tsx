@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import ManualSendPanel, { type ManualContact } from "@/components/ManualSendPanel";
-import { Send, Loader2, CheckCircle2, AlertTriangle, Users } from "lucide-react";
+import { Send, Loader2, CheckCircle2, AlertTriangle, Users, Plus } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type HistoryRow = {
   id: string;
@@ -39,6 +40,7 @@ export default function BroadcastComposer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState<number | null>(null);
+  const [composing, setComposing] = useState(false);
 
   // No active provider means nothing can be sent automatically — the manual path below still
   // works, since that only needs the composed text and the visitor's own mail client.
@@ -67,6 +69,7 @@ export default function BroadcastComposer({
       setName("");
       setSubject("");
       setBody("");
+      setComposing(false);
       router.refresh();
     } catch (err: any) {
       setError(err?.message ?? String(err));
@@ -77,118 +80,136 @@ export default function BroadcastComposer({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-xl font-bold text-zinc-100">
-          <Send className="h-5 w-5 text-emerald-400" /> Broadcast
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Send one email now to your contacts. For a multi-step drip that follows each contact&apos;s
-          own signup date, use Sequences instead.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-xl font-bold text-zinc-100">
+            <Send className="h-5 w-5 text-emerald-400" /> Broadcast
+          </h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            Send one email now to your contacts. For a multi-step drip that follows each
+            contact&apos;s own signup date, use Sequences instead.
+          </p>
+        </div>
+        <button type="button" onClick={() => setComposing(true)} className="btn-primary shrink-0">
+          <Plus className="h-4 w-4" /> New broadcast
+        </button>
       </div>
 
-      {noSender && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>
-            No email sender is connected, so automatic sending is off. Connect Resend, SendGrid,
-            Mailgun or SMTP on Integrations — or use <strong>Send manually</strong> below, which
-            needs no setup.
-          </span>
-        </div>
+      {sentAt && Date.now() - sentAt < 8000 && (
+        <p className="flex items-center gap-1 text-xs text-emerald-300">
+          <CheckCircle2 className="h-3.5 w-3.5" /> Queued — delivery starts within a minute
+        </p>
       )}
 
-      <section className="card space-y-4 p-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-zinc-400">Audience</span>
-            <select
-              value={audience}
-              onChange={(e) => setAudience(e.target.value as "all" | "campaign")}
-              className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none focus:border-emerald-500"
-            >
-              <option value="all">All contacts</option>
-              <option value="campaign">One campaign&apos;s contacts</option>
-            </select>
-          </label>
-          {audience === "campaign" && (
+      {/* Composing is a deliberate, one-shot action — it gets a focused dialog rather than a form
+          sitting open on the page, so the default view is the history of what's already gone out. */}
+      <Dialog open={composing} onOpenChange={setComposing}>
+        <DialogContent className="max-h-[85vh] max-w-[min(48rem,calc(100vw-2rem))] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>New broadcast</DialogTitle>
+          </DialogHeader>
+
+          {noSender && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                No email sender is connected, so automatic sending is off. Connect Resend, SendGrid,
+                Mailgun or SMTP on Integrations — or use <strong>Send manually</strong> below, which
+                needs no setup.
+              </span>
+            </div>
+          )}
+
+          <section className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-zinc-400">Audience</span>
+                <select
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value as "all" | "campaign")}
+                  className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none focus:border-emerald-500"
+                >
+                  <option value="all">All contacts</option>
+                  <option value="campaign">One campaign&apos;s contacts</option>
+                </select>
+              </label>
+              {audience === "campaign" && (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-zinc-400">Campaign</span>
+                  <select
+                    value={campaignId}
+                    onChange={(e) => setCampaignId(e.target.value)}
+                    className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none focus:border-emerald-500"
+                  >
+                    <option value="">Choose a campaign…</option>
+                    {campaigns.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-400">Campaign</span>
-              <select
-                value={campaignId}
-                onChange={(e) => setCampaignId(e.target.value)}
-                className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none focus:border-emerald-500"
-              >
-                <option value="">Choose a campaign…</option>
-                {campaigns.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title}
-                  </option>
-                ))}
-              </select>
+              <span className="mb-1 block text-xs font-medium text-zinc-400">Subject</span>
+              <input
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="Your subject line"
+                className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+              />
             </label>
-          )}
-        </div>
 
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-zinc-400">Subject</span>
-          <input
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Your subject line"
-            className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-zinc-400">Message (Markdown)</span>
+              <textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={12}
+                placeholder="Write your email…"
+                className="w-full resize-y rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 font-mono text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+              />
+              <span className="mt-1 block text-[11px] text-zinc-500">
+                An unsubscribe link is appended automatically — it can&apos;t be removed.
+              </span>
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-zinc-400">Internal name (optional)</span>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Defaults to the subject line"
+                className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+              />
+            </label>
+
+            {error && <p className="text-sm text-red-300">{error}</p>}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={send} disabled={!canSend} className="btn-primary">
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Send now
+              </button>
+              {/* No "Queued" chip here — a successful send closes this dialog, so the
+                  confirmation lives under the page header where it can actually be read. */}
+              {activeProvider && (
+                <span className="text-xs text-zinc-500">Sending via {activeProvider}</span>
+              )}
+            </div>
+          </section>
+
+          <ManualSendPanel
+            contacts={audience === "campaign" && campaignId
+              ? contacts.filter((c) => c.campaign_id === campaignId)
+              : contacts}
+            subject={subject}
+            body={body}
           />
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-zinc-400">Message (Markdown)</span>
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={12}
-            placeholder="Write your email…"
-            className="w-full resize-y rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 font-mono text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
-          />
-          <span className="mt-1 block text-[11px] text-zinc-500">
-            An unsubscribe link is appended automatically — it can&apos;t be removed.
-          </span>
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-zinc-400">Internal name (optional)</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Defaults to the subject line"
-            className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
-          />
-        </label>
-
-        {error && <p className="text-sm text-red-300">{error}</p>}
-
-        <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={send} disabled={!canSend} className="btn-primary">
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Send now
-          </button>
-          {sentAt && Date.now() - sentAt < 8000 && (
-            <span className="flex items-center gap-1 text-xs text-emerald-300">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Queued — delivery starts within a minute
-            </span>
-          )}
-          {activeProvider && (
-            <span className="text-xs text-zinc-500">Sending via {activeProvider}</span>
-          )}
-        </div>
-      </section>
-
-      <ManualSendPanel
-        contacts={audience === "campaign" && campaignId
-          ? contacts.filter((c) => c.campaign_id === campaignId)
-          : contacts}
-        subject={subject}
-        body={body}
-      />
+        </DialogContent>
+      </Dialog>
 
       <section className="card p-4">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
