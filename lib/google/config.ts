@@ -17,6 +17,16 @@ export const YOUTUBE_SCOPES = [
 // Deliberately not a read scope.
 export const MAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.send"];
 
+// Both Google connectors (Gmail + YouTube) share one OAuth client, so one missing credential
+// takes out both. Checked BEFORE the connect routes build an auth URL: without this the routes
+// threw an unhandled 500 with a raw stack trace at anyone who clicked "Connect Gmail", which is
+// both a bad failure mode and genuinely hard to diagnose from the outside — the Connections page
+// looked fine and the button simply exploded. Note the empty-string case is deliberately treated
+// as unconfigured: a declared-but-blank var in .env.local is the exact shape this hit in practice.
+export function isGoogleOAuthConfigured(): boolean {
+  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+}
+
 export function getGoogleClientId(): string {
   const id = process.env.GOOGLE_CLIENT_ID;
   if (!id) throw new Error("GOOGLE_CLIENT_ID is not set");

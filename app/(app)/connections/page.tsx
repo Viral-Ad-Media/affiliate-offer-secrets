@@ -69,6 +69,17 @@ export default async function ConnectionsPage({
           >
             Connection cancelled.
           </div>
+        ) : value === "not_configured" ? (
+          <div
+            key={key}
+            className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300"
+          >
+            <span className="font-medium">{PROVIDER_LABELS[key]} isn&apos;t configured on this
+            deployment.</span>{" "}
+            Gmail and YouTube share one Google OAuth client — set{" "}
+            <code className="text-amber-200">GOOGLE_CLIENT_ID</code> and{" "}
+            <code className="text-amber-200">GOOGLE_CLIENT_SECRET</code>, then redeploy.
+          </div>
         ) : value === "error" ? (
           <div
             key={key}

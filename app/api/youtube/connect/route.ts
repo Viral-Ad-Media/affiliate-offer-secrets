@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { GOOGLE_OAUTH_BASE, YOUTUBE_SCOPES, getGoogleClientId, getYoutubeRedirectUri } from "@/lib/google/config";
+import { GOOGLE_OAUTH_BASE, YOUTUBE_SCOPES, getGoogleClientId, getYoutubeRedirectUri, isGoogleOAuthConfigured } from "@/lib/google/config";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,13 @@ export async function GET() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(appUrl("/login"));
+
+  // Both Google connectors share one OAuth client. If it isn't configured on this deployment,
+  // say so on the Connections page instead of throwing an unhandled 500 at whoever clicked
+  // Connect — that failure was invisible from the UI and reported nothing actionable.
+  if (!isGoogleOAuthConfigured()) {
+    return NextResponse.redirect(appUrl("/connections?youtube=not_configured"));
+  }
 
   const state = crypto.randomUUID().replace(/-/g, "");
   const authUrl = new URL(GOOGLE_OAUTH_BASE);
