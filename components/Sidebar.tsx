@@ -219,9 +219,11 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar. sticky + h-screen + self-start: the page itself is what scrolls, so
+          without this the nav scrolls away on any long page. self-start stops the flex row from
+          stretching the aside to the full page height, which would defeat the sticky. */}
       <aside
-        className={`hidden sm:flex sm:h-screen sm:shrink-0 sm:flex-col sm:justify-between sm:overflow-y-auto sm:border-r sm:border-ink-700 sm:bg-ink-900/60 sm:py-6 sm:transition-[width] sm:duration-200 ${
+        className={`hidden sm:sticky sm:top-0 sm:flex sm:h-screen sm:shrink-0 sm:flex-col sm:justify-between sm:self-start sm:overflow-y-auto sm:border-r sm:border-ink-700 sm:bg-ink-900/60 sm:py-6 sm:transition-[width] sm:duration-200 ${
           collapsed ? "sm:w-16 sm:px-2" : "sm:w-60 sm:px-4"
         }`}
       >
