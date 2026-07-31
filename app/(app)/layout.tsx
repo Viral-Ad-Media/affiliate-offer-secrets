@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import ReferralClaimer from "@/components/ReferralClaimer";
 import NotificationsBell from "@/components/NotificationsBell";
 import CreditsChip from "@/components/CreditsChip";
+import TrialChip from "@/components/TrialChip";
 import TopBarAccount from "@/components/TopBarAccount";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -39,8 +40,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <ReferralClaimer />
       <Sidebar
         email={user.email ?? ""}
-        onTrial={onTrial}
-        trialDaysLeft={trialDaysLeft}
         creditBalance={creditBalance}
         firstName={profile?.first_name ?? null}
         lastName={profile?.last_name ?? null}
@@ -55,6 +54,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             content but below dialogs (z-50) and toasts (z-100); the account and notification
             menus portal out to fixed positioning, so they're unaffected either way. */}
         <div className="sticky top-0 z-30 hidden items-center justify-end gap-2 border-b border-ink-700 bg-ink-900/80 px-4 py-2 backdrop-blur sm:flex">
+          {/* Centered on the bar itself, not laid out between the other chips — absolute
+              positioning is what keeps it centered on the page regardless of how wide the
+              right-hand cluster grows. pointer-events are handed back to the chip alone so the
+              transparent overlay never eats clicks meant for the bar. */}
+          {onTrial && (
+            <div className="pointer-events-none absolute inset-x-0 flex justify-center">
+              <TrialChip trialDaysLeft={trialDaysLeft} className="pointer-events-auto" />
+            </div>
+          )}
           <CreditsChip creditBalance={creditBalance} />
           <NotificationsBell />
           <TopBarAccount
@@ -64,6 +72,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             avatarUrl={profile?.avatar_url ?? null}
           />
         </div>
+        {/* Mobile gets its own centered strip under the top bar — that bar already carries logo,
+            credits, bell, account and the hamburger, and a sixth item would wrap. */}
+        {onTrial && (
+          <div className="flex justify-center border-b border-ink-700 bg-ink-900/60 px-4 py-2 sm:hidden">
+            <TrialChip trialDaysLeft={trialDaysLeft} />
+          </div>
+        )}
         <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
       </div>
     </div>

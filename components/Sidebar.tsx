@@ -7,14 +7,15 @@ import {
   LayoutDashboard,
   Megaphone,
   Filter,
+  Target,
   Users,
+  BarChart3,
   Send,
   Newspaper,
   MessageSquare,
   History,
   Gift,
   Settings,
-  Clock,
   LogOut,
   Menu,
   X,
@@ -32,7 +33,21 @@ const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: (p: string) => p === "/dashboard" },
   { href: "/marketplace", label: "Marketplace", icon: Megaphone, match: (p: string) => p === "/marketplace" || p.startsWith("/product/") },
   { href: "/funnels", label: "Funnels", icon: Filter, match: (p: string) => p.startsWith("/funnels") },
-  { href: "/contacts", label: "Contacts", icon: Users, match: (p: string) => p === "/contacts" },
+  // Read-only view over every ad_launches row. Launching/activating stays on the angle's own card
+  // on the campaign page — see the comment at the top of app/(app)/ads/page.tsx.
+  { href: "/ads", label: "Ads Manager", icon: Target, match: (p: string) => p.startsWith("/ads") },
+  {
+    href: "/contacts",
+    label: "Contacts",
+    icon: Users,
+    match: (p: string) => p.startsWith("/contacts"),
+    children: [
+      { href: "/contacts", label: "Leads", match: (p: string) => p === "/contacts" },
+      { href: "/contacts/tags", label: "Tags", match: (p: string) => p === "/contacts/tags" },
+      { href: "/contacts/import", label: "Import", match: (p: string) => p === "/contacts/import" },
+      { href: "/contacts/export", label: "Export", match: (p: string) => p === "/contacts/export" },
+    ],
+  },
   {
     href: "/emails/broadcast",
     label: "Emails",
@@ -75,6 +90,7 @@ const NAV = [
       { href: "/rewards", label: "Rewards", match: (p: string) => p === "/rewards" },
     ],
   },
+  { href: "/analytics", label: "Analytics", icon: BarChart3, match: (p: string) => p === "/analytics" },
   { href: "/audit", label: "Audit trail", icon: History, match: (p: string) => p === "/audit" },
   // Billing lives OUTSIDE the (app) route group (app/settings/billing) even though its URL nests
   // under /settings — (app)/layout.tsx redirects to it when access is missing, so nesting it
@@ -97,8 +113,6 @@ const NAV = [
 
 type Props = {
   email: string;
-  onTrial: boolean;
-  trialDaysLeft: number;
   creditBalance: number;
   firstName: string | null;
   lastName: string | null;
@@ -113,8 +127,6 @@ type Props = {
 // full labeled nav — replaces the old cramped horizontal icon strip.
 export default function Sidebar({
   email,
-  onTrial,
-  trialDaysLeft,
   creditBalance,
   firstName,
   lastName,
@@ -210,27 +222,9 @@ export default function Sidebar({
     });
 
 
-  const accountChips = (iconOnly: boolean) => (
-    <>
-      <ThemeToggle iconOnly={iconOnly} />
-      {onTrial && (
-        <Link
-          href="/settings/billing"
-          title={iconOnly ? `Trial: ${trialDaysLeft} ${trialDaysLeft === 1 ? "day" : "days"} left` : undefined}
-          className={`flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-300 hover:border-amber-500 ${
-            iconOnly ? "justify-center" : "justify-center"
-          }`}
-        >
-          <Clock className="h-3.5 w-3.5 shrink-0" />
-          {!iconOnly && (
-            <span>
-              Trial: {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left
-            </span>
-          )}
-        </Link>
-      )}
-    </>
-  );
+  // The trial countdown used to sit here; it now lives centered in the top bar alongside the
+  // credits chip (components/TrialChip.tsx) — account status, not navigation.
+  const accountChips = (iconOnly: boolean) => <ThemeToggle iconOnly={iconOnly} />;
 
   return (
     <>

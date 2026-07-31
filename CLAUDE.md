@@ -61,7 +61,8 @@ segment) covers Home, About, Pricing, FAQ, Contact, Terms, and Privacy, wrapped 
 authenticated app lives at `/dashboard`, `/connections`, `/domains`, `/contacts`, `/audit`,
 `/product/[id]`, `/billing` — `app/(app)/layout.tsx` is the paywall/auth gate (redirects to
 `/login` with no session, `/billing` without access), renders `components/Sidebar.tsx` (left nav:
-Overview/Campaigns/Funnels/Connections/Domains/Contacts/Broadcast/Audit trail/Billing, active-link
+Overview/Marketplace/Funnels/Ads Manager/Contacts/Emails/SMS/Blog/Referrals/Analytics/Audit
+trail/Settings, active-link
 highlighting via `usePathname`; on desktop it's collapsible to an icon-only 64px rail — the choice
 persists in `localStorage` under `sidebar_collapsed`, applied one paint after mount since reading
 localStorage during SSR/hydration would mismatch; below the `sm` breakpoint it becomes a slim top
@@ -1914,6 +1915,46 @@ hijacked session could silently lock the real owner out. Don't "simplify" this a
 Deliberately not built: changing the sign-in email (needs a confirmation round trip to both old
 and new addresses — a real flow, not a text field) and account deletion. Teams/orgs are out of
 scope by decision, so RLS stays `user_id = auth.uid()` throughout.
+
+## Ads Manager, Analytics, and the Contacts submenu
+
+Three read surfaces over data other code already writes — no new tables for the first two.
+
+- **`/ads` (Ads Manager)** lists every `ad_launches` row with its campaign, angle, creative kind,
+  status and daily budget, plus three summary tiles (active ads, daily credits authorized,
+  drafts awaiting review). **Read-only on purpose**: creating, activating and pausing a launch
+  stay on the angle's own `LaunchAd` card inside `AdAnglesPanel` on the campaign page, where the
+  angle's copy and its generated creative are actually in front of you. A second place that
+  spends credits is exactly what the paused-until-confirmed design exists to avoid. Meta's own
+  Ads Manager stays the source of truth for delivery/spend/results; this page answers "what have
+  I launched, from which angle, in what state," which Meta can't — it has no idea what a campaign
+  or an angle is here. It gates its own banner on `ads_management_granted`, same signal
+  `LaunchAd` uses.
+- **`/analytics`** is five `head:true` count cards (leads, funnels live, split-test views, emails
+  sent, posts published). Counts only, deliberately: rates and time series need per-day rollups
+  the schema doesn't keep (views live as a running total on `bridge_variants`, not dated rows).
+  Four honest numbers beat a chart built from a shape the data can't support.
+- **Contacts submenu** — Leads / Tags / Import / Export. `contact_tags` + `contact_tag_links`
+  (0047) follow the owner-select / no-client-write shape of every domain table since 0009; tag
+  names are unique per tenant case-insensitively (`lower(trim(name))`), because "VIP" and "vip"
+  are one tag to a person. `app/api/contacts/import/route.ts` is a hand-rolled RFC4180-ish CSV
+  parser (quoted fields with commas/quotes/newlines) — deliberately NOT reusing
+  `/api/public/leads`, whose whole shape is built around an untrusted anonymous caller; adding an
+  authenticated bulk path there would widen the one endpoint strangers can reach. It dedupes
+  within the file and against existing emails, and tags duplicates too (re-importing a list to
+  tag an existing segment is a normal thing to want). **Export is a server route
+  (`/api/contacts/export`), not the client-side CSV builder** — `ContactsTable` only holds the
+  current page since pagination landed, so a client-built file would silently export 50 rows.
+
+## Top bar: credits and trial countdown
+
+`CreditsChip` and `TrialChip` both live in the desktop top bar rather than the sidebar — account
+status, not navigation, the same reason the bell and account menu are there. The trial chip is
+**absolutely positioned across the bar** so it centres on the page regardless of how wide the
+right-hand cluster grows; `pointer-events-none` on that overlay with `pointer-events-auto` on the
+chip keeps the transparent strip from eating clicks. Mobile gets its own centred strip under the
+top bar — that bar already carries logo, credits, bell, account and hamburger, and a sixth item
+wraps.
 
 ## Notifications
 
