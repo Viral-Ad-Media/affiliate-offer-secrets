@@ -1,39 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  MAX_POST_TITLE,
-  MAX_POST_CONTENT,
-  MAX_FEATURED_IMAGE_CHARS,
-  markdownToBlockTree,
-  emptyPostTree,
-  blogRenderCtx,
-  renderBlockTree,
-  slugify,
-} from "@/lib/blog";
-import { isValidImageDataUrl } from "@/lib/images/validate";
+import { emptyPostTree, blogRenderCtx, renderBlockTree } from "@/lib/blog";
+import { createPostFromCampaign, uniquePostSlug } from "@/lib/blog/fromCampaign";
 
 export const dynamic = "force-dynamic";
-
-// Post slugs are unique per blog (0033). New posts often share a title ("Untitled post"), so
-// suffix until free rather than letting the partial unique index throw.
-async function uniqueSlug(
-  admin: ReturnType<typeof createAdminClient>,
-  userId: string,
-  desired: string
-): Promise<string> {
-  for (let n = 1; n <= 50; n++) {
-    const candidate = n === 1 ? desired : `${desired}-${n}`;
-    const { data } = await admin
-      .from("blog_posts")
-      .select("id")
-      .eq("user_id", userId)
-      .ilike("slug", candidate)
-      .maybeSingle();
-    if (!data) return candidate;
-  }
-  return `${desired}-${Math.floor(Date.now() / 1000)}`;
-}
 
 // Create a draft post — blank, or seeded from one of the caller's own campaigns' blog_md
 // (importing converts the markdown into a pageKind-"blog" block tree; campaigns.blog_md itself
@@ -48,51 +19,33 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const campaignId = typeof body.campaign_id === "string" ? body.campaign_id : null;
+  const admin = createAdminClient();
 
-  let title = "Untitled post";
-  let contentMd = "";
-  let sourceCampaignId: string | null = null;
-  // Imported posts inherit the campaign's product shot as their featured image — a sensible
-  // default the tenant can replace (upload) or regenerate (AI) from the editor.
-  let featuredImage: string | null = null;
-
+  // Importing shares one implementation with the engine's auto-create (lib/blog/fromCampaign.ts)
+  // so a hand-imported post and an auto-created one can't diverge. Ownership is enforced by the
+  // helper scoping every read to this user_id — another tenant's campaign id reads as nonexistent.
   if (campaignId) {
-    // RLS-scoped read — doubles as the ownership check (another tenant's campaign id reads as
-    // nonexistent), same idiom as every other campaign-scoped route.
-    const { data: campaign } = await supabase
-      .from("campaigns")
-      .select("id, blog_md, embedded_image_data_url, products(product_title)")
-      .eq("id", campaignId)
-      .maybeSingle();
-    if (!campaign?.blog_md) {
+    const result = await createPostFromCampaign(admin, user.id, campaignId);
+    if (!result.created && result.reason === "no_blog_content") {
       return NextResponse.json({ error: "campaign not found or has no blog content" }, { status: 404 });
     }
-    const productTitle = (campaign.products as unknown as { product_title: string } | null)?.product_title;
-    // First markdown H1 in the generated blog_md is the natural title; fall back to the product.
-    const h1 = /^#\s+(.+)$/m.exec(campaign.blog_md as string)?.[1]?.trim();
-    title = (h1 || (productTitle ? `${productTitle} review` : title)).slice(0, MAX_POST_TITLE);
-    contentMd = (campaign.blog_md as string).slice(0, MAX_POST_CONTENT);
-    sourceCampaignId = campaign.id as string;
-    const img = campaign.embedded_image_data_url as string | null;
-    if (img && isValidImageDataUrl(img, MAX_FEATURED_IMAGE_CHARS)) featuredImage = img;
+    // An existing post for this campaign is returned rather than duplicated — the engine may have
+    // already created it when the kit finished building.
+    return NextResponse.json({ ok: true, post_id: result.postId, existing: !result.created });
   }
 
-  const tree = contentMd ? markdownToBlockTree(contentMd, { dropFirstH1: true }) : emptyPostTree();
+  const tree = emptyPostTree();
   const html = renderBlockTree(tree, blogRenderCtx());
-
-  const admin = createAdminClient();
   const { data, error } = await admin
     .from("blog_posts")
     .insert({
       user_id: user.id,
-      campaign_id: sourceCampaignId,
-      title,
-      slug: await uniqueSlug(admin, user.id, slugify(title) || "post"),
-      content_md: contentMd,
+      title: "Untitled post",
+      slug: await uniquePostSlug(admin, user.id, "post"),
+      content_md: "",
       page_copy: tree,
       html,
-      featured_image_url: featuredImage,
-      featured_image_status: featuredImage ? "ready" : "none",
+      featured_image_status: "none",
     })
     .select("id")
     .single();

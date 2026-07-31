@@ -1,5 +1,6 @@
 import { db } from "./core";
 import { notify, jobLabel } from "@/lib/notifications";
+import { createPostFromCampaign } from "@/lib/blog/fromCampaign";
 import { runBuildCampaignStage, BUILD_CAMPAIGN_STAGES } from "./build";
 import { runDiscoverProducts, type DiscoverJobPayload } from "./discover";
 import { runLaunchAdStage, LAUNCH_AD_STAGES, type LaunchAdPayload } from "./adlaunch";
@@ -327,6 +328,29 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
       body: (readyCampaign as any)?.products?.product_title ?? null,
       href: `/product/${productId}`,
     });
+
+    // The kit already contains a finished article (blog_md), so turn it into a DRAFT blog post
+    // here rather than making the tenant press "Import from campaign" for every build. Draft, not
+    // published: this is machine-written copy about someone else's product and it should be read
+    // before it goes public. Idempotent on campaign_id, so a rebuild updates the kit without
+    // stacking up posts.
+    //
+    // Best-effort, exactly like notify() above: a blog-post problem must not turn a successfully
+    // built kit into a failed job.
+    const { data: builtCampaign } = await db
+      .from("campaigns")
+      .select("id")
+      .eq("user_id", job.user_id)
+      .eq("product_id", productId)
+      .maybeSingle();
+    if (builtCampaign?.id) {
+      try {
+        await createPostFromCampaign(db, job.user_id, builtCampaign.id as string);
+      } catch (err) {
+        console.error("auto blog post failed", err);
+      }
+    }
+
     await markDone(job.id, "campaign ready");
     return { done: true };
   }
