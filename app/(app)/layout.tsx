@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { hasAppAccess } from "@/lib/shared";
 import Sidebar from "@/components/Sidebar";
 import ReferralClaimer from "@/components/ReferralClaimer";
+import NotificationsBell from "@/components/NotificationsBell";
+import TopBarAccount from "@/components/TopBarAccount";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
@@ -44,6 +46,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         avatarUrl={profile?.avatar_url ?? null}
       />
       <div className="min-w-0 flex-1">
+        {/* Desktop-only top bar. The bell lives here rather than in the sidebar: it's a global
+            status affordance, and the sidebar is navigation. Mobile already has its own top bar
+            inside Sidebar, which carries the bell there. */}
+        <div className="hidden items-center justify-end gap-1 border-b border-ink-700 px-4 py-2 sm:flex">
+          <NotificationsBell />
+          <TopBarAccount
+            email={user.email ?? ""}
+            firstName={profile?.first_name ?? null}
+            lastName={profile?.last_name ?? null}
+            avatarUrl={profile?.avatar_url ?? null}
+          />
+        </div>
         <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
       </div>
     </div>

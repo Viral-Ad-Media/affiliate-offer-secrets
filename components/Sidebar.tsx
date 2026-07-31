@@ -10,6 +10,7 @@ import {
   Users,
   Send,
   Newspaper,
+  MessageSquare,
   History,
   Gift,
   Award,
@@ -25,6 +26,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import ThemeToggle from "@/components/ThemeToggle";
 import NotificationsBell from "@/components/NotificationsBell";
+import TopBarAccount from "@/components/TopBarAccount";
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: (p: string) => p === "/dashboard" },
@@ -41,6 +43,7 @@ const NAV = [
       { href: "/emails/sequences", label: "Sequences", match: (p: string) => p.startsWith("/emails/sequences") },
     ],
   },
+  { href: "/sms", label: "SMS", icon: MessageSquare, match: () => false, soon: true },
   {
     href: "/blog",
     label: "Blog",
@@ -68,6 +71,7 @@ const NAV = [
     children: [
       { href: "/settings/profile", label: "Profile", match: (p: string) => p === "/settings/profile" },
       { href: "/settings/security", label: "Security", match: (p: string) => p === "/settings/security" },
+      { href: "/settings/team", label: "Team", match: (p: string) => p === "/settings/team" },
       { href: "/settings/connections", label: "Connections", match: (p: string) => p === "/settings/connections" },
       { href: "/settings/domains", label: "Domains", match: (p: string) => p.startsWith("/settings/domains") },
       { href: "/settings/billing", label: "Billing", match: (p: string) => p === "/settings/billing" },
@@ -122,16 +126,37 @@ export default function Sidebar({
     });
   }
 
-  async function logout() {
-    await createClient().auth.signOut();
-    router.push("/login");
-    router.refresh();
-  }
 
   const navLinks = (iconOnly: boolean) =>
     NAV.map((item) => {
       const active = item.match(pathname);
       const children = "children" in item ? item.children : undefined;
+      const soon = "soon" in item && item.soon;
+
+      // Rendered as a non-link: a nav item that navigates to a 404 is worse than one that's
+      // visibly inert. Keeps the icon and label so the roadmap is legible.
+      if (soon) {
+        return (
+          <div
+            key={item.href}
+            title={`${item.label} — coming soon`}
+            className={`flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-zinc-600 ${
+              iconOnly ? "justify-center" : ""
+            }`}
+          >
+            <item.icon className="h-4 w-4 shrink-0" />
+            {!iconOnly && (
+              <>
+                <span className="flex-1">{item.label}</span>
+                <span className="rounded border border-ink-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-600">
+                  Soon
+                </span>
+              </>
+            )}
+          </div>
+        );
+      }
+
       return (
         <div key={item.href}>
           <Link
@@ -168,10 +193,6 @@ export default function Sidebar({
       );
     });
 
-  const displayName = [firstName, lastName].filter(Boolean).join(" ").trim();
-  const initials =
-    ((firstName?.trim()?.[0] ?? "") + (lastName?.trim()?.[0] ?? "")).toUpperCase() ||
-    (email.trim()[0] ?? "?").toUpperCase();
 
   const accountChips = (iconOnly: boolean) => (
     <>
@@ -200,36 +221,6 @@ export default function Sidebar({
         <Coins className="h-3.5 w-3.5 shrink-0" />
         {!iconOnly && <span>{creditBalance} credits</span>}
       </Link>
-      {/* Identity chip — links to Profile, which is where you'd go to change any of it. */}
-      <Link
-        href="/settings/profile"
-        title={displayName ? `${displayName} · ${email}` : email}
-        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-ink-800 ${
-          iconOnly ? "justify-center" : ""
-        }`}
-      >
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-ink-600 bg-ink-800 text-[10px] font-semibold text-zinc-400">
-          {avatarUrl ? (
-            /* eslint-disable-next-line @next/next/no-img-element -- data: URL, nothing to optimise */
-            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            initials
-          )}
-        </span>
-        {!iconOnly && (
-          <span className="min-w-0 flex-1 truncate text-xs text-zinc-500">
-            {displayName || email}
-          </span>
-        )}
-      </Link>
-      <button
-        onClick={logout}
-        title={iconOnly ? "Log out" : undefined}
-        className="flex items-center justify-center gap-1.5 rounded-lg border border-ink-600 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-red-500 hover:text-red-300"
-      >
-        <LogOut className="h-3.5 w-3.5 shrink-0" />
-        {!iconOnly && <span>Log out</span>}
-      </button>
     </>
   );
 
@@ -249,7 +240,6 @@ export default function Sidebar({
               </Link>
             )}
             <div className="flex items-center gap-0.5">
-              <NotificationsBell iconOnly={collapsed} />
               <button
                 onClick={toggleCollapsed}
                 title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -271,6 +261,12 @@ export default function Sidebar({
         </Link>
         <div className="flex items-center gap-2">
           <NotificationsBell />
+          <TopBarAccount
+            email={email}
+            firstName={firstName}
+            lastName={lastName}
+            avatarUrl={avatarUrl}
+          />
           <Link
             href="/settings/billing"
             className="flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-1 text-xs text-emerald-300"

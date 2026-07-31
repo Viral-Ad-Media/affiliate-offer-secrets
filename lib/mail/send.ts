@@ -6,6 +6,7 @@
 // Server-only (admin client + Vault RPCs); never import from client components.
 
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { notify } from "@/lib/notifications";
 import {
   MailProviderError,
   sendResendEmail,
@@ -94,6 +95,14 @@ export async function sendViaActiveSender(
         .from("mail_provider_connections")
         .update({ status: "error", error: err.message, updated_at: new Date().toISOString() })
         .eq("id", conn.id);
+      // A rejected key silently stops EVERY future send — broadcasts included — so this must
+      // surface rather than showing up as mail that just quietly never arrives.
+      await notify(admin, userId, {
+        kind: "mail_sender_error",
+        title: `${provider} rejected your credentials`,
+        body: "Email sending is paused until you reconnect this provider.",
+        href: "/settings/connections",
+      });
       return { ok: false, reason: "needs_reconnect" };
     }
     throw err;

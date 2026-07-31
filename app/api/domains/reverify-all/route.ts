@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isDomainFullyVerified } from "@/lib/vercel/client";
+import { notify } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data: domains } = await admin
     .from("custom_domains")
-    .select("id, domain")
+    .select("id, domain, user_id")
     .eq("status", "verified");
 
   let checked = 0;
@@ -37,6 +38,15 @@ export async function POST(req: Request) {
           updated_at: new Date().toISOString(),
         })
         .eq("id", row.id);
+      // A domain silently falling out of verification is the definition of something the tenant
+      // must act on — their funnel/blog pages stop resolving there. This sweep is the only place
+      // that transition happens, so it's the only place that can raise it.
+      await notify(admin, row.user_id as string, {
+        kind: "domain_error",
+        title: `${row.domain} stopped resolving`,
+        body: "DNS no longer points at Vercel, so pages on this domain aren't being served. Re-verify after fixing your DNS records.",
+        href: "/settings/domains",
+      });
     }
   }
 

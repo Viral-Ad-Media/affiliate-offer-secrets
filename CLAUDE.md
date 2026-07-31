@@ -1855,6 +1855,36 @@ validator, or renderer changes; purely how the existing capabilities are surface
   full-width canvas. Same standing caveat as O.3: real drag gestures can't be simulated by this
   session's tooling.
 
+## Workspaces / teams (phase 1 of multi-tenancy)
+
+`workspaces` + `workspace_members` (owner/admin/member) + `workspace_invitations`, migration
+0041, surfaced at **Settings → Team**. Invitations are accepted at `/invite/{token}`.
+
+**Phase 1 is schema + team UI only.** No tenant data is workspace-scoped yet and no existing RLS
+has changed — the app still behaves exactly as before. Phase 2 is the real migration: adding
+`workspace_id` to 18 tenant tables, rewriting 144 `auth.uid()` RLS clauses to membership checks,
+and updating 129 `.eq("user_id")` app queries. Don't do those piecemeal; a half-migrated security
+model is worse than either end state.
+
+- A partial unique index enforces **one owner per workspace**, which is why ownership moves only
+  through `transfer_workspace_ownership()` — it demotes before promoting, and any other order
+  violates the index.
+- `is_workspace_member`/`workspace_role` are SECURITY DEFINER so policies on `workspace_members`
+  don't recurse through that table's own RLS.
+- Invitation tokens are separate from row ids: the id appears in admin listings, and something
+  already shown to other members must never also be the credential that joins the workspace.
+- Accepting does NOT require the invited address to match the signed-in one — people sign up with
+  a different address routinely, and the token is the credential. Expiry + single use are enforced.
+- Verified against the DB: a plain member cannot invite, seize ownership, or remove the owner, and
+  a consumed token cannot be replayed.
+- No invitation *email* is sent yet — the UI surfaces the link for the admin to send. That's
+  deliberate over pretending to send mail that never arrives, and it works regardless of which
+  provider the workspace has configured.
+
+Slugs are reserved against a `reserved_workspace_slugs` table so a workspace can't take `api`,
+`app`, `settings`, `blog`, `w`, `p`, `b`, `d` or `r` — each of which is a real route today or a
+DNS label later.
+
 ## Settings
 
 Sidebar **Settings** is a submenu, one page per item: **Profile** (`/settings/profile`, also hosts
