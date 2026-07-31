@@ -91,7 +91,16 @@ async function claimJob(): Promise<JobRow | null> {
     console.error("claim_job raw error:", JSON.stringify(error, null, 2));
     throw new Error(`claim_job failed: ${error.message}`);
   }
-  return (data as JobRow) ?? null;
+  // claim_job is declared `returns jobs` (a composite, not setof), so when there is nothing to
+  // claim PostgREST hands back an all-NULL ROW OBJECT — {"id":null,"type":null,...} — not JSON
+  // null. That object is truthy, so a bare `?? null` let the caller treat "queue empty" as a
+  // claimed job: dispatch fell through to failJob(), which updated `jobs where id = null` (a
+  // no-op), and runWorkerLoop spun for its entire 50s budget every single invocation. With the
+  // 1-minute cron that burned a full serverless invocation per minute doing nothing, and the
+  // responses ran long enough that pg_net logged them with a null status_code. Check `id`, not
+  // the object, to decide whether a row actually came back.
+  const job = data as JobRow | null;
+  return job && job.id ? job : null;
 }
 
 const KNOWN_NETWORKS = ["clickbank", "digistore24"] as const;

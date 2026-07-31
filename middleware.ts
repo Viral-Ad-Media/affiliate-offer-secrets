@@ -23,6 +23,10 @@ const PUBLIC_PREFIX_PATHS = [
   "/api/public/leads", // bridge-page lead capture — anonymous visitors, no auth
   "/api/public/unsubscribe", // one-click email unsubscribe link — anonymous visitors, no auth
   "/api/broadcast/sweep", // pg_cron backstop for Broadcast drip sequences, x-engine-secret gated
+  // 6-hourly pg_cron domain re-verification, x-engine-secret gated. Was missing here since it
+  // shipped, so the auth gate 307'd every unauthenticated pg_net POST to /login and the sweep
+  // never once ran — confirmed live against production before this fix.
+  "/api/domains/reverify-all",
   "/api/marketplace/refresh", // pg_cron daily marketplace-cache sweep, x-engine-secret gated
   "/b/", // public blog post pages — anonymous readers, no auth
   "/r/", // referral link capture — the visitor has no account yet, that's the point
