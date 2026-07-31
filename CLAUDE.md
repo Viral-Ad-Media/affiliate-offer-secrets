@@ -1855,6 +1855,29 @@ validator, or renderer changes; purely how the existing capabilities are surface
   full-width canvas. Same standing caveat as O.3: real drag gestures can't be simulated by this
   session's tooling.
 
+## Settings (Profile + Security)
+
+`/settings` — one page, three cards: Profile, Security, and links out to things that already have
+a home (Billing, Connections, the sidebar theme toggle). Preferences are linked rather than
+duplicated; two places to set the same thing is how they drift.
+
+**`profiles` is SELECT-only for clients and must stay that way.** The general update policy was
+dropped in 0002_trial.sql because it let a user self-grant `access_granted`. Profile edits go
+through `update_profile(p_full_name, p_timezone)` (0039), which can only write those two columns.
+Do NOT re-add a broad update policy to simplify a form — that is the exact hole 0002 closed.
+Timezone is validated against `pg_timezone_names` at write time rather than by a CHECK, so a
+future tzdata change can't invalidate existing rows.
+
+**Changing a password re-authenticates first.** `supabase.auth.updateUser({password})` does NOT
+verify the current password — it trusts the session — so `SecuritySettings` calls
+`signInWithPassword` with the current password before updating. Without that, anyone with a
+hijacked session could silently lock the real owner out. Don't "simplify" this away.
+"Sign out everywhere" uses `signOut({scope:"global"})`, which revokes every refresh token.
+
+Deliberately not built: changing the sign-in email (needs a confirmation round trip to both old
+and new addresses — a real flow, not a text field) and account deletion. Teams/orgs are out of
+scope by decision, so RLS stays `user_id = auth.uid()` throughout.
+
 ## Notifications
 
 Bell in the sidebar header (and the mobile top bar), `components/NotificationsBell.tsx`, backed by

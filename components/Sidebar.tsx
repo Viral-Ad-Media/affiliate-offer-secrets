@@ -16,6 +16,7 @@ import {
   Gift,
   Award,
   CreditCard,
+  Settings,
   Clock,
   Coins,
   LogOut,
@@ -62,6 +63,7 @@ const NAV = [
   { href: "/rewards", label: "Rewards", icon: Award, match: (p: string) => p === "/rewards" },
   { href: "/audit", label: "Audit trail", icon: History, match: (p: string) => p === "/audit" },
   { href: "/billing", label: "Billing", icon: CreditCard, match: (p: string) => p === "/billing" },
+  { href: "/settings", label: "Settings", icon: Settings, match: (p: string) => p === "/settings" },
 ];
 
 type Props = {
