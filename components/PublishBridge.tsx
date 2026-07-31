@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Globe, Copy, CheckCircle2, Loader2, Plus, Trash2, Radio } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import StatusDropdownButton from "@/components/StatusDropdownButton";
 
 type Domain = { id: string; domain: string };
 type Route = { id: string; domain_id: string; domain: string; path: string };
@@ -51,13 +52,15 @@ export default function PublishBridge({
     });
   }, [campaignId]);
 
-  async function togglePublish() {
+  // Set the chosen state explicitly rather than toggling — the status menu can pick either one,
+  // and a toggle would do the wrong thing if the button's state and the campaign's disagreed.
+  async function changeStatus(next: "published" | "draft") {
     setBusy(true);
     setError(null);
     const res = await fetch(`/api/campaigns/${campaignId}/publish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ published: !published }),
+      body: JSON.stringify({ published: next === "published" }),
     });
     const data = await res.json();
     setBusy(false);
@@ -121,10 +124,11 @@ export default function PublishBridge({
             <span className="text-xs text-zinc-500">Not publicly reachable until published.</span>
           )}
         </div>
-        <button onClick={togglePublish} disabled={busy} className={published ? "btn-ghost" : "btn-primary"}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {published ? "Unpublish" : "Publish"}
-        </button>
+        <StatusDropdownButton
+          status={published ? "published" : "draft"}
+          busy={busy}
+          onChange={changeStatus}
+        />
       </div>
       {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
 

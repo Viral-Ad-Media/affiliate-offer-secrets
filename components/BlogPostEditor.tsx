@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Loader2, CheckCircle2, ExternalLink, Copy, ChevronDown, Check, Globe, FileText } from "lucide-react";
+import { ArrowLeft, Loader2, CheckCircle2, ExternalLink, Copy } from "lucide-react";
 import type { PageBlockTree } from "@/lib/engine/renderPages";
 import { markdownToBlockTree, blogRenderCtx, renderBlockTree, renderPublicPostHtml } from "@/lib/blog";
 import EditorPreviewButton from "@/components/EditorPreview";
+import StatusDropdownButton from "@/components/StatusDropdownButton";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
 import FeaturedImageField from "@/components/FeaturedImageField";
@@ -87,7 +88,6 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [imageBusyBlockId, setImageBusyBlockId] = useState<string | null>(null);
-  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [slug, setSlug] = useState(post.slug ?? "");
   const [excerpt, setExcerpt] = useState(post.excerpt ?? "");
   const [featuredImage, setFeaturedImage] = useState<string | null>(post.featured_image_url);
@@ -129,8 +129,6 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
   // Set the post's status explicitly rather than toggling: the split button's menu can pick
   // either state directly, and a toggle would do the wrong thing if the two ever disagreed.
   async function setPostStatus(next: "published" | "draft") {
-    setStatusMenuOpen(false);
-    if (next === status) return;
     // Publishing always saves current edits too — publishing stale content would be surprising.
     const ok = await patch("publish", { title, blocks: tree.blocks, category_id: categoryId || null, slug, excerpt, featured_image_url: featuredImage, ...seo, status: next });
     if (ok) setStatus(next);
@@ -187,56 +185,11 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
             {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Save
           </button>
-          {/* One button, chevron inside it: the label is the post's current status and clicking
-              anywhere on it opens the status menu. */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setStatusMenuOpen((v) => !v)}
-              disabled={busy !== null}
-              title="Change status"
-              aria-haspopup="menu"
-              aria-expanded={statusMenuOpen}
-              className="btn-primary flex items-center gap-1.5 text-xs"
-            >
-              {busy === "publish" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : status === "published" ? (
-                <Globe className="h-3.5 w-3.5" />
-              ) : null}
-              {status === "published" ? "Published" : "Publish"}
-              <ChevronDown className="h-3.5 w-3.5 opacity-80" />
-            </button>
-
-            {statusMenuOpen && (
-              <>
-                {/* Click-away layer rather than a document listener: this editor is a fixed
-                    full-screen overlay, so a plain backdrop is enough and can't leak a listener. */}
-                <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
-                <div
-                  role="menu"
-                  className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-lg border border-ink-700 bg-ink-900 py-1 shadow-lg"
-                >
-                  {([
-                    { value: "published", label: "Published", icon: Globe },
-                    { value: "draft", label: "Draft", icon: FileText },
-                  ] as const).map((o) => (
-                    <button
-                      key={o.value}
-                      type="button"
-                      role="menuitem"
-                      onClick={() => setPostStatus(o.value)}
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-200 hover:bg-ink-800"
-                    >
-                      <o.icon className="h-3.5 w-3.5 text-zinc-500" />
-                      <span className="flex-1">{o.label}</span>
-                      {status === o.value && <Check className="h-3.5 w-3.5 text-emerald-400" />}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+          <StatusDropdownButton
+            status={status === "published" ? "published" : "draft"}
+            busy={busy !== null}
+            onChange={setPostStatus}
+          />
         </div>
       </div>
 
