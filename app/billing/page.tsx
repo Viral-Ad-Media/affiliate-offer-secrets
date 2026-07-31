@@ -77,7 +77,7 @@ export default async function BillingPage({
           )}
           <div className="card p-5">
             <h2 className="mb-1 text-sm font-semibold text-zinc-100">
-              {onTrial ? "Unlock permanently" : "Unlock ClickBank Studio"}
+              {onTrial ? "Unlock permanently" : "Unlock Affiliate Studio"}
             </h2>
             <p className="mb-4 text-sm text-zinc-400">
               One-time payment for full access — discovery, campaign kits, and (once connected)

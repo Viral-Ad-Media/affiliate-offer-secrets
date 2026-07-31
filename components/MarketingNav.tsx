@@ -21,7 +21,7 @@ export default function MarketingNav() {
     <header className="border-b border-ink-700 bg-ink-950/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4">
         <Link href="/" className="font-heading text-lg font-bold text-zinc-100" onClick={() => setOpen(false)}>
-          ClickBank <span className="text-emerald-400">Studio</span>
+          Affiliate <span className="text-emerald-400">Studio</span>
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">

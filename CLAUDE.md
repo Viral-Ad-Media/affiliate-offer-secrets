@@ -1,6 +1,16 @@
-# ClickBank Studio
+# Affiliate Studio
 
-Multi-tenant ClickBank affiliate SaaS. The Next.js app (deployed on Vercel) is the visual
+**Product name is "Affiliate Studio."** It was renamed from "ClickBank Studio" once Digistore24
+(and more networks later) became supported — the user-facing wordmark must stay network-agnostic.
+"ClickBank" survives ONLY where it names the real network: the `'clickbank'` enum value in
+`network_connections`/`products`, `clickbank.com`'s GraphQL endpoint, `hop.clickbank.net`
+hoplinks, `CLICKBANK_CATEGORIES` (`lib/categories.ts`), `lib/engine/clickbank.ts`, the network
+label/badge in the UI, copy about live marketplace discovery (still ClickBank-only), and the
+trademark disclaimer in `components/MarketingFooter.tsx`. Never rename those. Infrastructure
+names (repo dir `clickbank-studio`, the Vercel project, `clickbank-studio.vercel.app`, the GitHub
+repo) were deliberately left alone — changing them breaks deploy URLs and is a separate decision.
+
+Multi-tenant affiliate SaaS. The Next.js app (deployed on Vercel) is the visual
 dashboard; **Supabase (Postgres + Auth) is the database**, with every tenant-owned table scoped
 by Row Level Security to `auth.uid() = user_id`. **`lib/engine/*` is the research/generation
 engine** — an automated Anthropic-API-based worker that drains the `jobs` queue across all
@@ -1245,7 +1255,7 @@ manage, not an afterthought.
   bridge` and a direct POST simulating custom-domain traffic — not assumed to work from the code
   alone.
 - **No collision with the existing marketing `/contact` page** — that's a visitor contacting the
-  SaaS operator (ClickBank Studio itself), a completely different context from a tenant's own ad
+  SaaS operator (Affiliate Studio itself), a completely different context from a tenant's own ad
   visitor submitting a bridge page's opt-in form. `contacts` (the table/nav entry) and `/contact`
   (the marketing page) are unrelated on purpose; don't conflate them when extending either.
 - **`ContactsTable.tsx` is `"use client"`, a deliberate deviation from `AuditTrail.tsx`'s

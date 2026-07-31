@@ -196,7 +196,7 @@ export default function Sidebar({ email, onTrial, trialDaysLeft, creditBalance }
           <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between px-2"}`}>
             {!collapsed && (
               <Link href="/dashboard" className="font-heading text-base font-bold text-zinc-100">
-                ClickBank <span className="text-emerald-400">Studio</span>
+                Affiliate <span className="text-emerald-400">Studio</span>
               </Link>
             )}
             <button
@@ -215,7 +215,7 @@ export default function Sidebar({ email, onTrial, trialDaysLeft, creditBalance }
       {/* Mobile top bar */}
       <header className="flex items-center justify-between border-b border-ink-700 bg-ink-900/60 px-4 py-3 sm:hidden">
         <Link href="/dashboard" className="font-heading text-base font-bold text-zinc-100">
-          ClickBank <span className="text-emerald-400">Studio</span>
+          Affiliate <span className="text-emerald-400">Studio</span>
         </Link>
         <div className="flex items-center gap-2">
           <Link
@@ -243,7 +243,7 @@ export default function Sidebar({ email, onTrial, trialDaysLeft, creditBalance }
             <div className="flex flex-col gap-6">
               <div className="flex items-center justify-between px-2">
                 <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="font-heading text-base font-bold text-zinc-100">
-                  ClickBank <span className="text-emerald-400">Studio</span>
+                  Affiliate <span className="text-emerald-400">Studio</span>
                 </Link>
                 <button
                   onClick={() => setMobileOpen(false)}

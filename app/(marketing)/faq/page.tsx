@@ -1,21 +1,21 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "FAQ — ClickBank Studio",
-  description: "Common questions about ClickBank Studio.",
+  title: "FAQ — Affiliate Studio",
+  description: "Common questions about Affiliate Studio.",
 };
 
 const FAQS = [
   {
-    q: "What exactly does ClickBank Studio generate for me?",
+    q: "What exactly does Affiliate Studio generate for me?",
     a: "For each product you promote, it generates Facebook and TikTok ad copy, a bridge (lead-capture) landing page, a blog article, and email swipes — all grounded in claims taken directly from the vendor's own sales page.",
   },
   {
-    q: "Do I need a ClickBank account?",
-    a: "Yes — you promote products using your own ClickBank affiliate nickname and hoplinks. ClickBank Studio doesn't create ClickBank accounts or process ClickBank commissions; it only helps you research products and produce campaign assets faster.",
+    q: "Do I need an affiliate network account?",
+    a: "Yes — you promote products using your own affiliate nickname and hoplinks from the network the product lives on (ClickBank and Digistore24 are supported today). Affiliate Studio doesn't create network accounts or process your commissions; it only helps you research products and produce campaign assets faster.",
   },
   {
-    q: "Does ClickBank Studio hold or spend my ad budget?",
+    q: "Does Affiliate Studio hold or spend my ad budget?",
     a: "No. When you connect your Facebook account, ad campaigns are created and billed directly through your own Meta ad account and payment method. The platform is only authorized to create and activate campaigns — it never holds or moves your money.",
   },
   {

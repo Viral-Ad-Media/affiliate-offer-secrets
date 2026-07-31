@@ -1,9 +1,9 @@
 ---
 name: run-engine
-description: Drain pending ClickBank Studio jobs across all tenants — discover marketplace products with live research or build complete campaign kits (ads, TikTok scripts, landing copy, presell HTML, lead-capture bridge HTML, blog, emails) for promoted products, writing everything back into Supabase so it appears in each client's dashboard.
+description: Drain pending Affiliate Studio jobs across all tenants — discover marketplace products with live research or build complete campaign kits (ads, TikTok scripts, landing copy, presell HTML, lead-capture bridge HTML, blog, emails) for promoted products, writing everything back into Supabase so it appears in each client's dashboard.
 ---
 
-# Run the ClickBank Studio engine
+# Run the Affiliate Studio engine
 
 Drain the jobs queue — this is a background process running with the Supabase service-role key,
 so `pending` (with no `--user` filter) returns open jobs from **every** client, not just one.

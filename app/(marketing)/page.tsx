@@ -55,7 +55,7 @@ const FEATURES = [
   {
     icon: Rocket,
     title: "You keep control",
-    body: "Your own ClickBank nickname, your own ad account, your own Facebook Page. The platform never holds your ad spend.",
+    body: "Your own affiliate nickname, your own ad account, your own Facebook Page. The platform never holds your ad spend.",
   },
 ];
 
@@ -65,14 +65,14 @@ export default function HomePage() {
       <section className="border-b border-ink-700 bg-gradient-to-b from-ink-900/60 to-ink-950">
         <div className="mx-auto max-w-4xl px-4 py-20 text-center sm:py-28">
           <span className="chip border-ink-600 bg-ink-800 text-zinc-300">
-            Built for ClickBank affiliates
+            Built for affiliate marketers
           </span>
           <h1 className="mt-5 text-4xl font-bold text-zinc-100 sm:text-5xl">
-            Find winning ClickBank products.
+            Find winning affiliate products.
             <br className="hidden sm:block" /> Ship full campaigns in minutes.
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-base text-zinc-400 sm:text-lg">
-            ClickBank Studio researches the marketplace, writes your ad copy and pages, and can
+            Affiliate Studio researches the marketplace, writes your ad copy and pages, and can
             publish to Facebook and launch real ad campaigns — all from one dashboard.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">

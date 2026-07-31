@@ -1,16 +1,16 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "About — ClickBank Studio",
-  description: "Why ClickBank Studio exists and how it works.",
+  title: "About — Affiliate Studio",
+  description: "Why Affiliate Studio exists and how it works.",
 };
 
 export default function AboutPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 sm:py-20">
-      <h1 className="text-3xl font-bold text-zinc-100 sm:text-4xl">About ClickBank Studio</h1>
+      <h1 className="text-3xl font-bold text-zinc-100 sm:text-4xl">About Affiliate Studio</h1>
       <p className="mt-4 text-base leading-relaxed text-zinc-400">
-        ClickBank Studio is a research and campaign-generation cockpit built for ClickBank
+        Affiliate Studio is a research and campaign-generation cockpit built for
         affiliate marketers who are tired of the manual grind: scrolling the marketplace for
         products, digging through sales pages for angles, and writing ad copy, landing pages, and
         email swipes by hand for every single offer.
@@ -33,7 +33,7 @@ export default function AboutPage() {
             Your accounts, your control
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-            ClickBank Studio never touches your ClickBank commissions, and it never holds your ad
+            Affiliate Studio never touches your affiliate commissions, and it never holds your ad
             budget. When you connect Facebook, you're authorizing the platform to post and launch
             campaigns on your own Page and your own ad account — Meta bills your ad spend
             directly to you. New ad campaigns are always created paused, so nothing goes live
@@ -48,7 +48,7 @@ export default function AboutPage() {
           <p className="mt-2 text-sm leading-relaxed text-zinc-400">
             The product exists because the actual bottleneck in affiliate marketing usually isn't
             finding an offer — it's producing enough good creative and copy fast enough to test
-            it properly. ClickBank Studio is built to close that specific gap, not to replace your
+            it properly. Affiliate Studio is built to close that specific gap, not to replace your
             judgment about what to promote or how to run it.
           </p>
         </section>

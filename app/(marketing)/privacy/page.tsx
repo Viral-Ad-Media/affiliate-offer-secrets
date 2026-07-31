@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "Privacy Policy — ClickBank Studio",
-  description: "Privacy Policy for ClickBank Studio.",
+  title: "Privacy Policy — Affiliate Studio",
+  description: "Privacy Policy for Affiliate Studio.",
 };
 
 export default function PrivacyPage() {
@@ -20,7 +20,7 @@ export default function PrivacyPage() {
           <h2 className="font-heading text-lg font-semibold text-zinc-100">1. What we collect</h2>
           <p className="mt-2">
             When you create an account we collect your email address and any profile details you
-            provide (such as your ClickBank nickname). If you connect Facebook, we store your
+            provide (such as your affiliate nickname). If you connect Facebook, we store your
             Meta user ID and the OAuth access tokens needed to post and launch campaigns on your
             behalf — access tokens are stored encrypted and are never shown back to you in
             plaintext. We also record usage data such as jobs run, content generated, and posts

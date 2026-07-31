@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "Terms of Service — ClickBank Studio",
-  description: "Terms of Service for ClickBank Studio.",
+  title: "Terms of Service — Affiliate Studio",
+  description: "Terms of Service for Affiliate Studio.",
 };
 
 export default function TermsPage() {
@@ -19,7 +19,7 @@ export default function TermsPage() {
         <section>
           <h2 className="font-heading text-lg font-semibold text-zinc-100">1. Acceptance of terms</h2>
           <p className="mt-2">
-            By creating an account or using ClickBank Studio ("the Service"), operated by
+            By creating an account or using Affiliate Studio ("the Service"), operated by
             [LEGAL ENTITY NAME] ("we", "us"), you agree to these Terms of Service. If you do not
             agree, do not use the Service.
           </p>
@@ -28,7 +28,7 @@ export default function TermsPage() {
         <section>
           <h2 className="font-heading text-lg font-semibold text-zinc-100">2. Description of the Service</h2>
           <p className="mt-2">
-            ClickBank Studio provides ClickBank marketplace research and AI-generated marketing
+            Affiliate Studio provides affiliate marketplace research and AI-generated marketing
             content (ad copy, landing pages, blog content, email content) for use by affiliate
             marketers. Optional features allow you to connect your own Facebook account to
             publish posts and launch advertising campaigns using your own connected ad account.
@@ -38,7 +38,7 @@ export default function TermsPage() {
         <section>
           <h2 className="font-heading text-lg font-semibold text-zinc-100">3. Your accounts and connections</h2>
           <p className="mt-2">
-            You are solely responsible for your ClickBank account, your Facebook/Meta account,
+            You are solely responsible for your affiliate network accounts, your Facebook/Meta account,
             and any ad account you connect to the Service, including all activity and any charges
             incurred on those accounts. The Service never holds or transmits your advertising
             budget — advertising spend is billed directly by Meta to your connected payment
@@ -61,7 +61,7 @@ export default function TermsPage() {
           <p className="mt-2">
             AI-generated content is provided as a starting point only. You are responsible for
             reviewing all generated ad copy, landing pages, and other content for accuracy and
-            for compliance with ClickBank's terms, Meta's advertising policies, and all applicable
+            for compliance with your affiliate network's terms, Meta's advertising policies, and all applicable
             laws before publishing or running paid traffic to it.
           </p>
         </section>
@@ -70,7 +70,7 @@ export default function TermsPage() {
           <h2 className="font-heading text-lg font-semibold text-zinc-100">6. Prohibited use</h2>
           <p className="mt-2">
             You may not use the Service to generate or publish content that is fraudulent,
-            infringing, or that violates ClickBank's, Meta's, or any other third party's terms of
+            infringing, or that violates your affiliate network's, Meta's, or any other third party's terms of
             service. We may suspend or terminate accounts that violate this section.
           </p>
         </section>

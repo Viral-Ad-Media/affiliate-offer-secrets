@@ -1,4 +1,4 @@
--- ClickBank Studio — multi-tenant schema (Phase A)
+-- Affiliate Studio — multi-tenant schema (Phase A)
 -- Ports lib/db.ts (SQLite, single-user) to Postgres with per-user Row Level Security.
 
 create extension if not exists "pgcrypto";

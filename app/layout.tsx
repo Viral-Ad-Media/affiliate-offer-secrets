@@ -19,7 +19,7 @@ const sourceSans = Source_Sans_3({
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://clickbank-studio.vercel.app";
 const DESCRIPTION =
-  "ClickBank Studio researches the marketplace, writes your ad copy and pages, builds funnels, and launches real ad campaigns — all from one dashboard.";
+  "Affiliate Studio researches the marketplace, writes your ad copy and pages, builds funnels, and launches real ad campaigns — all from one dashboard.";
 
 // Site-wide SEO defaults. Per-page metadata exports (marketing pages) override title/description;
 // metadataBase makes every relative OG/canonical URL absolute. Funnel pages (/p, /d) keep their
@@ -27,21 +27,21 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),
   title: {
-    default: "ClickBank Studio — Find winning products, ship full campaigns",
-    template: "%s — ClickBank Studio",
+    default: "Affiliate Studio — Find winning products, ship full campaigns",
+    template: "%s — Affiliate Studio",
   },
   description: DESCRIPTION,
-  applicationName: "ClickBank Studio",
+  applicationName: "Affiliate Studio",
   openGraph: {
     type: "website",
-    siteName: "ClickBank Studio",
-    title: "ClickBank Studio — Find winning products, ship full campaigns",
+    siteName: "Affiliate Studio",
+    title: "Affiliate Studio — Find winning products, ship full campaigns",
     description: DESCRIPTION,
     url: "/",
   },
   twitter: {
     card: "summary_large_image",
-    title: "ClickBank Studio",
+    title: "Affiliate Studio",
     description: DESCRIPTION,
   },
   robots: { index: true, follow: true },

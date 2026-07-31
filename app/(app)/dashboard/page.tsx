@@ -46,7 +46,7 @@ const QUICK_LINKS = [
     href: "/connections",
     icon: Link2,
     label: "Connections",
-    description: "Connect ClickBank, Meta, and other platforms.",
+    description: "Connect affiliate networks, Meta, and other platforms.",
   },
   {
     href: "/domains",

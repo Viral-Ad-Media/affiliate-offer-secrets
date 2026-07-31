@@ -26,7 +26,7 @@ export function BuyAccessButton() {
         await startCheckout({ type: "access" });
       }}
     >
-      {busy ? "Redirecting…" : "Unlock ClickBank Studio — $97 one-time"}
+      {busy ? "Redirecting…" : "Unlock Affiliate Studio — $97 one-time"}
     </button>
   );
 }

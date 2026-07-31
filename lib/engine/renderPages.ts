@@ -74,7 +74,7 @@ export const DISCLOSURE =
 
 // Bridge pages collect a real name + email (see app/api/public/leads/route.ts) — a real third
 // party's PII. Deliberately not a link to this app's own /privacy page: a bridge page represents
-// the *tenant's* offer/brand, not ClickBank Studio's — the tenant's own downstream compliance
+// the *tenant's* offer/brand, not Affiliate Studio's — the tenant's own downstream compliance
 // stays their responsibility, same division DISCLOSURE already establishes for affiliate links.
 export const LEAD_CONSENT_TEXT = "By submitting, you agree to be contacted about this offer.";
 

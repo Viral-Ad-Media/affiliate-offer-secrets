@@ -32,10 +32,10 @@ export default function MarketingFooter() {
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
           <div>
             <div className="font-heading text-sm font-bold text-zinc-100">
-              ClickBank <span className="text-emerald-400">Studio</span>
+              Affiliate <span className="text-emerald-400">Studio</span>
             </div>
             <p className="mt-2 text-xs text-zinc-500">
-              AI-powered ClickBank product discovery and campaign generation for affiliate
+              AI-powered affiliate product discovery and campaign generation for affiliate
               marketers.
             </p>
           </div>
@@ -57,8 +57,8 @@ export default function MarketingFooter() {
           ))}
         </div>
         <div className="mt-8 border-t border-ink-800 pt-6 text-xs text-zinc-600">
-          © {new Date().getFullYear()} ClickBank Studio. ClickBank is a registered trademark of
-          Click Sales, Inc.; ClickBank Studio is an independent tool and is not affiliated with or
+          © {new Date().getFullYear()} Affiliate Studio. ClickBank is a registered trademark of
+          Click Sales, Inc.; Affiliate Studio is an independent tool and is not affiliated with or
           endorsed by ClickBank.
         </div>
       </div>

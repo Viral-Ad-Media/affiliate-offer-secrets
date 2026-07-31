@@ -3,7 +3,7 @@ import { Check } from "lucide-react";
 import { ACCESS_FEE_CENTS, CREDIT_PACKS } from "@/lib/pricing";
 
 export const metadata = {
-  title: "Pricing — ClickBank Studio",
+  title: "Pricing — Affiliate Studio",
   description: "One-time access fee plus pay-as-you-go ad credits.",
 };
 

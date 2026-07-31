@@ -152,7 +152,7 @@ export default function Campaigns() {
     <main className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold text-zinc-100">
-          ClickBank <span className="text-emerald-400">Studio</span>
+          Affiliate <span className="text-emerald-400">Studio</span>
         </h1>
         <p className="text-sm text-zinc-400">
           Product discovery → campaign kits. Queue a job below and it starts processing
