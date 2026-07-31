@@ -6,6 +6,7 @@ import TikTokPanel from "@/components/TikTokPanel";
 import YouTubePanel from "@/components/YouTubePanel";
 import MailProvidersPanel, { type MailProvidersStatus } from "@/components/MailProvidersPanel";
 import NetworkConnectionsPanel from "@/components/NetworkConnectionsPanel";
+import EverflowPanel, { type EverflowStatus } from "@/components/EverflowPanel";
 
 const PROVIDER_LABELS: Record<string, string> = {
   meta: "Facebook",
@@ -24,7 +25,7 @@ export default async function ConnectionsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [metaStatus, tiktokStatus, youtubeStatus, mailProviders, networkRows] = await Promise.all([
+  const [metaStatus, tiktokStatus, youtubeStatus, mailProviders, networkRows, everflowRow] = await Promise.all([
     supabase.rpc("get_meta_connection_status").then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_tiktok_connection_status").then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_youtube_connection_status").then((r) => r.data ?? { connected: false }),
@@ -35,8 +36,19 @@ export default async function ConnectionsPage({
       .from("network_connections")
       .select("network, affiliate_id")
       .then((r) => r.data ?? []),
+    // Sanitized status only — the API key itself never leaves Vault (0046).
+    supabase.rpc("get_everflow_connection_status").then((r) => (r.data ?? [])[0] ?? null),
   ]);
   const networkConnections = Object.fromEntries(networkRows.map((r) => [r.network, r.affiliate_id]));
+
+  const everflowStatus: EverflowStatus = everflowRow
+    ? {
+        connected: true,
+        network_name: everflowRow.network_name ?? null,
+        status: everflowRow.status ?? "connected",
+        affiliate_id: networkConnections.everflow ?? null,
+      }
+    : null;
 
   const banners = (["meta", "tiktok", "youtube"] as const)
     .map((key) => ({ key, value: searchParams[key] }))
@@ -94,6 +106,8 @@ export default async function ConnectionsPage({
         </h2>
         <NetworkConnectionsPanel userId={user.id} initialConnections={networkConnections} />
       </div>
+
+      <EverflowPanel initial={everflowStatus} />
 
       <ConnectionsPanel status={metaStatus} />
 

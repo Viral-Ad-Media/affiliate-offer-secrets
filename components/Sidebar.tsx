@@ -13,7 +13,6 @@ import {
   MessageSquare,
   History,
   Gift,
-  Award,
   Settings,
   Clock,
   LogOut,
@@ -64,8 +63,18 @@ const NAV = [
       { href: "/blog/settings", label: "Settings", match: (p: string) => p === "/blog/settings" },
     ],
   },
-  { href: "/referrals", label: "Referrals", icon: Gift, match: (p: string) => p === "/referrals" },
-  { href: "/rewards", label: "Rewards", icon: Award, match: (p: string) => p === "/rewards" },
+  // Two sides of the same programme — you refer people, you earn rewards for it — so they share
+  // one nav section instead of two adjacent top-level entries.
+  {
+    href: "/referrals",
+    label: "Referrals",
+    icon: Gift,
+    match: (p: string) => p === "/referrals" || p === "/rewards",
+    children: [
+      { href: "/referrals", label: "Invite & track", match: (p: string) => p === "/referrals" },
+      { href: "/rewards", label: "Rewards", match: (p: string) => p === "/rewards" },
+    ],
+  },
   { href: "/audit", label: "Audit trail", icon: History, match: (p: string) => p === "/audit" },
   // Billing lives OUTSIDE the (app) route group (app/settings/billing) even though its URL nests
   // under /settings — (app)/layout.tsx redirects to it when access is missing, so nesting it
