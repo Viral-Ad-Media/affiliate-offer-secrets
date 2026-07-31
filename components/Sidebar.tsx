@@ -23,6 +23,7 @@ import {
   PanelLeftOpen,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: (p: string) => p === "/dashboard" },
@@ -133,6 +134,7 @@ export default function Sidebar({ email, onTrial, trialDaysLeft, creditBalance }
 
   const accountChips = (iconOnly: boolean) => (
     <>
+      <ThemeToggle iconOnly={iconOnly} />
       {onTrial && (
         <Link
           href="/billing"

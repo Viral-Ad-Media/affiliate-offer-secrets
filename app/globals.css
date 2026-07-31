@@ -2,11 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
-/* shadcn/ui semantic tokens (HSL, no alpha) — hand-mapped to this app's actual ink / emerald
-   palette (tailwind.config.ts), not shadcn's default slate/zinc, so any shadcn-registry
-   component (e.g. from 21st.dev) matches the existing dark theme with no per-component
-   recoloring. This app is dark-only (no light variant), so these are the only values defined. */
+/* THEMING — the app ships dark by default; `<html class="light">` flips it.
+   Every ink-* (surface) and zinc-* (text) Tailwind color, plus the light-text accent shades,
+   resolves to one of the RGB-channel variables below (see tailwind.config.ts), so the entire UI
+   themes from this one block instead of per-component `dark:` variants across ~600 usages.
+   ThemeScript (components/ThemeScript.tsx) sets the class before first paint — no flash.
+   NOT themed on purpose: the WYSIWYG canvas's page preview (bg-white/#1a1a1a) and every
+   rendered public page (funnels, blog posts) — those represent real published pages, which are
+   always light regardless of what theme the operator edits in. */
 :root {
+  /* Surfaces (dark) */
+  --ink-950: 2 6 23;
+  --ink-900: 11 17 32;
+  --ink-800: 19 27 46;
+  --ink-700: 30 41 59;
+  --ink-600: 51 65 85;
+  --ink-500: 71 85 105;
+  /* Text (dark) — stock Tailwind zinc */
+  --zinc-100: 244 244 245;
+  --zinc-200: 228 228 231;
+  --zinc-300: 212 212 216;
+  --zinc-400: 161 161 170;
+  --zinc-500: 113 113 122;
+  --zinc-600: 82 82 91;
+  /* Accent text (dark) — stock */
+  --emerald-200: 167 243 208;
+  --emerald-300: 110 231 183;
+  --emerald-400: 52 211 153;
+  --amber-300: 252 211 77;
+  --amber-400: 251 191 36;
+  --red-300: 252 165 165;
+  --red-400: 248 113 113;
+  --sky-300: 125 211 252;
+
+  /* shadcn/ui semantic tokens (HSL, no alpha) — hand-mapped to this app's own ink/emerald
+     palette, not shadcn's default slate/zinc, so any shadcn-registry component (e.g. from
+     21st.dev) matches the theme with no per-component recoloring. */
   --background: 229 84% 5%; /* ink-950 */
   --foreground: 240 6% 90%; /* zinc-200 */
   --card: 223 49% 8%; /* ink-900 */
@@ -27,6 +58,58 @@
   --input: 217 33% 17%; /* ink-700 */
   --ring: 161 94% 30%; /* emerald-600, matches this app's existing focus:border-emerald-500 inputs */
   --radius: 0.5rem;
+  color-scheme: dark;
+}
+
+:root.light {
+  /* Surfaces (light) — ink-950 is the page background, ink-900 the raised card, so the ramp
+     inverts: the "deepest" token becomes the softest tint and cards become pure white. */
+  --ink-950: 248 250 252; /* slate-50 */
+  --ink-900: 255 255 255;
+  --ink-800: 241 245 249; /* slate-100 — hover/secondary surface */
+  --ink-700: 226 232 240; /* slate-200 — default border */
+  --ink-600: 203 213 225; /* slate-300 — stronger border */
+  --ink-500: 148 163 184; /* slate-400 */
+  /* Text (light) — the strong end inverts, the muted middle barely moves. */
+  --zinc-100: 24 24 27; /* primary text */
+  --zinc-200: 39 39 42;
+  --zinc-300: 63 63 70;
+  --zinc-400: 82 82 91; /* secondary text */
+  --zinc-500: 113 113 122; /* muted — identical in both themes */
+  --zinc-600: 148 148 158; /* dimmest (placeholders) */
+  /* Accent text (light) — darkened for contrast on white. */
+  /* Measured against the real composited backgrounds these sit on (tinted chips over white):
+     every one clears 4.5:1 for normal text. emerald-400 and red-300 needed the extra step down
+     from the 600 shades (3.7:1) to get there — verified live, not eyeballed. */
+  --emerald-200: 6 95 70; /* emerald-800 */
+  --emerald-300: 4 120 87; /* emerald-700 */
+  --emerald-400: 4 120 87; /* emerald-700 */
+  --amber-300: 180 83 9; /* amber-700 */
+  --amber-400: 180 83 9; /* amber-700 */
+  --red-300: 185 28 28; /* red-700 */
+  --red-400: 185 28 28; /* red-700 */
+  --sky-300: 3 105 161; /* sky-700 */
+
+  --background: 210 40% 98%;
+  --foreground: 240 6% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 6% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 6% 10%;
+  --primary: 161 94% 30%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 240 6% 10%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 240 4% 46%;
+  --accent: 210 40% 96%;
+  --accent-foreground: 240 6% 10%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 161 94% 30%;
+  color-scheme: light;
 }
 
 body {

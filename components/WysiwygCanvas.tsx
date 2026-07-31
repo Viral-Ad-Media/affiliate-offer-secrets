@@ -1127,7 +1127,10 @@ export default function WysiwygCanvas({
           ))}
         </div>
         <div
-          className="mx-auto rounded-lg border border-ink-700 bg-white px-6 py-10 text-[#1a1a1a] transition-[max-width] duration-200"
+          // bg-white/#1a1a1a are hardcoded ON PURPOSE and never themed — this is a preview of the
+          // real published page, which is always light. The shadow keeps it reading as a distinct
+          // "sheet" in light mode, where the app background is itself near-white.
+          className="mx-auto rounded-lg border border-ink-700 bg-white px-6 py-10 text-[#1a1a1a] shadow-sm transition-[max-width] duration-200"
           style={{ fontFamily: PAGE_FONT, lineHeight: 1.6, maxWidth: DEVICE_WIDTHS[device] }}
         >
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

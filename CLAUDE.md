@@ -8,6 +8,41 @@ tenants (via a service-role key that bypasses RLS), triggered automatically the 
 queued (no human runs anything). The Google Drive `clickbank-engine/` folder is a legacy cloud
 mirror from the pre-multi-tenant version — optional now, not required.
 
+## Theming (light / dark)
+
+The app ships dark; `<html class="light">` flips it. **There are no `dark:` variants anywhere** —
+adding one is almost always the wrong fix.
+
+- **How it works**: `tailwind.config.ts` defines the `ink-*` (surfaces), `zinc-100..600` (text),
+  and light-text accent shades (`emerald/amber/red/sky` 200-400) as
+  `rgb(var(--token) / <alpha-value>)`. The channel values live in `app/globals.css` under `:root`
+  (dark) and `:root.light`. One block themes ~600 existing utility usages, which is why this was
+  done as a palette indirection instead of touching every component. The `<alpha-value>` form
+  keeps opacity modifiers (`bg-ink-900/90`) working. Accent shades 500+ (borders, filled buttons,
+  tinted `/15` backgrounds) read fine on both and stay stock.
+- **The light ramp inverts at the strong end, not the middle**: `ink-950` is the page background
+  and `ink-900` the raised card, so in light mode 950 becomes the softest tint and 900 becomes
+  pure white. Same for text — `zinc-100` (strongest) goes near-black, while `zinc-500` (muted) is
+  byte-identical in both themes.
+- **No flash**: `components/ThemeScript.tsx` is a blocking inline `<script>` in `<head>`
+  (app/layout.tsx) that applies the class before first paint. Doing this in a `useEffect` would
+  render dark first and flash on every load for light-mode users. `<html>` carries
+  `suppressHydrationWarning` because that script mutates its class list pre-hydration.
+- **Preference**: `localStorage.theme` = `system` (default) | `light` | `dark`, chosen via
+  `components/ThemeToggle.tsx` in the sidebar footer (segmented control expanded, cycle button on
+  the collapsed rail). `applyTheme()` there mirrors ThemeScript's logic exactly — keep the two in
+  sync. While on `system` it subscribes to `prefers-color-scheme` so the app follows the OS live.
+- **Deliberately NOT themed**: the WYSIWYG canvas's page preview (`bg-white`, `text-[#1a1a1a]` in
+  `WysiwygCanvas.tsx`) and every rendered public page (funnel opt-in/steps, blog posts, campaign
+  images). Those are real published pages served to ad traffic — always light, regardless of the
+  theme the operator happens to be editing in. The canvas carries a `shadow-sm` so it still reads
+  as a distinct sheet against the near-white light-mode background.
+- **Contrast was measured, not eyeballed**: every accent text shade was checked live against its
+  real composited background (tinted chips over white). `emerald-400` and `red-300` initially
+  landed at 3.7:1 on the 600 shades and were stepped down to the 700s; all now clear 4.5:1
+  (emerald-300 4.50, emerald-400 5.39, amber-300 4.58, red-300 4.97, zinc-500 4.75, zinc-100
+  17.4). Re-run that check if you change a light-mode accent value.
+
 ## Site structure
 
 `/` is the public marketing site, not the app — `app/(marketing)/*` (route group, no URL
