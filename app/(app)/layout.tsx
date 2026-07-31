@@ -49,8 +49,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="min-w-0 flex-1">
         {/* Desktop-only top bar. The bell lives here rather than in the sidebar: it's a global
             status affordance, and the sidebar is navigation. Mobile already has its own top bar
-            inside Sidebar, which carries the bell there. */}
-        <div className="hidden items-center justify-end gap-2 border-b border-ink-700 px-4 py-2 sm:flex">
+            inside Sidebar, which carries the bell there.
+            Sticky to match the sidebar. It needs its own background — the page scrolls underneath
+            it, and a transparent bar would let content show through. z-30 keeps it above page
+            content but below dialogs (z-50) and toasts (z-100); the account and notification
+            menus portal out to fixed positioning, so they're unaffected either way. */}
+        <div className="sticky top-0 z-30 hidden items-center justify-end gap-2 border-b border-ink-700 bg-ink-900/80 px-4 py-2 backdrop-blur sm:flex">
           <CreditsChip creditBalance={creditBalance} />
           <NotificationsBell />
           <TopBarAccount
