@@ -1406,9 +1406,42 @@ URL.
   saves current edits first — live-URL bar with copy). Note: the editor's public-URL origin is
   applied post-mount via `useEffect` — reading `window.location` during render was a real
   hydration mismatch caught live.
-- **Deferred, explicitly**: no public blog index/archive page (per-post URLs only — no tenant
-  enumeration surface), no custom-domain serving for posts (`custom_domain_routes` still maps
-  funnel pages only), no SEO slugs in the URL.
+### Public blog (0033)
+
+The blog is a real published site, not just per-post links.
+
+- **URLs**: index `/b/{blog_slug}`, post `/b/{blog_slug}/{post_slug}` — both served by
+  `app/b/[...path]/route.ts`. Legacy `/b/{uuid}` links **301** to the canonical slug URL (the
+  UUID branch is kept forever; anything already shared keeps working). Slugs are generated from
+  titles via `slugify()` and de-duplicated with a numeric suffix — post slugs are unique per blog,
+  the blog slug is globally unique, both by partial unique index. `RESERVED_SLUGS` in the settings
+  route stops a blog slug shadowing a real path.
+- **Custom domains**: `custom_domains.serves_blog` opts a verified domain into hosting the blog at
+  its root (`app/d/[[...path]]/route.ts`). Explicit `custom_domain_routes` are checked FIRST and
+  always win, so one domain can host mapped funnel pages *and* the blog on every other path. On a
+  domain, `siteOrigin` is threaded into the renderers so links/canonical drop the `/b/{slug}`
+  prefix and point at that domain.
+- **Renderers** (`lib/blog.ts`): `renderBlogIndexHtml` (card grid: featured image, title, excerpt,
+  category, date) and `renderPublicPostHtml` (site header, byline, featured-image hero, article,
+  author box) share one `PUBLIC_CSS` constant so the two can't drift. Both self-contained, no
+  scripts, indexable.
+- **Featured images**: `blog_posts.featured_image_url` (validated data URL, 900k cap). Three
+  sources — upload (`components/FeaturedImageField.tsx`), AI generation, or inherited from the
+  campaign's `embedded_image_data_url` on import. Drives `og:image` and flips the Twitter card to
+  `summary_large_image`.
+- **AI generation** reuses the kie.ai pipeline exactly: `lib/engine/blogimage.ts` mirrors
+  `creativeimage.ts`'s five stages (16:9 instead of 1:1), a `generate_blog_image` job type in
+  `worker.ts` with its own `failJob` branch writing `featured_image_status='failed'`, and
+  `stageVerify` re-checking `post_id` against `job.user_id` — the payload is not trusted just
+  because the queueing route checked it. Same nominal 100/day runaway-loop cap as the others.
+- **Author/blog identity**: `blog_settings` gains `slug`, `description`, `author_bio`,
+  `author_avatar_url` — the author box renders under every post and at the foot of the index.
+- **Verified live**: index/post/legacy-redirect/404s, slug normalization ("Woodworking Reviews!!"
+  → `woodworking-reviews`), featured-image hero + card thumbnail + `og:image`, author box,
+  canonical, and that unpublishing removes a post from BOTH its own URL (404) and the index. An
+  SVG featured image and a reserved slug are both rejected. All test data reverted afterward.
+- **Still deferred**: no category filter/pagination on the index (caps at 200 posts, newest
+  first), no RSS feed, no sitemap.
 
 ## Freeform block-based page builder (Phase O — complete, all 5 sub-phases landed)
 

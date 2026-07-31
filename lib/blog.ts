@@ -150,7 +150,113 @@ export function renderPostContentHtml(contentMd: string): string {
   return marked.parse(noHtml, { async: false }) as string;
 }
 
-export type BlogSettings = { blog_title?: string | null; author_name?: string | null };
+export type BlogSettings = {
+  blog_title?: string | null;
+  author_name?: string | null;
+  slug?: string | null;
+  description?: string | null;
+  author_bio?: string | null;
+  author_avatar_url?: string | null;
+};
+
+export const MAX_BLOG_BIO = 600;
+export const MAX_POST_EXCERPT = 300;
+// Featured images are full-width hero art, so they get a larger cap than the inline
+// MAX_AD_IMAGE/page-block images; still a data URL, same validated-format convention.
+export const MAX_FEATURED_IMAGE_CHARS = 900_000;
+
+// URL-safe slug from arbitrary title text. Deliberately ASCII-only and lossy — a slug is an
+// identifier, not content; anything unmappable collapses to a dash. Empty input (a title of only
+// punctuation/non-Latin) returns "" and the caller falls back to the row id.
+export function slugify(input: string): string {
+  return input
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "") // strip accents
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80)
+    .replace(/-+$/g, "");
+}
+
+// Canonical public URL for a post. Prefers the pretty slug pair and falls back to the legacy
+// /b/{uuid} form when the blog or the post hasn't been given a slug yet, so a post is always
+// reachable at *some* stable URL.
+export function blogPostPath(blogSlug: string | null | undefined, postSlug: string | null | undefined, postId: string): string {
+  return blogSlug && postSlug ? `/b/${blogSlug}/${postSlug}` : `/b/${postId}`;
+}
+
+export function blogIndexPath(blogSlug: string | null | undefined): string | null {
+  return blogSlug ? `/b/${blogSlug}` : null;
+}
+
+// Shared by the post page and the index so the two can never drift visually.
+const PUBLIC_CSS = `
+  :root { --ink:#1a1a1a; --muted:#6b7280; --line:#e5e7eb; --accent:#047857; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fff; color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.7; }
+  a { color: var(--accent); }
+  main { max-width: 720px; margin: 0 auto; padding: 48px 20px 80px; }
+  .site-head { border-bottom: 1px solid var(--line); }
+  .site-head-inner { max-width: 1040px; margin: 0 auto; padding: 20px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .site-title { font-size: 1.15rem; font-weight: 700; text-decoration: none; color: var(--ink); }
+  .site-desc { color: var(--muted); font-size: .9rem; margin: 0; }
+  h1.post-title { font-size: 2.1rem; line-height: 1.2; margin: 0 0 8px; }
+  .post-meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 32px; }
+  .featured { width: 100%; height: auto; border-radius: 14px; margin: 0 0 32px; display: block; }
+  article h1, article h2, article h3 { line-height: 1.3; margin-top: 2em; }
+  article img { max-width: 100%; height: auto; }
+  article blockquote { border-left: 3px solid #d1d5db; margin-left: 0; padding-left: 16px; color: #4b5563; }
+  article pre { overflow-x: auto; background: #f3f4f6; padding: 12px; border-radius: 8px; }
+  .author-box { display: flex; gap: 16px; align-items: flex-start; margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--line); }
+  .author-box img { width: 56px; height: 56px; border-radius: 999px; object-fit: cover; flex-shrink: 0; }
+  .author-box .name { font-weight: 600; }
+  .author-box .bio { color: var(--muted); font-size: .92rem; margin: 4px 0 0; }
+  /* Index */
+  .index-wrap { max-width: 1040px; margin: 0 auto; padding: 40px 20px 80px; }
+  .post-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 32px; list-style: none; padding: 0; margin: 0; }
+  .post-card a.thumb { display: block; }
+  .post-card img { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: 12px; display: block; }
+  .post-card .ph { width: 100%; aspect-ratio: 16/9; border-radius: 12px; background: linear-gradient(135deg,#ecfdf5,#e0f2fe); }
+  .post-card h2 { font-size: 1.15rem; line-height: 1.35; margin: 14px 0 6px; }
+  .post-card h2 a { color: var(--ink); text-decoration: none; }
+  .post-card h2 a:hover { color: var(--accent); }
+  .post-card p { color: var(--muted); font-size: .93rem; margin: 0; }
+  .card-meta { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; margin-top: 10px; }
+  .empty { color: var(--muted); padding: 60px 0; text-align: center; }
+  /* Block-tree markup (mirrors the funnel pages' stylesheet) */
+  .block-img { max-width:100%; border-radius:12px; margin:24px 0; display:block; }
+  .faq-item { margin-bottom: 16px; }
+  .faq-item h3 { font-size:16px; margin-bottom:4px; }
+  .row { display:flex; gap:24px; flex-wrap:wrap; }
+  .row .col { flex:1; min-width:200px; }
+  .icon-list-item, .image-list-item { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+  .icon-list-item svg { flex-shrink:0; }
+  .image-list-item img { width:48px; height:48px; object-fit:cover; border-radius:8px; flex-shrink:0; }
+  .block-btn { display:inline-block; background:#16a34a; color:#fff; padding:12px 24px; border-radius:8px; font-weight:600; text-decoration:none; }
+  .disclosure { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 12px; color: #888; }
+`;
+
+// Header shown on both index and post pages when the blog has been named. `base` is "" on a
+// custom domain (links are root-relative there) and "/b/{slug}" on the app path.
+function siteHeader(settings: BlogSettings | null | undefined, base: string): string {
+  if (!settings?.blog_title) return "";
+  return `<header class="site-head"><div class="site-head-inner">
+  <a class="site-title" href="${escapeHtml(base || "/")}">${escapeHtml(settings.blog_title)}</a>
+  ${settings.description ? `<p class="site-desc">${escapeHtml(settings.description)}</p>` : ""}
+</div></header>`;
+}
+
+function authorBox(settings: BlogSettings | null | undefined): string {
+  if (!settings?.author_name && !settings?.author_bio) return "";
+  const avatar = settings?.author_avatar_url
+    ? `<img src="${escapeHtml(settings.author_avatar_url)}" alt="" />`
+    : "";
+  return `<div class="author-box">${avatar}<div>
+  ${settings?.author_name ? `<div class="name">${escapeHtml(settings.author_name)}</div>` : ""}
+  ${settings?.author_bio ? `<p class="bio">${escapeHtml(settings.author_bio)}</p>` : ""}
+</div></div>`;
+}
 
 // Meta-description excerpt: first ~155 chars of readable text, markdown/HTML syntax stripped.
 function postExcerpt(post: { content_md: string; html?: string | null }): string {
@@ -171,19 +277,31 @@ function postExcerpt(post: { content_md: string; html?: string | null }): string
 export function renderPublicPostHtml(post: {
   id?: string;
   title: string;
+  slug?: string | null;
   content_md: string;
   html?: string | null;
+  excerpt?: string | null;
+  featured_image_url?: string | null;
   published_at: string | null;
   category_name?: string | null;
   settings?: BlogSettings | null;
   seo_title?: string | null;
   seo_description?: string | null;
   seo_index?: boolean;
+  // Set on custom-domain requests so links/canonical point at that domain instead of the app.
+  siteOrigin?: string | null;
 }): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://clickbank-studio.vercel.app";
-  const canonical = post.id ? `${appUrl}/b/${post.id}` : null;
+  const origin = post.siteOrigin || appUrl;
+  // On a custom domain the blog lives at the root, so paths drop the /b/{blogSlug} prefix.
+  const onDomain = !!post.siteOrigin;
+  const base = onDomain ? "" : blogIndexPath(post.settings?.slug) ?? "";
+  const postPath = onDomain
+    ? `/${post.slug ?? post.id ?? ""}`
+    : blogPostPath(post.settings?.slug, post.slug, post.id ?? "");
+  const canonical = post.id || post.slug ? `${origin}${postPath}` : null;
   // Per-post SEO overrides (0032) win over the derived title/excerpt.
-  const description = (post.seo_description || "").trim() || postExcerpt(post);
+  const description = (post.seo_description || "").trim() || (post.excerpt || "").trim() || postExcerpt(post);
   const date = post.published_at
     ? new Date(post.published_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : "";
@@ -209,37 +327,93 @@ ${description ? `<meta property="og:description" content="${escapeHtml(descripti
 ${canonical ? `<meta property="og:url" content="${escapeHtml(canonical)}">` : ""}
 ${post.settings?.blog_title ? `<meta property="og:site_name" content="${escapeHtml(post.settings.blog_title)}">` : ""}
 ${post.published_at ? `<meta property="article:published_time" content="${escapeHtml(post.published_at)}">` : ""}
-<meta name="twitter:card" content="summary">
+${post.featured_image_url ? `<meta property="og:image" content="${escapeHtml(post.featured_image_url)}">` : ""}
+<meta name="twitter:card" content="${post.featured_image_url ? "summary_large_image" : "summary"}">
 ${post.seo_index === false ? '<meta name="robots" content="noindex, nofollow">' : ""}
-<style>
-  body { margin: 0; background: #fff; color: #1a1a1a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.7; }
-  main { max-width: 720px; margin: 0 auto; padding: 48px 20px 80px; }
-  h1.post-title { font-size: 2.1rem; line-height: 1.2; margin: 0 0 8px; }
-  .post-meta { color: #6b7280; font-size: 0.9rem; margin-bottom: 32px; }
-  article h1, article h2, article h3 { line-height: 1.3; margin-top: 2em; }
-  article img { max-width: 100%; height: auto; }
-  article a { color: #047857; }
-  article blockquote { border-left: 3px solid #d1d5db; margin-left: 0; padding-left: 16px; color: #4b5563; }
-  article pre { overflow-x: auto; background: #f3f4f6; padding: 12px; border-radius: 8px; }
-  /* Block-tree markup (mirrors the funnel pages' stylesheet) */
-  .block-img { max-width:100%; border-radius:12px; margin:24px 0; display:block; }
-  .faq-item { margin-bottom: 16px; }
-  .faq-item h3 { font-size:16px; margin-bottom:4px; }
-  .row { display:flex; gap:24px; flex-wrap:wrap; }
-  .row .col { flex:1; min-width:200px; }
-  .icon-list-item, .image-list-item { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
-  .icon-list-item svg { flex-shrink:0; }
-  .image-list-item img { width:48px; height:48px; object-fit:cover; border-radius:8px; flex-shrink:0; }
-  .block-btn { display:inline-block; background:#16a34a; color:#fff; padding:12px 24px; border-radius:8px; font-weight:600; text-decoration:none; }
-  .disclosure { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e5e5; font-size: 12px; color: #888; }
-</style>
+<style>${PUBLIC_CSS}</style>
 </head>
 <body>
+${siteHeader(post.settings, base)}
 <main>
   <h1 class="post-title">${escapeHtml(post.title)}</h1>
   ${meta ? `<div class="post-meta">${meta}</div>` : ""}
+  ${post.featured_image_url ? `<img class="featured" src="${escapeHtml(post.featured_image_url)}" alt="${escapeHtml(post.title)}" />` : ""}
   <article>${body}</article>
+  ${authorBox(post.settings)}
 </main>
+</body>
+</html>`;
+}
+
+export type BlogIndexPost = {
+  id: string;
+  title: string;
+  slug: string | null;
+  excerpt: string | null;
+  content_md: string;
+  html?: string | null;
+  featured_image_url: string | null;
+  published_at: string | null;
+  category_name?: string | null;
+};
+
+// The blog index — every published post, newest first. Same self-contained/no-scripts shape as
+// the post page, sharing PUBLIC_CSS so the two never drift. `siteOrigin` is set on custom-domain
+// requests: there the blog is the site root, so cards link to /{post-slug} instead of
+// /b/{blog-slug}/{post-slug}.
+export function renderBlogIndexHtml(
+  settings: BlogSettings,
+  posts: BlogIndexPost[],
+  opts?: { siteOrigin?: string | null }
+): string {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://clickbank-studio.vercel.app";
+  const onDomain = !!opts?.siteOrigin;
+  const origin = opts?.siteOrigin || appUrl;
+  const base = onDomain ? "" : blogIndexPath(settings.slug) ?? "";
+  const title = settings.blog_title || "Blog";
+  const description = (settings.description || "").trim();
+
+  const cards = posts
+    .map((p) => {
+      const href = onDomain ? `/${p.slug ?? p.id}` : blogPostPath(settings.slug, p.slug, p.id);
+      const excerpt = (p.excerpt || "").trim() || postExcerpt(p);
+      const date = p.published_at
+        ? new Date(p.published_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+        : "";
+      const metaLine = [p.category_name, date].filter(Boolean).map((v) => escapeHtml(String(v))).join(" · ");
+      const thumb = p.featured_image_url
+        ? `<img src="${escapeHtml(p.featured_image_url)}" alt="${escapeHtml(p.title)}" />`
+        : `<div class="ph"></div>`;
+      return `<li class="post-card">
+  <a class="thumb" href="${escapeHtml(href)}">${thumb}</a>
+  <h2><a href="${escapeHtml(href)}">${escapeHtml(p.title)}</a></h2>
+  ${excerpt ? `<p>${escapeHtml(excerpt)}</p>` : ""}
+  ${metaLine ? `<div class="card-meta">${metaLine}</div>` : ""}
+</li>`;
+    })
+    .join("\n");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+${description ? `<meta name="description" content="${escapeHtml(description)}">` : ""}
+<link rel="canonical" href="${escapeHtml(origin + base)}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="${escapeHtml(title)}">
+${description ? `<meta property="og:description" content="${escapeHtml(description)}">` : ""}
+<meta property="og:url" content="${escapeHtml(origin + base)}">
+<meta name="twitter:card" content="summary">
+<style>${PUBLIC_CSS}</style>
+</head>
+<body>
+${siteHeader(settings, base)}
+<div class="index-wrap">
+  ${posts.length === 0 ? `<p class="empty">No posts published yet.</p>` : `<ul class="post-grid">${cards}</ul>`}
+  ${authorBox(settings)}
+</div>
 </body>
 </html>`;
 }

@@ -14,9 +14,22 @@ export default async function BlogSettingsPage() {
 
   const { data: settings } = await supabase
     .from("blog_settings")
-    .select("blog_title, author_name")
+    .select("blog_title, author_name, slug, description, author_bio, author_avatar_url")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  return <BlogSettingsPanel initial={settings ?? { blog_title: null, author_name: null }} />;
+  return (
+    <BlogSettingsPanel
+      initial={
+        settings ?? {
+          blog_title: null,
+          author_name: null,
+          slug: null,
+          description: null,
+          author_bio: null,
+          author_avatar_url: null,
+        }
+      }
+    />
+  );
 }

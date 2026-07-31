@@ -8,6 +8,7 @@ import type { PageBlockTree } from "@/lib/engine/renderPages";
 import { markdownToBlockTree } from "@/lib/blog";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
+import FeaturedImageField from "@/components/FeaturedImageField";
 
 type Post = {
   id: string;
@@ -20,6 +21,11 @@ type Post = {
   seo_title: string | null;
   seo_description: string | null;
   seo_index: boolean;
+  slug: string | null;
+  excerpt: string | null;
+  featured_image_url: string | null;
+  featured_image_status: string;
+  featured_image_error: string | null;
 };
 type Category = { id: string; name: string };
 
@@ -80,6 +86,9 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [imageBusyBlockId, setImageBusyBlockId] = useState<string | null>(null);
+  const [slug, setSlug] = useState(post.slug ?? "");
+  const [excerpt, setExcerpt] = useState(post.excerpt ?? "");
+  const [featuredImage, setFeaturedImage] = useState<string | null>(post.featured_image_url);
   const [seo, setSeo] = useState<SeoValues>({
     seo_title: post.seo_title ?? "",
     seo_description: post.seo_description ?? "",
@@ -112,13 +121,13 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
   }
 
   async function save() {
-    await patch("save", { title, blocks: tree.blocks, category_id: categoryId || null, ...seo });
+    await patch("save", { title, blocks: tree.blocks, category_id: categoryId || null, slug, excerpt, featured_image_url: featuredImage, ...seo });
   }
 
   async function togglePublish() {
     const next = status === "published" ? "draft" : "published";
     // Publishing always saves current edits too — publishing stale content would be surprising.
-    const ok = await patch("publish", { title, blocks: tree.blocks, category_id: categoryId || null, ...seo, status: next });
+    const ok = await patch("publish", { title, blocks: tree.blocks, category_id: categoryId || null, slug, excerpt, featured_image_url: featuredImage, ...seo, status: next });
     if (ok) setStatus(next);
   }
 
@@ -201,6 +210,43 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
           ))}
         </select>
       </div>
+
+      <section className="card space-y-4 p-4">
+        <FeaturedImageField
+          postId={post.id}
+          value={featuredImage}
+          status={post.featured_image_status}
+          error={post.featured_image_error}
+          onChange={setFeaturedImage}
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-zinc-400">URL slug</span>
+            <input
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              placeholder="auto-from-title"
+              className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 font-mono text-xs outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+            />
+            <span className="mt-1 block text-[11px] text-zinc-500">
+              The address of this post. Leave empty to follow the title.
+            </span>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-zinc-400">Excerpt</span>
+            <textarea
+              value={excerpt}
+              onChange={(e) => setExcerpt(e.target.value)}
+              rows={2}
+              placeholder="Short summary shown on the blog index card."
+              className="w-full resize-y rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-xs outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+            />
+            <span className="mt-1 block text-[11px] text-zinc-500">
+              Falls back to the first lines of the post if left empty.
+            </span>
+          </label>
+        </div>
+      </section>
 
       <SeoFields
         values={seo}

@@ -9,6 +9,7 @@ import {
   GENERATE_CREATIVE_IMAGE_STAGES,
   type GenerateCreativeImagePayload,
 } from "./creativeimage";
+import { GENERATE_BLOG_IMAGE_STAGES, runGenerateBlogImageStage, type GenerateBlogImagePayload } from "./blogimage";
 import {
   runGenerateCreativeVideoStage,
   GENERATE_CREATIVE_VIDEO_STAGES,
@@ -32,6 +33,7 @@ type JobRow = {
     | "launch_ad"
     | "generate_ad_image"
     | "generate_video"
+    | "generate_blog_image"
     | "generate_creative_image"
     | "generate_creative_video"
     | "send_broadcast_email";
@@ -168,6 +170,12 @@ async function failJob(job: JobRow, message: string) {
         .from("campaign_creatives")
         .update({ status: "failed", error: message, updated_at: new Date().toISOString() })
         .eq("id", job.payload.campaign_creative_id);
+    }
+    if (job.type === "generate_blog_image" && job.payload?.post_id) {
+      await db
+        .from("blog_posts")
+        .update({ featured_image_status: "failed", featured_image_error: message, updated_at: new Date().toISOString() })
+        .eq("id", job.payload.post_id);
     }
     if (job.type === "send_broadcast_email" && job.payload?.enrollment_step_id) {
       await db
@@ -490,6 +498,47 @@ async function processGenerateCreativeImageStage(job: JobRow): Promise<StageResu
   return { done: false };
 }
 
+// Blog featured image — same shape again, writing to blog_posts by payload.post_id.
+async function processGenerateBlogImageStage(job: JobRow): Promise<StageResult> {
+  const payload = job.payload as GenerateBlogImagePayload;
+  if (!payload?.post_id) throw new Error("generate_blog_image job missing payload.post_id");
+
+  const { stageData, postPatch, retry } = await runGenerateBlogImageStage(
+    job.stage,
+    payload,
+    job.user_id,
+    job.stage_data ?? {},
+    { userId: job.user_id, jobId: job.id }
+  );
+
+  if (retry) return { done: false, retry: true };
+
+  if (postPatch && Object.keys(postPatch).length > 0) {
+    await db
+      .from("blog_posts")
+      .update({ ...postPatch, updated_at: new Date().toISOString() })
+      .eq("id", payload.post_id);
+  }
+
+  const nextStage = job.stage + 1;
+  const { data: advanced } = await db
+    .from("jobs")
+    .update({ stage: nextStage, stage_data: stageData, updated_at: new Date().toISOString() })
+    .eq("id", job.id)
+    .eq("stage", job.stage)
+    .select("id")
+    .maybeSingle();
+
+  if (!advanced) return { done: false, raced: true };
+
+  if (nextStage >= GENERATE_BLOG_IMAGE_STAGES.length) {
+    await markDone(job.id, "blog featured image ready");
+    return { done: true };
+  }
+
+  return { done: false };
+}
+
 // Per-item generalization of processGenerateVideoStage — same shape, targets campaign_creatives
 // by id. The atomic per-row 'generating' claim happens up front in
 // app/api/campaign-creatives/generate/route.ts (claim_campaign_creative RPC), same idiom as
@@ -608,6 +657,8 @@ export async function runWorkerLoop(): Promise<{ processed: number }> {
         processed += await runStageLoop(job, processGenerateVideoStage, start);
       } else if (job.type === "generate_creative_image") {
         processed += await runStageLoop(job, processGenerateCreativeImageStage, start);
+      } else if (job.type === "generate_blog_image") {
+        processed += await runStageLoop(job, processGenerateBlogImageStage, start);
       } else if (job.type === "generate_creative_video") {
         processed += await runStageLoop(job, processGenerateCreativeVideoStage, start);
       } else if (job.type === "send_broadcast_email") {
