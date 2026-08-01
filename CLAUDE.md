@@ -1912,9 +1912,28 @@ verify the current password — it trusts the session — so `SecuritySettings` 
 hijacked session could silently lock the real owner out. Don't "simplify" this away.
 "Sign out everywhere" uses `signOut({scope:"global"})`, which revokes every refresh token.
 
-Deliberately not built: changing the sign-in email (needs a confirmation round trip to both old
-and new addresses — a real flow, not a text field) and account deletion. Teams/orgs are out of
-scope by decision, so RLS stays `user_id = auth.uid()` throughout.
+**Changing the sign-in email and deleting the account both live on Security**, and both
+re-authenticate with the current password first — a session is not proof of identity for an
+account-level change, the same reasoning as the password form.
+
+- **Email change** is `supabase.auth.updateUser({email})`. Supabase owns the confirmation round
+  trip: nothing changes until the link is clicked, and with the project's "Secure email change"
+  setting on it mails BOTH the old and new address, which is what stops a hijacked session quietly
+  moving an account. Confirm that setting is enabled in the Supabase dashboard — the UI copy tells
+  the user to check both inboxes.
+- **Account deletion** (`app/api/account/delete/route.ts`) needs the password AND the account's own
+  email typed back. Deleting the auth user cascades every tenant table, but **three things are
+  outside the FK graph and are cleaned up explicitly first**: Vault secrets (every connector's
+  `*_secret_id`), Storage objects in `campaign-videos`, and verified domains attached to the Vercel
+  project. An account that's "deleted" while its OAuth tokens, videos and domains survive isn't
+  deleted in any sense a user would recognise. Each cleanup is best-effort and never blocks the
+  deletion — being unable to delete your account because a third-party API is down is the worse
+  failure — and whatever failed comes back in `cleanupFailures` to chase by hand. Verified: the
+  three rejection paths (no password, wrong email, wrong password) and, with a throwaway auth user,
+  that the cascade really does take products/contacts/ledger/profile with it. A successful deletion
+  through the UI has NOT been run end to end — there's only one real account here to try it on.
+
+Teams/orgs are out of scope by decision, so RLS stays `user_id = auth.uid()` throughout.
 
 ## Ads Manager, Analytics, and the Contacts submenu
 
