@@ -1930,7 +1930,11 @@ account-level change, the same reasoning as the password form.
   deletion — being unable to delete your account because a third-party API is down is the worse
   failure — and whatever failed comes back in `cleanupFailures` to chase by hand. Verified: the
   three rejection paths (no password, wrong email, wrong password) and, with a throwaway auth user,
-  that the cascade really does take products/contacts/ledger/profile with it. A successful deletion
+  that the cascade really does take products/contacts/ledger/profile with it. **Re-auth runs on a throwaway
+  Supabase client, never the request-scoped one** — `signInWithPassword` rewrites session cookies,
+  so checking a password on the cookie-bound client logs the real user out when the password is
+  wrong. Found the hard way: a rejected delete attempt during testing silently signed the browser
+  out, after which every authenticated API call returned the login page's HTML with a 200. A successful deletion
   through the UI has NOT been run end to end — there's only one real account here to try it on.
 
 Teams/orgs are out of scope by decision, so RLS stays `user_id = auth.uid()` throughout.
@@ -1964,6 +1968,31 @@ Three read surfaces over data other code already writes — no new tables for th
   tag an existing segment is a normal thing to want). **Export is a server route
   (`/api/contacts/export`), not the client-side CSV builder** — `ContactsTable` only holds the
   current page since pagination landed, so a client-built file would silently export 50 rows.
+
+## Form fields in the page editor
+
+The lead-capture form's tenant-added fields were text/email/tel only. They now cover
+`FORM_FIELD_TYPES` in `lib/engine/blockTree.ts` — text, email, tel, number, url, textarea,
+checkbox, radio, select — declared in ONE exported list so the schema, validator, renderer and the
+editor's dropdown can't drift. `FIELD_PRESETS` in `WysiwygCanvas.tsx` adds one-click Last name /
+Full name / Phone / Second email / Message / Checkbox / Choose one / Dropdown, each with a readable
+`fieldKey` (it becomes the CSV column header and the JSON key in `contacts.extra_fields`, so
+`last_name` beats a uuid) de-duplicated against the fields already on that form.
+
+- **First name and email are deliberately NOT presets** — the form renders those itself and they
+  can't be edited or removed, so offering them would create a duplicate that silently overwrites
+  the real one.
+- **The submit collector had to change, and this is the subtle part**: it read `.value` off every
+  `[name]` element, which is right for inputs and wrong for the new controls — an unticked checkbox
+  would have submitted "yes" anyway, and a radio group would have submitted whichever member came
+  last in the DOM rather than the chosen one. Both now require `.checked`.
+- Radio/select carry `options`; the validator caps them (`MAX_FIELD_OPTIONS`) and drops them for
+  types that can't use them, and the renderer emits nothing for an option-less radio/select rather
+  than a broken control. An unknown `fieldType` falls back to text instead of failing the save — a
+  page that renders one field as text beats a page that won't save.
+- Verified live end to end: every type rendered with the right markup, a submission stored
+  last_name/phone/message/budget plus the SELECTED radio option, an unticked checkbox stored
+  nothing and a ticked one stored "yes".
 
 ## Marketplace: Top products and Trending
 

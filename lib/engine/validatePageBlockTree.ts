@@ -10,6 +10,9 @@
 import {
   ELEMENT_BLOCK_TYPES,
   ALLOWED_ICON_NAMES,
+  FORM_FIELD_TYPES,
+  CHOICE_FIELD_TYPES,
+  type FormFieldType,
   type PageBlockTree,
   type SectionBlock,
   type RowBlock,
@@ -38,6 +41,7 @@ const MAX_DEPTH = 4; // root(section) -> row -> column -> element
 const MAX_SECTION_CHILDREN = 60;
 const MAX_COLUMN_CHILDREN = 20;
 const MAX_FORM_CHILDREN = 10;
+const MAX_FIELD_OPTIONS = 12; // radio/select choices — a lead form asking for more than this is a survey
 const MAX_ROOT_BLOCKS = 40;
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
@@ -186,7 +190,22 @@ function validateFormInput(raw: unknown, count: { n: number }): FormInputBlock {
   const content = (b.content ?? {}) as Record<string, unknown>;
   const fieldKey = typeof content.fieldKey === "string" && FIELD_KEY_RE.test(content.fieldKey) ? content.fieldKey : "";
   if (!fieldKey) throw new Error("invalid form input fieldKey");
-  const fieldType = content.fieldType === "email" || content.fieldType === "tel" ? content.fieldType : "text";
+  // Anything not in the known list falls back to a plain text input rather than being rejected —
+  // a page that renders one field as text is a far better outcome than a page that won't save.
+  const fieldType = (FORM_FIELD_TYPES as readonly string[]).includes(content.fieldType as string)
+    ? (content.fieldType as FormFieldType)
+    : "text";
+
+  // Options are meaningless off a radio/select, so they're dropped rather than stored where
+  // nothing will ever read them.
+  const rawOptions = Array.isArray(content.options) ? content.options : [];
+  const options = CHOICE_FIELD_TYPES.includes(fieldType)
+    ? rawOptions
+        .slice(0, MAX_FIELD_OPTIONS)
+        .map((o) => clampStr(o, MAX_TEXT_SHORT))
+        .filter((o) => o !== "")
+    : undefined;
+
   return {
     id: b.id as string,
     type: "form_input",
@@ -197,6 +216,7 @@ function validateFormInput(raw: unknown, count: { n: number }): FormInputBlock {
       fieldType,
       placeholder: clampStr(content.placeholder, MAX_TEXT_SHORT),
       required: content.required === true,
+      ...(options ? { options } : {}),
     },
   };
 }

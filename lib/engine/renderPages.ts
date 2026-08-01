@@ -221,7 +221,14 @@ const PAGE_STYLE = `
   .image-list-item img { width:48px; height:48px; object-fit:cover; border-radius:8px; flex-shrink:0; }
   .block-btn { display:inline-block; background:#16a34a; color:#fff; padding:12px 24px; border-radius:8px; font-weight:600; text-decoration:none; }
   .optin { max-width: 420px; margin: 40px auto 0; padding: 24px; background:#fff; border:1px solid #e5e5e5; border-radius:12px; text-align:center; }
-  .optin input { width:100%; box-sizing:border-box; padding:14px; margin:8px 0; border:1px solid #ccc; border-radius:8px; font-size:16px; }
+  .optin input, .optin textarea, .optin select { width:100%; box-sizing:border-box; padding:14px; margin:8px 0; border:1px solid #ccc; border-radius:8px; font-size:16px; font-family:inherit; }
+  .optin textarea { resize:vertical; min-height:96px; }
+  /* Tick-boxes and radios sit inline with their label, so they must opt out of the full-width
+     rule above rather than stretching across the form. */
+  .optin .field-check { display:flex; align-items:center; gap:8px; margin:8px 0; font-size:15px; text-align:left; }
+  .optin .field-check input { width:auto; margin:0; padding:0; flex-shrink:0; }
+  .optin .field-group { border:1px solid #ccc; border-radius:8px; padding:10px 14px; margin:8px 0; text-align:left; }
+  .optin .field-group legend { font-size:14px; color:#555; padding:0 4px; }
   .cta { display:inline-block; background:#16a34a; color:#fff; border:none; padding:16px 32px; border-radius:8px; font-weight:600; font-size:18px; margin-top: 12px; cursor:pointer; width:100%; text-decoration:none; box-sizing:border-box; }
   .cta:hover { background:#15803d; }
   .hidden { display:none; }
@@ -284,6 +291,12 @@ ${t.bodyStart}
       var form = e.target;
       var payload = { campaign_id: form.dataset.campaignId, first_name: '', email: '', extra_fields: {} };
       Array.prototype.forEach.call(form.querySelectorAll('[name]'), function (el) {
+        // Checkboxes and radios only count when chosen: an unticked box must send nothing, and a
+        // radio group must send the selected option rather than whichever member is last in the
+        // DOM. Reading .value blindly (as this did before tick-boxes existed) got both wrong.
+        if (el.type === 'checkbox' || el.type === 'radio') {
+          if (!el.checked) return;
+        }
         if (el.name === 'first_name') payload.first_name = el.value;
         else if (el.name === 'email') payload.email = el.value;
         else if (el.name) payload.extra_fields[el.name] = el.value;

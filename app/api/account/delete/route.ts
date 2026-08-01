@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CAMPAIGN_VIDEOS_BUCKET } from "@/lib/supabase/storage";
@@ -41,7 +42,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "The email you typed doesn't match this account" }, { status: 400 });
   }
 
-  const { error: reauthError } = await supabase.auth.signInWithPassword({
+  // Re-auth on a THROWAWAY client, never `supabase` (the request-scoped, cookie-writing one).
+  // signInWithPassword rewrites session cookies on that client, so a wrong password there logs the
+  // real user out mid-request — confirmed live: a rejected delete attempt left the browser signed
+  // out and every later API call silently 200'd with the login page's HTML instead of doing
+  // anything. Checking a password must never be able to end the session it's checking.
+  const verifier = createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+  const { error: reauthError } = await verifier.auth.signInWithPassword({
     email: user.email ?? "",
     password,
   });

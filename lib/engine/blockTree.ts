@@ -180,9 +180,37 @@ export const ELEMENT_BLOCK_TYPES = [
 // Only ever a child of a lead_capture_form block — never part of ElementBlock, so a Column's
 // children (typed ElementBlock[]) can never structurally contain one. A "floating" form input
 // elsewhere on the page is impossible by construction, not just rejected at validation time.
+// Field types a tenant can drag into the lead-capture form. Kept as one exported list so the
+// schema, the validator, the renderer and the editor's dropdown can never disagree about what's
+// legal — adding a type here is the only place a new one has to be declared.
+export const FORM_FIELD_TYPES = [
+  "text",
+  "email",
+  "tel",
+  "number",
+  "url",
+  "textarea",
+  "checkbox",
+  "radio",
+  "select",
+] as const;
+export type FormFieldType = (typeof FORM_FIELD_TYPES)[number];
+
+// Types whose whole point is a fixed set of answers — meaningless without options, so the
+// validator requires at least one and the editor seeds two.
+export const CHOICE_FIELD_TYPES: readonly FormFieldType[] = ["radio", "select"];
+
 export type FormInputBlock = Base & {
   type: "form_input";
-  content: { label: string; fieldKey: string; fieldType: "text" | "email" | "tel"; placeholder: string; required: boolean };
+  content: {
+    label: string;
+    fieldKey: string;
+    fieldType: FormFieldType;
+    placeholder: string;
+    required: boolean;
+    /** radio/select only. Ignored for every other type. */
+    options?: string[];
+  };
 };
 
 export type ColumnBlock = Base & { type: "column"; children: ElementBlock[] };
@@ -435,17 +463,57 @@ function renderSection(section: SectionBlock, ctx: RenderCtx): string {
 // LEAD_CAPTURE_ENDPOINT: posts to /api/public/leads. The fixed name/email inputs and the POST
 // wiring below are rendered by this function only — never exposed as editable fields in the
 // editor, so they can't be redirected or removed via the block-tree builder.
+// One tenant-added field. Every branch emits a `name` matching the block's fieldKey, because that
+// is what the submit handler collects and what the leads route validates against the page's
+// current field list — a field rendered without it silently never reaches the database.
+function renderFormField(f: FormInputBlock): string {
+  const name = escapeHtml(f.content.fieldKey);
+  const label = escapeHtml(f.content.label);
+  const placeholder = escapeHtml(f.content.placeholder || f.content.label);
+  const required = f.content.required ? " required" : "";
+  const options = (f.content.options ?? []).filter((o) => o.trim() !== "");
+
+  switch (f.content.fieldType) {
+    case "textarea":
+      return `<textarea name="${name}" placeholder="${placeholder}" rows="4"${required}></textarea>`;
+
+    case "checkbox":
+      // Value is only submitted when ticked, which is exactly the semantics a checkbox should
+      // have — an unticked box sends nothing rather than "false".
+      return `<label class="field-check"><input type="checkbox" name="${name}" value="yes"${required} /> <span>${label}</span></label>`;
+
+    case "radio": {
+      if (options.length === 0) return "";
+      const inputs = options
+        .map(
+          (o, i) =>
+            `<label class="field-check"><input type="radio" name="${name}" value="${escapeHtml(o)}"${
+              i === 0 ? required : ""
+            } /> <span>${escapeHtml(o)}</span></label>`
+        )
+        .join("");
+      // required goes on the FIRST radio only: HTML treats a required radio group as satisfied by
+      // any member, and repeating it just makes the browser's own message noisier.
+      return `<fieldset class="field-group"><legend>${label}</legend>${inputs}</fieldset>`;
+    }
+
+    case "select": {
+      if (options.length === 0) return "";
+      const opts = options
+        .map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`)
+        .join("");
+      // The placeholder option carries no value, so "nothing chosen" fails a required check
+      // instead of submitting the prompt text as an answer.
+      return `<select name="${name}"${required}><option value="">${placeholder}</option>${opts}</select>`;
+    }
+
+    default:
+      return `<input name="${name}" type="${f.content.fieldType}" placeholder="${placeholder}"${required} />`;
+  }
+}
+
 function renderLeadCaptureForm(block: LeadCaptureFormBlock, ctx: RenderCtx): string {
-  const extraInputs = block.children
-    .map(
-      (f) =>
-        `<input name="${escapeHtml(f.content.fieldKey)}" type="${
-          f.content.fieldType === "email" ? "email" : f.content.fieldType === "tel" ? "tel" : "text"
-        }" placeholder="${escapeHtml(f.content.placeholder || f.content.label)}"${
-          f.content.required ? " required" : ""
-        } />`
-    )
-    .join("\n          ");
+  const extraInputs = block.children.map(renderFormField).filter(Boolean).join("\n          ");
   return `<div class="optin"${styleAttr(block.style, BOX_STYLE_KEYS)}>
         <form id="leadForm" data-campaign-id="${escapeHtml(ctx.campaignId)}" data-next-step-url="${
     ctx.nextStepUrl ? escapeHtml(ctx.nextStepUrl) : ""

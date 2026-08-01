@@ -51,11 +51,61 @@ import {
   type ElementBlock,
   type LockedBlock,
   type FormInputBlock,
+  type FormFieldType,
+  CHOICE_FIELD_TYPES,
   type ContainerRef,
   type Block,
   type BlockStyle,
 } from "@/lib/engine/renderPages";
 import BlockStylePanel from "@/components/BlockStylePanel";
+
+// What the per-field dropdown offers. Labelled for humans ("Phone", not "tel") but valued with
+// the exact schema strings, so the editor and the renderer can't drift.
+const FIELD_TYPE_LABELS: { value: FormFieldType; label: string }[] = [
+  { value: "text", label: "Text" },
+  { value: "email", label: "Email" },
+  { value: "tel", label: "Phone" },
+  { value: "number", label: "Number" },
+  { value: "url", label: "URL" },
+  { value: "textarea", label: "Paragraph" },
+  { value: "checkbox", label: "Checkbox" },
+  { value: "radio", label: "Radio" },
+  { value: "select", label: "Dropdown" },
+];
+
+// One-click presets for the fields people actually ask for. These are ordinary form_input blocks
+// with a sensible label/key/type already filled in — the point is that adding "Last name" doesn't
+// mean typing a label, choosing a type and inventing a key by hand.
+//
+// First name and email are NOT here: those two are rendered by the form itself and can't be
+// removed or edited, so offering them would create a duplicate that quietly overwrites the real one.
+const FIELD_PRESETS: {
+  label: string;
+  fieldKey: string;
+  fieldType: FormFieldType;
+  placeholder?: string;
+}[] = [
+  { label: "Last name", fieldKey: "last_name", fieldType: "text", placeholder: "Last name" },
+  { label: "Full name", fieldKey: "full_name", fieldType: "text", placeholder: "Full name" },
+  { label: "Phone", fieldKey: "phone", fieldType: "tel", placeholder: "Phone number" },
+  { label: "Second email", fieldKey: "alt_email", fieldType: "email", placeholder: "Email address" },
+  { label: "Message", fieldKey: "message", fieldType: "textarea", placeholder: "Your message" },
+  { label: "Checkbox", fieldKey: "consent", fieldType: "checkbox" },
+  { label: "Choose one", fieldKey: "choice", fieldType: "radio" },
+  { label: "Dropdown", fieldKey: "dropdown", fieldType: "select", placeholder: "Select one…" },
+];
+
+// Field keys are the CSV column headers and the JSON keys in contacts.extra_fields, so they have
+// to be unique within a form — two "phone" fields would silently overwrite each other on submit.
+function uniqueFieldKey(base: string, existing: FormInputBlock[]): string {
+  const taken = new Set(existing.map((f) => f.content.fieldKey));
+  if (!taken.has(base)) return base;
+  for (let i = 2; i < 50; i++) {
+    const candidate = `${base}_${i}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${base}_${Date.now()}`;
+}
 
 // Converts the same trusted CSS string styleToInlineCss() produces for the real published page
 // into a React inline-style object, so the canvas preview reflects a block's own custom style —
@@ -1001,30 +1051,91 @@ export default function WysiwygCanvas({
   };
 
   function renderFormField(field: FormInputBlock, formId: string) {
+    const isChoice = CHOICE_FIELD_TYPES.includes(field.content.fieldType);
+    const options = field.content.options ?? [];
+
+    // Switching INTO a choice type with no options would render nothing on the live page (the
+    // renderer skips an option-less radio/select), so two are seeded here.
+    function changeType(next: string) {
+      const patch: Record<string, unknown> = { fieldType: next };
+      if (CHOICE_FIELD_TYPES.includes(next as any) && options.length === 0) {
+        patch.options = ["Option 1", "Option 2"];
+      }
+      commit(field.id, patch);
+    }
+
+    function setOption(i: number, value: string) {
+      const next = [...options];
+      next[i] = value;
+      commit(field.id, { options: next });
+    }
+
     return (
-      <div key={field.id} className="group/item relative mb-2 flex items-center gap-2 pr-6">
-        <EditableText
-          value={field.content.label}
-          onCommit={(v) => commit(field.id, { label: v })}
-          maxLength={100}
-          className="flex-1 rounded border border-gray-300 bg-gray-50 px-2 py-1.5 text-[13px] text-gray-500"
-        />
-        <select
-          value={field.content.fieldType}
-          onChange={(e) => commit(field.id, { fieldType: e.target.value })}
-          className="rounded border border-gray-300 bg-white px-1 py-1 text-xs"
-        >
-          <option value="text">text</option>
-          <option value="email">email</option>
-          <option value="tel">phone</option>
-        </select>
-        <button
-          type="button"
-          onClick={() => onChange(removeChildBlock(tree, formId, field.id))}
-          className="hidden text-gray-400 hover:text-red-500 group-hover/item:block"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+      <div key={field.id} className="group/item relative mb-2 rounded border border-gray-200 bg-gray-50 p-2 pr-6">
+        <div className="flex items-center gap-2">
+          <EditableText
+            value={field.content.label}
+            onCommit={(v) => commit(field.id, { label: v })}
+            maxLength={100}
+            className="flex-1 rounded border border-gray-300 bg-white px-2 py-1.5 text-[13px] text-gray-600"
+          />
+          <select
+            value={field.content.fieldType}
+            onChange={(e) => changeType(e.target.value)}
+            className="rounded border border-gray-300 bg-white px-1 py-1 text-xs"
+          >
+            {FIELD_TYPE_LABELS.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+          <label className="flex shrink-0 items-center gap-1 text-[11px] text-gray-500">
+            <input
+              type="checkbox"
+              checked={field.content.required}
+              onChange={(e) => commit(field.id, { required: e.target.checked })}
+            />
+            req
+          </label>
+          <button
+            type="button"
+            onClick={() => onChange(removeChildBlock(tree, formId, field.id))}
+            className="hidden text-gray-400 hover:text-red-500 group-hover/item:block"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {isChoice && (
+          <div className="mt-2 space-y-1 pl-1">
+            {options.map((opt, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <span className="text-[11px] text-gray-400">{field.content.fieldType === "radio" ? "○" : "—"}</span>
+                <input
+                  value={opt}
+                  onChange={(e) => setOption(i, e.target.value)}
+                  className="flex-1 rounded border border-gray-300 bg-white px-2 py-1 text-[12px]"
+                />
+                <button
+                  type="button"
+                  onClick={() => commit(field.id, { options: options.filter((_, j) => j !== i) })}
+                  className="text-gray-400 hover:text-red-500"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => commit(field.id, { options: [...options, `Option ${options.length + 1}`] })}
+              disabled={options.length >= 12}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-700 disabled:opacity-40"
+            >
+              <Plus className="h-3 w-3" /> Add choice
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -1048,23 +1159,40 @@ export default function WysiwygCanvas({
               <div className="rounded-lg border border-gray-300 bg-white px-3.5 py-3 text-[13px] text-gray-400">Email address (required, locked)</div>
               {block.children.map((f) => renderFormField(f, block.id))}
             </div>
-            <button
-              type="button"
-              onClick={() =>
-                onChange(
-                  addChildBlock(tree, block.id, {
-                    id: newBlockId(),
-                    type: "form_input",
-                    style: {},
-                    content: { label: "New field", fieldKey: newBlockId(), fieldType: "text", placeholder: "", required: false },
-                  } as FormInputBlock)
-                )
-              }
-              disabled={block.children.length >= 10}
-              className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700"
-            >
-              <Plus className="h-3 w-3" /> Add form field
-            </button>
+            <div className="mb-3 flex flex-wrap gap-1">
+              {FIELD_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() =>
+                    onChange(
+                      addChildBlock(tree, block.id, {
+                        id: newBlockId(),
+                        type: "form_input",
+                        style: {},
+                        content: {
+                          label: preset.label,
+                          // A readable key, not a uuid: it becomes the CSV column header and the
+                          // JSON key in contacts.extra_fields, and "last_name" beats "b3f9a1…".
+                          // Suffixed when it would collide with a field already on the form.
+                          fieldKey: uniqueFieldKey(preset.fieldKey, block.children),
+                          fieldType: preset.fieldType,
+                          placeholder: preset.placeholder ?? "",
+                          required: false,
+                          ...(CHOICE_FIELD_TYPES.includes(preset.fieldType)
+                            ? { options: ["Option 1", "Option 2"] }
+                            : {}),
+                        },
+                      } as FormInputBlock)
+                    )
+                  }
+                  disabled={block.children.length >= 10}
+                  className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 hover:border-emerald-500 hover:text-emerald-700 disabled:opacity-40"
+                >
+                  <Plus className="h-2.5 w-2.5" /> {preset.label}
+                </button>
+              ))}
+            </div>
             <EditableText
               as="div"
               value={block.content.ctaText}
