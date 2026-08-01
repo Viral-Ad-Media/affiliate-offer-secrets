@@ -20,6 +20,7 @@ import type { Job, Product } from "@/lib/shared";
 import { CLICKBANK_CATEGORIES } from "@/lib/categories";
 import ManualAddProduct from "@/components/ManualAddProduct";
 import ProductStatusSelect from "@/components/ProductStatusSelect";
+import MarketplaceHighlights from "@/components/MarketplaceHighlights";
 import { DataTableFilter, type FilterOption } from "@/components/ui/data-table-filter";
 import Pager, { pageFromParam } from "@/components/Pager";
 
@@ -294,6 +295,10 @@ export default function Marketplace() {
           href="/settings/jobs"
         />
       </section>
+
+      {/* What the marketplace looks like today, before you've queued anything — the discovery form
+          above answers "find me products in X", this answers "what should I even look at". */}
+      <MarketplaceHighlights onAdded={load} />
 
       <section className="card overflow-hidden">
         <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">

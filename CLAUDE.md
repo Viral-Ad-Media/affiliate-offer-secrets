@@ -1965,6 +1965,34 @@ Three read surfaces over data other code already writes — no new tables for th
   (`/api/contacts/export`), not the client-side CSV builder** — `ContactsTable` only holds the
   current page since pagination landed, so a client-built file would silently export 50 rows.
 
+## Marketplace: Top products and Trending
+
+Two tabs above the products table (`components/MarketplaceHighlights.tsx`,
+`app/api/marketplace/highlights/route.ts`), both served from the daily `marketplace_products`
+cache — no live ClickBank call, so the panel paints instantly and the WAF sees no extra traffic.
+Each row's **Add** posts to the existing `/api/products/manual-add`, so entitlement and validation
+are unchanged.
+
+- **Top** is highest gravity right now. Real from day one.
+- **Trending is a real measurement, not a re-ranking.** The cache holds one row per product and
+  the sweep overwrites it, so nothing recorded change over time — a "Trending" tab built on that
+  snapshot could only be Top wearing a different label. `marketplace_gravity_history` (0052)
+  records one gravity reading per product per day (appended by `refreshMarketplaceCache`,
+  best-effort — a history write must never fail the refresh), and the `marketplace_trending` view
+  computes the 7-day delta. **Consequence, surfaced in the UI rather than hidden: Trending is empty
+  until two daily sweeps have run.**
+- Two guards worth keeping: percent change is `null` below 1.0 starting gravity (a 0.1 → 1.0 move
+  is "+900%" and means nothing, so those rank by absolute change), and the API filters to risers
+  (`gravity_change > 0`) — a faller is real data but it isn't trending.
+- **Could not check whether ClickBank's GraphQL exposes a trend-style `sortField`** — this sandbox
+  has no outbound DNS, and the standing rule is not to write code against an unverified API shape.
+  If it turns out to have one, it would be a simpler source than the history table; worth a probe
+  from a machine with network access.
+- `/api/products/manual-add` now forwards `gravity`/`avg_sale`/`recurring` when given them
+  (validated finite, non-negative, capped). `upsert_product` always accepted these; only the route
+  dropped them, so a product added from this panel used to land with no stats beside products that
+  had them.
+
 ## Cross-table paging, and erasing a lead
 
 - **`audit_events`** (0049) UNIONs the six posting/sending tables into one row shape so `/audit` can

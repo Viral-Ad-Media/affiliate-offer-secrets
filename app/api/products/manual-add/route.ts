@@ -12,6 +12,14 @@ function clampStr(v: unknown, max: number): string {
   return v.slice(0, max).trim();
 }
 
+// Accepts a finite, non-negative number within a sane ceiling; anything else becomes undefined so
+// the column stays null rather than storing garbage.
+function numeric(v: unknown): number | undefined {
+  const n = typeof v === "number" ? v : Number.NaN;
+  if (!Number.isFinite(n) || n < 0 || n > 1_000_000) return undefined;
+  return n;
+}
+
 function isHttpUrl(v: string): boolean {
   try {
     const u = new URL(v);
@@ -74,6 +82,14 @@ export async function POST(req: Request) {
     niche: clampStr(body.niche, MAX_SHORT) || "unknown",
     description: clampStr(body.description, MAX_LONG) || undefined,
     sales_page_url: salesPageUrl || undefined,
+    // Marketplace stats, when the caller has them — the Top/Trending panel adds straight from the
+    // daily cache, and dropping these would show a brand-new row with no gravity or $/sale beside
+    // products that have both. upsert_product already accepts them; only this route ignored them.
+    // Still bounded: these arrive as request JSON, and a NaN or a negative would render as
+    // nonsense on the dashboard.
+    gravity: numeric(body.gravity),
+    avg_sale: numeric(body.avg_sale),
+    recurring: numeric(body.recurring),
     status: "New",
   };
 

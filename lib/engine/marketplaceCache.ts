@@ -100,6 +100,31 @@ export async function refreshMarketplaceCache(): Promise<{
     await sleep(SWEEP_REQUEST_GAP_MS);
   }
 
+  // Snapshot today's gravity into marketplace_gravity_history (0052) — one row per product per
+  // day, which is the only reason a "Trending" list can say anything at all. Done once from the
+  // cache after the sweep rather than per category, so it records exactly what the cache holds.
+  // Best-effort: a history write failing must never fail the refresh itself.
+  try {
+    const { data: current } = await db
+      .from("marketplace_products")
+      .select("network, vendor_id, gravity");
+    const today = new Date().toISOString().slice(0, 10);
+    const history = (current ?? []).map((r: { network: string; vendor_id: string; gravity: number | null }) => ({
+      network: r.network,
+      vendor_id: r.vendor_id,
+      captured_on: today,
+      gravity: r.gravity,
+    }));
+    if (history.length > 0) {
+      // Re-running the sweep on the same day overwrites that day's reading rather than erroring.
+      await db
+        .from("marketplace_gravity_history")
+        .upsert(history, { onConflict: "network,vendor_id,captured_on" });
+    }
+  } catch {
+    // Swallowed on purpose — see above.
+  }
+
   let pruned = 0;
   if (failed.length === 0) {
     const { data } = await db
