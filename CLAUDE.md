@@ -1974,13 +1974,31 @@ Each row's **Add** posts to the existing `/api/products/manual-add`, so entitlem
 are unchanged.
 
 - **Top** is highest gravity right now. Real from day one.
-- **Trending is a real measurement, not a re-ranking.** The cache holds one row per product and
-  the sweep overwrites it, so nothing recorded change over time — a "Trending" tab built on that
-  snapshot could only be Top wearing a different label. `marketplace_gravity_history` (0052)
-  records one gravity reading per product per day (appended by `refreshMarketplaceCache`,
-  best-effort — a history write must never fail the refresh), and the `marketplace_trending` view
-  computes the 7-day delta. **Consequence, surfaced in the UI rather than hidden: Trending is empty
-  until two daily sweeps have run.**
+- **Trending and New are real measurements, not re-rankings.** The cache holds one row per
+  product and the sweep overwrites it, so nothing recorded change over time — tabs built on that
+  snapshot could only be Top wearing a different label. **`marketplace_product_history`
+  (0052/0053) stores a full product row per day**, appended by `refreshMarketplaceCache`
+  (best-effort — a history write must never fail the refresh) and written BEFORE the prune, so a
+  product's final day is recorded rather than lost.
+  - Storing the whole row, not just gravity, is what makes `marketplace_trending` self-sufficient:
+    it used to INNER JOIN `marketplace_products` for the title/urls, but the sweep prunes that
+    table, so a product dropping out of the top-N took its own history with it — precisely the
+    product whose fall you'd want to see. The view now reads history alone and reports `in_cache`
+    so "climbing" is distinguishable from "was climbing, then vanished". Payout movement
+    (`avg_sale_change`) came along for free.
+  - **`marketplace_new_products` (0054)** answers "what appeared today": a product whose earliest
+    snapshot is recent. The trap it guards: on the first day of history EVERY product's first
+    sighting is that day, so a naive query announces hundreds of "new" products — the first day is
+    excluded outright, because it's the day we started looking, not the day they launched.
+  - **Consequence, surfaced in the UI rather than hidden: Trending and New are both empty until
+    two daily sweeps have run.**
+- **The database is always the first source, and also the safety net.** `runDiscoverProducts` goes
+  fresh cache → live fetch → `getStoredMarketplaceHits` (newest stored snapshot per product,
+  any age) *only if the live fetch throws*. ClickBank's WAF has been seen blocking bursts; before
+  this, that failure took the whole discovery job down while the database held a perfectly usable
+  picture from yesterday. Stale-but-real beats empty. It is deliberately NOT used ahead of the
+  live fetch — `getCachedMarketplaceHits`' 30-hour freshness rule stands, because gravity drives
+  scoring and serving week-old numbers as current is the failure the cache exists to prevent.
 - Two guards worth keeping: percent change is `null` below 1.0 starting gravity (a 0.1 → 1.0 move
   is "+900%" and means nothing, so those rank by absolute change), and the API filters to risers
   (`gravity_change > 0`) — a faller is real data but it isn't trending.

@@ -8,13 +8,15 @@ const LIMIT = 12;
 // Top and Trending, both read from the daily marketplace cache (0029) — no live ClickBank call, so
 // the panel paints instantly and the WAF never sees extra traffic.
 //
-// The two lists answer genuinely different questions, which is the whole point of having both:
+// The three lists answer genuinely different questions, which is the whole point of having them:
 //   Top      — what's selling hardest RIGHT NOW (highest gravity). Proven, but crowded.
-//   Trending — what's MOVING (biggest gravity gain this week, via marketplace_gravity_history +
-//              the marketplace_trending view, 0052). Less proven, less competition.
+//   Trending — what's MOVING (biggest gravity gain this week). Less proven, less competition.
+//   New      — what just APPEARED (first snapshot within the last 7 days). Earliest in, least
+//              competition, least evidence.
 //
-// Trending is empty until at least two daily sweeps have recorded a reading; the response says so
-// explicitly rather than falling back to a re-ranked Top list wearing a different label.
+// Trending and New both read from marketplace_product_history (0052/0053/0054) and are empty until
+// the sweep has run at least twice — the response says so rather than falling back to a re-ranked
+// Top list wearing a different label.
 export async function GET() {
   const supabase = createClient();
   const {
@@ -22,7 +24,7 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
-  const [{ data: top }, { data: trending }, { data: owned }] = await Promise.all([
+  const [{ data: top }, { data: trending }, { data: fresh }, { data: owned }] = await Promise.all([
     supabase
       .from("marketplace_products")
       .select("network, vendor_id, product_title, category, sub_category, gravity, avg_sale, recurring, sales_page_url, fetched_at")
@@ -39,6 +41,14 @@ export async function GET() {
       // the view), and a +900% move off 0.1 gravity isn't a trend, it's noise.
       .order("gravity_change", { ascending: false, nullsFirst: false })
       .limit(LIMIT),
+    supabase
+      .from("marketplace_new_products")
+      .select("network, vendor_id, product_title, category, sub_category, gravity, avg_sale, recurring, sales_page_url, first_seen_on, days_known")
+      // Newest first, then strongest — among products that appeared the same day, the one already
+      // pulling gravity is the more interesting one.
+      .order("first_seen_on", { ascending: false })
+      .order("gravity", { ascending: false, nullsFirst: false })
+      .limit(LIMIT),
     // So the panel can show "Added" instead of offering to add something twice.
     supabase.from("products").select("vendor_id").eq("user_id", user.id).eq("network", "clickbank"),
   ]);
@@ -50,6 +60,7 @@ export async function GET() {
   return NextResponse.json({
     top: mark(top as any),
     trending: mark(trending as any),
+    fresh: mark(fresh as any),
     // Null when the cache has never been swept; the UI distinguishes "no data yet" from "nothing
     // is trending".
     cachedAt: (top ?? [])[0]?.fetched_at ?? null,

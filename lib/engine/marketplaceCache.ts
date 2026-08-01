@@ -100,25 +100,41 @@ export async function refreshMarketplaceCache(): Promise<{
     await sleep(SWEEP_REQUEST_GAP_MS);
   }
 
-  // Snapshot today's gravity into marketplace_gravity_history (0052) — one row per product per
-  // day, which is the only reason a "Trending" list can say anything at all. Done once from the
-  // cache after the sweep rather than per category, so it records exactly what the cache holds.
-  // Best-effort: a history write failing must never fail the refresh itself.
+  // Snapshot the WHOLE product into marketplace_product_history (0052/0053) — one row per product
+  // per day. This is the only reason a "Trending" list can say anything at all, and it's stored in
+  // full rather than as a bare gravity number for two reasons: payout movement is as interesting
+  // as gravity movement, and the prune below deletes products that fall out of the top-N, so
+  // history has to be able to describe a product the live cache no longer holds.
+  //
+  // Written BEFORE the prune, so a product's final day is recorded rather than lost. Best-effort:
+  // a history write failing must never fail the refresh itself.
   try {
     const { data: current } = await db
       .from("marketplace_products")
-      .select("network, vendor_id, gravity");
+      .select(
+        "network, vendor_id, product_title, category, sub_category, gravity, initial_sale, avg_sale, recurring, sales_page_url"
+      );
     const today = new Date().toISOString().slice(0, 10);
-    const history = (current ?? []).map((r: { network: string; vendor_id: string; gravity: number | null }) => ({
-      network: r.network,
-      vendor_id: r.vendor_id,
-      captured_on: today,
-      gravity: r.gravity,
-    }));
+    // Exactly the columns selected above — narrower than CacheRow, which also carries
+    // description/affiliate_page_url/fetched_at that a daily snapshot has no use for.
+    type HistoryInput = Pick<
+      CacheRow,
+      | "network"
+      | "vendor_id"
+      | "product_title"
+      | "category"
+      | "sub_category"
+      | "gravity"
+      | "initial_sale"
+      | "avg_sale"
+      | "recurring"
+      | "sales_page_url"
+    >;
+    const history = ((current ?? []) as HistoryInput[]).map((r) => ({ ...r, captured_on: today }));
     if (history.length > 0) {
       // Re-running the sweep on the same day overwrites that day's reading rather than erroring.
       await db
-        .from("marketplace_gravity_history")
+        .from("marketplace_product_history")
         .upsert(history, { onConflict: "network,vendor_id,captured_on" });
     }
   } catch {
@@ -181,4 +197,73 @@ export async function getCachedMarketplaceHits(
     },
     affiliateToolsUrl: r.affiliate_page_url,
   }));
+}
+
+// Last-resort read from stored history: the newest snapshot we hold for each product in a
+// category, regardless of age.
+//
+// This exists because the live fetch can fail outright — ClickBank's WAF has been observed
+// blocking bursts, and a network blip is a network blip. Before this, that failure took the whole
+// discovery job down and the tenant got nothing, even though the database was sitting on a
+// perfectly usable picture of the marketplace from yesterday. Stale-but-real beats empty.
+//
+// Deliberately NOT used ahead of the live fetch: getCachedMarketplaceHits' freshness rule stands,
+// because gravity drives scoring and silently serving week-old numbers as current is the failure
+// this whole cache was built to avoid. This is the fallback, not the first choice — the caller
+// tells the user what they're looking at.
+export async function getStoredMarketplaceHits(
+  payload: DiscoverPayload
+): Promise<{ hits: MarketplaceHit[]; capturedOn: string | null }> {
+  if (payload.mode !== "category" || !payload.category) return { hits: [], capturedOn: null };
+
+  let q = db
+    .from("marketplace_product_history")
+    .select(
+      "vendor_id, product_title, category, sub_category, gravity, initial_sale, avg_sale, recurring, sales_page_url, captured_on"
+    )
+    .eq("network", "clickbank")
+    .eq("category", payload.category);
+  if (payload.subCategory) q = q.eq("sub_category", payload.subCategory);
+
+  // Newest day first, then strongest — so the de-dupe below keeps each product's latest snapshot.
+  const { data, error } = await q
+    .order("captured_on", { ascending: false })
+    .order("gravity", { ascending: false, nullsFirst: false })
+    // Enough rows to cover several days of the same products before de-duping.
+    .limit(payload.count * 10);
+  if (error || !data || data.length === 0) return { hits: [], capturedOn: null };
+
+  const seen = new Set<string>();
+  const latest: any[] = [];
+  for (const row of data) {
+    if (seen.has(row.vendor_id)) continue;
+    seen.add(row.vendor_id);
+    latest.push(row);
+    if (latest.length >= payload.count) break;
+  }
+  // Re-sort by strength: the query above ordered by day first, which isn't the order a caller wants.
+  latest.sort((a, b) => (b.gravity ?? 0) - (a.gravity ?? 0));
+
+  return {
+    capturedOn: latest.length > 0 ? (latest[0].captured_on as string) : null,
+    hits: latest.map((r) => ({
+      site: r.vendor_id as string,
+      title: r.product_title as string,
+      // History stores stats, not marketing copy — the description is re-fetched from the sales
+      // page during verification anyway.
+      description: null,
+      url: (r.sales_page_url as string) ?? "",
+      marketplaceStats: {
+        category: r.category,
+        subCategory: r.sub_category,
+        initialDollarsPerSale: r.initial_sale,
+        averageDollarsPerSale: r.avg_sale,
+        gravity: r.gravity,
+        totalRebill: r.recurring,
+        rebill: null,
+        upsell: null,
+      },
+      affiliateToolsUrl: null,
+    })),
+  };
 }

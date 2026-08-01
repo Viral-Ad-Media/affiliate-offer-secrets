@@ -1,5 +1,5 @@
 import { searchMarketplace, type DiscoverPayload } from "./clickbank";
-import { getCachedMarketplaceHits } from "./marketplaceCache";
+import { getCachedMarketplaceHits, getStoredMarketplaceHits } from "./marketplaceCache";
 import { fetchSalesPage } from "./salespage";
 import { completeJSON, COMPLIANCE_SYSTEM } from "./anthropic";
 import { upsertProduct, db } from "./core";
@@ -23,11 +23,34 @@ export async function runDiscoverProducts(
   affiliateId: string,
   payload: DiscoverJobPayload
 ): Promise<{ saved: number }> {
-  // Cache-first: the daily marketplace preload (lib/engine/marketplaceCache.ts) usually already
-  // holds this category's top listings — a hit skips the live ClickBank round trip entirely and
-  // matches whatever the jobs route just instant-seeded. Miss (keyword mode, stale, or a request
-  // the sweep window can't fully satisfy) → the same live fetch as before.
-  const hits = (await getCachedMarketplaceHits(payload)) ?? (await searchMarketplace(payload));
+  // Three sources, in this order — the database is always tried first, the network is the top-up,
+  // and the database is also the safety net when the network says no:
+  //   1. Fresh cache (marketplace_products, <30h) — no round trip at all, and matches whatever
+  //      the jobs route just instant-seeded.
+  //   2. Live ClickBank fetch — for a miss: keyword mode, stale rows, or a request the sweep
+  //      window can't fully satisfy.
+  //   3. Stored history (marketplace_product_history) — only if that fetch FAILS. ClickBank's WAF
+  //      has been seen blocking bursts; before this, such a failure took the whole job down and
+  //      the tenant got nothing, while the database held a perfectly usable picture from
+  //      yesterday. Stale-but-real beats empty, as long as it's labelled.
+  let hits = await getCachedMarketplaceHits(payload);
+  let servedFrom: "cache" | "live" | "stored" = "cache";
+  if (!hits) {
+    try {
+      hits = await searchMarketplace(payload);
+      servedFrom = "live";
+    } catch (err) {
+      const stored = await getStoredMarketplaceHits(payload);
+      if (stored.hits.length === 0) throw err; // nothing to fall back to — fail as before
+      hits = stored.hits;
+      servedFrom = "stored";
+      console.warn(
+        `[discover] live marketplace fetch failed (${
+          err instanceof Error ? err.message : String(err)
+        }); serving ${stored.hits.length} products from stored data captured ${stored.capturedOn}`
+      );
+    }
+  }
 
   for (const hit of hits) {
     const vendorId = hit.site;

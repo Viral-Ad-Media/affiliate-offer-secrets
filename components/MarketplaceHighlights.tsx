@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Flame, TrendingUp, Plus, Check, ExternalLink, Loader2 } from "lucide-react";
+import { Flame, TrendingUp, Sparkles, Plus, Check, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "@/lib/toast";
 
 type Highlight = {
@@ -17,20 +17,30 @@ type Highlight = {
   owned: boolean;
   gravity_change?: number | null;
   gravity_change_pct?: number | null;
+  first_seen_on?: string;
+  days_known?: number;
 };
 
-type Tab = "top" | "trending";
+type Tab = "top" | "trending" | "fresh";
+
+const TABS: { key: Tab; label: string; icon: typeof Flame; blurb: string }[] = [
+  { key: "top", label: "Top products", icon: Flame, blurb: "Highest gravity across every category, refreshed daily" },
+  { key: "trending", label: "Trending", icon: TrendingUp, blurb: "Biggest gravity gain over the last 7 days" },
+  { key: "fresh", label: "New", icon: Sparkles, blurb: "First seen in the marketplace within the last 7 days" },
+];
 
 const fmtMoney = (v: number | null) => (v == null ? "—" : `$${v.toFixed(0)}`);
 
-// Two views over the same daily cache, answering different questions: Top is what's selling
-// hardest right now, Trending is what's climbing fastest this week. Both are read-only until you
-// press Add, which drops the product into your own list via the existing manual-add route — the
-// same path the "Add product manually" form uses, so entitlement and validation are unchanged.
+// Three views over the stored marketplace data, answering different questions: Top is what's
+// selling hardest right now, Trending is what's climbing fastest this week, New is what only just
+// appeared. All read-only until you press Add, which drops the product into your own list via the
+// existing manual-add route — the same path the "Add product manually" form uses, so entitlement
+// and validation are unchanged.
 export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => void }) {
   const [tab, setTab] = useState<Tab>("top");
   const [top, setTop] = useState<Highlight[]>([]);
   const [trending, setTrending] = useState<Highlight[]>([]);
+  const [fresh, setFresh] = useState<Highlight[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState<string | null>(null);
 
@@ -41,6 +51,7 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
       const data = await res.json();
       setTop(data.top ?? []);
       setTrending(data.trending ?? []);
+      setFresh(data.fresh ?? []);
     } finally {
       setLoading(false);
     }
@@ -79,38 +90,28 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
     }
   }
 
-  const rows = tab === "top" ? top : trending;
+  const rows = tab === "top" ? top : tab === "trending" ? trending : fresh;
 
   return (
     <section className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-700 px-4 py-3">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setTab("top")}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
-              tab === "top" ? "bg-emerald-600 text-white" : "border border-ink-600 text-zinc-400 hover:bg-ink-700"
-            }`}
-          >
-            <Flame className="h-3.5 w-3.5" /> Top products
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("trending")}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
-              tab === "trending"
-                ? "bg-emerald-600 text-white"
-                : "border border-ink-600 text-zinc-400 hover:bg-ink-700"
-            }`}
-          >
-            <TrendingUp className="h-3.5 w-3.5" /> Trending
-          </button>
+        <div className="flex flex-wrap items-center gap-1">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+                tab === t.key
+                  ? "bg-emerald-600 text-white"
+                  : "border border-ink-600 text-zinc-400 hover:bg-ink-700"
+              }`}
+            >
+              <t.icon className="h-3.5 w-3.5" /> {t.label}
+            </button>
+          ))}
         </div>
-        <span className="text-xs text-zinc-500">
-          {tab === "top"
-            ? "Highest gravity across every category, refreshed daily"
-            : "Biggest gravity gain over the last 7 days"}
-        </span>
+        <span className="text-xs text-zinc-500">{TABS.find((t) => t.key === tab)?.blurb}</span>
       </div>
 
       {loading ? (
@@ -118,12 +119,18 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
       ) : rows.length === 0 ? (
         <div className="px-4 py-8 text-center">
           <p className="text-sm text-zinc-400">
-            {tab === "trending" ? "No trend data yet" : "No cached products yet"}
+            {tab === "trending"
+              ? "No trend data yet"
+              : tab === "fresh"
+                ? "No new products yet"
+                : "No cached products yet"}
           </p>
           <p className="mt-1 text-xs text-zinc-600">
             {tab === "trending"
               ? "Trending compares gravity between daily snapshots, so it needs a couple of days of history before it can show movement. Today's snapshot is recorded."
-              : "The marketplace cache refreshes daily — check back shortly."}
+              : tab === "fresh"
+                ? "A product counts as new the first time a daily sweep sees it — so this fills in from the next sweep onward. Everything present when tracking started is treated as existing, not new."
+                : "The marketplace cache refreshes daily — check back shortly."}
           </p>
         </div>
       ) : (
@@ -142,6 +149,13 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
                   {h.recurring ? <span>· rebill {fmtMoney(h.recurring)}</span> : null}
                 </div>
               </div>
+
+              {tab === "fresh" && h.days_known != null && (
+                <span className="chip border-sky-500/30 bg-sky-500/15 text-sky-300">
+                  <Sparkles className="h-3 w-3" />
+                  {h.days_known === 0 ? "New today" : `${h.days_known}d ago`}
+                </span>
+              )}
 
               {tab === "trending" && h.gravity_change != null && (
                 <span className="chip border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
