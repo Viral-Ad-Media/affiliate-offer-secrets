@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Rocket,
   Search,
@@ -20,6 +21,7 @@ import { CLICKBANK_CATEGORIES } from "@/lib/categories";
 import ManualAddProduct from "@/components/ManualAddProduct";
 import ProductStatusSelect from "@/components/ProductStatusSelect";
 import { DataTableFilter, type FilterOption } from "@/components/ui/data-table-filter";
+import Pager, { pageFromParam } from "@/components/Pager";
 
 const NETWORK_LABELS: Record<string, string> = { clickbank: "ClickBank", digistore24: "Digistore24" };
 
@@ -73,8 +75,24 @@ function StatTile({
   );
 }
 
+type ProductStats = { total: number; promoting: number; selected: number; avg_gravity: number };
+
 export default function Marketplace() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  // The page number lives in the URL like every other list in this app, even though this one is a
+  // client component — a Link navigation re-renders it with the new searchParams, so the pager and
+  // the refresh/back-button behaviour stay identical to the server-rendered pages.
+  const page = pageFromParam(searchParams.get("page") ?? undefined);
+
   const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState<ProductStats>({
+    total: 0,
+    promoting: 0,
+    selected: 0,
+    avg_gravity: 0,
+  });
   const [jobs, setJobs] = useState<Job[]>([]);
   const [discoverMode, setDiscoverMode] = useState<"category" | "keyword">("category");
   const [category, setCategory] = useState(CLICKBANK_CATEGORIES[0].name);
@@ -85,14 +103,20 @@ export default function Marketplace() {
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
+  const statusKey = statusFilters.join(",");
+
   const load = useCallback(async () => {
+    const params = new URLSearchParams({ page: String(page) });
+    for (const s of statusKey ? statusKey.split(",") : []) params.append("status", s);
     const [p, j] = await Promise.all([
-      fetch("/api/products").then((r) => r.json()),
+      fetch(`/api/products?${params}`).then((r) => r.json()),
       fetch("/api/jobs").then((r) => r.json()),
     ]);
-    setProducts(p);
+    setProducts(p.rows ?? []);
+    setTotal(p.total ?? 0);
+    if (p.stats) setStats(p.stats);
     setJobs(j);
-  }, []);
+  }, [page, statusKey]);
 
   useEffect(() => {
     load();
@@ -100,16 +124,14 @@ export default function Marketplace() {
     return () => clearInterval(t);
   }, [load]);
 
-  const filtered = useMemo(
-    () => (statusFilters.length === 0 ? products : products.filter((p) => statusFilters.includes(p.status))),
-    [products, statusFilters]
-  );
+  // Filtering is a server query now, so changing it has to reset to page 1 — staying on page 4 of
+  // an unfiltered list while filtering down to three rows would show an empty table.
+  function changeStatusFilters(next: string[]) {
+    setStatusFilters(next);
+    if (page !== 1) router.push("/marketplace");
+  }
 
   const openJobs = jobs.filter((j) => j.status === "pending" || j.status === "running");
-  const avgGravity =
-    products.length > 0
-      ? products.reduce((s, p) => s + (p.gravity ?? 0), 0) / products.length
-      : 0;
 
   async function promote(id: string) {
     setBusy(id);
@@ -250,17 +272,19 @@ export default function Marketplace() {
       </section>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile icon={<Package className="h-5 w-5" />} label="Products tracked" value={products.length} />
+        {/* These describe every product, not just the page on screen — they come from the
+            product_stats view rather than the returned rows. */}
+        <StatTile icon={<Package className="h-5 w-5" />} label="Products tracked" value={stats.total} />
         <StatTile
           icon={<Flame className="h-5 w-5" />}
           label="Avg gravity"
-          value={avgGravity.toFixed(1)}
+          value={stats.avg_gravity.toFixed(1)}
         />
         <StatTile
           icon={<CheckCircle2 className="h-5 w-5" />}
           label="Promoting"
-          value={products.filter((p) => p.status === "Promoting").length}
-          sub={`${products.filter((p) => p.status === "Selected").length} selected`}
+          value={stats.promoting}
+          sub={`${stats.selected} selected`}
         />
         <StatTile
           icon={<Hourglass className="h-5 w-5" />}
@@ -280,7 +304,7 @@ export default function Marketplace() {
             label="Status"
             options={STATUS_OPTIONS}
             selectedValues={statusFilters}
-            onChange={setStatusFilters}
+            onChange={changeStatusFilters}
             isMultiSelect
           />
         </div>
@@ -302,7 +326,7 @@ export default function Marketplace() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((p) => (
+              {products.map((p) => (
                 <tr key={p.id}>
                   <td className="max-w-xs px-4 py-2.5">
                     <Link
@@ -395,7 +419,7 @@ export default function Marketplace() {
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && (
+              {products.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-14 text-center">
                     <Inbox className="mx-auto mb-2.5 h-7 w-7 text-zinc-600" />
@@ -415,6 +439,11 @@ export default function Marketplace() {
             </tbody>
           </table>
         </div>
+        {total > 0 && (
+          <div className="border-t border-ink-700 px-4 py-2.5">
+            <Pager page={page} total={total} basePath="/marketplace" label="products" />
+          </div>
+        )}
       </section>
     </main>
   );

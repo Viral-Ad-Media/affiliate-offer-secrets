@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, CheckCircle2, Download } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Copy, CheckCircle2, Download, Trash2, Loader2 } from "lucide-react";
 import type { Contact } from "@/lib/shared";
+import { createClient } from "@/lib/supabase/client";
+import { toast } from "@/lib/toast";
 
 // Flattens a lead's user-added form fields (Phase O.5) into one "key: value; key: value" string —
 // deliberate v1 scope cut, matching the plan's own call: no dynamic per-field columns, since the
@@ -14,12 +17,33 @@ function flattenExtraFields(extraFields: Record<string, string>): string {
 }
 
 export default function ContactsTable({ contacts }: { contacts: Contact[] }) {
+  const router = useRouter();
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function copyEmail(id: string, email: string) {
     await navigator.clipboard.writeText(email);
     setCopiedId(id);
     setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 1500);
+  }
+
+  // Deleting a lead is irreversible and it's someone else's data, so it asks first — and names the
+  // address, since one row in a long table is easy to mis-click.
+  async function deleteContact(c: Contact) {
+    if (!window.confirm(`Delete ${c.email}? This can't be undone.`)) return;
+    setDeletingId(c.id);
+    const { data, error } = await createClient().rpc("delete_contact", { p_contact_id: c.id });
+    setDeletingId(null);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    if (!data) {
+      toast.error("That contact no longer exists");
+      return;
+    }
+    toast.success(`Deleted ${c.email}`);
+    router.refresh();
   }
 
   return (
@@ -77,16 +101,31 @@ export default function ContactsTable({ contacts }: { contacts: Contact[] }) {
                     {Object.keys(c.extra_fields).length > 0 ? flattenExtraFields(c.extra_fields) : "—"}
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => copyEmail(c.id, c.email)}
-                      className="rounded p-1 text-zinc-500 hover:text-zinc-200"
-                    >
-                      {copiedId === c.id ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => copyEmail(c.id, c.email)}
+                        title="Copy email"
+                        className="rounded p-1 text-zinc-500 hover:text-zinc-200"
+                      >
+                        {copiedId === c.id ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => deleteContact(c)}
+                        disabled={deletingId === c.id}
+                        title="Delete this lead"
+                        className="rounded p-1 text-zinc-500 hover:text-red-400"
+                      >
+                        {deletingId === c.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

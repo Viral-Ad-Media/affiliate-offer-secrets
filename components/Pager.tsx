@@ -26,6 +26,8 @@ export default function Pager({
   basePath,
   size = PAGE_SIZE,
   label = "items",
+  paramName = "page",
+  preserve,
 }: {
   page: number;
   /** Total row count, from a head:true count query — not the length of the current page. */
@@ -33,13 +35,27 @@ export default function Pager({
   basePath: string;
   size?: number;
   label?: string;
+  /** Query param this pager owns. Two lists on one page (see /audit) need distinct names. */
+  paramName?: string;
+  /** Other query params to carry across, so paging one list doesn't reset the other. */
+  preserve?: Record<string, string | undefined>;
 }) {
   const totalPages = Math.max(1, Math.ceil(total / size));
   if (total === 0) return null;
 
   const first = (page - 1) * size + 1;
   const last = Math.min(page * size, total);
-  const href = (p: number) => (p <= 1 ? basePath : `${basePath}?page=${p}`);
+  const href = (p: number) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(preserve ?? {})) {
+      if (v && v !== "1") params.set(k, v);
+    }
+    // Page 1 is the bare path — a "?page=1" URL is the same view with a worse address.
+    if (p > 1) params.set(paramName, String(p));
+    else params.delete(paramName);
+    const qs = params.toString();
+    return qs ? `${basePath}?${qs}` : basePath;
+  };
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">

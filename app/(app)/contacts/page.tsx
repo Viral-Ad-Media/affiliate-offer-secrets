@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Contact } from "@/lib/shared";
 import ContactsTable from "@/components/ContactsTable";
+import ContactErasePanel from "@/components/ContactErasePanel";
 import Pager, { PAGE_SIZE, pageFromParam, pageRange } from "@/components/Pager";
 
 // Real paid traffic accumulates leads fast — this list was capped at 1000 with no way to reach
@@ -61,6 +62,7 @@ export default async function ContactsPage({
       </header>
       <ContactsTable contacts={contacts} />
       <Pager page={page} total={total} basePath="/contacts" label="contacts" />
+      <ContactErasePanel />
     </main>
   );
 }

@@ -1946,6 +1946,37 @@ Three read surfaces over data other code already writes — no new tables for th
   (`/api/contacts/export`), not the client-side CSV builder** — `ContactsTable` only holds the
   current page since pagination landed, so a client-built file would silently export 50 rows.
 
+## Cross-table paging, and erasing a lead
+
+- **`audit_events`** (0049) UNIONs the six posting/sending tables into one row shape so `/audit` can
+  run a single counted, ordered, ranged query. It used to pull 200 rows from each of six tables on
+  every load, merge in JS and throw most away — and could only ever show the newest 200, so older
+  activity was permanently unreachable. **`security_invoker = true` is the load-bearing detail**:
+  each underlying table's owner-select RLS still applies, so a tenant sees only their own rows, and
+  it keeps `security definer view` off the advisors report. Ordering is `created_at desc, id desc` —
+  `created_at` alone isn't unique across six tables, and a non-deterministic sort makes rows appear
+  twice or not at all while paging.
+- **`product_stats`** (0050, same invoker pattern) aggregates the Marketplace tiles in Postgres.
+  That's what let `/api/products` become paged: the tiles still describe every product while the
+  list returns one page. Status filtering moved server-side with it — filtering one page
+  client-side would silently hide matches on other pages.
+- **PostgREST answers an out-of-range `.range()` with a 416, not an empty list.** Reachable in
+  normal use: sit on page 2, delete rows until fewer than one page remains, and the 5s poll starts
+  erroring. `/api/products` counts first and clamps the page; the server-rendered pages clamp via
+  `pageFromParam(raw, totalPages)`.
+- **`Pager` takes `paramName`/`preserve`** so two lists can page independently on one page —
+  `/audit` runs `?page=` for events and `?usage=` for the generation ledger.
+- **Erasure (0051)** — `contacts` is the first table here holding a third party's PII, and there
+  was no way to remove one. `delete_contact(id)` is the everyday row delete; `erase_contact_email
+  (email)` is the GDPR/CCPA answer: it's keyed by **address, not row**, because the person asking
+  doesn't know which campaigns captured them and may be in several. It also **redacts their address
+  in `mail_sends`/`broadcast_sends`** — deleting the contact row alone leaves their email sitting in
+  the send logs, which would make the erasure claim untrue. The send rows themselves survive (that
+  a send happened is a real audit record, and the pooled daily cap counts it); the address becomes
+  `erased@redacted.invalid`, using RFC 2606's reserved TLD so it can never collide with a real one.
+  Both are `SECURITY DEFINER` + `auth.uid()`-scoped, granted to `authenticated` — the narrow hole in
+  a table with no client write policy, same shape as `start_trial()`/`update_profile()`.
+
 ## Product status, and where the jobs queue lives
 
 - **`products.status` is now settable by hand** (`components/ProductStatusSelect.tsx` — the status
