@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Terms of Service — Affiliate Studio",
+  title: "Terms of Service",
   description: "Terms of Service for Affiliate Studio.",
 };
 
@@ -29,20 +29,24 @@ export default function TermsPage() {
           <h2 className="font-heading text-lg font-semibold text-zinc-100">2. Description of the Service</h2>
           <p className="mt-2">
             Affiliate Studio provides affiliate marketplace research and AI-generated marketing
-            content (ad copy, landing pages, blog content, email content) for use by affiliate
-            marketers. Optional features allow you to connect your own Facebook account to
-            publish posts and launch advertising campaigns using your own connected ad account.
+            content (ad copy, funnel pages, blog content, email content, images and video) for use
+            by affiliate marketers, along with tools to edit, host and publish that content —
+            including funnel and blog hosting on domains you connect, contact capture, and email
+            broadcasts and sequences. Optional features allow you to connect your own social,
+            advertising and email accounts to publish posts, send email, and launch advertising
+            campaigns using those accounts.
           </p>
         </section>
 
         <section>
           <h2 className="font-heading text-lg font-semibold text-zinc-100">3. Your accounts and connections</h2>
           <p className="mt-2">
-            You are solely responsible for your affiliate network accounts, your Facebook/Meta account,
-            and any ad account you connect to the Service, including all activity and any charges
-            incurred on those accounts. The Service never holds or transmits your advertising
-            budget — advertising spend is billed directly by Meta to your connected payment
-            method.
+            You are solely responsible for every account you connect to the Service — affiliate
+            networks, Meta/Facebook and Instagram, TikTok, Google/YouTube, your email provider, and
+            any domain or ad account — including all activity and any charges incurred on them.
+            The Service never holds or transmits your advertising budget: ad spend is billed
+            directly by the ad platform to your connected payment method, and email is sent through
+            and billed by your own provider.
           </p>
         </section>
 
@@ -60,9 +64,12 @@ export default function TermsPage() {
           <h2 className="font-heading text-lg font-semibold text-zinc-100">5. Content and compliance</h2>
           <p className="mt-2">
             AI-generated content is provided as a starting point only. You are responsible for
-            reviewing all generated ad copy, landing pages, and other content for accuracy and
-            for compliance with your affiliate network's terms, Meta's advertising policies, and all applicable
-            laws before publishing or running paid traffic to it.
+            reviewing all generated ad copy, funnel pages, and other content for accuracy and for
+            compliance with your affiliate network's terms, the ad platforms' advertising policies,
+            and all applicable laws before publishing or running paid traffic to it. You are also
+            the controller of any contact data your funnels capture, and are responsible for
+            consent, deletion requests, and email marketing law (including CAN-SPAM, CASL and GDPR)
+            in the jurisdictions where your audience lives.
           </p>
         </section>
 

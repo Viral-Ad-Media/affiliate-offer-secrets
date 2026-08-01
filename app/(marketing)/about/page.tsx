@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "About — Affiliate Studio",
+  title: "About",
   description: "Why Affiliate Studio exists and how it works.",
 };
 
@@ -22,9 +22,24 @@ export default function AboutPage() {
           <p className="mt-2 text-sm leading-relaxed text-zinc-400">
             Point it at a category, and it pulls live ClickBank marketplace data, scores products
             on gravity and earnings potential, and verifies each one against its actual vendor
-            sales page. For anything worth promoting, it generates a complete kit — Facebook and
-            TikTok ad copy, a bridge (lead-capture) landing page, a blog article, and email
-            swipes — grounded entirely in what the vendor's own page actually claims.
+            sales page. For anything worth promoting, it generates a complete kit — three ad
+            angles, TikTok scripts, funnel pages, a blog article, email swipes and social
+            captions — grounded entirely in what the vendor's own page actually claims.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="font-heading text-xl font-semibold text-zinc-100">
+            And then the part nobody talks about
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+            Generating copy is the easy half. The rest of it — building the funnel, hosting it
+            somewhere that isn't a shared subdomain, capturing the leads, following up by email,
+            testing a second version of the page, putting a pixel on it, getting an ad in front of
+            it — is where offers actually die. So all of that is here too: a drag-and-drop page
+            builder, multi-step upsell funnels, split testing, your own domains, contacts, drip
+            sequences through your own mail provider, a real blog, and paused-until-you-confirm ad
+            launches. One workflow instead of six subscriptions.
           </p>
         </section>
 
@@ -34,10 +49,11 @@ export default function AboutPage() {
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-zinc-400">
             Affiliate Studio never touches your affiliate commissions, and it never holds your ad
-            budget. When you connect Facebook, you're authorizing the platform to post and launch
-            campaigns on your own Page and your own ad account — Meta bills your ad spend
-            directly to you. New ad campaigns are always created paused, so nothing goes live
-            until you explicitly confirm it.
+            budget. Everything runs on accounts you own: your affiliate ID, your Facebook Page and
+            ad account, your domains, your mail provider. Meta bills your ad spend directly to
+            you, and new ad campaigns are always created paused, so nothing goes live until you
+            explicitly confirm it. Your captured leads export to plain CSV whenever you want
+            them.
           </p>
         </section>
 

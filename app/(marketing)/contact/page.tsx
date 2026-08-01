@@ -1,7 +1,7 @@
 import { Mail } from "lucide-react";
 
 export const metadata = {
-  title: "Contact — Affiliate Studio",
+  title: "Contact",
   description: "Get in touch with the Affiliate Studio team.",
 };
 

@@ -3,14 +3,18 @@ import { Check } from "lucide-react";
 import { ACCESS_FEE_CENTS, CREDIT_PACKS } from "@/lib/pricing";
 
 export const metadata = {
-  title: "Pricing — Affiliate Studio",
+  title: "Pricing",
   description: "One-time access fee plus pay-as-you-go ad credits.",
 };
 
 const ACCESS_INCLUDES = [
-  "Unlimited product discovery across all ClickBank categories",
-  "Unlimited campaign kit generation (ads, bridge landing pages, blog, email)",
-  "Connect your Facebook Page and publish posts",
+  "Unlimited product discovery across every ClickBank category",
+  "Unlimited campaign kits — ad angles, TikTok scripts, funnel pages, blog, email swipes",
+  "Drag-and-drop funnel builder with multi-step upsells and split testing",
+  "AI ad images and short-form video generation",
+  "Your own domains for funnels and your blog",
+  "Contacts, CSV import/export, broadcasts and drip sequences",
+  "Connect Facebook, Instagram, TikTok and YouTube and publish from the dashboard",
   "Full usage & cost audit trail",
   "30-day free trial before you pay anything",
 ];
@@ -89,8 +93,13 @@ export default function PricingPage() {
       </div>
 
       <p className="mx-auto mt-10 max-w-2xl text-center text-xs text-zinc-600">
-        Facebook posting and ad launches require connecting your own Facebook Page and Meta ad
-        account. See the <Link href="/faq" className="underline hover:text-zinc-400">FAQ</Link>{" "}
+        Some features connect to accounts you already own and are billed by those providers, not
+        by us: social posting and ad launches use your own Meta/TikTok/YouTube accounts, sending
+        email uses your own Resend, SendGrid, Mailgun or SMTP account, and custom domains use a
+        domain you already have. See the{" "}
+        <Link href="/faq" className="underline hover:text-zinc-400">
+          FAQ
+        </Link>{" "}
         for details.
       </p>
     </div>

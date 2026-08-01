@@ -35,8 +35,8 @@ export default function MarketingFooter() {
               Affiliate <span className="text-emerald-400">Studio</span>
             </div>
             <p className="mt-2 text-xs text-zinc-500">
-              AI-powered affiliate product discovery and campaign generation for affiliate
-              marketers.
+              Product research, campaign generation, funnels, email and ad launches — one workflow
+              for affiliate marketers.
             </p>
           </div>
           {COLUMNS.map((col) => (

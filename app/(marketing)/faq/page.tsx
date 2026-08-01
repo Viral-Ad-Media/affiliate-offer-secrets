@@ -1,18 +1,38 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "FAQ — Affiliate Studio",
+  title: "FAQ",
   description: "Common questions about Affiliate Studio.",
 };
 
 const FAQS = [
   {
     q: "What exactly does Affiliate Studio generate for me?",
-    a: "For each product you promote, it generates Facebook and TikTok ad copy, a bridge (lead-capture) landing page, a blog article, and email swipes — all grounded in claims taken directly from the vendor's own sales page.",
+    a: "For each product you promote: three distinct Facebook/Instagram ad angles, TikTok scripts, a funnel (an opt-in page you can extend with thank-you, upsell and order steps), a blog article, email swipes and social captions — all grounded in claims taken directly from the vendor's own sales page. You can also generate an ad image or a short-form video for each individual angle and social post.",
   },
   {
-    q: "Do I need an affiliate network account?",
-    a: "Yes — you promote products using your own affiliate nickname and hoplinks from the network the product lives on (ClickBank and Digistore24 are supported today). Affiliate Studio doesn't create network accounts or process your commissions; it only helps you research products and produce campaign assets faster.",
+    q: "Which affiliate networks are supported?",
+    a: "Automated marketplace discovery is ClickBank-only today — pick a category and the engine pulls live gravity and earnings data, scores it and verifies each sales page. For Digistore24 and networks running on the Everflow platform, you connect your own affiliate ID and add products by hand; everything downstream (hoplinks, campaign kits, funnels, ads) then works exactly the same. Affiliate Studio never creates network accounts or touches your commissions.",
+  },
+  {
+    q: "Can I edit the funnel pages, or am I stuck with what the AI wrote?",
+    a: "Every page is fully editable on a drag-and-drop canvas: sections, rows and columns, headings, paragraphs, images, bullet and icon lists, buttons, dividers and custom form fields, each with its own font, colour, spacing and border controls. The affiliate disclosure, the hoplink and the lead-capture wiring are the only things you can't edit or delete — they're code-owned so a page can never be published without them.",
+  },
+  {
+    q: "Can I run split tests?",
+    a: "Yes. Run several copy variants against the same funnel URL with weighted traffic — visitors get a sticky assignment so they always see the same version — and the panel shows views, leads and a conversion rate per variant. When one wins, promote it in a click and the test ends.",
+  },
+  {
+    q: "Where do the leads my funnel captures go?",
+    a: "Into your own contact list inside the app. From there you can tag them, import more from CSV, export everything to any ESP, or enrol them in an email sequence.",
+  },
+  {
+    q: "Can I send email from Affiliate Studio?",
+    a: "Yes — one-off broadcasts and multi-step drip sequences, where each step fires a set number of days after that specific contact opted in. Sending goes through your own Resend, SendGrid, Mailgun or SMTP account, so deliverability and sending limits are yours, not a shared pool. Unsubscribe links are added automatically and can't be edited out. If you'd rather not connect anything, there's also a manual mode that builds the emails and hands them to your own mail client.",
+  },
+  {
+    q: "Can I use my own domain?",
+    a: "Yes. Connect a domain you already own (we don't sell domains), point its DNS, and serve funnels from it — several campaigns per domain, each on its own path. One domain can also host your blog, which comes with a public index, SEO-friendly slugs, categories, featured images, RSS and a sitemap.",
   },
   {
     q: "Does Affiliate Studio hold or spend my ad budget?",
@@ -27,20 +47,32 @@ const FAQS = [
     a: "1 credit ≈ $1 of ad budget you're authorizing the platform to commit on your behalf when you activate a campaign. Credits are only deducted at activation — building and comparing paused drafts is free. See the Pricing page for credit pack pricing.",
   },
   {
+    q: "Which social accounts can I post to?",
+    a: "Facebook Pages, Instagram (feed posts and Reels), TikTok and YouTube — each connected over OAuth to accounts you own. Every post is recorded in a single audit trail alongside your emails and generation costs.",
+  },
+  {
+    q: "Can I track visitors on my funnel pages?",
+    a: "Yes — drop in your GA4, Google Tag Manager, Microsoft Clarity or Meta Pixel ID per funnel and it's injected into every page that funnel serves, including split-test variants and later steps. Paste the whole install snippet if that's easier; we extract the ID and render our own version of the tag rather than injecting pasted code.",
+  },
+  {
     q: "Do I need Meta App Review to connect Facebook?",
-    a: "No, not to test it yourself. Facebook apps in Development Mode work immediately for the account that owns the app — you can connect your own Page and ad account and use every feature without waiting on Meta's review process.",
+    a: "No, not to test it yourself. Facebook apps in Development Mode work immediately for the account that owns the app — you can connect your own Page and ad account and use every feature without waiting on Meta's review process. TikTok and Google have equivalent developer/test modes.",
   },
   {
     q: "Is there a free trial?",
     a: "Yes — every new account gets a 30-day free trial with full access to product discovery and campaign generation, no credit card required to start.",
   },
   {
-    q: "Is the bridge page content compliant for ad platforms?",
-    a: "Generated copy avoids fabricated claims, income promises, and cure language, and includes affiliate disclosures on every landing page and blog page. You're still responsible for reviewing copy against the specific ad platform's current policies before running paid traffic.",
+    q: "Is the generated content compliant for ad platforms?",
+    a: "Generated copy avoids fabricated claims, income promises, and cure language, and every funnel page and blog post carries an affiliate disclosure that can't be removed. Products whose own sales pages make claims likely to get ads rejected are flagged during discovery. You're still responsible for reviewing copy against the specific ad platform's current policies before running paid traffic.",
   },
   {
     q: "Can I edit the generated content?",
-    a: "Yes — every generated asset (ad copy, pages, blog content, email swipes) is meant as a strong first draft you can review and edit before publishing or launching.",
+    a: "Yes — every generated asset (ad copy, funnel pages, blog content, email swipes) is meant as a strong first draft you can review and edit before publishing or launching. Nothing is published until you say so: funnels have an explicit publish toggle, blog posts have draft/published states, and ad campaigns are created paused.",
+  },
+  {
+    q: "Do I get paid for referring other affiliates?",
+    a: "Yes — every account gets a referral link. When someone who signs up through it pays the access fee, you earn reward points you can redeem 1:1 as ad credits.",
   },
   {
     q: "What happens to my data if I cancel?",

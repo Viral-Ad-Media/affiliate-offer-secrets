@@ -20,7 +20,7 @@ const sourceSans = Source_Sans_3({
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://clickbank-studio.vercel.app";
 const DESCRIPTION =
-  "Affiliate Studio researches the marketplace, writes your ad copy and pages, builds funnels, and launches real ad campaigns — all from one dashboard.";
+  "Affiliate Studio researches the marketplace, writes your ads, funnels, blog and emails, hosts them on your own domain, and launches real ad campaigns — all from one dashboard.";
 
 // Site-wide SEO defaults. Per-page metadata exports (marketing pages) override title/description;
 // metadataBase makes every relative OG/canonical URL absolute. Funnel pages (/p, /d) keep their
