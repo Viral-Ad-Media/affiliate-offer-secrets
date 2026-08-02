@@ -57,9 +57,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {/* Centered on the bar itself, not laid out between the other chips — absolute
               positioning is what keeps it centered on the page regardless of how wide the
               right-hand cluster grows. pointer-events are handed back to the chip alone so the
-              transparent overlay never eats clicks meant for the bar. */}
+              transparent overlay never eats clicks meant for the bar.
+              Only from `lg`: being out of flow, it can't push the right-hand cluster away, so on a
+              narrow-but-not-mobile window (~640-900px) the centered chip printed straight through
+              the credits chip. Below `lg` the strip underneath takes over instead. */}
           {onTrial && (
-            <div className="pointer-events-none absolute inset-x-0 flex justify-center">
+            <div className="pointer-events-none absolute inset-x-0 hidden justify-center lg:flex">
               <TrialChip trialDaysLeft={trialDaysLeft} className="pointer-events-auto" />
             </div>
           )}
@@ -72,10 +75,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             avatarUrl={profile?.avatar_url ?? null}
           />
         </div>
-        {/* Mobile gets its own centered strip under the top bar — that bar already carries logo,
-            credits, bell, account and the hamburger, and a sixth item would wrap. */}
+        {/* Everything below `lg` gets its own centered strip under the top bar — on mobile that
+            bar already carries logo, credits, bell, account and the hamburger, and on a narrow
+            desktop window there isn't room to centre a chip between them without collision. */}
         {onTrial && (
-          <div className="flex justify-center border-b border-ink-700 bg-ink-900/60 px-4 py-2 sm:hidden">
+          <div className="flex justify-center border-b border-ink-700 bg-ink-900/60 px-4 py-2 lg:hidden">
             <TrialChip trialDaysLeft={trialDaysLeft} />
           </div>
         )}

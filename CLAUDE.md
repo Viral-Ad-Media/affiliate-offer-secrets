@@ -2119,9 +2119,13 @@ are unchanged.
 status, not navigation, the same reason the bell and account menu are there. The trial chip is
 **absolutely positioned across the bar** so it centres on the page regardless of how wide the
 right-hand cluster grows; `pointer-events-none` on that overlay with `pointer-events-auto` on the
-chip keeps the transparent strip from eating clicks. Mobile gets its own centred strip under the
-top bar — that bar already carries logo, credits, bell, account and hamburger, and a sixth item
-wraps.
+chip keeps the transparent strip from eating clicks.
+
+**The centred chip only renders from `lg`, and the strip underneath covers everything below it.**
+Being absolutely positioned means it can't push the right-hand cluster aside — so on a
+narrow-but-not-mobile window (~640-900px) it printed straight through the credits chip. The
+breakpoint on both halves was `sm` when this shipped and had exactly that overlap; it's `lg` now.
+Any future absolutely-centred top-bar element inherits the same constraint.
 
 ## Notifications
 
