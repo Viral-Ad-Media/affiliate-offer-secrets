@@ -2158,6 +2158,16 @@ top-level routes, not from `/_next`, so without the exemption the auth gate 307s
 and every logged-out visitor — the whole marketing site, every public funnel and blog page — gets
 a broken favicon. That was live until it was caught here.
 
+**`CRAWLER_PATHS` (`/robots.txt`, `/sitemap.xml`) is the same bug, found the same way.**
+`app/robots.ts` and `app/sitemap.ts` are also real top-level App Router routes, and both were
+307'ing to `/login` — so every crawler that asked this app for the two files whose entire purpose
+is to be fetched without a session got a redirect to a login page. Harmless while the app lived on
+a `.vercel.app` host nobody was indexing; a real problem the hour a real domain went live, which is
+when it was caught (`curl` of `/robots.txt` during the post-rename check). Any future
+convention-generated top-level route (`opengraph-image`, `manifest.webmanifest`, …) needs the same
+exemption — the rule is "if App Router generates it as a route and an anonymous client fetches it,
+the auth gate must skip it."
+
 ## Email sending (providers + manual)
 
 **Gmail OAuth was removed in 0037_retire_gmail_sender.sql.** `gmail.send` is a Google RESTRICTED

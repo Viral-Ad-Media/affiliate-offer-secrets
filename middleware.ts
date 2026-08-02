@@ -17,6 +17,12 @@ const PUBLIC_EXACT_PATHS = [
 // any session, so they must never hit the auth gate.
 const ICON_PATHS = ["/icon.svg", "/apple-icon.png", "/favicon.ico"];
 
+// Same class of bug as ICON_PATHS: App Router serves app/robots.ts and app/sitemap.ts as real
+// top-level routes, so the auth gate 307'd both to /login. Every crawler that asked this app for
+// its robots.txt or sitemap got a redirect to a login page instead — which is exactly the traffic
+// those two files exist to serve. Caught the day the real domain went live.
+const CRAWLER_PATHS = ["/robots.txt", "/sitemap.xml"];
+
 // Prefix-match — dynamic sub-paths (e.g. /p/[campaignId]/bridge) or server-to-server webhooks.
 const PUBLIC_PREFIX_PATHS = [
   "/api/billing/webhook",
@@ -98,7 +104,10 @@ export async function middleware(request: NextRequest) {
   // was 307'ing them to /login for every logged-out visitor, i.e. the marketing site and every
   // public funnel/blog page had a broken favicon. (`favicon.ico` is already excluded by this
   // middleware's own matcher; these are not.) Confirmed live before fixing.
-  const isAsset = pathname.startsWith("/_next") || ICON_PATHS.includes(pathname);
+  const isAsset =
+    pathname.startsWith("/_next") ||
+    ICON_PATHS.includes(pathname) ||
+    CRAWLER_PATHS.includes(pathname);
 
   if (!user && !isPublic && !isAsset) {
     const url = request.nextUrl.clone();
