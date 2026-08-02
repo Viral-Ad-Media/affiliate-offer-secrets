@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import ThemeToggle from "@/components/ThemeToggle";
+import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
 import NotificationsBell from "@/components/NotificationsBell";
 import CreditsChip from "@/components/CreditsChip";
 import AppLogo from "@/components/AppLogo";
@@ -247,7 +248,12 @@ export default function Sidebar({
 
   // The trial countdown used to sit here; it now lives centered in the top bar alongside the
   // credits chip (components/TrialChip.tsx) — account status, not navigation.
-  const accountChips = (iconOnly: boolean) => <ThemeToggle iconOnly={iconOnly} />;
+  const accountChips = (iconOnly: boolean) => (
+    <>
+      <WorkspaceSwitcher collapsed={iconOnly} />
+      <ThemeToggle iconOnly={iconOnly} />
+    </>
+  );
 
   return (
     <>

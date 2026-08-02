@@ -1922,35 +1922,76 @@ validator, or renderer changes; purely how the existing capabilities are surface
   full-width canvas. Same standing caveat as O.3: real drag gestures can't be simulated by this
   session's tooling.
 
-## Workspaces / teams (phase 1 of multi-tenancy)
+## Workspaces / teams — multi-tenancy, complete
 
-`workspaces` + `workspace_members` (owner/admin/member) + `workspace_invitations`, migration
-0041, surfaced at **Settings → Team**. Invitations are accepted at `/invite/{token}`.
+`workspaces` + `workspace_members` (owner/admin/member) + `workspace_invitations` (0041), and
+since 0057/0058/0059 **the workspace actually owns the data**. 38 tenant tables carry a NOT NULL
+`workspace_id`; RLS on all of them is `is_workspace_member(workspace_id)`. Team UI at
+**Settings → Team**, invitations accepted at `/invite/{token}`.
 
-**Phase 1 is schema + team UI only.** No tenant data is workspace-scoped yet and no existing RLS
-has changed — the app still behaves exactly as before. Phase 2 is the real migration: adding
-`workspace_id` to 18 tenant tables, rewriting 144 `auth.uid()` RLS clauses to membership checks,
-and updating 129 `.eq("user_id")` app queries. Don't do those piecemeal; a half-migrated security
-model is worse than either end state.
+**Two layers, and confusing them is the mistake to avoid.** RLS (`is_workspace_member`) decides
+whether a row is visible *at all* — that is the security boundary. `profiles.active_workspace_id`,
+read via `current_workspace_id()` and surfaced by `components/WorkspaceSwitcher.tsx`, decides which
+of *your* workspaces the UI is showing — that is UX. Queries still filter `.eq("workspace_id", ws)`
+explicitly, exactly as they always also filtered on `user_id` despite the policy: belt and braces,
+and it keeps a member of two workspaces from seeing both lists merged. **Because the scope is
+resolved in one function, per-organization subdomains become a change to how that resolves and
+touch no policy at all.**
 
-- A partial unique index enforces **one owner per workspace**, which is why ownership moves only
-  through `transfer_workspace_ownership()` — it demotes before promoting, and any other order
-  violates the index.
+- **`user_id` stays on every table** as created-by attribution ("who launched this ad"). It is no
+  longer a scope. Nothing should filter on it except the person-scoped tables below.
+- **Deliberately NOT workspace-scoped**, because they describe a person: `notifications`,
+  `referral_codes`, `rewards_ledger`, `referrals`, and `usage_ledger` (so per-member generation
+  spend stays attributable). `profiles` is identity. Those four keep `auth.uid() = user_id`.
+- **Roles do not gate data.** owner/admin/member all read and write the workspace's content; roles
+  gate only invitations, role changes and ownership transfer. One uniform policy across 30 tables
+  is the version that can actually be verified.
+
+**The trigger is the load-bearing safety net, not a convenience.** `stamp_workspace_id()` (0058)
+fires BEFORE INSERT on all 38 tables and fills `workspace_id` when the caller left it NULL —
+explicit values always win. It exists because the engine runs as `service_role` and bypasses RLS,
+so one forgotten `workspace_id` would have created a row that succeeded and was then invisible to
+everyone, silently. Auditing ~90 insert sites and hoping was not a security model. It resolves two
+ways: a signed-in caller gets `current_workspace_id()`; a service-role caller gets the row owner's
+workspace, the same rule the backfill used. **`NOT NULL` (0059) is the second half** — together
+they make the invisible-row failure impossible rather than unlikely. Never drop either.
+
+**Sequenced in three deployable steps on purpose** (0057 add + backfill + permissive OR → app
+conversion → 0059 enforce). The dangerous window in a migration like this is the one where
+deployed code and RLS disagree about what a row belongs to; a policy accepting
+`user_id OR workspace_id` removes that window instead of shortening it. Reuse this shape.
+
+Things worth knowing if you extend this:
+- **`handle_new_user` creates the workspace.** It didn't before, which is why three accounts that
+  signed up on 2026-08-01 had none and would have failed 0059's NOT NULL. Workspace creation is
+  wrapped in an exception handler: a user with no workspace is recoverable, a failed signup isn't.
+- **The public blog identifies a blog by workspace, not by owner** (`/b`, `/d`, `lib/blogIndex.ts`).
+  Scoping it to the owner would make a post written by an invited teammate vanish from a published
+  blog.
+- **`product_stats` groups by workspace ALONE.** Grouping by `(workspace, user)` emits one partial
+  tile row per member instead of one describing the workspace. `audit_events` carries both.
+- **A user id passed into a parameter renamed `workspaceId` is still a `string`** — `tsc` cannot
+  catch it. Four of those were found by grepping call sites, not by a clean typecheck. Grep when
+  you rename a scope parameter.
+- The `assert_owns_*` functions are membership checks now; a plain ownership check would refuse an
+  invited member their own workspace's campaigns.
+- Slugs are reserved against `reserved_workspace_slugs` so a workspace can't take `api`, `app`,
+  `settings`, `blog`, `w`, `p`, `b`, `d` or `r` — each a real route today or a DNS label later.
+- A partial unique index enforces one owner per workspace, which is why ownership moves only
+  through `transfer_workspace_ownership()`; any other order violates the index.
 - `is_workspace_member`/`workspace_role` are SECURITY DEFINER so policies on `workspace_members`
   don't recurse through that table's own RLS.
 - Invitation tokens are separate from row ids: the id appears in admin listings, and something
   already shown to other members must never also be the credential that joins the workspace.
 - Accepting does NOT require the invited address to match the signed-in one — people sign up with
   a different address routinely, and the token is the credential. Expiry + single use are enforced.
-- Verified against the DB: a plain member cannot invite, seize ownership, or remove the owner, and
-  a consumed token cannot be replayed.
-- No invitation *email* is sent yet — the UI surfaces the link for the admin to send. That's
-  deliberate over pretending to send mail that never arrives, and it works regardless of which
-  provider the workspace has configured.
+- No invitation *email* is sent yet; the UI surfaces the link for the admin to send.
 
-Slugs are reserved against a `reserved_workspace_slugs` table so a workspace can't take `api`,
-`app`, `settings`, `blog`, `w`, `p`, `b`, `d` or `r` — each of which is a real route today or a
-DNS label later.
+**Verified by impersonating real users under RLS** at each step: every tenant sees exactly what
+they owned before and none of anyone else's; a client insert that omits `workspace_id` still
+passes `WITH CHECK` (the trigger fills it before the check runs) and lands in the right workspace;
+and a temporarily-added member gains visibility of the workspace's products, with the membership
+removed in the same transaction.
 
 ## Settings
 
