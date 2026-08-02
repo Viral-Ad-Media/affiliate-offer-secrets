@@ -1,11 +1,10 @@
 import { Mail } from "lucide-react";
+import { SUPPORT_EMAIL } from "@/lib/brand";
 
 export const metadata = {
   title: "Contact",
   description: "Get in touch with the Affiliate Offer Secrets team.",
 };
-
-const SUPPORT_EMAIL = "support@clickbankstudio.app";
 
 export default function ContactPage() {
   return (
@@ -30,10 +29,6 @@ export default function ContactPage() {
           </a>
         </div>
       </div>
-
-      <p className="mt-6 text-xs text-zinc-600">
-        [Replace with your team's real support address before going live.]
-      </p>
     </div>
   );
 }

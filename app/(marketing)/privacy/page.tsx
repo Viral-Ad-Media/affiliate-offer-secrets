@@ -1,3 +1,5 @@
+import { LEGAL_LAST_UPDATED, SUPPORT_EMAIL } from "@/lib/brand";
+
 export const metadata = {
   title: "Privacy Policy",
   description: "Privacy Policy for Affiliate Offer Secrets.",
@@ -7,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 sm:py-20">
       <h1 className="text-3xl font-bold text-zinc-100 sm:text-4xl">Privacy Policy</h1>
-      <p className="mt-3 text-sm text-zinc-500">Last updated: [DATE]</p>
+      <p className="mt-3 text-sm text-zinc-500">Last updated: {LEGAL_LAST_UPDATED}</p>
 
       <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
         This is placeholder legal content, not a finished legal document. Have a qualified lawyer
@@ -94,8 +96,11 @@ export default function PrivacyPage() {
           <h2 className="font-heading text-lg font-semibold text-zinc-100">7. Your rights</h2>
           <p className="mt-2">
             Depending on your location, you may have rights to access, correct, or delete your
-            personal data. To exercise these rights, contact us at [SUPPORT EMAIL]. [Expand this
-            section for GDPR/CCPA or other applicable regional requirements as needed.]
+            personal data. To exercise these rights, contact us at{" "}
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-emerald-400 hover:underline">
+              {SUPPORT_EMAIL}
+            </a>
+            . We delete a contact record, and redact the address from our send logs, on request.
           </p>
         </section>
 
@@ -110,7 +115,11 @@ export default function PrivacyPage() {
         <section>
           <h2 className="font-heading text-lg font-semibold text-zinc-100">9. Contact</h2>
           <p className="mt-2">
-            Questions about this Privacy Policy can be sent to [SUPPORT EMAIL].
+            Questions about this Privacy Policy can be sent to{" "}
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-emerald-400 hover:underline">
+              {SUPPORT_EMAIL}
+            </a>
+            .
           </p>
         </section>
       </div>

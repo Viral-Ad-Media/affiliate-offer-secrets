@@ -10,6 +10,25 @@ GraphQL endpoint, `hop.clickbank.net` hoplinks, `CLICKBANK_CATEGORIES` (`lib/cat
 discovery (still ClickBank-only), and the trademark disclaimer in
 `components/MarketingFooter.tsx`. Never rename those.
 
+**Renaming this product is not a grep-and-replace, and twice now a plain search has missed
+things.** Three separate hiding places, all found only by reading rather than searching:
+the wordmark is split across JSX (`Affiliate Offer <span>Secrets</span>` in
+`components/AppLogo.tsx`, `components/MarketingFooter.tsx` and `app/login/page.tsx`), so the full
+product name never appears as one string; `app/icon.svg` carries it in an `aria-label` and a
+comment; and the support address was a *different* old name again (`support@clickbankstudio.app`,
+a placeholder domain nobody here owns) living alone in the contact page. Search for every historic
+name — "ClickBank Studio", "clickbankstudio", "Affiliate Studio" — plus bare `Studio`, plus every
+email address in `app/` and `components/`, and read the JSX around each hit.
+
+`lib/brand.ts` now holds `SUPPORT_EMAIL` and `LEGAL_LAST_UPDATED` for exactly this reason: the
+support address appears on Contact, Privacy and Terms, and duplicating it is what let it rot in
+the first place. `SUPPORT_EMAIL` must be a mailbox that really receives — Privacy prints it as the
+address for GDPR/CCPA erasure requests, so a dead address there is a false compliance claim, not a
+cosmetic slip. `app/(marketing)/terms/page.tsx` still contains a literal `[LEGAL ENTITY NAME]`
+and a few other bracketed items on purpose: those are the operator's to supply and must not be
+invented; both legal pages carry an amber "placeholder legal content, have a lawyer finalise this"
+banner until they are.
+
 **Infrastructure was renamed too** (the earlier "leave infra alone" decision is superseded): the
 GitHub repo is `Viral-Ad-Media/affiliate-offer-secrets`, the local directory is
 `affiliate-offer-secrets`, and the Vercel project is `affiliate-offer-secrets`. `supabase/

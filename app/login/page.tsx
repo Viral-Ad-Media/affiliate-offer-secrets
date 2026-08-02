@@ -41,7 +41,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
           <h1 className="text-2xl font-bold text-zinc-100">
-            Affiliate <span className="text-emerald-400">Studio</span>
+            Affiliate Offer <span className="text-emerald-400">Secrets</span>
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
             {mode === "login" ? "Sign in to your account" : "Create your account"}
