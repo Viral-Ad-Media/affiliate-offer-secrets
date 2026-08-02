@@ -1,5 +1,6 @@
 // Direct integration with Google's Gemini API for Veo video generation — no third-party proxy.
-// Distinct from lib/google/* (the OAuth client used for YouTube/Mail connections): this is a
+// A plain platform-level API key, not a per-tenant OAuth client (there is no longer any Google
+// OAuth in this codebase — Gmail sending and then YouTube were both retired): this is a
 // plain API-key integration, same trust tier as ANTHROPIC_API_KEY. Verified live against
 // Google's docs: base https://generativelanguage.googleapis.com/v1beta, x-goog-api-key auth,
 // long-running-operation pattern (submit, then poll the returned operation name).

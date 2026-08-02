@@ -44,7 +44,7 @@ export default function TermsPage() {
           <h2 className="font-heading text-lg font-semibold text-zinc-100">3. Your accounts and connections</h2>
           <p className="mt-2">
             You are solely responsible for every account you connect to the Service — affiliate
-            networks, Meta/Facebook and Instagram, TikTok, Google/YouTube, your email provider, and
+            networks, Meta/Facebook and Instagram, TikTok, your email provider, and
             any domain or ad account — including all activity and any charges incurred on them.
             The Service never holds or transmits your advertising budget: ad spend is billed
             directly by the ad platform to your connected payment method, and email is sent through

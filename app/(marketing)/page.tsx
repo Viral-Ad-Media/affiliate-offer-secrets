@@ -39,7 +39,7 @@ const STEPS = [
   {
     icon: Rocket,
     title: "Launch and follow up",
-    body: "Publish to Facebook, Instagram, TikTok or YouTube, launch a paused-for-review Meta ad, and drip your email sequence to the leads the funnel captures.",
+    body: "Publish to Facebook, Instagram or TikTok, launch a paused-for-review Meta ad, and drip your email sequence to the leads the funnel captures.",
   },
 ];
 
@@ -77,12 +77,12 @@ const FEATURES = [
   {
     icon: Video,
     title: "AI images and video",
-    body: "Generate an ad image or a short-form video per angle and per social post, then post it straight to Instagram Reels, TikTok or YouTube.",
+    body: "Generate an ad image or a short-form video per angle and per social post, then post it straight to Instagram Reels or TikTok.",
   },
   {
     icon: Facebook,
     title: "Connect your own accounts",
-    body: "Facebook, Instagram, TikTok and YouTube connect over OAuth. Every post is logged in a single audit trail.",
+    body: "Facebook, Instagram and TikTok connect over OAuth. Every post is logged in a single audit trail.",
   },
   {
     icon: Coins,

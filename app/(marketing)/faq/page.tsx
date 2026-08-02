@@ -48,7 +48,7 @@ const FAQS = [
   },
   {
     q: "Which social accounts can I post to?",
-    a: "Facebook Pages, Instagram (feed posts and Reels), TikTok and YouTube — each connected over OAuth to accounts you own. Every post is recorded in a single audit trail alongside your emails and generation costs.",
+    a: "Facebook Pages, Instagram (feed posts and Reels) and TikTok — each connected over OAuth to accounts you own. Every post is recorded in a single audit trail alongside your emails and generation costs.",
   },
   {
     q: "Can I track visitors on my funnel pages?",

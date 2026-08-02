@@ -807,9 +807,9 @@ Schema in `supabase/migrations/0009_page_domains.sql`; Vercel API wrapper in
 
 ## Connectors (Instagram, TikTok, YouTube, Mail)
 
-Instagram gets real posting; TikTok and YouTube are **connect-only** (this app doesn't generate
-video, so there's nothing to post yet — connecting now means it's ready the moment that changes);
-Mail sends the generated email swipe copy from the client's own connected Gmail. Generic
+Instagram and TikTok get real posting. (Mail once sent from a client's connected Gmail, and
+YouTube once accepted real uploads — both are gone; see "Google is out of this codebase" below.)
+Generic
 Vault-secret RPCs (`store_oauth_secret`/`get_oauth_secret`/`delete_oauth_secret`, added in
 `supabase/migrations/0010_connectors.sql`) are used by TikTok/YouTube/Mail instead of the
 Meta-named ones in `0007_meta_secret_helper.sql` — those stay untouched, zero risk to Phase B/C.
@@ -839,10 +839,10 @@ Meta-named ones in `0007_meta_secret_helper.sql` — those stay untouched, zero 
   route at save time, and the public image route again at **serve** time — never trust the DB
   row's format is guaranteed just because a write path validated it; a non-matching stored value
   is a 404, not served with whatever Content-Type it happens to claim.
-- **TikTok/YouTube/Mail follow the exact same OAuth-CSRF/Vault/default-deny-RLS shape as Meta**
-  (`lib/tiktok/*`, `lib/google/*`, `app/api/{tiktok,youtube,mail}/{connect,callback,disconnect}`),
-  each with its own state-cookie name (`tiktok_oauth_state`/`youtube_oauth_state`/
-  `mail_oauth_state`) so concurrent flows in different tabs never collide.
+- **TikTok follows the exact same OAuth-CSRF/Vault/default-deny-RLS shape as Meta**
+  (`lib/tiktok/*`, `app/api/tiktok/{connect,callback,disconnect}`), with its own state-cookie name
+  (`tiktok_oauth_state`) so concurrent flows in different tabs never collide. YouTube and Mail
+  used to sit alongside it under `lib/google/*` with their own cookie names; both are gone.
 - **YouTube and Mail share one Google Cloud OAuth client** (`GOOGLE_CLIENT_ID`/`SECRET`) but each
   has its own dedicated callback route and its own disjoint scope constant
   (`YOUTUBE_SCOPES`/`MAIL_SCOPES` in `lib/google/config.ts`) — **never combine them into one
@@ -870,6 +870,31 @@ Meta-named ones in `0007_meta_secret_helper.sql` — those stay untouched, zero 
   a route that doesn't exist). TikTok apps and Google's OAuth consent screen both
   work immediately for the developer/testers added on the app itself, without full review —
   sufficient for testing, same caveat as Meta's Development Mode.
+
+## Google is out of this codebase
+
+Both Google-dependent connectors were retired, for the same underlying reason, and neither should
+be re-added without revisiting it: **`gmail.send` and `youtube.upload` are Google RESTRICTED/
+sensitive scopes**, so shipping either to the public needs a security assessment that can require a
+third-party audit. That's a fine dependency for one operator in Testing mode and the wrong one
+under a multi-tenant product.
+
+- **Gmail sending** went first (`0037_retire_gmail_sender.sql`) — `app/api/mail/` keeps only
+  `send`, which now dispatches through `sendViaActiveSender()` and the per-tenant API-key providers
+  (Resend/SendGrid/Mailgun/SMTP).
+- **YouTube** went second: `app/api/youtube/*`, `components/YouTubePanel.tsx` and the whole of
+  `lib/google/*` are deleted, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are no longer read
+  anywhere, and `GenerateVideo.tsx` posts a generated clip to Instagram Reels or TikTok only.
+  Verified before deleting: zero rows in both `youtube_connections` and `youtube_posts`, so no
+  tenant lost a connection and no audit history was destroyed.
+- **`youtube_connections` and `youtube_posts` are deliberately left in place**, unread — same call
+  as `mail_connections` and `profiles.nickname`. `youtube_posts` in particular is one of the six
+  tables the `audit_events` view (0049) UNIONs, so dropping it would mean rewriting that view for
+  no user-visible gain. `AuditPlatform`'s `"youtube"` member and `AuditTrail.tsx`'s `PLATFORM_META`
+  entry stay for the same reason: the branch is unreachable now, but it's what keeps the view and
+  its renderer honest about a table that still exists.
+- `GEMINI_API_KEY` is **not** affected — it's a plain Google AI Studio API key for Veo video
+  generation, never an OAuth client, and video generation itself is untouched.
 
 ## Mail providers (Resend / SendGrid / Mailgun / generic SMTP)
 

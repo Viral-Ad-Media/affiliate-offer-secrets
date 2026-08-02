@@ -23,7 +23,7 @@ export default function PrivacyPage() {
           <p className="mt-2">
             When you create an account we collect your email address and any profile details you
             provide (such as your name, timezone and affiliate IDs). When you connect a third-party
-            account — Facebook/Instagram, TikTok, YouTube, an email provider such as Resend,
+            account — Facebook/Instagram, TikTok, an email provider such as Resend,
             SendGrid, Mailgun or your own SMTP server, or an affiliate network — we store the
             account identifier and the credentials needed to act on your behalf. Those credentials
             are stored in encrypted secret storage and are never shown back to you in plaintext.
@@ -67,7 +67,7 @@ export default function PrivacyPage() {
             and page hosting, including your custom domains), Anthropic (content generation —
             product and sales-page text is sent to generate your campaign kits), kie.ai and Google
             (Gemini) for AI image and video generation, and — only for accounts you choose to
-            connect — Meta/Facebook, TikTok, Google/YouTube, and your chosen email provider
+            connect — Meta/Facebook, TikTok, and your chosen email provider
             (Resend, SendGrid, Mailgun or your own SMTP server). [Add or remove processors to
             match your actual infrastructure before publishing.]
           </p>

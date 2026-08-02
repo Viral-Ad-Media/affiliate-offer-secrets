@@ -14,7 +14,7 @@ const ACCESS_INCLUDES = [
   "AI ad images and short-form video generation",
   "Your own domains for funnels and your blog",
   "Contacts, CSV import/export, broadcasts and drip sequences",
-  "Connect Facebook, Instagram, TikTok and YouTube and publish from the dashboard",
+  "Connect Facebook, Instagram and TikTok and publish from the dashboard",
   "Full usage & cost audit trail",
   "30-day free trial before you pay anything",
 ];
@@ -94,7 +94,7 @@ export default function PricingPage() {
 
       <p className="mx-auto mt-10 max-w-2xl text-center text-xs text-zinc-600">
         Some features connect to accounts you already own and are billed by those providers, not
-        by us: social posting and ad launches use your own Meta/TikTok/YouTube accounts, sending
+        by us: social posting and ad launches use your own Meta/TikTok accounts, sending
         email uses your own Resend, SendGrid, Mailgun or SMTP account, and custom domains use a
         domain you already have. See the{" "}
         <Link href="/faq" className="underline hover:text-zinc-400">

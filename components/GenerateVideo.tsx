@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Video, Loader2, Instagram, Music2, Youtube, Sparkles } from "lucide-react";
+import { Video, Loader2, Instagram, Music2, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type VideoStatus = "none" | "generating" | "ready" | "failed";
 
 type PlatformTarget = {
-  key: "instagram" | "tiktok" | "youtube";
+  key: "instagram" | "tiktok";
   label: string;
   icon: typeof Instagram;
   available: boolean;
@@ -29,14 +29,12 @@ export default function GenerateVideo({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [igUserId, setIgUserId] = useState<string | null>(null);
   const [tiktokConnected, setTiktokConnected] = useState(false);
-  const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, { ok: boolean; text: string }>>({});
   const [caption, setCaption] = useState(defaultCaption);
   const [idempotencyKeys, setIdempotencyKeys] = useState<Record<string, string>>({
     instagram: crypto.randomUUID(),
     tiktok: crypto.randomUUID(),
-    youtube: crypto.randomUUID(),
   });
 
   async function refreshStatus() {
@@ -58,13 +56,11 @@ export default function GenerateVideo({
       refreshStatus(),
       supabase.rpc("get_meta_connection_status"),
       supabase.rpc("get_tiktok_connection_status"),
-      supabase.rpc("get_youtube_connection_status"),
-    ]).then(([, meta, tiktok, youtube]: any[]) => {
+    ]).then(([, meta, tiktok]: any[]) => {
       const accounts = (meta.data?.instagram_accounts ?? []) as { ig_user_id: string; is_active: boolean }[];
       const active = accounts.find((a) => a.is_active);
       setIgUserId(active?.ig_user_id ?? null);
       setTiktokConnected(!!tiktok.data?.connected);
-      setYoutubeConnected(!!youtube.data?.connected);
       setLoading(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,7 +121,6 @@ export default function GenerateVideo({
   const targets: PlatformTarget[] = [
     { key: "instagram", label: "Instagram Reels", icon: Instagram, available: !!igUserId },
     { key: "tiktok", label: "TikTok", icon: Music2, available: tiktokConnected },
-    { key: "youtube", label: "YouTube", icon: Youtube, available: youtubeConnected },
   ];
 
   return (
@@ -167,9 +162,7 @@ export default function GenerateVideo({
                   onClick={() =>
                     t.key === "instagram"
                       ? post("instagram", "/api/instagram/post-reel", { ig_user_id: igUserId, caption })
-                      : t.key === "tiktok"
-                        ? post("tiktok", "/api/tiktok/post-video", { caption })
-                        : post("youtube", "/api/youtube/upload", { title: caption.slice(0, 100), description: caption })
+                      : post("tiktok", "/api/tiktok/post-video", { caption })
                   }
                   disabled={!t.available || busy === t.key || !caption.trim()}
                   className="btn-ghost text-xs"

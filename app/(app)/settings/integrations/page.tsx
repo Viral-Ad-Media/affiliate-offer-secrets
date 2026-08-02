@@ -3,7 +3,6 @@ import { CheckCircle2, XCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import ConnectionsPanel from "@/components/ConnectionsPanel";
 import TikTokPanel from "@/components/TikTokPanel";
-import YouTubePanel from "@/components/YouTubePanel";
 import MailProvidersPanel, { type MailProvidersStatus } from "@/components/MailProvidersPanel";
 import NetworkConnectionsPanel from "@/components/NetworkConnectionsPanel";
 import EverflowPanel, { type EverflowStatus } from "@/components/EverflowPanel";
@@ -11,13 +10,12 @@ import EverflowPanel, { type EverflowStatus } from "@/components/EverflowPanel";
 const PROVIDER_LABELS: Record<string, string> = {
   meta: "Facebook",
   tiktok: "TikTok",
-  youtube: "YouTube",
 };
 
 export default async function ConnectionsPage({
   searchParams,
 }: {
-  searchParams: { meta?: string; tiktok?: string; youtube?: string };
+  searchParams: { meta?: string; tiktok?: string };
 }) {
   const supabase = createClient();
   const {
@@ -25,10 +23,9 @@ export default async function ConnectionsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [metaStatus, tiktokStatus, youtubeStatus, mailProviders, networkRows, everflowRow] = await Promise.all([
+  const [metaStatus, tiktokStatus, mailProviders, networkRows, everflowRow] = await Promise.all([
     supabase.rpc("get_meta_connection_status").then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_tiktok_connection_status").then((r) => r.data ?? { connected: false }),
-    supabase.rpc("get_youtube_connection_status").then((r) => r.data ?? { connected: false }),
     supabase
       .rpc("get_mail_provider_connections")
       .then((r) => (r.data ?? { active_provider: null, providers: [] }) as MailProvidersStatus),
@@ -50,7 +47,7 @@ export default async function ConnectionsPage({
       }
     : null;
 
-  const banners = (["meta", "tiktok", "youtube"] as const)
+  const banners = (["meta", "tiktok"] as const)
     .map((key) => ({ key, value: searchParams[key] }))
     .filter((b) => b.value);
 
@@ -114,11 +111,6 @@ export default async function ConnectionsPage({
       <div>
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">TikTok</h2>
         <TikTokPanel status={tiktokStatus} />
-      </div>
-
-      <div>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">YouTube</h2>
-        <YouTubePanel status={youtubeStatus} />
       </div>
 
       <div className="space-y-3">
