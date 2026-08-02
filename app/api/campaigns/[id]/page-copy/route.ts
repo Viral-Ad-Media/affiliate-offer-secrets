@@ -21,6 +21,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const campaignId = params.id;
 
   // Ownership check FIRST, via the RLS-respecting user-scoped client — assert_owns_campaign
@@ -84,7 +86,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const { data: connection } = await admin
     .from("network_connections")
     .select("affiliate_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("network", product.network)
     .maybeSingle();
   if (!connection?.affiliate_id) {

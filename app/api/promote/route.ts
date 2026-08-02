@@ -10,6 +10,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json();
   const productId = body.product_id as string;
 
@@ -17,7 +19,7 @@ export async function POST(req: Request) {
     .from("products")
     .select("*")
     .eq("id", productId)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .single();
   if (productError || !product) {
     return NextResponse.json({ error: "product not found" }, { status: 404 });
@@ -26,7 +28,7 @@ export async function POST(req: Request) {
   const { data: connection } = await supabase
     .from("network_connections")
     .select("affiliate_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("network", product.network)
     .maybeSingle();
   if (!connection?.affiliate_id) {
@@ -39,7 +41,7 @@ export async function POST(req: Request) {
   const { data: open } = await supabase
     .from("jobs")
     .select("id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("type", "build_campaign")
     .in("status", ["pending", "running"])
     .filter("payload->>product_id", "eq", productId)
@@ -51,7 +53,7 @@ export async function POST(req: Request) {
       .from("products")
       .update({ status: "Selected", updated_at: new Date().toISOString() })
       .eq("id", productId)
-      .eq("user_id", user.id);
+      .eq("workspace_id", ws);
   }
 
   const { data: job, error } = await supabase

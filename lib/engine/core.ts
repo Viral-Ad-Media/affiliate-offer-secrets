@@ -138,7 +138,7 @@ export async function jobContext(job: any) {
     const { data: known } = await db
       .from("products")
       .select("vendor_id")
-      .eq("user_id", job.user_id)
+      .eq("workspace_id", job.workspace_id)
       .order("vendor_id");
     ctx.known_vendor_ids = (known ?? []).map((r) => r.vendor_id);
   }

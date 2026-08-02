@@ -11,10 +11,12 @@ export default async function BroadcastPage({ searchParams }: { searchParams: { 
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const { count } = await supabase
     .from("broadcast_sequences")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("kind", "sequence");
   const total = count ?? 0;
   const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
@@ -24,14 +26,14 @@ export default async function BroadcastPage({ searchParams }: { searchParams: { 
     supabase
       .from("broadcast_sequences")
       .select("id, name, audience_type, campaign_id, status, created_at, updated_at")
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       // Only multi-step drips — one-off sends (kind='broadcast', 0035) have their own page.
       .eq("kind", "sequence")
       .order("created_at", { ascending: false })
       .range(from, to),
     supabase.from("campaigns").select("id, products(product_title)"),
-    supabase.from("broadcast_steps").select("id, sequence_id").eq("user_id", user.id),
-    supabase.from("broadcast_enrollments").select("id, sequence_id").eq("user_id", user.id),
+    supabase.from("broadcast_steps").select("id, sequence_id").eq("workspace_id", ws),
+    supabase.from("broadcast_enrollments").select("id, sequence_id").eq("workspace_id", ws),
   ]);
 
   const titleByCampaign = new Map<string, string>();

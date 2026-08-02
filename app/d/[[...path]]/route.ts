@@ -24,7 +24,7 @@ const xmlHeaders = (name: string) => ({
 // matches so the caller can fall through to its own generic 404 — keeps one not-found shape.
 async function serveBlogOnDomain(
   admin: ReturnType<typeof createAdminClient>,
-  userId: string,
+  workspaceId: string,
   path: string,
   siteOrigin: string,
   searchParams: URLSearchParams
@@ -32,12 +32,12 @@ async function serveBlogOnDomain(
   const { data: settings } = await admin
     .from("blog_settings")
     .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html")
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!settings) return null;
 
   if (path === "") {
-    const index = await loadBlogIndex(admin, userId, searchParams);
+    const index = await loadBlogIndex(admin, workspaceId, searchParams);
     if (!index) return null; // unknown category / page past the end → caller's generic 404
     return new Response(renderBlogIndexHtml(settings, index.posts, { ...index, siteOrigin }), {
       status: 200,
@@ -56,7 +56,7 @@ async function serveBlogOnDomain(
         headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" },
       });
     }
-    const posts = await loadAllPublishedPosts(admin, userId);
+    const posts = await loadAllPublishedPosts(admin, workspaceId);
     const body =
       path === "rss.xml"
         ? renderRssXml(settings, posts, siteOrigin, "")
@@ -73,7 +73,7 @@ async function serveBlogOnDomain(
     .select(
       "id, title, slug, content_md, html, excerpt, featured_image_url, published_at, seo_title, seo_description, seo_index, blog_categories(name, slug)"
     )
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .ilike("slug", segments[segments.length - 1] ?? path)
     .eq("status", "published")
     .maybeSingle();
@@ -125,7 +125,7 @@ export async function GET(request: Request, { params }: { params: { path?: strin
 
   const { data: domainRow } = await admin
     .from("custom_domains")
-    .select("id, user_id, serves_blog")
+    .select("id, workspace_id, serves_blog")
     .eq("domain", host)
     .eq("status", "verified")
     .maybeSingle();
@@ -145,7 +145,7 @@ export async function GET(request: Request, { params }: { params: { path?: strin
   if (domainRow.serves_blog) {
     const blog = await serveBlogOnDomain(
       admin,
-      domainRow.user_id as string,
+      domainRow.workspace_id as string,
       path,
       `https://${host}`,
       new URL(request.url).searchParams

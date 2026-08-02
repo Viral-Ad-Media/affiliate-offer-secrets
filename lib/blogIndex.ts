@@ -24,12 +24,12 @@ function toIndexPost(r: any): BlogIndexPost {
 // unfiltered by design, so they share this rather than loadBlogIndex's paged query.
 export async function loadAllPublishedPosts(
   admin: ReturnType<typeof createAdminClient>,
-  userId: string
+  workspaceId: string
 ): Promise<BlogIndexPost[]> {
   const { data } = await admin
     .from("blog_posts")
     .select(POST_COLUMNS)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .eq("status", "published")
     .order("published_at", { ascending: false, nullsFirst: false })
     .limit(MAX_FEED_POSTS);
@@ -51,7 +51,7 @@ export type BlogIndexData = {
 // typo'd filter look like it worked).
 export async function loadBlogIndex(
   admin: ReturnType<typeof createAdminClient>,
-  userId: string,
+  workspaceId: string,
   params: URLSearchParams
 ): Promise<BlogIndexData | null> {
   const categorySlug = (params.get("category") || "").trim() || null;
@@ -63,7 +63,7 @@ export async function loadBlogIndex(
   const { data: catRows } = await admin
     .from("blog_categories")
     .select("id, name, slug, description, blog_posts!inner(id)")
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .eq("blog_posts.status", "published")
     .order("name");
 
@@ -87,7 +87,7 @@ export async function loadBlogIndex(
   }
 
   const applyFilters = <T extends { eq: (col: string, val: unknown) => T }>(q: T): T => {
-    let out = q.eq("user_id", userId).eq("status", "published");
+    let out = q.eq("workspace_id", workspaceId).eq("status", "published");
     if (activeCategory) out = out.eq("category_id", activeCategory.id);
     return out;
   };

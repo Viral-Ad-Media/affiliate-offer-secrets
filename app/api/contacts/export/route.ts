@@ -32,6 +32,8 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return new Response("Not signed in", { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const { data: campaigns } = await supabase.from("campaigns").select("id, products(product_title)");
   const titleByCampaign = new Map<string, string>();
   for (const c of campaigns ?? []) {
@@ -44,7 +46,7 @@ export async function GET() {
     const { data: rows } = await supabase
       .from("contacts")
       .select("campaign_id, first_name, email, extra_fields, created_at")
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .order("created_at", { ascending: false })
       .range(from, from + PAGE - 1);
     if (!rows || rows.length === 0) break;

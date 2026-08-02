@@ -16,6 +16,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json();
   const to = (body.to as string | undefined)?.trim();
   const subject = (body.subject as string | undefined)?.trim();
@@ -42,7 +44,7 @@ export async function POST(req: Request) {
   try {
     // Dispatches via the account's active sender — one of the connected
     // Resend/SendGrid/Mailgun/SMTP providers, or none configured.
-    const result = await sendViaActiveSender(admin, user.id, { to, subject, html });
+    const result = await sendViaActiveSender(admin, user.id, ws as string, { to, subject, html });
     if (isSendFailure(result)) {
       if (result.reason === "not_connected") {
         return NextResponse.json({ error: "mail not connected" }, { status: 404 });

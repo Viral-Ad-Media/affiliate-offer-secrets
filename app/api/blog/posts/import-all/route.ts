@@ -20,6 +20,8 @@ export async function POST() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   // RLS-scoped read — the caller's campaigns only. Campaigns that errored mid-build can still
   // hold a finished article (the content stage runs before the ones that failed), and that draft
   // is worth having, so the filter is "has an article", not "status = ready".
@@ -36,7 +38,7 @@ export async function POST() {
 
   for (const c of campaigns ?? []) {
     try {
-      const result = await createPostFromCampaign(admin, user.id, c.id as string);
+      const result = await createPostFromCampaign(admin, ws as string, c.id as string);
       if (result.created) created++;
       else skipped++;
     } catch (err: any) {

@@ -53,7 +53,7 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
   if (segments.length === 1 && UUID_RE.test(segments[0])) {
     const { data: post } = await admin
       .from("blog_posts")
-      .select("id, user_id, slug, status")
+      .select("id, workspace_id, slug, status")
       .eq("id", segments[0])
       .eq("status", "published")
       .maybeSingle();
@@ -61,7 +61,7 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
     const { data: settings } = await admin
       .from("blog_settings")
       .select("slug")
-      .eq("user_id", post.user_id as string)
+      .eq("workspace_id", post.workspace_id as string)
       .maybeSingle();
     const target = blogPostPath(settings?.slug ?? null, post.slug as string | null, post.id as string);
     // Only redirect if we actually have a nicer URL; otherwise render in place below.
@@ -74,13 +74,13 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
   // Everything else is keyed off the blog slug.
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("user_id, blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html")
+    .select("workspace_id, blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html")
     .ilike("slug", segments[0])
     .maybeSingle();
   if (!settings) return notFound();
 
   if (segments.length === 1) {
-    const index = await loadBlogIndex(admin, settings.user_id as string, new URL(req.url).searchParams);
+    const index = await loadBlogIndex(admin, settings.workspace_id as string, new URL(req.url).searchParams);
     // Unknown category slug or a page past the end — 404 rather than silently showing everything.
     if (!index) return notFound();
     return new Response(renderBlogIndexHtml(settings, index.posts, index), {
@@ -92,7 +92,7 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
   // Feeds live under the blog's own prefix. Safe to reserve these names: slugify() strips dots,
   // so no post slug can ever be "rss.xml" or "sitemap.xml".
   if (segments[1] === "rss.xml" || segments[1] === "sitemap.xml") {
-    const posts = await loadAllPublishedPosts(admin, settings.user_id as string);
+    const posts = await loadAllPublishedPosts(admin, settings.workspace_id as string);
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
     const base = `/b/${settings.slug}`;
     const body =
@@ -107,7 +107,7 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
   const { data: post } = await admin
     .from("blog_posts")
     .select("id, slug, published_at, blog_categories(slug)")
-    .eq("user_id", settings.user_id as string)
+    .eq("workspace_id", settings.workspace_id as string)
     .ilike("slug", segments[segments.length - 1])
     .eq("status", "published")
     .maybeSingle();
@@ -136,7 +136,7 @@ async function renderPost(admin: ReturnType<typeof createAdminClient>, postId: s
   const { data: post } = await admin
     .from("blog_posts")
     .select(
-      "id, user_id, title, slug, content_md, html, excerpt, featured_image_url, published_at, seo_title, seo_description, seo_index, blog_categories(name)"
+      "id, workspace_id, title, slug, content_md, html, excerpt, featured_image_url, published_at, seo_title, seo_description, seo_index, blog_categories(name)"
     )
     .eq("id", postId)
     .eq("status", "published")
@@ -146,7 +146,7 @@ async function renderPost(admin: ReturnType<typeof createAdminClient>, postId: s
   const { data: settings } = await admin
     .from("blog_settings")
     .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style")
-    .eq("user_id", post.user_id as string)
+    .eq("workspace_id", post.workspace_id as string)
     .maybeSingle();
 
   const html = renderPublicPostHtml({

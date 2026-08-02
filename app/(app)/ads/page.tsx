@@ -66,15 +66,17 @@ export default async function AdsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const [{ data: launches }, metaStatus] = await Promise.all([
-    // Owner-select RLS is the scoping; .eq("user_id") is kept explicit to match the style of every
-    // other list page here.
+    // Membership RLS is the scoping; .eq("workspace_id") is kept explicit to match the style of
+    // every other list page here, and to keep a member of two workspaces from seeing both merged.
     supabase
       .from("ad_launches")
       .select(
         "id, campaign_id, angle_index, creative_kind, status, budget_credits, country, headline, notes, meta_ad_id, created_at, campaigns(product_id, products(product_title))"
       )
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .order("created_at", { ascending: false })
       .limit(200),
     supabase.rpc("get_meta_connection_status").then((r) => r.data ?? { connected: false }),

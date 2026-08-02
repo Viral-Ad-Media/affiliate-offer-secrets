@@ -14,18 +14,20 @@ export async function POST() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const admin = createAdminClient();
   const { data: existing } = await admin
     .from("everflow_connections")
     .select("api_key_secret_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .maybeSingle();
 
-  await admin.from("everflow_connections").delete().eq("user_id", user.id);
+  await admin.from("everflow_connections").delete().eq("workspace_id", ws);
   if (existing?.api_key_secret_id) {
     await admin.rpc("delete_oauth_secret", { p_secret_id: existing.api_key_secret_id });
   }
-  await admin.from("network_connections").delete().eq("user_id", user.id).eq("network", "everflow");
+  await admin.from("network_connections").delete().eq("workspace_id", ws).eq("network", "everflow");
 
   return NextResponse.json({ ok: true });
 }

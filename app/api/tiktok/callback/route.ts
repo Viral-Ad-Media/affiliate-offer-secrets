@@ -40,6 +40,8 @@ export async function GET(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return redirectClearingCookie("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   try {
     const tokens = await exchangeTiktokCode(code);
     const userInfo = await getTiktokUserInfo(tokens.access_token);
@@ -61,7 +63,7 @@ export async function GET(req: Request) {
     const { data: existing } = await admin
       .from("tiktok_connections")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .maybeSingle();
 
     const row = {

@@ -25,13 +25,13 @@ export type CreativeImageStageOutput = {
 // at the API route that queues the job. Same pattern as adimage.ts/adlaunch.ts's stageVerify.
 async function stageVerify(
   payload: GenerateCreativeImagePayload,
-  userId: string
+  workspaceId: string
 ): Promise<CreativeImageStageOutput> {
   const { data: creative } = await db
     .from("campaign_creatives")
     .select("id, campaign_id, source, item_index")
     .eq("id", payload.campaign_creative_id)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!creative) throw new Error("Creative not found for this account");
 
@@ -39,7 +39,7 @@ async function stageVerify(
     .from("campaigns")
     .select("product_id, fb_ad_angles, social_posts")
     .eq("id", creative.campaign_id)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!campaign) throw new Error("Campaign not found for this account");
 
@@ -119,6 +119,7 @@ export async function runGenerateCreativeImageStage(
   stageIndex: number,
   payload: GenerateCreativeImagePayload,
   userId: string,
+  workspaceId: string,
   stageData: Record<string, unknown>,
   usageCtx: { userId: string; jobId: string }
 ): Promise<CreativeImageStageOutput> {
@@ -126,7 +127,7 @@ export async function runGenerateCreativeImageStage(
   const usage: UsageContext = { ...usageCtx, jobType: "generate_creative_image", stage };
   switch (stage) {
     case "verify":
-      return stageVerify(payload, userId);
+      return stageVerify(payload, workspaceId);
     case "prompt":
       return stagePrompt(stageData, usage);
     case "submit":

@@ -29,6 +29,7 @@ const MAX_ATTEMPTS = 5;
 type JobRow = {
   id: string;
   user_id: string;
+  workspace_id: string;
   type:
     | "discover_products"
     | "build_campaign"
@@ -115,11 +116,11 @@ const KNOWN_NETWORKS = ["clickbank", "digistore24"] as const;
 // API routes (app/api/jobs/route.ts, app/api/promote/route.ts) check this same condition before
 // ever inserting the job — this is the worker-side belt-and-suspenders re-check, same trust-
 // boundary split used for every other job type in this codebase.
-async function getAffiliateId(userId: string, network: string): Promise<string> {
+async function getAffiliateId(workspaceId: string, network: string): Promise<string> {
   const { data } = await db
     .from("network_connections")
     .select("affiliate_id")
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .eq("network", network)
     .maybeSingle();
   if (!data?.affiliate_id) {
@@ -153,7 +154,7 @@ async function failJob(job: JobRow, message: string) {
       await db
         .from("campaigns")
         .update({ status: "error", notes: message, updated_at: new Date().toISOString() })
-        .eq("user_id", job.user_id)
+        .eq("workspace_id", job.workspace_id)
         .eq("product_id", job.payload.product_id);
     }
     if (job.type === "launch_ad") {
@@ -225,9 +226,10 @@ async function processDiscover(job: JobRow) {
   if (network !== "clickbank") {
     throw new Error(`Automated discovery for ${network} isn't available yet.`);
   }
-  const affiliateId = await getAffiliateId(job.user_id, network);
+  const affiliateId = await getAffiliateId(job.workspace_id, network);
   const result = await runDiscoverProducts(
     job.user_id,
+    job.workspace_id,
     job.id,
     network as "clickbank",
     affiliateId,
@@ -251,7 +253,7 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
     .from("products")
     .select("*")
     .eq("id", productId)
-    .eq("user_id", job.user_id)
+    .eq("workspace_id", job.workspace_id)
     .maybeSingle();
   if (!product) throw new Error(`No product ${productId}`);
 
@@ -270,7 +272,7 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
   const { data: campaignRow } = await db
     .from("campaigns")
     .select("id")
-    .eq("user_id", job.user_id)
+    .eq("workspace_id", job.workspace_id)
     .eq("product_id", productId)
     .maybeSingle();
   if (!campaignRow) throw new Error(`No campaign row for product ${productId}`);
@@ -289,7 +291,7 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
     await db
       .from("campaigns")
       .update({ ...campaignPatch, updated_at: new Date().toISOString() })
-      .eq("user_id", job.user_id)
+      .eq("workspace_id", job.workspace_id)
       .eq("product_id", productId);
   }
 
@@ -308,7 +310,7 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
     await db
       .from("campaigns")
       .update({ status: "ready", updated_at: new Date().toISOString() })
-      .eq("user_id", job.user_id)
+      .eq("workspace_id", job.workspace_id)
       .eq("product_id", productId);
     await db
       .from("products")
@@ -319,7 +321,7 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
     const { data: readyCampaign } = await db
       .from("campaigns")
       .select("products(product_title)")
-      .eq("user_id", job.user_id)
+      .eq("workspace_id", job.workspace_id)
       .eq("product_id", productId)
       .maybeSingle();
     await notify(db, job.user_id, {
@@ -340,12 +342,12 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
     const { data: builtCampaign } = await db
       .from("campaigns")
       .select("id")
-      .eq("user_id", job.user_id)
+      .eq("workspace_id", job.workspace_id)
       .eq("product_id", productId)
       .maybeSingle();
     if (builtCampaign?.id) {
       try {
-        await createPostFromCampaign(db, job.user_id, builtCampaign.id as string);
+        await createPostFromCampaign(db, job.workspace_id, builtCampaign.id as string);
       } catch (err) {
         console.error("auto blog post failed", err);
       }
@@ -379,6 +381,7 @@ async function processLaunchAdStage(job: JobRow): Promise<StageResult> {
     job.stage,
     payload,
     job.user_id,
+    job.workspace_id,
     job.stage_data ?? {},
     {
       meta_campaign_id: existingLaunch?.meta_campaign_id ?? null,
@@ -433,6 +436,7 @@ async function processGenerateAdImageStage(job: JobRow): Promise<StageResult> {
     job.stage,
     payload,
     job.user_id,
+    job.workspace_id,
     job.stage_data ?? {},
     { userId: job.user_id, jobId: job.id }
   );
@@ -477,6 +481,7 @@ async function processGenerateVideoStage(job: JobRow): Promise<StageResult> {
     job.stage,
     payload,
     job.user_id,
+    job.workspace_id,
     job.stage_data ?? {},
     { userId: job.user_id, jobId: job.id }
   );
@@ -522,6 +527,7 @@ async function processGenerateCreativeImageStage(job: JobRow): Promise<StageResu
     job.stage,
     payload,
     job.user_id,
+    job.workspace_id,
     job.stage_data ?? {},
     { userId: job.user_id, jobId: job.id }
   );
@@ -563,6 +569,7 @@ async function processGenerateBlogImageStage(job: JobRow): Promise<StageResult> 
     job.stage,
     payload,
     job.user_id,
+    job.workspace_id,
     job.stage_data ?? {},
     { userId: job.user_id, jobId: job.id }
   );
@@ -609,6 +616,7 @@ async function processGenerateCreativeVideoStage(job: JobRow): Promise<StageResu
     job.stage,
     payload,
     job.user_id,
+    job.workspace_id,
     job.stage_data ?? {},
     { userId: job.user_id, jobId: job.id }
   );
@@ -655,6 +663,7 @@ async function processSendBroadcastEmailStage(job: JobRow): Promise<StageResult>
     job.stage,
     payload,
     job.user_id,
+    job.workspace_id,
     job.stage_data ?? {}
   );
 

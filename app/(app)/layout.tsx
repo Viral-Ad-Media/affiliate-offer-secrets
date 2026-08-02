@@ -16,6 +16,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("access_granted, nickname, trial_ends_at, first_name, last_name, avatar_url, is_superadmin")
@@ -32,7 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { data: creditRows } = await supabase
     .from("credits_ledger")
     .select("delta")
-    .eq("user_id", user.id);
+    .eq("workspace_id", ws);
   const creditBalance = (creditRows ?? []).reduce((sum, r) => sum + r.delta, 0);
 
   return (

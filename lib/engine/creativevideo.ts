@@ -32,13 +32,13 @@ export type CreativeVideoStageOutput = {
 // Same load-bearing ownership re-check as creativeimage.ts's stageVerify.
 async function stageVerify(
   payload: GenerateCreativeVideoPayload,
-  userId: string
+  workspaceId: string
 ): Promise<CreativeVideoStageOutput> {
   const { data: creative } = await db
     .from("campaign_creatives")
     .select("id, campaign_id, source, item_index")
     .eq("id", payload.campaign_creative_id)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!creative) throw new Error("Creative not found for this account");
 
@@ -46,7 +46,7 @@ async function stageVerify(
     .from("campaigns")
     .select("product_id, fb_ad_angles, social_posts")
     .eq("id", creative.campaign_id)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!campaign) throw new Error("Campaign not found for this account");
 
@@ -142,6 +142,7 @@ export async function runGenerateCreativeVideoStage(
   stageIndex: number,
   payload: GenerateCreativeVideoPayload,
   userId: string,
+  workspaceId: string,
   stageData: Record<string, unknown>,
   usageCtx: { userId: string; jobId: string }
 ): Promise<CreativeVideoStageOutput> {
@@ -149,7 +150,7 @@ export async function runGenerateCreativeVideoStage(
   const usage: UsageContext = { ...usageCtx, jobType: "generate_creative_video", stage };
   switch (stage) {
     case "verify":
-      return stageVerify(payload, userId);
+      return stageVerify(payload, workspaceId);
     case "script":
       return stageScript(stageData, usage);
     case "submit":

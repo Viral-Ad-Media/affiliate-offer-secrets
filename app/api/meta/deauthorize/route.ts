@@ -38,7 +38,7 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data: connection } = await admin
     .from("meta_connections")
-    .select("id, user_id")
+    .select("id, workspace_id")
     .eq("fb_user_id", fbUserId)
     .maybeSingle();
 
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       .from("meta_connections")
       .update({ status: "needs_reconnect", updated_at: new Date().toISOString() })
       .eq("id", connection.id);
-    await admin.from("meta_pages").update({ status: "needs_reconnect" }).eq("user_id", connection.user_id);
+    await admin.from("meta_pages").update({ status: "needs_reconnect" }).eq("workspace_id", connection.workspace_id);
   }
 
   return NextResponse.json({ ok: true });

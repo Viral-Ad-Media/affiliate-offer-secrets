@@ -27,13 +27,13 @@ export type VideoStageOutput = {
 // validates the row's user_id, not payload contents.
 async function stageVerify(
   payload: GenerateVideoPayload,
-  userId: string
+  workspaceId: string
 ): Promise<VideoStageOutput> {
   const { data: campaign } = await db
     .from("campaigns")
     .select("id, product_id, tiktok_md")
     .eq("id", payload.campaign_id)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!campaign) throw new Error("Campaign not found for this account");
 
@@ -114,6 +114,7 @@ export async function runGenerateVideoStage(
   stageIndex: number,
   payload: GenerateVideoPayload,
   userId: string,
+  workspaceId: string,
   stageData: Record<string, unknown>,
   usageCtx: { userId: string; jobId: string }
 ): Promise<VideoStageOutput> {
@@ -121,7 +122,7 @@ export async function runGenerateVideoStage(
   const usage: UsageContext = { ...usageCtx, jobType: "generate_video", stage };
   switch (stage) {
     case "verify":
-      return stageVerify(payload, userId);
+      return stageVerify(payload, workspaceId);
     case "script":
       return stageScript(stageData, usage);
     case "submit":

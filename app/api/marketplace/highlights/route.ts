@@ -24,6 +24,8 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const [{ data: top }, { data: trending }, { data: fresh }, { data: owned }] = await Promise.all([
     supabase
       .from("marketplace_products")
@@ -50,7 +52,7 @@ export async function GET() {
       .order("gravity", { ascending: false, nullsFirst: false })
       .limit(LIMIT),
     // So the panel can show "Added" instead of offering to add something twice.
-    supabase.from("products").select("vendor_id").eq("user_id", user.id).eq("network", "clickbank"),
+    supabase.from("products").select("vendor_id").eq("workspace_id", ws).eq("network", "clickbank"),
   ]);
 
   const ownedIds = new Set((owned ?? []).map((p) => p.vendor_id as string));

@@ -51,10 +51,12 @@ export default async function AuditPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   // Counts first: the page number can't be clamped to a real range without knowing the totals, and
   // head:true means neither count pulls a single row.
   const [{ count: eventTotal }, { count: usageTotal }] = await Promise.all([
-    supabase.from("audit_events").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("audit_events").select("id", { count: "exact", head: true }).eq("workspace_id", ws),
     supabase.from("usage_ledger").select("id", { count: "exact", head: true }).eq("user_id", user.id),
   ]);
 
@@ -69,7 +71,7 @@ export default async function AuditPage({
     supabase
       .from("audit_events")
       .select("id, platform, created_at, campaign_id, summary, detail, external_id")
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       // id as a tiebreaker: created_at alone isn't unique across six tables, and a non-deterministic
       // sort makes rows appear twice (or not at all) as you page through them.
       .order("created_at", { ascending: false })

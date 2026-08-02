@@ -75,23 +75,25 @@ export default async function Overview() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const [
     { count: productsCount },
     { count: campaignsReadyCount },
     { count: contactsCount },
     { count: activeSequencesCount },
   ] = await Promise.all([
-    supabase.from("products").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("products").select("id", { count: "exact", head: true }).eq("workspace_id", ws),
     supabase
       .from("campaigns")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .eq("status", "ready"),
-    supabase.from("contacts").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("contacts").select("id", { count: "exact", head: true }).eq("workspace_id", ws),
     supabase
       .from("broadcast_sequences")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .eq("status", "active"),
   ]);
 

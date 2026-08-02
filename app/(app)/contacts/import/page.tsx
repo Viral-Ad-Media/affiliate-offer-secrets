@@ -11,8 +11,10 @@ export default async function ContactImportPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const [{ data: tags }, { data: campaigns }] = await Promise.all([
-    supabase.from("contact_tags").select("id, name").eq("user_id", user.id).order("name"),
+    supabase.from("contact_tags").select("id, name").eq("workspace_id", ws).order("name"),
     supabase.from("campaigns").select("id, products(product_title)"),
   ]);
 

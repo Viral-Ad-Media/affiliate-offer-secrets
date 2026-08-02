@@ -11,6 +11,8 @@ export default async function BlogPostPage({ params }: { params: { postId: strin
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const [{ data: post }, { data: categories }] = await Promise.all([
     // RLS-scoped — another tenant's post id reads as nonexistent.
     supabase
@@ -20,7 +22,7 @@ export default async function BlogPostPage({ params }: { params: { postId: strin
       )
       .eq("id", params.postId)
       .maybeSingle(),
-    supabase.from("blog_categories").select("id, name").eq("user_id", user.id).order("name"),
+    supabase.from("blog_categories").select("id, name").eq("workspace_id", ws).order("name"),
   ]);
   if (!post) notFound();
 

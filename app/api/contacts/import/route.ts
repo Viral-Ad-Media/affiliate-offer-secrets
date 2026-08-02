@@ -78,6 +78,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json().catch(() => ({}));
   const csv = typeof body.csv === "string" ? body.csv : "";
   const tagId = typeof body.tag_id === "string" && body.tag_id ? body.tag_id : null;
@@ -98,7 +100,7 @@ export async function POST(req: Request) {
       .from("contact_tags")
       .select("id")
       .eq("id", tagId)
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .maybeSingle();
     if (!tag) return NextResponse.json({ error: "tag not found" }, { status: 404 });
   }
@@ -107,7 +109,7 @@ export async function POST(req: Request) {
       .from("campaigns")
       .select("id")
       .eq("id", campaignId)
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .maybeSingle();
     if (!campaign) return NextResponse.json({ error: "campaign not found" }, { status: 404 });
   }
@@ -141,7 +143,7 @@ export async function POST(req: Request) {
   const { data: existing } = await admin
     .from("contacts")
     .select("id, email")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .in("email", toInsert.map((c) => c.email));
   const existingByEmail = new Map((existing ?? []).map((e) => [(e.email as string).toLowerCase(), e.id as string]));
 

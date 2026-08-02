@@ -12,9 +12,11 @@ export default async function BlogCategoriesPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const [{ data: categories }, { data: posts }] = await Promise.all([
-    supabase.from("blog_categories").select("id, name, description").eq("user_id", user.id).order("name"),
-    supabase.from("blog_posts").select("category_id").eq("user_id", user.id),
+    supabase.from("blog_categories").select("id, name, description").eq("workspace_id", ws).order("name"),
+    supabase.from("blog_posts").select("category_id").eq("workspace_id", ws),
   ]);
 
   const counts = new Map<string, number>();

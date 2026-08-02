@@ -12,6 +12,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json();
   const igUserId = body.ig_user_id as string | undefined;
   const caption = (body.caption as string | undefined)?.trim();
@@ -40,7 +42,7 @@ export async function POST(req: Request) {
   const { data: existingPost } = await admin
     .from("instagram_posts")
     .select("ig_media_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
   if (existingPost) {
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
   const { data: igAccount } = await admin
     .from("meta_instagram_accounts")
     .select("linked_page_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("ig_user_id", igUserId)
     .single();
   if (!igAccount) return NextResponse.json({ error: "Instagram account not found" }, { status: 404 });
@@ -60,7 +62,7 @@ export async function POST(req: Request) {
   const { data: page } = await admin
     .from("meta_pages")
     .select("page_token_secret_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("page_id", igAccount.linked_page_id)
     .single();
   if (!page) return NextResponse.json({ error: "linked Page not found" }, { status: 404 });
@@ -76,7 +78,7 @@ export async function POST(req: Request) {
     .from("campaigns")
     .select("embedded_image_data_url")
     .eq("id", campaignId)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .single();
   if (!campaign?.embedded_image_data_url) {
     return NextResponse.json({ error: "no image available for this campaign" }, { status: 400 });
@@ -103,7 +105,7 @@ export async function POST(req: Request) {
       await admin
         .from("meta_pages")
         .update({ status: "needs_reconnect" })
-        .eq("user_id", user.id)
+        .eq("workspace_id", ws)
         .eq("page_id", igAccount.linked_page_id);
     }
     return NextResponse.json({ error: err?.message ?? "Failed to publish" }, { status: 502 });

@@ -18,6 +18,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json();
   const caption = (body.caption as string | undefined)?.trim();
   const campaignId = body.campaign_id as string | undefined;
@@ -41,7 +43,7 @@ export async function POST(req: Request) {
   const { data: existingPost } = await admin
     .from("tiktok_posts")
     .select("tiktok_publish_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
   if (existingPost) {
@@ -53,7 +55,7 @@ export async function POST(req: Request) {
   const { data: conn } = await admin
     .from("tiktok_connections")
     .select("id, access_token_secret_id, refresh_token_secret_id, token_expires_at")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .single();
   if (!conn) return NextResponse.json({ error: "TikTok not connected" }, { status: 404 });
 
@@ -61,7 +63,7 @@ export async function POST(req: Request) {
     .from("campaigns")
     .select("video_path, video_status")
     .eq("id", campaignId)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .single();
   if (!campaign?.video_path || campaign.video_status !== "ready") {
     return NextResponse.json({ error: "no ready video available for this campaign" }, { status: 400 });

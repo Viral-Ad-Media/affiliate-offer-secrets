@@ -12,6 +12,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const stepId = params.id;
   const body = await req.json().catch(() => ({}));
   const direction = body.direction === "up" || body.direction === "down" ? body.direction : null;
@@ -24,7 +26,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .from("funnel_steps")
     .select("campaign_id")
     .eq("id", stepId)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .maybeSingle();
   if (!step) {
     return NextResponse.json({ error: "step not found" }, { status: 404 });

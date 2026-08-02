@@ -15,12 +15,14 @@ export default async function BroadcastPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const [{ data: campaigns }, { data: sent }, { data: provider }, { data: contactRows }] = await Promise.all([
     supabase.from("campaigns").select("id, products(product_title)"),
     supabase
       .from("broadcast_sequences")
       .select("id, name, status, audience_type, created_at")
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .eq("kind", "broadcast")
       .order("created_at", { ascending: false })
       .limit(25),
@@ -30,7 +32,7 @@ export default async function BroadcastPage() {
     supabase
       .from("contacts")
       .select("id, email, first_name, campaign_id")
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .is("unsubscribed_at", null)
       .order("created_at", { ascending: false })
       .limit(500),
@@ -41,7 +43,7 @@ export default async function BroadcastPage() {
     .sort((a, b) => a.title.localeCompare(b.title));
 
   // Counts per broadcast, so the history list can show how many actually went out.
-  const { data: sendRows } = await supabase.from("broadcast_sends").select("sequence_id").eq("user_id", user.id);
+  const { data: sendRows } = await supabase.from("broadcast_sends").select("sequence_id").eq("workspace_id", ws);
   const sentCount = new Map<string, number>();
   for (const r of sendRows ?? []) {
     if (r.sequence_id) sentCount.set(r.sequence_id, (sentCount.get(r.sequence_id) ?? 0) + 1);

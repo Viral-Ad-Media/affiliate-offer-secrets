@@ -15,10 +15,12 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const { data: jobs, error } = await supabase
     .from("jobs")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -31,6 +33,7 @@ export async function POST(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+  const { data: ws } = await supabase.rpc("current_workspace_id");
 
   const body = await req.json();
   if (body.type !== "discover_products") {
@@ -49,7 +52,7 @@ export async function POST(req: Request) {
   const { data: connection } = await supabase
     .from("network_connections")
     .select("affiliate_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("network", network)
     .maybeSingle();
   if (!connection?.affiliate_id) {
@@ -79,7 +82,7 @@ export async function POST(req: Request) {
   const { data: open } = await supabase
     .from("jobs")
     .select("id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("type", "discover_products")
     .in("status", ["pending", "running"])
     .filter("payload", "eq", JSON.stringify(payload))

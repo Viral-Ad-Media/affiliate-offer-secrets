@@ -14,6 +14,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json().catch(() => ({}));
   const name = typeof body.name === "string" ? body.name.trim().slice(0, MAX_CATEGORY_NAME) : "";
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
@@ -31,7 +33,7 @@ export async function POST(req: Request) {
     const { data: taken } = await admin
       .from("blog_categories")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .ilike("slug", slug)
       .maybeSingle();
     if (!taken) break;

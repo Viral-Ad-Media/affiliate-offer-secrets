@@ -15,12 +15,14 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("blog_categories")
     .delete()
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .select("id");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data || data.length === 0) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -39,6 +41,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+  const { data: ws } = await supabase.rpc("current_workspace_id");
 
   const body = await req.json().catch(() => ({}));
   const name = typeof body.name === "string" ? body.name.trim().slice(0, MAX_CATEGORY_NAME) : "";
@@ -57,7 +60,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .from("blog_categories")
     .update(patch)
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .select("id, name, slug, description");
   if (error) {
     const dup = error.message.includes("duplicate") || error.code === "23505";

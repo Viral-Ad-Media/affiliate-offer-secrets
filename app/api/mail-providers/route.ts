@@ -29,6 +29,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -109,7 +111,7 @@ export async function POST(req: Request) {
   const { data: existing } = await admin
     .from("mail_provider_connections")
     .select("id, secret_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("provider", provider)
     .maybeSingle();
 
@@ -150,6 +152,7 @@ export async function DELETE(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+  const { data: ws } = await supabase.rpc("current_workspace_id");
 
   let body: Record<string, unknown>;
   try {
@@ -168,7 +171,7 @@ export async function DELETE(req: Request) {
   const { data: existing } = await admin
     .from("mail_provider_connections")
     .select("id, secret_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("provider", provider)
     .maybeSingle();
   if (!existing) return NextResponse.json({ ok: true });

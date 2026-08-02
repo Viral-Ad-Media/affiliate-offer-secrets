@@ -23,6 +23,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json().catch(() => ({}));
   const apiKey = typeof body.api_key === "string" ? body.api_key.trim() : "";
   const affiliateId = typeof body.affiliate_id === "string" ? body.affiliate_id.trim() : "";
@@ -58,7 +60,7 @@ export async function POST(req: Request) {
   const { data: existing } = await admin
     .from("everflow_connections")
     .select("api_key_secret_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .maybeSingle();
 
   const { error: connErr } = await admin.from("everflow_connections").upsert(

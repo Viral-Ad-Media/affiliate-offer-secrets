@@ -13,9 +13,11 @@ export default async function ContactTagsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const [{ data: tags }, { data: links }] = await Promise.all([
-    supabase.from("contact_tags").select("id, name").eq("user_id", user.id).order("name"),
-    supabase.from("contact_tag_links").select("tag_id").eq("user_id", user.id),
+    supabase.from("contact_tags").select("id, name").eq("workspace_id", ws).order("name"),
+    supabase.from("contact_tag_links").select("tag_id").eq("workspace_id", ws),
   ]);
 
   const counts = new Map<string, number>();

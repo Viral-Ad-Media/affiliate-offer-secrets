@@ -14,10 +14,12 @@ export default async function BlogPage({ searchParams }: { searchParams: { page?
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const { count } = await supabase
     .from("blog_posts")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id);
+    .eq("workspace_id", ws);
   const total = count ?? 0;
   const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
   const [from, to] = pageRange(page);
@@ -26,10 +28,10 @@ export default async function BlogPage({ searchParams }: { searchParams: { page?
     supabase
       .from("blog_posts")
       .select("id, title, status, category_id, campaign_id, published_at, updated_at")
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .order("updated_at", { ascending: false })
       .range(from, to),
-    supabase.from("blog_categories").select("id, name").eq("user_id", user.id).order("name"),
+    supabase.from("blog_categories").select("id, name").eq("workspace_id", ws).order("name"),
     // Campaigns whose kit actually includes generated blog content — the import dropdown.
     supabase.from("campaigns").select("id, products(product_title)").not("blog_md", "is", null),
   ]);

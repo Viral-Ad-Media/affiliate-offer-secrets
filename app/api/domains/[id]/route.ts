@@ -12,12 +12,14 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const admin = createAdminClient();
   const { data: domainRow } = await admin
     .from("custom_domains")
     .select("id, domain")
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .single();
   if (!domainRow) return NextResponse.json({ error: "domain not found" }, { status: 404 });
 
@@ -49,6 +51,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+  const { data: ws } = await supabase.rpc("current_workspace_id");
 
   const body = await req.json().catch(() => ({}));
   const patch: { serves_blog?: boolean; is_primary?: boolean } = {};
@@ -63,7 +66,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .from("custom_domains")
     .select("id, status")
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .maybeSingle();
   if (!domainRow) return NextResponse.json({ error: "domain not found" }, { status: 404 });
   if (domainRow.status !== "verified" && (patch.serves_blog || patch.is_primary)) {
@@ -81,7 +84,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       await admin
         .from("custom_domains")
         .update({ [flag]: false })
-        .eq("user_id", user.id)
+        .eq("workspace_id", ws)
         .neq("id", domainRow.id)
         .eq(flag, true);
     }
@@ -91,7 +94,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .from("custom_domains")
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", domainRow.id)
-    .eq("user_id", user.id);
+    .eq("workspace_id", ws);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

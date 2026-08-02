@@ -40,7 +40,7 @@ function stepUrl(campaignId: string, stepIndex: number): string {
 export async function rerenderFunnelSequence(
   admin: SupabaseClient,
   campaignId: string,
-  userId: string
+  workspaceId: string
 ): Promise<void> {
   const { data: campaign } = await admin
     .from("campaigns")
@@ -60,7 +60,7 @@ export async function rerenderFunnelSequence(
   const { data: connection } = await admin
     .from("network_connections")
     .select("affiliate_id")
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .eq("network", product.network)
     .maybeSingle();
   const affiliateId = connection?.affiliate_id ?? null;
@@ -143,7 +143,7 @@ export async function rerenderFunnelSequence(
             .from("products")
             .select("product_title, network, vendor_id")
             .eq("id", targetProductId)
-            .eq("user_id", userId)
+            .eq("workspace_id", workspaceId)
             .maybeSingle();
           if (tp) {
             targetProduct = tp;
@@ -151,7 +151,7 @@ export async function rerenderFunnelSequence(
               const { data: tc } = await admin
                 .from("network_connections")
                 .select("affiliate_id")
-                .eq("user_id", userId)
+                .eq("workspace_id", workspaceId)
                 .eq("network", tp.network)
                 .maybeSingle();
               targetAffiliateId = tc?.affiliate_id ?? null;

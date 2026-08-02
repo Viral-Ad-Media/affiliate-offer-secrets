@@ -13,6 +13,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json();
   const pageId = body.page_id as string | undefined;
   const message = (body.message as string | undefined)?.trim();
@@ -43,7 +45,7 @@ export async function POST(req: Request) {
   const { data: existingPost } = await admin
     .from("meta_posts")
     .select("fb_post_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
   if (existingPost) {
@@ -53,7 +55,7 @@ export async function POST(req: Request) {
   const { data: page } = await admin
     .from("meta_pages")
     .select("page_token_secret_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("page_id", pageId)
     .single();
   if (!page) return NextResponse.json({ error: "page not found" }, { status: 404 });
@@ -95,7 +97,7 @@ export async function POST(req: Request) {
       await admin
         .from("meta_pages")
         .update({ status: "needs_reconnect" })
-        .eq("user_id", user.id)
+        .eq("workspace_id", ws)
         .eq("page_id", pageId);
     }
     return NextResponse.json({ error: err?.message ?? "Failed to publish" }, { status: 502 });

@@ -13,6 +13,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json().catch(() => ({}));
   const name = typeof body.name === "string" ? body.name.trim().slice(0, 60) : "";
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
@@ -22,7 +24,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .from("contact_tags")
     .update({ name })
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .select("id");
   if (error) {
     const dup = error.code === "23505" || error.message.includes("duplicate");
@@ -41,6 +43,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+  const { data: ws } = await supabase.rpc("current_workspace_id");
 
   const admin = createAdminClient();
   // Links cascade on tag delete — the contacts themselves are untouched, only the grouping goes.
@@ -48,7 +51,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     .from("contact_tags")
     .delete()
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .select("id");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data || data.length === 0) return NextResponse.json({ error: "not found" }, { status: 404 });

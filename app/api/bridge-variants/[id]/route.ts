@@ -25,6 +25,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const variantId = params.id;
 
   const { data: owns, error: ownErr } = await supabase.rpc("assert_owns_bridge_variant", {
@@ -90,7 +92,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const { data: connection } = await admin
     .from("network_connections")
     .select("affiliate_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("network", product.network)
     .maybeSingle();
   if (!connection?.affiliate_id) {

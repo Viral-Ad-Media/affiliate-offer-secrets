@@ -22,12 +22,12 @@ export type BlogImageStageOutput = {
 // The real security boundary for this job type — jobs' own RLS only validates the row's user_id,
 // not payload contents, so a forged post_id must be caught here, not just at the API route that
 // queues the job. Same pattern as creativeimage.ts/adlaunch.ts's stageVerify.
-async function stageVerify(payload: GenerateBlogImagePayload, userId: string): Promise<BlogImageStageOutput> {
+async function stageVerify(payload: GenerateBlogImagePayload, workspaceId: string): Promise<BlogImageStageOutput> {
   const { data: post } = await db
     .from("blog_posts")
     .select("id, title, content_md, html")
     .eq("id", payload.post_id)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!post) throw new Error("Post not found for this account");
 
@@ -94,6 +94,7 @@ export async function runGenerateBlogImageStage(
   stageIndex: number,
   payload: GenerateBlogImagePayload,
   userId: string,
+  workspaceId: string,
   stageData: Record<string, unknown>,
   usageCtx: { userId: string; jobId: string }
 ): Promise<BlogImageStageOutput> {
@@ -101,7 +102,7 @@ export async function runGenerateBlogImageStage(
   const usage: UsageContext = { ...usageCtx, jobType: "generate_blog_image", stage };
   switch (stage) {
     case "verify":
-      return stageVerify(payload, userId);
+      return stageVerify(payload, workspaceId);
     case "prompt":
       return stagePrompt(stageData, usage);
     case "submit":

@@ -18,6 +18,7 @@ export type DiscoverJobPayload = DiscoverPayload & { niche: string };
 // one this function actually supports before invoking it.
 export async function runDiscoverProducts(
   userId: string,
+  workspaceId: string,
   jobId: string,
   network: Network,
   affiliateId: string,
@@ -130,7 +131,7 @@ export async function runDiscoverProducts(
         page_verified: item.page_verified,
         updated_at: new Date().toISOString(),
       })
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .ilike("vendor_id", item.vendor_id);
   }
 

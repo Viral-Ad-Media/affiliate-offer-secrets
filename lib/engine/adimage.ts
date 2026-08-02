@@ -21,13 +21,13 @@ export type AdImageStageOutput = {
 // API route that queues the job. Same pattern as adlaunch.ts's stageVerify.
 async function stageVerify(
   payload: GenerateAdImagePayload,
-  userId: string
+  workspaceId: string
 ): Promise<AdImageStageOutput> {
   const { data: campaign } = await db
     .from("campaigns")
     .select("id, product_id, fb_ads_md")
     .eq("id", payload.campaign_id)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!campaign) throw new Error("Campaign not found for this account");
 
@@ -98,6 +98,7 @@ export async function runGenerateAdImageStage(
   stageIndex: number,
   payload: GenerateAdImagePayload,
   userId: string,
+  workspaceId: string,
   stageData: Record<string, unknown>,
   usageCtx: { userId: string; jobId: string }
 ): Promise<AdImageStageOutput> {
@@ -105,7 +106,7 @@ export async function runGenerateAdImageStage(
   const usage: UsageContext = { ...usageCtx, jobType: "generate_ad_image", stage };
   switch (stage) {
     case "verify":
-      return stageVerify(payload, userId);
+      return stageVerify(payload, workspaceId);
     case "prompt":
       return stagePrompt(stageData, usage);
     case "submit":

@@ -3,7 +3,7 @@
 // byte-for-byte what the import button would have produced.
 //
 // Server-only: takes the admin client (blog tables have no client write grants — 0030) and always
-// scopes reads by user_id explicitly, since the worker runs as service_role and gets no RLS.
+// scopes reads by workspace_id explicitly, since the worker runs as service_role and gets no RLS.
 
 import type { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -23,7 +23,7 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 // rather than letting the partial unique index throw.
 export async function uniquePostSlug(
   admin: AdminClient,
-  userId: string,
+  workspaceId: string,
   desired: string
 ): Promise<string> {
   for (let n = 1; n <= 50; n++) {
@@ -31,7 +31,7 @@ export async function uniquePostSlug(
     const { data } = await admin
       .from("blog_posts")
       .select("id")
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .ilike("slug", candidate)
       .maybeSingle();
     if (!data) return candidate;
@@ -52,13 +52,13 @@ export type CampaignPostResult =
 // deleted stops blocking, which is right: the old post is now unrelated history.)
 export async function createPostFromCampaign(
   admin: AdminClient,
-  userId: string,
+  workspaceId: string,
   campaignId: string
 ): Promise<CampaignPostResult> {
   const { data: existing } = await admin
     .from("blog_posts")
     .select("id")
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .eq("campaign_id", campaignId)
     .maybeSingle();
   if (existing) return { created: false, reason: "already_exists", postId: existing.id as string };
@@ -67,7 +67,7 @@ export async function createPostFromCampaign(
     .from("campaigns")
     .select("id, blog_md, embedded_image_data_url, products(product_title)")
     .eq("id", campaignId)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!campaign?.blog_md) return { created: false, reason: "no_blog_content" };
 
@@ -88,10 +88,10 @@ export async function createPostFromCampaign(
   const { data, error } = await admin
     .from("blog_posts")
     .insert({
-      user_id: userId,
+      workspace_id: workspaceId,
       campaign_id: campaign.id as string,
       title,
-      slug: await uniquePostSlug(admin, userId, slugify(title) || "post"),
+      slug: await uniquePostSlug(admin, workspaceId, slugify(title) || "post"),
       content_md: contentMd,
       page_copy: tree,
       html,

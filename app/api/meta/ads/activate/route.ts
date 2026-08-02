@@ -36,6 +36,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json();
   const launchId = body.launch_id as string | undefined;
   if (!launchId) return NextResponse.json({ error: "launch_id is required" }, { status: 400 });
@@ -79,7 +81,7 @@ export async function POST(req: Request) {
   const { data: connection } = await admin
     .from("meta_connections")
     .select("user_token_secret_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .maybeSingle();
   if (!connection) {
     await refundAndFail(admin, user.id, launchId, launch.budget_credits, "No Meta connection");

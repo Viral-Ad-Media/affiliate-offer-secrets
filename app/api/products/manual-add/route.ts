@@ -36,6 +36,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -65,7 +67,7 @@ export async function POST(req: Request) {
   const { data: connection } = await supabase
     .from("network_connections")
     .select("affiliate_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("network", network)
     .maybeSingle();
   if (!connection?.affiliate_id) {

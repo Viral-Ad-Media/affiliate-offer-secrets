@@ -17,6 +17,8 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   // RLS-scoped read doubles as the ownership check; the worker's stageVerify re-checks for real.
   const { data: post } = await supabase
     .from("blog_posts")
@@ -33,7 +35,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const { count } = await admin
     .from("jobs")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .eq("type", "generate_blog_image")
     .gte("created_at", since);
   if ((count ?? 0) >= MAX_BLOG_IMAGES_PER_DAY) {
@@ -45,7 +47,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     .from("blog_posts")
     .update({ featured_image_status: "generating", featured_image_error: null, updated_at: new Date().toISOString() })
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .neq("featured_image_status", "generating")
     .select("id")
     .maybeSingle();

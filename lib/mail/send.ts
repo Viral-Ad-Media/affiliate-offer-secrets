@@ -30,6 +30,7 @@ export type SendFailure = { ok: false; reason: "not_connected" | "needs_reconnec
 export async function sendViaActiveSender(
   admin: AdminClient,
   userId: string,
+  workspaceId: string,
   args: { to: string; subject: string; html: string }
 ): Promise<SendResult | SendFailure> {
   const { data: profile } = await admin
@@ -46,7 +47,7 @@ export async function sendViaActiveSender(
   const { data: conn } = await admin
     .from("mail_provider_connections")
     .select("id, provider, secret_id, smtp_host, smtp_port, smtp_username, smtp_secure, mailgun_domain, mailgun_region, from_address, from_name, status")
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .eq("provider", provider)
     .maybeSingle();
   if (!conn) return { ok: false, reason: "not_connected" };

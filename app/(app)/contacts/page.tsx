@@ -18,10 +18,12 @@ export default async function ContactsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const { count } = await supabase
     .from("contacts")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id);
+    .eq("workspace_id", ws);
   const total = count ?? 0;
   const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
   const [from, to] = pageRange(page);
@@ -30,7 +32,7 @@ export default async function ContactsPage({
     supabase
       .from("contacts")
       .select("id, campaign_id, first_name, email, extra_fields, created_at")
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .order("created_at", { ascending: false })
       .range(from, to),
     supabase.from("campaigns").select("id, products(product_title)"),

@@ -17,6 +17,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json().catch(() => ({}));
   const campaignId = typeof body.campaign_id === "string" ? body.campaign_id : null;
   const admin = createAdminClient();
@@ -25,7 +27,7 @@ export async function POST(req: Request) {
   // so a hand-imported post and an auto-created one can't diverge. Ownership is enforced by the
   // helper scoping every read to this user_id — another tenant's campaign id reads as nonexistent.
   if (campaignId) {
-    const result = await createPostFromCampaign(admin, user.id, campaignId);
+    const result = await createPostFromCampaign(admin, ws as string, campaignId);
     if (!result.created && result.reason === "no_blog_content") {
       return NextResponse.json({ error: "campaign not found or has no blog content" }, { status: 404 });
     }
@@ -41,7 +43,7 @@ export async function POST(req: Request) {
     .insert({
       user_id: user.id,
       title: "Untitled post",
-      slug: await uniquePostSlug(admin, user.id, "post"),
+      slug: await uniquePostSlug(admin, ws as string, "post"),
       content_md: "",
       page_copy: tree,
       html,

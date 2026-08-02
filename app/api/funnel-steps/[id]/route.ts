@@ -31,6 +31,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const stepId = params.id;
 
   const { data: owns, error: ownErr } = await supabase.rpc("assert_owns_funnel_step", {
@@ -102,7 +104,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       .from("products")
       .select("id")
       .eq("id", body.target_product_id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .maybeSingle();
     if (!targetProduct) {
       return NextResponse.json({ error: "invalid target product" }, { status: 400 });
@@ -141,11 +143,12 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+  const { data: ws } = await supabase.rpc("current_workspace_id");
 
   const stepId = params.id;
 
   const admin = createAdminClient();
-  const { data: step } = await admin.from("funnel_steps").select("campaign_id").eq("id", stepId).eq("user_id", user.id).maybeSingle();
+  const { data: step } = await admin.from("funnel_steps").select("campaign_id").eq("id", stepId).eq("workspace_id", ws).maybeSingle();
   if (!step) {
     return NextResponse.json({ error: "step not found" }, { status: 404 });
   }

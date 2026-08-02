@@ -16,6 +16,8 @@ export async function GET(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const url = new URL(req.url);
   const rawPage = Number.parseInt(url.searchParams.get("page") ?? "1", 10);
   const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
@@ -29,7 +31,7 @@ export async function GET(req: Request) {
     const q = supabase
       .from("products")
       .select("*, campaigns(id, status)", { count: "exact" })
-      .eq("user_id", user.id);
+      .eq("workspace_id", ws);
     return statuses.length > 0 ? q.in("status", statuses) : q;
   };
 
@@ -41,7 +43,7 @@ export async function GET(req: Request) {
     supabase
       .from("product_stats")
       .select("total, promoting, selected, avg_gravity")
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .maybeSingle(),
   ]);
 

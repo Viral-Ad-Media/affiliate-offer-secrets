@@ -54,6 +54,8 @@ export async function GET(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return redirectClearingCookie("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   try {
     const { access_token: shortLived } = await exchangeCodeForToken(code);
     const { access_token: longLived } = await exchangeForLongLivedToken(shortLived);
@@ -80,7 +82,7 @@ export async function GET(req: Request) {
     const { data: existingConnection } = await admin
       .from("meta_connections")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .maybeSingle();
 
     let connectionId: string;
@@ -128,7 +130,7 @@ export async function GET(req: Request) {
       const { data: existingPage } = await admin
         .from("meta_pages")
         .select("id, is_active")
-        .eq("user_id", user.id)
+        .eq("workspace_id", ws)
         .eq("page_id", page.id)
         .maybeSingle();
 
@@ -164,7 +166,7 @@ export async function GET(req: Request) {
         const { data: existingIg } = await admin
           .from("meta_instagram_accounts")
           .select("id, is_active")
-          .eq("user_id", user.id)
+          .eq("workspace_id", ws)
           .eq("ig_user_id", igAccount.id)
           .maybeSingle();
 
@@ -196,7 +198,7 @@ export async function GET(req: Request) {
       const { data: existingAccount } = await admin
         .from("meta_ad_accounts")
         .select("id, is_active")
-        .eq("user_id", user.id)
+        .eq("workspace_id", ws)
         .eq("ad_account_id", account.id)
         .maybeSingle();
 

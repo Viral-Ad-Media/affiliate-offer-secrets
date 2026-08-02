@@ -11,14 +11,14 @@ export const dynamic = "force-dynamic";
 // Post slugs are unique per blog (0033's partial index). Rather than let a duplicate title 500
 // on the index, append -2, -3, … until free. Excludes the post being edited so re-saving an
 // unchanged title doesn't keep incrementing.
-async function uniquePostSlug(userId: string, postId: string, desired: string): Promise<string> {
+async function uniquePostSlug(workspaceId: string, postId: string, desired: string): Promise<string> {
   const admin = createAdminClient();
   for (let n = 1; n <= 50; n++) {
     const candidate = n === 1 ? desired : `${desired}-${n}`;
     const { data } = await admin
       .from("blog_posts")
       .select("id")
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .ilike("slug", candidate)
       .neq("id", postId)
       .maybeSingle();
@@ -39,6 +39,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json().catch(() => ({}));
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
@@ -57,7 +59,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     // Slug follows the title unless explicitly set. Uniqueness is per-blog (0033's partial index),
     // so a collision within this tenant gets a numeric suffix rather than a 500 from the index.
     const desired = slugify(typeof body.slug === "string" && body.slug.trim() ? body.slug : (patch.title as string) ?? "");
-    if (desired) patch.slug = await uniquePostSlug(user.id, params.id, desired);
+    if (desired) patch.slug = await uniquePostSlug(ws as string, params.id, desired);
   }
   if (typeof body.excerpt === "string") {
     patch.excerpt = body.excerpt.trim().slice(0, MAX_POST_EXCERPT) || null;
@@ -95,7 +97,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .from("blog_posts")
     .update(patch)
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .select("id, title, status, category_id, published_at, updated_at");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data || data.length === 0) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -108,13 +110,14 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+  const { data: ws } = await supabase.rpc("current_workspace_id");
 
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("blog_posts")
     .delete()
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .select("id");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data || data.length === 0) return NextResponse.json({ error: "not found" }, { status: 404 });

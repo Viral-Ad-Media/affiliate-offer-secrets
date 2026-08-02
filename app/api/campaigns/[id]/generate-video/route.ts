@@ -20,6 +20,8 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const { data: owns } = await supabase.rpc("assert_owns_campaign", { p_campaign_id: params.id });
   if (!owns) return NextResponse.json({ error: "campaign not found" }, { status: 404 });
 
@@ -30,7 +32,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const { count } = await admin
     .from("jobs")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .in("type", ["generate_video", "generate_creative_video"])
     .gte("created_at", since);
   if ((count ?? 0) >= MAX_VIDEO_GENERATIONS_PER_DAY) {

@@ -51,28 +51,30 @@ export default async function AnalyticsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   // head:true count queries — none of these pull rows, so the page cost doesn't grow with the
   // data behind it.
   const [contacts, published, sends, campaignsReady, variants, funnelsLive] = await Promise.all([
-    supabase.from("contacts").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("contacts").select("id", { count: "exact", head: true }).eq("workspace_id", ws),
     supabase
       .from("blog_posts")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .eq("status", "published"),
-    supabase.from("broadcast_sends").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("broadcast_sends").select("id", { count: "exact", head: true }).eq("workspace_id", ws),
     supabase
       .from("campaigns")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .eq("status", "ready"),
     // Views are a running total per split-test variant, so they only exist for funnels that have
     // a test running — stated in the hint rather than presented as total traffic.
-    supabase.from("bridge_variants").select("views").eq("user_id", user.id),
+    supabase.from("bridge_variants").select("views").eq("workspace_id", ws),
     supabase
       .from("campaigns")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("workspace_id", ws)
       .eq("bridge_published", true),
   ]);
 

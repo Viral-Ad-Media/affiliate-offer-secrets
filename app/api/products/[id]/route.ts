@@ -11,11 +11,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const { data: product, error } = await supabase
     .from("products")
     .select("*")
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .single();
   if (error || !product) return NextResponse.json({ error: "not found" }, { status: 404 });
 
@@ -23,7 +25,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .from("campaigns")
     .select("*")
     .eq("product_id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .maybeSingle();
 
   return NextResponse.json({ product, campaign: campaign ?? null });
@@ -35,6 +37,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+  const { data: ws } = await supabase.rpc("current_workspace_id");
 
   const body = await req.json();
   if (body.status) {
@@ -45,7 +48,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       .from("products")
       .update({ status: body.status, updated_at: new Date().toISOString() })
       .eq("id", params.id)
-      .eq("user_id", user.id);
+      .eq("workspace_id", ws);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
   return NextResponse.json({ ok: true });

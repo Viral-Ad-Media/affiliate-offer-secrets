@@ -21,6 +21,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json().catch(() => ({}));
   const status = typeof body.status === "string" ? body.status : "";
   if (!(PRODUCT_STATUSES as readonly string[]).includes(status)) {
@@ -34,7 +36,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .from("products")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .select("id, status")
     .maybeSingle();
 

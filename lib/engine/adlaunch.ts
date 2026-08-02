@@ -50,12 +50,12 @@ async function getToken(secretId: string): Promise<string> {
 // user_id, not payload contents, so a forged payload (another tenant's campaign_id/page_id/
 // ad_account_id/angle_index) must be caught here, not just at the API route that queues the job.
 // Runs once, as stage 0; later stages trust job.user_id because this stage already proved it.
-async function stageVerify(payload: LaunchAdPayload, userId: string): Promise<AdLaunchStageOutput> {
+async function stageVerify(payload: LaunchAdPayload, workspaceId: string, userId: string): Promise<AdLaunchStageOutput> {
   const { data: campaign } = await db
     .from("campaigns")
     .select("id, images_json, ad_creative_image_data_url, fb_ad_angles")
     .eq("id", payload.campaign_id)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!campaign) throw new Error("Campaign not found for this account");
 
@@ -73,7 +73,7 @@ async function stageVerify(payload: LaunchAdPayload, userId: string): Promise<Ad
     .eq("source", "fb_ad_angle")
     .eq("item_index", payload.angle_index)
     .eq("kind", payload.creative_kind)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!requestedCreative || requestedCreative.status !== "ready") {
     throw new Error(`The ${payload.creative_kind} creative for this angle isn't ready yet`);
@@ -91,7 +91,7 @@ async function stageVerify(payload: LaunchAdPayload, userId: string): Promise<Ad
       .eq("source", "fb_ad_angle")
       .eq("item_index", payload.angle_index)
       .eq("kind", "image")
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .maybeSingle();
     if (siblingImage?.status === "ready") thumbnailImageDataUrl = siblingImage.image_data_url ?? null;
   }
@@ -100,7 +100,7 @@ async function stageVerify(payload: LaunchAdPayload, userId: string): Promise<Ad
     .from("meta_pages")
     .select("page_id")
     .eq("page_id", payload.page_id)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!page) throw new Error("Page not found for this account");
 
@@ -108,14 +108,14 @@ async function stageVerify(payload: LaunchAdPayload, userId: string): Promise<Ad
     .from("meta_ad_accounts")
     .select("ad_account_id")
     .eq("ad_account_id", payload.ad_account_id)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!adAccount) throw new Error("Ad account not found for this account");
 
   const { data: connection } = await db
     .from("meta_connections")
     .select("user_token_secret_id, ads_management_granted")
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!connection) throw new Error("No Meta connection for this account");
   if (!connection.ads_management_granted) {
@@ -317,13 +317,14 @@ export async function runLaunchAdStage(
   stageIndex: number,
   payload: LaunchAdPayload,
   userId: string,
+  workspaceId: string,
   stageData: Record<string, unknown>,
   existingLaunch: ExistingLaunch
 ): Promise<AdLaunchStageOutput> {
   const stage = LAUNCH_AD_STAGES[stageIndex];
   switch (stage) {
     case "verify":
-      return stageVerify(payload, userId);
+      return stageVerify(payload, workspaceId, userId);
     case "campaign":
       return stageCampaign(payload, stageData);
     case "adset":

@@ -23,6 +23,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const { data: ws } = await supabase.rpc("current_workspace_id");
+
   const body = await req.json().catch(() => ({}));
   const campaignId = body.campaign_id as string | undefined;
   const source = body.source as string | undefined;
@@ -72,7 +74,7 @@ export async function POST(req: Request) {
   const { count } = await admin
     .from("jobs")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
+    .eq("workspace_id", ws)
     .in("type", [jobType, legacyJobType])
     .gte("created_at", since);
   if ((count ?? 0) >= dailyCap) {
