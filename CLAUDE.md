@@ -864,11 +864,12 @@ Meta-named ones in `0007_meta_secret_helper.sql` — those stay untouched, zero 
   `campaigns` via the admin client without independently re-checking ownership.
 - **Env vars**: `TIKTOK_CLIENT_KEY`/`TIKTOK_CLIENT_SECRET` (developers.tiktok.com — register
   `${NEXT_PUBLIC_APP_URL}/api/tiktok/callback`), `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
-  (console.cloud.google.com — register both `${NEXT_PUBLIC_APP_URL}/api/youtube/callback` and
-  `${NEXT_PUBLIC_APP_URL}/api/mail/callback`). TikTok apps and Google's OAuth consent screen both
+  (console.cloud.google.com — register `${NEXT_PUBLIC_APP_URL}/api/youtube/callback`, and ONLY
+  that one: the Gmail OAuth flow was retired in `0037_retire_gmail_sender.sql`, so `/api/mail/`
+  has a `send` route and no `connect`/`callback` at all. Registering a mail callback would point at
+  a route that doesn't exist). TikTok apps and Google's OAuth consent screen both
   work immediately for the developer/testers added on the app itself, without full review —
-  sufficient for testing, same caveat as Meta's Development Mode; `gmail.send` specifically is a
-  "restricted" scope that needs Google's security assessment before a public rollout.
+  sufficient for testing, same caveat as Meta's Development Mode.
 
 ## Mail providers (Resend / SendGrid / Mailgun / generic SMTP)
 
