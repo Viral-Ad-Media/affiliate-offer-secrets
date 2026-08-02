@@ -1,6 +1,6 @@
 export const metadata = {
   title: "Privacy Policy",
-  description: "Privacy Policy for Affiliate Studio.",
+  description: "Privacy Policy for Affiliate Offer Secrets.",
 };
 
 export default function PrivacyPage() {

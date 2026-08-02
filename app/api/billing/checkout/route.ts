@@ -16,12 +16,12 @@ export async function POST(req: Request) {
 
   let lineItem: { name: string; cents: number; type: "access" | "credits"; credits?: number };
   if (body.type === "access") {
-    lineItem = { name: "Affiliate Studio — Access", cents: ACCESS_FEE_CENTS, type: "access" };
+    lineItem = { name: "Affiliate Offer Secrets — Access", cents: ACCESS_FEE_CENTS, type: "access" };
   } else if (body.type === "credits") {
     const pack = CREDIT_PACKS.find((p) => p.credits === Number(body.credits));
     if (!pack) return NextResponse.json({ error: "unknown credit pack" }, { status: 400 });
     lineItem = {
-      name: `Affiliate Studio — ${pack.credits} credits`,
+      name: `Affiliate Offer Secrets — ${pack.credits} credits`,
       cents: pack.cents,
       type: "credits",
       credits: pack.credits,

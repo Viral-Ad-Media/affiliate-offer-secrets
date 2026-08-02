@@ -2,7 +2,7 @@ import { Mail } from "lucide-react";
 
 export const metadata = {
   title: "Contact",
-  description: "Get in touch with the Affiliate Studio team.",
+  description: "Get in touch with the Affiliate Offer Secrets team.",
 };
 
 const SUPPORT_EMAIL = "support@clickbankstudio.app";

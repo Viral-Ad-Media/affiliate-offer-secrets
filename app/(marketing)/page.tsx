@@ -129,7 +129,7 @@ export default function HomePage() {
             <br className="hidden sm:block" /> Ship the whole funnel in minutes.
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-base text-zinc-400 sm:text-lg">
-            Affiliate Studio researches the marketplace, writes your ads, funnel pages, blog and
+            Affiliate Offer Secrets researches the marketplace, writes your ads, funnel pages, blog and
             emails, hosts them on your own domain, and launches real campaigns — from one
             dashboard.
           </p>

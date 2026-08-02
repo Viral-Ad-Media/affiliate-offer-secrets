@@ -2,17 +2,17 @@ import Link from "next/link";
 
 export const metadata = {
   title: "FAQ",
-  description: "Common questions about Affiliate Studio.",
+  description: "Common questions about Affiliate Offer Secrets.",
 };
 
 const FAQS = [
   {
-    q: "What exactly does Affiliate Studio generate for me?",
+    q: "What exactly does Affiliate Offer Secrets generate for me?",
     a: "For each product you promote: three distinct Facebook/Instagram ad angles, TikTok scripts, a funnel (an opt-in page you can extend with thank-you, upsell and order steps), a blog article, email swipes and social captions — all grounded in claims taken directly from the vendor's own sales page. You can also generate an ad image or a short-form video for each individual angle and social post.",
   },
   {
     q: "Which affiliate networks are supported?",
-    a: "Automated marketplace discovery is ClickBank-only today — pick a category and the engine pulls live gravity and earnings data, scores it and verifies each sales page. For Digistore24 and networks running on the Everflow platform, you connect your own affiliate ID and add products by hand; everything downstream (hoplinks, campaign kits, funnels, ads) then works exactly the same. Affiliate Studio never creates network accounts or touches your commissions.",
+    a: "Automated marketplace discovery is ClickBank-only today — pick a category and the engine pulls live gravity and earnings data, scores it and verifies each sales page. For Digistore24 and networks running on the Everflow platform, you connect your own affiliate ID and add products by hand; everything downstream (hoplinks, campaign kits, funnels, ads) then works exactly the same. Affiliate Offer Secrets never creates network accounts or touches your commissions.",
   },
   {
     q: "Can I edit the funnel pages, or am I stuck with what the AI wrote?",
@@ -27,7 +27,7 @@ const FAQS = [
     a: "Into your own contact list inside the app. From there you can tag them, import more from CSV, export everything to any ESP, or enrol them in an email sequence.",
   },
   {
-    q: "Can I send email from Affiliate Studio?",
+    q: "Can I send email from Affiliate Offer Secrets?",
     a: "Yes — one-off broadcasts and multi-step drip sequences, where each step fires a set number of days after that specific contact opted in. Sending goes through your own Resend, SendGrid, Mailgun or SMTP account, so deliverability and sending limits are yours, not a shared pool. Unsubscribe links are added automatically and can't be edited out. If you'd rather not connect anything, there's also a manual mode that builds the emails and hands them to your own mail client.",
   },
   {
@@ -35,7 +35,7 @@ const FAQS = [
     a: "Yes. Connect a domain you already own (we don't sell domains), point its DNS, and serve funnels from it — several campaigns per domain, each on its own path. One domain can also host your blog, which comes with a public index, SEO-friendly slugs, categories, featured images, RSS and a sitemap.",
   },
   {
-    q: "Does Affiliate Studio hold or spend my ad budget?",
+    q: "Does Affiliate Offer Secrets hold or spend my ad budget?",
     a: "No. When you connect your Facebook account, ad campaigns are created and billed directly through your own Meta ad account and payment method. The platform is only authorized to create and activate campaigns — it never holds or moves your money.",
   },
   {

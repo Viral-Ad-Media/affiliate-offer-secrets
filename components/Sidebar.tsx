@@ -242,7 +242,7 @@ export default function Sidebar({
             {collapsed ? (
               // Collapsed rail: the mark alone still identifies the app and keeps a "go home"
               // target where the wordmark link would be.
-              <Link href="/dashboard" title="Affiliate Studio">
+              <Link href="/dashboard" title="Affiliate Offer Secrets">
                 <AppLogo wordmark={false} markClassName="h-7 w-7" />
               </Link>
             ) : (

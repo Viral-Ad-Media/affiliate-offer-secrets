@@ -18,9 +18,9 @@ const sourceSans = Source_Sans_3({
   display: "swap",
 });
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://clickbank-studio.vercel.app";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.affiliateoffersecrets.com";
 const DESCRIPTION =
-  "Affiliate Studio researches the marketplace, writes your ads, funnels, blog and emails, hosts them on your own domain, and launches real ad campaigns — all from one dashboard.";
+  "Affiliate Offer Secrets researches the marketplace, writes your ads, funnels, blog and emails, hosts them on your own domain, and launches real ad campaigns — all from one dashboard.";
 
 // Site-wide SEO defaults. Per-page metadata exports (marketing pages) override title/description;
 // metadataBase makes every relative OG/canonical URL absolute. Funnel pages (/p, /d) keep their
@@ -28,21 +28,21 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),
   title: {
-    default: "Affiliate Studio — Find winning products, ship full campaigns",
-    template: "%s — Affiliate Studio",
+    default: "Affiliate Offer Secrets — Find winning products, ship full campaigns",
+    template: "%s — Affiliate Offer Secrets",
   },
   description: DESCRIPTION,
-  applicationName: "Affiliate Studio",
+  applicationName: "Affiliate Offer Secrets",
   openGraph: {
     type: "website",
-    siteName: "Affiliate Studio",
-    title: "Affiliate Studio — Find winning products, ship full campaigns",
+    siteName: "Affiliate Offer Secrets",
+    title: "Affiliate Offer Secrets — Find winning products, ship full campaigns",
     description: DESCRIPTION,
     url: "/",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Affiliate Studio",
+    title: "Affiliate Offer Secrets",
     description: DESCRIPTION,
   },
   robots: { index: true, follow: true },

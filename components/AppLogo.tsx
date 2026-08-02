@@ -4,7 +4,7 @@
 // changes.
 function LogoMark({ className = "h-7 w-7" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 64 64" role="img" aria-label="Affiliate Studio" className={`${className} shrink-0`}>
+    <svg viewBox="0 0 64 64" role="img" aria-label="Affiliate Offer Secrets" className={`${className} shrink-0`}>
       <rect width="64" height="64" rx="14" fill="#0a0f1a" />
       <path
         d="M20 46 L32 18 L44 46"
@@ -33,9 +33,11 @@ export default function AppLogo({
   return (
     <span className="flex items-center gap-2">
       <LogoMark className={markClassName} />
+      {/* Three words don't fit the 208px of usable width in the expanded sidebar on one line, so
+          the wordmark is allowed to wrap to two — leading-tight keeps that from looking loose. */}
       {wordmark && (
-        <span className={textClassName}>
-          Affiliate <span className="text-emerald-400">Studio</span>
+        <span className={`${textClassName} min-w-0 leading-tight`}>
+          Affiliate Offer <span className="text-emerald-400">Secrets</span>
         </span>
       )}
     </span>

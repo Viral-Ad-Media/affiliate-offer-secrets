@@ -363,7 +363,7 @@ export function renderPublicPostHtml(post: {
   // Set on custom-domain requests so links/canonical point at that domain instead of the app.
   siteOrigin?: string | null;
 }): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://clickbank-studio.vercel.app";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.affiliateoffersecrets.com";
   const origin = post.siteOrigin || appUrl;
   // On a custom domain the blog lives at the root, so paths drop the /b/{blogSlug} prefix.
   const onDomain = !!post.siteOrigin;
@@ -452,7 +452,7 @@ export function renderBlogIndexHtml(
     totalPages?: number;
   }
 ): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://clickbank-studio.vercel.app";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.affiliateoffersecrets.com";
   const onDomain = !!opts?.siteOrigin;
   const origin = opts?.siteOrigin || appUrl;
   const base = onDomain ? "" : blogIndexPath(settings.slug) ?? "";

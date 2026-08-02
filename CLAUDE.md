@@ -1,14 +1,35 @@
-# Affiliate Studio
+# Affiliate Offer Secrets
 
-**Product name is "Affiliate Studio."** It was renamed from "ClickBank Studio" once Digistore24
-(and more networks later) became supported — the user-facing wordmark must stay network-agnostic.
-"ClickBank" survives ONLY where it names the real network: the `'clickbank'` enum value in
-`network_connections`/`products`, `clickbank.com`'s GraphQL endpoint, `hop.clickbank.net`
-hoplinks, `CLICKBANK_CATEGORIES` (`lib/categories.ts`), `lib/engine/clickbank.ts`, the network
-label/badge in the UI, copy about live marketplace discovery (still ClickBank-only), and the
-trademark disclaimer in `components/MarketingFooter.tsx`. Never rename those. Infrastructure
-names (repo dir `clickbank-studio`, the Vercel project, `clickbank-studio.vercel.app`, the GitHub
-repo) were deliberately left alone — changing them breaks deploy URLs and is a separate decision.
+**Product name is "Affiliate Offer Secrets,"** matching the domain
+**`www.affiliateoffersecrets.com`**. It was "ClickBank Studio" until Digistore24 support made a
+network-specific name wrong, then "Affiliate Studio" until the domain was bought — the
+user-facing wordmark must stay network-agnostic. "ClickBank" survives ONLY where it names the
+real network: the `'clickbank'` enum value in `network_connections`/`products`, `clickbank.com`'s
+GraphQL endpoint, `hop.clickbank.net` hoplinks, `CLICKBANK_CATEGORIES` (`lib/categories.ts`),
+`lib/engine/clickbank.ts`, the network label/badge in the UI, copy about live marketplace
+discovery (still ClickBank-only), and the trademark disclaimer in
+`components/MarketingFooter.tsx`. Never rename those.
+
+**Infrastructure was renamed too** (the earlier "leave infra alone" decision is superseded): the
+GitHub repo is `Viral-Ad-Media/affiliate-offer-secrets`, the local directory is
+`affiliate-offer-secrets`, and the Vercel project is `affiliate-offer-secrets`. `supabase/
+migrations/0001_init.sql`'s header keeps the original name on purpose — a migration is a record
+of what was written at the time, not a live label.
+
+**`clickbank-studio.vercel.app` is gone.** Renaming the Vercel project releases that hostname
+(anyone can claim it), so every reference to it had to move to the custom domain in the same
+pass: `NEXT_PUBLIC_APP_URL`, the fallback origins in `app/layout.tsx`/`app/robots.ts`/
+`app/sitemap.ts`/`lib/blog.ts`, and all four Vault cron URLs (`engine_webhook_url`,
+`marketplace_refresh_url`, `domains_reverify_url`, `broadcast_sweep_url`). Externally registered
+callbacks pointing at the old host — Meta/TikTok/Google OAuth redirect URIs, Meta's deauthorize
+callback, the Stripe webhook endpoint, and Supabase Auth's Site URL/redirect allowlist — are the
+one class this codebase can't fix from inside itself and must be re-registered by hand.
+
+**`NEXT_PUBLIC_APP_URL` is load-bearing for the whole app, not just link generation.**
+`middleware.ts` rewrites any request whose `Host` doesn't match it to `/d${pathname}` (tenant
+custom-domain serving), so pointing it at the wrong host doesn't degrade gracefully — it 404s
+every page of the app. Confirmed live: the domain returned a bare "Not found" for its entire
+first day, purely because this var still named the old Vercel host.
 
 Multi-tenant affiliate SaaS. The Next.js app (deployed on Vercel) is the visual
 dashboard; **Supabase (Postgres + Auth) is the database**, with every tenant-owned table scoped
@@ -1256,7 +1277,7 @@ manage, not an afterthought.
   bridge` and a direct POST simulating custom-domain traffic — not assumed to work from the code
   alone.
 - **No collision with the existing marketing `/contact` page** — that's a visitor contacting the
-  SaaS operator (Affiliate Studio itself), a completely different context from a tenant's own ad
+  SaaS operator (Affiliate Offer Secrets itself), a completely different context from a tenant's own ad
   visitor submitting a bridge page's opt-in form. `contacts` (the table/nav entry) and `/contact`
   (the marketing page) are unrelated on purpose; don't conflate them when extending either.
 - **`ContactsTable.tsx` is `"use client"`, a deliberate deviation from `AuditTrail.tsx`'s

@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://clickbank-studio.vercel.app";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.affiliateoffersecrets.com";
 
 // Static marketing routes only. Tenant blog posts (/b/{postId}) are deliberately not enumerated —
 // a global sitemap of every tenant's posts would be a cross-tenant enumeration surface; each post

@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Affiliate Studio">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Affiliate Offer Secrets">
   <rect width="64" height="64" rx="14" fill="#0a0f1a"/>
-  <!-- "A" for Affiliate Studio, replacing the old "C" (ClickBank) mark. Drawn as strokes rather
+  <!-- "A" for Affiliate Offer Secrets, replacing the old "C" (ClickBank) mark. Drawn as strokes rather
        than a filled glyph so it stays legible at 16px, where a real typeface's thin joins fill in.
        Emerald matches the wordmark accent. -->
   <path d="M20 46 L32 18 L44 46" fill="none" stroke="#34d399" stroke-width="7"

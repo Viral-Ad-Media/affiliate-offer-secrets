@@ -1,6 +1,6 @@
 export const metadata = {
   title: "Terms of Service",
-  description: "Terms of Service for Affiliate Studio.",
+  description: "Terms of Service for Affiliate Offer Secrets.",
 };
 
 export default function TermsPage() {
@@ -19,7 +19,7 @@ export default function TermsPage() {
         <section>
           <h2 className="font-heading text-lg font-semibold text-zinc-100">1. Acceptance of terms</h2>
           <p className="mt-2">
-            By creating an account or using Affiliate Studio ("the Service"), operated by
+            By creating an account or using Affiliate Offer Secrets ("the Service"), operated by
             [LEGAL ENTITY NAME] ("we", "us"), you agree to these Terms of Service. If you do not
             agree, do not use the Service.
           </p>
@@ -28,7 +28,7 @@ export default function TermsPage() {
         <section>
           <h2 className="font-heading text-lg font-semibold text-zinc-100">2. Description of the Service</h2>
           <p className="mt-2">
-            Affiliate Studio provides affiliate marketplace research and AI-generated marketing
+            Affiliate Offer Secrets provides affiliate marketplace research and AI-generated marketing
             content (ad copy, funnel pages, blog content, email content, images and video) for use
             by affiliate marketers, along with tools to edit, host and publish that content —
             including funnel and blog hosting on domains you connect, contact capture, and email
