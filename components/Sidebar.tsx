@@ -21,6 +21,7 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  ShieldAlert,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -29,7 +30,17 @@ import CreditsChip from "@/components/CreditsChip";
 import AppLogo from "@/components/AppLogo";
 import TopBarAccount from "@/components/TopBarAccount";
 
-const NAV = [
+type NavChild = { href: string; label: string; match: (p: string) => boolean };
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  match: (p: string) => boolean;
+  children?: NavChild[];
+  soon?: boolean;
+};
+
+const NAV: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: (p: string) => p === "/dashboard" },
   { href: "/marketplace", label: "Marketplace", icon: Megaphone, match: (p: string) => p === "/marketplace" || p.startsWith("/product/") },
   { href: "/funnels", label: "Funnels", icon: Filter, match: (p: string) => p.startsWith("/funnels") },
@@ -112,12 +123,20 @@ const NAV = [
   },
 ];
 
+const SUPERADMIN_NAV: NavItem = {
+  href: "/admin",
+  label: "Superadmin",
+  icon: ShieldAlert,
+  match: (p: string) => p.startsWith("/admin"),
+};
+
 type Props = {
   email: string;
   creditBalance: number;
   firstName: string | null;
   lastName: string | null;
   avatarUrl: string | null;
+  isSuperadmin?: boolean;
 };
 
 // Desktop (sm+): a persistent left sidebar, collapsible to an icon-only rail — the choice is
@@ -132,6 +151,7 @@ export default function Sidebar({
   firstName,
   lastName,
   avatarUrl,
+  isSuperadmin = false,
 }: Props) {
   const pathname = usePathname();
   const router = useRouter();
@@ -156,11 +176,13 @@ export default function Sidebar({
   }
 
 
+  const nav = isSuperadmin ? [...NAV, SUPERADMIN_NAV] : NAV;
+
   const navLinks = (iconOnly: boolean) =>
-    NAV.map((item) => {
+    nav.map((item) => {
       const active = item.match(pathname);
-      const children = "children" in item ? item.children : undefined;
-      const soon = "soon" in item && item.soon;
+      const children = item.children;
+      const soon = item.soon === true;
 
       // Rendered as a non-link: a nav item that navigates to a 404 is worse than one that's
       // visibly inert. Keeps the icon and label so the roadmap is legible.

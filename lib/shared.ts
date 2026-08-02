@@ -235,3 +235,48 @@ export const STATUS_COLORS: Record<string, string> = {
   Paused: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
   Dead: "bg-red-500/15 text-red-300 border-red-500/30",
 };
+
+// ---------------------------------------------------------------------------------------------
+// Superadmin. These mirror the return shapes of the admin_* RPCs in 0056_admin_reads.sql — those
+// functions gate themselves with assert_superadmin(), so an ordinary tenant selecting these types
+// in code still gets nothing back from the database.
+// ---------------------------------------------------------------------------------------------
+
+export type AdminAccountRow = {
+  user_id: string;
+  email: string;
+  full_name: string | null;
+  created_at: string;
+  last_sign_in_at: string | null;
+  access_granted: boolean;
+  trial_ends_at: string | null;
+  is_superadmin: boolean;
+  credits: number;
+  products: number;
+  campaigns: number;
+  contacts: number;
+  jobs_error: number;
+  spend_usd: number;
+};
+
+export type AdminProblemJob = {
+  id: string;
+  user_id: string;
+  email: string;
+  type: string;
+  status: string;
+  stage: number | null;
+  attempts: number;
+  result: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminActionRow = {
+  id: string;
+  actor_email: string | null;
+  action: string;
+  target_email: string | null;
+  detail: Record<string, unknown>;
+  created_at: string;
+};

@@ -18,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("access_granted, nickname, trial_ends_at, first_name, last_name, avatar_url")
+    .select("access_granted, nickname, trial_ends_at, first_name, last_name, avatar_url, is_superadmin")
     .eq("id", user.id)
     .single();
 
@@ -44,6 +44,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         firstName={profile?.first_name ?? null}
         lastName={profile?.last_name ?? null}
         avatarUrl={profile?.avatar_url ?? null}
+        isSuperadmin={profile?.is_superadmin === true}
       />
       <div className="min-w-0 flex-1">
         {/* Desktop-only top bar. The bell lives here rather than in the sidebar: it's a global

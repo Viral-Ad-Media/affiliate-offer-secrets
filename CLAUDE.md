@@ -2005,6 +2005,50 @@ account-level change, the same reasoning as the password form.
 
 Teams/orgs are out of scope by decision, so RLS stays `user_id = auth.uid()` throughout.
 
+## Superadmin (/admin)
+
+Cross-tenant observability plus a handful of audited account actions, at `/admin`. Schema in
+`supabase/migrations/0055_superadmin.sql` (flag, audit table, action RPCs) and
+`0056_admin_reads.sql` (read RPCs). Gate in `lib/admin.ts`; UI in `app/admin/*` +
+`components/AdminAccountsTable.tsx` / `AdminProblemJobs.tsx`.
+
+- **Authorization lives in the DATABASE, not the route.** Every `admin_*` function is
+  `SECURITY DEFINER`, granted to `authenticated`, and calls `assert_superadmin()` as its first
+  statement. So the pages use the ordinary RLS-scoped client and **no service-role key is involved
+  in this feature at all** — a future admin route that forgets `requireSuperadminOr404()` still
+  gets nothing back. That's the opposite of how the rest of this app does cross-tenant reads
+  (admin client + a gate in the route) and it is the safer shape; prefer it for anything new here.
+- **The flag is `profiles.is_superadmin`.** That table has exactly one policy — SELECT on
+  `auth.uid() = id`, no client write path of any kind, because the general update policy was
+  dropped in `0002_trial.sql` to stop self-granted `access_granted`. That makes it the safest
+  table in the schema to hold a privilege bit, and it is now a **third** independent reason never
+  to re-add a broad profiles update policy: doing so would turn this into privilege escalation.
+- **`is_superadmin()` takes no argument** — it answers only about the caller, so it can't be used
+  to enumerate who the admins are. Non-superadmins get a **404** from `/admin`, not a 403; the
+  surface doesn't confirm its own existence.
+- **`/admin` sits outside the `(app)` route group on purpose.** That group's layout is the
+  paywall — it redirects to `/settings/billing` when `hasAppAccess()` is false — and an operator
+  whose own trial lapsed must not lose the ability to see why the platform is on fire.
+- **Every action writes its audit row in the same transaction as its effect** (`admin_actions`,
+  default-deny RLS, service_role only). There is no code path that changes access, credits or a
+  trial without a record of who did it. Verified live: a credit adjustment produced the ledger row
+  and the audit row with byte-identical timestamps.
+- **`admin_adjust_credits` is a deliberate, documented exception to "only the Stripe webhook
+  writes `credits_ledger`."** That rule exists to stop ordinary app code minting credits by
+  accident. A superadmin comping or clawing back credits is a real support action, and the
+  alternative — doing it by hand in SQL — is strictly less safe: this path is authenticated,
+  authorized, reasoned and audited. The ledger stays append-only; a claw-back is a negative delta.
+- **`admin_requeue_job` does not reset `stage`** — a multi-stage job resumes where it died, which
+  is the entire point of the `stage`/`stage_data` design. It resets `attempts` (so `MAX_ATTEMPTS`
+  doesn't instantly re-fail it) and clears `locked_at`. It writes the failure message to
+  `jobs.result`, NOT an `error` column — that column doesn't exist; `worker.ts`'s `failJob` uses
+  `result` and the admin path has to match or the UI shows a blank reason.
+- The sidebar entry is appended only for superadmins, so an ordinary tenant's rendered HTML never
+  mentions `/admin` — the route 404s for them regardless, but there's no reason to advertise it.
+- **Deliberately NOT included: impersonation / "view as tenant."** It was offered and not chosen;
+  it's the most sensitive thing this app could grow and would need its own audit trail and a much
+  harder gate than a boolean column.
+
 ## Ads Manager, Analytics, and the Contacts submenu
 
 Three read surfaces over data other code already writes — no new tables for the first two.
