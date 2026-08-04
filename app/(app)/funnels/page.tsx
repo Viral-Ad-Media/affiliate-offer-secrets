@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
+import { originFromHost } from "@/lib/host";
 import { createClient } from "@/lib/supabase/server";
 import { Radio, ExternalLink, Inbox, Beaker, Layers } from "lucide-react";
 
@@ -56,7 +58,9 @@ export default async function FunnelsPage() {
     domainUrlByCampaign.set(r.campaign_id, `https://${r.custom_domains.domain}/${r.path}`);
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  // The host that served this page, not NEXT_PUBLIC_APP_URL — since the canonical redirect the
+  // operator is on their workspace subdomain, and the default link shown should be the branded one.
+  const appUrl = originFromHost(headers().get("host")) || (process.env.NEXT_PUBLIC_APP_URL ?? "");
 
   const funnels = (campaigns ?? []).map((c: any) => ({
     id: c.id as string,

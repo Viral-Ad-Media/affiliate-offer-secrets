@@ -28,8 +28,11 @@ export default function PublishBridge({
   const [addingRoute, setAddingRoute] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
 
+  // Current origin, not NEXT_PUBLIC_APP_URL: since the canonical redirect (Phase 3), the operator
+  // works on their workspace's subdomain, and the link they copy should be the branded one they're
+  // looking at. The subdomain serves only its own workspace's campaigns, which is exactly this one.
   const defaultUrl =
-    typeof window !== "undefined" ? `${process.env.NEXT_PUBLIC_APP_URL}/p/${campaignId}/bridge` : "";
+    typeof window !== "undefined" ? `${window.location.origin}/p/${campaignId}/bridge` : "";
 
   useEffect(() => {
     const supabase = createClient();

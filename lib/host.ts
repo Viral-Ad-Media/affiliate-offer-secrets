@@ -86,6 +86,17 @@ export function classifyHost(rawHost: string | null | undefined, cfg?: HostConfi
   return { kind: "custom" };
 }
 
+// Origin for building absolute URLs that should stay on whatever host served the request —
+// server-side sibling of the client components' window.location.origin. http for local dev,
+// https everywhere else (mirrors app/d/[[...path]]/route.ts's existing assumption).
+export function originFromHost(host: string | null | undefined): string {
+  const h = (host ?? "").trim().toLowerCase();
+  if (!h) return "";
+  const bare = stripPort(h);
+  const scheme = bare === "localhost" || bare === "127.0.0.1" || bare.endsWith(".localhost") ? "http" : "https";
+  return `${scheme}://${h}`;
+}
+
 // The canonical origin for a workspace. Used for the www -> subdomain redirect, the workspace
 // switcher's navigation, and the copy-link buttons that surface a tenant's branded URL.
 //

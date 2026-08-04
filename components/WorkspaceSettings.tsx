@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Check, Copy, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { workspaceOrigin } from "@/lib/host";
 
 // Mirrors slugify_workspace() in 0041 closely enough for a live preview. The server re-slugifies
 // and re-validates whatever is submitted, so this is guidance, not the boundary — but showing the
@@ -22,13 +23,11 @@ export default function WorkspaceSettings({
   workspaceId,
   name: initialName,
   slug: initialSlug,
-  appUrl,
   canEdit,
 }: {
   workspaceId: string;
   name: string;
   slug: string;
-  appUrl: string;
   canEdit: boolean;
 }) {
   const router = useRouter();
@@ -38,8 +37,9 @@ export default function WorkspaceSettings({
   const [copied, setCopied] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const base = appUrl.replace(/\/$/, "");
-  const publicUrl = `${base}/w/${previewSlug(slug) || initialSlug}`;
+  // The workspace's real subdomain (this used to build a /w/{slug} URL — a route that never
+  // existed). Falls back to the canonical host until NEXT_PUBLIC_ROOT_DOMAIN is configured.
+  const publicUrl = workspaceOrigin(previewSlug(slug) || initialSlug);
 
   async function save() {
     setBusy(true);
@@ -88,9 +88,13 @@ export default function WorkspaceSettings({
           className={`${field} font-mono`}
         />
         <span className="mt-1 block text-[11px] text-zinc-500">
-          Used to preview funnels and blog posts before you connect a custom domain.{" "}
-          <strong className="text-amber-300/80">Changing it breaks existing links</strong> to those
-          previews.
+          This is your workspace&apos;s subdomain — where your team works and where funnel and blog
+          links you share point.{" "}
+          <strong className="text-amber-300/80">
+            Changing it changes your workspace&apos;s URL and breaks links you&apos;ve already
+            shared
+          </strong>{" "}
+          (ads already running are unaffected — they use the main domain).
         </span>
       </label>
 

@@ -4,16 +4,24 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { classifyHost, workspaceOrigin } from "@/lib/host";
 
-type Membership = { workspace_id: string; role: string; workspaces: { name: string } | null };
+type Membership = {
+  workspace_id: string;
+  role: string;
+  workspaces: { name: string; slug: string } | null;
+};
 
-// Which workspace the app is currently showing. Switching writes profiles.active_workspace_id via
-// the narrow set_active_workspace RPC (profiles has no client update policy by design), then
-// router.refresh() so every server component re-reads through current_workspace_id().
+// Which workspace the app is currently showing. With subdomains (Phase 3), the URL is the source
+// of truth: on a workspace subdomain the active workspace is the host's, whatever
+// active_workspace_id says, and switching NAVIGATES to the other workspace's own origin.
+// set_active_workspace is still written first so a later landing on the canonical host (an OAuth
+// return, a bookmark) redirects to the same place. When the target origin is the current one
+// (no root domain configured, or dev without subdomains) this degrades to the pre-subdomain
+// behavior: write the RPC, router.refresh().
 //
 // This is a UX control, not a security one: RLS already refuses rows from a workspace you're not
-// in, so the worst a broken switcher can do is show you the wrong workspace of your OWN. That's
-// also why per-organization subdomains can later replace this without touching any policy.
+// in, so the worst a broken switcher can do is show you the wrong workspace of your OWN.
 export default function WorkspaceSwitcher({ collapsed = false }: { collapsed?: boolean }) {
   const router = useRouter();
   const [rows, setRows] = useState<Membership[]>([]);
@@ -25,11 +33,19 @@ export default function WorkspaceSwitcher({ collapsed = false }: { collapsed?: b
   useEffect(() => {
     const supabase = createClient();
     Promise.all([
-      supabase.from("workspace_members").select("workspace_id, role, workspaces(name)"),
+      supabase.from("workspace_members").select("workspace_id, role, workspaces(name, slug)"),
       supabase.rpc("current_workspace_id"),
     ]).then(([m, ws]) => {
-      setRows((m.data ?? []) as unknown as Membership[]);
-      setActiveId((ws.data as string | null) ?? null);
+      const memberships = (m.data ?? []) as unknown as Membership[];
+      setRows(memberships);
+      // Host wins over the account's stored active workspace — the checkmark must agree with the
+      // URL, or the switcher claims one workspace while the page shows another.
+      const hostKind = classifyHost(window.location.host);
+      const fromHost =
+        hostKind.kind === "workspace"
+          ? memberships.find((r) => r.workspaces?.slug === hostKind.slug)?.workspace_id
+          : undefined;
+      setActiveId(fromHost ?? ((ws.data as string | null) ?? null));
     });
   }, []);
 
@@ -57,6 +73,16 @@ export default function WorkspaceSwitcher({ collapsed = false }: { collapsed?: b
     if (error) return;
     setActiveId(id);
     setOpen(false);
+
+    const slug = rows.find((r) => r.workspace_id === id)?.workspaces?.slug;
+    const target = slug ? workspaceOrigin(slug) : "";
+    if (target && target !== window.location.origin) {
+      // Cross-origin: a real navigation, keeping the current path — /contacts in workspace A
+      // becomes /contacts in workspace B. The auth cookie is domain-wide (Phase 3 S2), so the
+      // session survives the hop.
+      window.location.assign(`${target}${window.location.pathname}${window.location.search}`);
+      return;
+    }
     router.refresh();
   }
 

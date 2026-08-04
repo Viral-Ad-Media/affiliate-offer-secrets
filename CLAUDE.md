@@ -1930,13 +1930,17 @@ since 0057/0058/0059 **the workspace actually owns the data**. 38 tenant tables 
 **Settings → Team**, invitations accepted at `/invite/{token}`.
 
 **Two layers, and confusing them is the mistake to avoid.** RLS (`is_workspace_member`) decides
-whether a row is visible *at all* — that is the security boundary. `profiles.active_workspace_id`,
-read via `current_workspace_id()` and surfaced by `components/WorkspaceSwitcher.tsx`, decides which
-of *your* workspaces the UI is showing — that is UX. Queries still filter `.eq("workspace_id", ws)`
-explicitly, exactly as they always also filtered on `user_id` despite the policy: belt and braces,
-and it keeps a member of two workspaces from seeing both lists merged. **Because the scope is
-resolved in one function, per-organization subdomains become a change to how that resolves and
-touch no policy at all.**
+whether a row is visible *at all* — that is the security boundary. The active workspace — resolved
+per request by `lib/workspace.ts`'s `currentWorkspaceId()` (subdomain slug first, then
+`profiles.active_workspace_id` via `current_workspace_id()`) — decides which of *your* workspaces
+the UI is showing — that is UX. Queries still filter `.eq("workspace_id", ws)` explicitly, exactly
+as they always also filtered on `user_id` despite the policy: belt and braces, and it keeps a
+member of two workspaces from seeing both lists merged. **The scope really is resolved in one
+function now — it wasn't when this section was first written.** `lib/workspace.ts` claimed to be
+the single resolver while having zero callers; all 60 server-side sites inlined
+`rpc("current_workspace_id")` themselves, none checking the error. Phase 3 (subdomains) forced
+the consolidation: every server page/route now calls `currentWorkspaceId()` /
+`currentUserAndWorkspace()`, and nothing else should ever inline the RPC again.
 
 - **`user_id` stays on every table** as created-by attribution ("who launched this ad"). It is no
   longer a scope. Nothing should filter on it except the person-scoped tables below.
@@ -1992,6 +1996,64 @@ they owned before and none of anyone else's; a client insert that omits `workspa
 passes `WITH CHECK` (the trigger fills it before the check runs) and lands in the right workspace;
 and a temporarily-added member gains visibility of the workspace's products, with the membership
 removed in the same transaction.
+
+## Per-organization subdomains (Phase 3)
+
+Each workspace lives at `{slug}.affiliateoffersecrets.com`, canonically: signing in on the
+canonical host redirects you to your workspace's subdomain, and the URL itself says which org
+you're in. Feature-flagged entirely by env: **`NEXT_PUBLIC_ROOT_DOMAIN` turns the whole thing on**
+(classifier + canonical redirect), `NEXT_PUBLIC_COOKIE_DOMAIN` makes the session domain-wide.
+Both are `NEXT_PUBLIC_*` — inlined at build time, each change needs its own deployment. Unset,
+the app behaves exactly as pre-Phase-3, which is also how dev runs by default.
+
+- **`lib/host.ts` is the one place a Host header is interpreted** — `classifyHost()` returns
+  app / workspace(slug) / custom; middleware switches on it (only `custom` rewrites to `/d`),
+  `lib/workspace.ts` resolves scope from it, `lib/publicPage.ts` restricts public serving by it.
+  `*.localhost` is a workspace host so all of this is testable in dev with zero config
+  (`acme.localhost:3400`) — which also fixed the old `host.startsWith("localhost")` check that
+  classified `acme.localhost` as a tenant custom domain.
+- **`workspace_id_for_slug(p_slug)` (0060) folds membership into the lookup** — NULL for "no such
+  workspace" and "not a member" alike, so a subdomain can't probe which workspaces exist. Public
+  serving deliberately does NOT use it (anonymous visitors have no membership):
+  `publicWorkspaceScope()` in `lib/publicPage.ts` does a plain admin-client slug lookup and every
+  caller collapses a mismatch to the same generic 404. **A workspace subdomain only ever serves
+  its own workspace's funnels, images, and blog** — without that check, campaign UUIDs being
+  host-independent meant acme's subdomain would happily serve globex's funnel under acme's brand.
+- **Cookies** (`lib/supabase/cookieOptions.ts`): `NEXT_PUBLIC_COOKIE_DOMAIN` drives both the
+  Domain attribute AND a renamed session cookie (`aos-auth`) — old host-only cookies and new
+  domain-wide ones with the same name are both sent with undefined precedence (intermittent
+  logged-out loop), so the rename deterministically signs everyone out exactly once when this
+  first deploys. OAuth state cookies are domain-wide (a connect flow started on a subdomain lands
+  on the canonical host's registered callback); their clears carry the same domain or they'd
+  silently no-op. The sticky A/B cookie is host-AWARE via `cookieDomainForHost()` — on a tenant's
+  BYO custom domain a Domain naming our root would make the browser reject the entire Set-Cookie.
+- **Cross-host redirects in middleware use `redirectToHost()`, never `NextResponse.redirect()`**
+  — Next relativizes an absolute Location whose origin it considers its own, including hand-set
+  headers for loopback-family hosts (localhost AND 127.0.0.1; www.localhost and real domains
+  survive — all observed live). Dev's canonical host is therefore `www.localhost:{port}`, which
+  browsers resolve unaided and `classifyHost` treats as app.
+- **The canonical redirect lives in `app/(app)/layout.tsx`, not middleware** — so marketing,
+  `/login`, `/p`, `/b`, every API route, and `/admin` (cross-tenant by nature) never redirect.
+  Path preserved via the `x-pathname` header middleware stamps. On a subdomain, marketing paths
+  and `/login` bounce OUT to the canonical host; the bare subdomain root goes to `/dashboard`.
+- **The funnel step chain is baked HOST-RELATIVE** (`/p/{id}/step/{n}`, `lib/funnelSteps.ts` +
+  both page-copy PATCH routes) — a visitor continues on whatever host they entered on, and a
+  workspace rename can't break a chain. **Real Meta ad `link_url`s stay absolute on the canonical
+  host on purpose** (`lib/engine/adlaunch.ts`) — an ad already spending must never depend on a
+  mutable slug; same for Instagram's fetched image URL and the unsubscribe link in emails.
+  Copy-link UI (PublishBridge, LaunchAd preview, Funnels list) shows the current host's URL — the
+  branded one the operator is looking at.
+- **The blog is noindex on subdomains** (middleware header for `/b/*` on workspace hosts) — the
+  canonical host's copy is the indexable one and the renderers' canonical tags already point there.
+- The workspace switcher navigates cross-origin to the target workspace's own subdomain (writing
+  `set_active_workspace` first so canonical-host landings follow), and derives the ACTIVE
+  workspace from the host, not the RPC — the checkmark must agree with the URL.
+  `/settings/team` resolves through `currentWorkspaceId()` now; it used to pick the first
+  membership by `created_at`, so a two-workspace user could edit A while the switcher showed B.
+- **Ship checklist** (external, cannot be done from code): add `*.affiliateoffersecrets.com` to
+  the Vercel project; wildcard TLS needs either Vercel nameservers (recommended — also fixes the
+  apex A records) or a persistent `_acme-challenge` TXT record; set both env vars; redeploy.
+  First production deploy with `NEXT_PUBLIC_COOKIE_DOMAIN` signs every session out once, by design.
 
 ## Settings
 

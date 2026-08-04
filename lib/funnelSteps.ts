@@ -27,8 +27,14 @@ type FunnelStepRow = {
   seo_description: string | null;
 };
 
+// Path-relative on purpose (Phase 3): the baked "next step" href follows whatever host the
+// visitor is on — a visitor who entered on a workspace subdomain continues the funnel there, one
+// who entered via an ad on the canonical host continues there. Deleting the host from stored HTML
+// is strictly better than picking either absolute host, and it means a workspace rename never
+// breaks a step chain. Real Meta ad link_urls stay absolute on the canonical host for the same
+// reason, in lib/engine/adlaunch.ts — an ad already spending must never depend on a mutable slug.
 function stepUrl(campaignId: string, stepIndex: number): string {
-  return `${process.env.NEXT_PUBLIC_APP_URL}/p/${campaignId}/step/${stepIndex}`;
+  return `/p/${campaignId}/step/${stepIndex}`;
 }
 
 // Re-renders campaigns.bridge_html (its post-opt-in redirect target) and every funnel_steps row's

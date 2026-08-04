@@ -116,7 +116,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .limit(1)
     .maybeSingle();
   const nextStepUrl = firstStep
-    ? `${process.env.NEXT_PUBLIC_APP_URL}/p/${variant.campaign_id}/step/${firstStep.step_index}`
+    ? `/p/${variant.campaign_id}/step/${firstStep.step_index}` // path-relative: see lib/funnelSteps.ts stepUrl()
     : null;
 
   const bridgeHtml = renderBridgeHtml(

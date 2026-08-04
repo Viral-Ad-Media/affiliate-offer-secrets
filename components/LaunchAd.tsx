@@ -160,8 +160,11 @@ export default function LaunchAd({
     );
   }
 
+  // Preview on the host you're on (see PublishBridge). The ACTUAL ad link_url is baked
+  // server-side in lib/engine/adlaunch.ts and stays on the canonical host on purpose — a live
+  // ad's destination must never depend on a workspace slug that can be renamed.
   const previewUrl =
-    typeof window !== "undefined" ? `${process.env.NEXT_PUBLIC_APP_URL}/p/${campaignId}/bridge` : "";
+    typeof window !== "undefined" ? `${window.location.origin}/p/${campaignId}/bridge` : "";
 
   if (launch?.status === "building") {
     return (

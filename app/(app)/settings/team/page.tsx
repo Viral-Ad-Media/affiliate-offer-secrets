@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { currentWorkspaceId } from "@/lib/workspace";
 import TeamSettings from "@/components/TeamSettings";
 import WorkspaceSettings from "@/components/WorkspaceSettings";
 
@@ -12,15 +13,16 @@ export default async function TeamPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // A user is in exactly one workspace today (the backfilled personal one). Workspace SWITCHING
-  // arrives with phase 2, when data is actually workspace-scoped — until then picking the first
-  // membership is honest rather than pretending a switcher does something.
+  // The ACTIVE workspace, via the same resolver as every other page. This used to pick the first
+  // membership by created_at (with a comment claiming switching didn't exist yet — it had shipped)
+  // — so a user in two workspaces could have the switcher showing B while this page rendered and
+  // edited A's name, slug, and members.
+  const activeWorkspaceId = await currentWorkspaceId();
   const { data: membership } = await supabase
     .from("workspace_members")
     .select("workspace_id, role, workspaces(name, slug)")
     .eq("user_id", user.id)
-    .order("created_at")
-    .limit(1)
+    .eq("workspace_id", activeWorkspaceId)
     .maybeSingle();
 
   if (!membership) {
@@ -51,7 +53,6 @@ export default async function TeamPage() {
         workspaceId={membership.workspace_id as string}
         name={ws.name}
         slug={ws.slug}
-        appUrl={appUrl}
         canEdit={membership.role === "owner" || membership.role === "admin"}
       />
 
