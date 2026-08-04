@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_COOKIE_OPTIONS } from "@/lib/supabase/cookieOptions";
+import { classifyHost } from "@/lib/host";
 
 // Exact-match only — "/" as a prefix would match every path and disable the auth gate entirely.
 const PUBLIC_EXACT_PATHS = [
@@ -43,35 +44,69 @@ const PUBLIC_PREFIX_PATHS = [
   "/r/", // referral link capture — the visitor has no account yet, that's the point
 ];
 
+// Cross-HOST redirects must write the Location header by hand, and must never target bare
+// localhost. Two layered problems, both observed live rather than theorized:
+//
+//   1. NextResponse.redirect() rewrites an absolute Location to a relative one whenever the
+//      target origin matches what the server considers its own — so "send acme.localhost to
+//      localhost/about" became "Location: /about", an infinite redirect to itself. A hand-set
+//      header avoids the redirect() path...
+//   2. ...but the server ALSO relativizes hand-set Location headers whose host it considers
+//      loopback-equivalent: localhost and 127.0.0.1 both got stripped; www.localhost and any real
+//      domain survived intact. So in dev the canonical host becomes www.localhost — browsers
+//      resolve *.localhost to loopback with no config, it reaches the same dev server, and
+//      classifyHost treats a www label as the app. Production APP_URL is never bare localhost,
+//      so this substitution is inert there.
+function redirectToHost(target: URL): NextResponse {
+  if (target.hostname === "localhost") target.hostname = "www.localhost";
+  return new NextResponse(null, { status: 307, headers: { Location: target.toString() } });
+}
+
 export async function middleware(request: NextRequest) {
-  // Custom-domain traffic (bring-your-own domains connected via /domains) must be handled BEFORE
-  // the auth-gate logic below — it's always anonymous public traffic and must never redirect to
-  // /login. A mismatch just means this Host isn't our own app's host; rewrite it to the catch-all
-  // domain-serving route and return immediately, skipping route resolution for anything else
-  // (dashboard, API routes, etc. are simply never reached for a mismatched Host).
-  const host = request.headers.get("host") ?? "";
-  const appHost = (() => {
-    try {
-      return new URL(process.env.NEXT_PUBLIC_APP_URL!).host;
-    } catch {
-      return "";
-    }
-  })();
-  const isOwnHost = host === appHost || host.startsWith("localhost") || host.startsWith("127.0.0.1");
-  const isAssetPath = request.nextUrl.pathname.startsWith("/_next");
+  // Three kinds of host, decided BEFORE the auth-gate logic below (see lib/host.ts):
+  //
+  //   app       — the canonical host (or local dev). Everything below runs as it always has.
+  //   workspace — {slug}.{root domain}. Serves the ordinary app; lib/workspace.ts scopes every
+  //               query to that slug's workspace per request. Falls through to the session +
+  //               auth-gate logic like the canonical host, with two exceptions handled here.
+  //   custom    — a tenant's bring-your-own domain. Always anonymous public traffic; rewritten to
+  //               the /d catch-all and returned immediately, so it can never redirect to /login
+  //               and never reaches any other route.
+  const pathname = request.nextUrl.pathname;
+  const hostKind = classifyHost(request.headers.get("host"));
+  const isAssetPath = pathname.startsWith("/_next");
   // A bridge page served under a tenant's custom domain runs its lead-capture fetch() from that
   // domain's own origin — a relative /api/public/leads call would otherwise get caught by the
   // rewrite below and 404 (no matching custom_domain_routes entry for an API path). Every route
   // under /api/public/ already does its own campaign-scoped authorization, so it's safe to resolve
   // regardless of the arriving Host — same reasoning as the /_next exemption, just for API routes
   // client-side JS running inside a /d/-served page needs to call back into.
-  const isPublicApiPath = request.nextUrl.pathname.startsWith("/api/public/");
+  const isPublicApiPath = pathname.startsWith("/api/public/");
 
-  if (!isOwnHost && !isAssetPath && !isPublicApiPath) {
+  if (hostKind.kind === "custom" && !isAssetPath && !isPublicApiPath) {
     const url = request.nextUrl.clone();
-    url.pathname = `/d${request.nextUrl.pathname}`;
+    url.pathname = `/d${pathname}`;
     return NextResponse.rewrite(url);
   }
+
+  if (hostKind.kind === "workspace") {
+    // There is exactly one marketing site and one login page, and they live on the canonical
+    // host. The bare subdomain root goes to the app instead — acme.{root}/ means "acme's
+    // dashboard", not a duplicate homepage.
+    if (pathname === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
+    if (PUBLIC_EXACT_PATHS.includes(pathname)) {
+      return redirectToHost(new URL(pathname + request.nextUrl.search, process.env.NEXT_PUBLIC_APP_URL));
+    }
+  }
+
+  // The `(app)` layout redirects a canonical-host visit to the workspace's subdomain, and a
+  // server component cannot see its own URL — the path rides along as a request header. Set
+  // before NextResponse.next({ request }) captures the request, in both places that happens.
+  request.headers.set("x-pathname", pathname + request.nextUrl.search);
 
   let response = NextResponse.next({ request });
 
@@ -99,7 +134,6 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
   const isPublic =
     PUBLIC_EXACT_PATHS.includes(pathname) || PUBLIC_PREFIX_PATHS.some((p) => pathname.startsWith(p));
   // App Router serves these icon conventions as real routes, NOT from /_next — so the auth gate
@@ -112,6 +146,11 @@ export async function middleware(request: NextRequest) {
     CRAWLER_PATHS.includes(pathname);
 
   if (!user && !isPublic && !isAsset) {
+    // On a workspace subdomain, go straight to the canonical login — a same-host /login would
+    // only bounce there via the marketing-path redirect above, one wasted hop.
+    if (hostKind.kind === "workspace") {
+      return redirectToHost(new URL("/login", process.env.NEXT_PUBLIC_APP_URL));
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

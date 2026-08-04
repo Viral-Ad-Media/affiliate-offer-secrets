@@ -73,7 +73,12 @@ export function classifyHost(rawHost: string | null | undefined, cfg?: HostConfi
     if (!host.endsWith(suffix)) continue;
     const label = host.slice(0, -suffix.length);
     if (!label || label.includes(".")) continue;
-    if (NEVER_A_WORKSPACE.has(label) || !SLUG_RE.test(label)) continue;
+    // www.{root} / www.localhost is the canonical site, never a tenant's domain — classify as
+    // app rather than falling through to the custom-domain rewrite. In production the appHost
+    // equality above usually catches this first; www.localhost (the dev canonical host, see
+    // middleware's redirectToHost) only ever reaches here.
+    if (NEVER_A_WORKSPACE.has(label)) return { kind: "app" };
+    if (!SLUG_RE.test(label)) continue;
     return { kind: "workspace", slug: label };
   }
 

@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
-import { currentWorkspaceId } from "@/lib/workspace";
+import { headers } from "next/headers";
+import { currentWorkspaceId, workspaceSlugFromHost } from "@/lib/workspace";
+import { hostConfigFromEnv, workspaceOrigin } from "@/lib/host";
 import { createClient } from "@/lib/supabase/server";
 import { hasAppAccess } from "@/lib/shared";
 import Sidebar from "@/components/Sidebar";
@@ -18,6 +20,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect("/login");
 
   const ws = await currentWorkspaceId();
+
+  // Canonical redirect: signed in on the canonical host with a workspace that has a subdomain →
+  // work happens there (the URL itself says which org you're in). Loop safety is structural, not
+  // best-effort: this only fires when the request is NOT already on a workspace subdomain, and
+  // the target IS one — and it's gated on the root domain being configured at all, so a
+  // deployment without wildcard DNS behaves exactly as today. Deliberately scoped to this layout:
+  // marketing pages, /login, /p, /b, every /api route, and /admin (cross-tenant by nature, and
+  // outside this route group on purpose) never redirect.
+  if (ws && !workspaceSlugFromHost() && hostConfigFromEnv().rootDomain) {
+    const { data: wsRow } = await supabase
+      .from("workspaces")
+      .select("slug")
+      .eq("id", ws)
+      .maybeSingle();
+    if (wsRow?.slug) {
+      // Set by middleware — a server component cannot see its own URL otherwise.
+      const path = headers().get("x-pathname") ?? "/dashboard";
+      redirect(`${workspaceOrigin(wsRow.slug)}${path}`);
+    }
+  }
 
   const { data: profile } = await supabase
     .from("profiles")
