@@ -8,6 +8,7 @@ import {
   type PermalinkStyle,
 } from "@/lib/blog";
 import { loadBlogIndex, loadAllPublishedPosts } from "@/lib/blogIndex";
+import { publicWorkspaceScope } from "@/lib/publicPage";
 
 // Feeds are cheap to regenerate but change only on publish — a short shared cache keeps crawler
 // and reader-app polling off the database without making a new post wait long to appear.
@@ -48,6 +49,13 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
   if (segments.length === 0 || segments.length > 4) return notFound();
   const admin = createAdminClient();
 
+  // On a workspace subdomain, only that workspace's blog serves — the blog is identified by its
+  // own path slug, so without this check acme.{root}/b/{globex-blog} would serve another tenant's
+  // blog under acme's branded host. Same shape as lib/publicPage.ts's funnel-page scoping.
+  const scope = await publicWorkspaceScope(admin, req.headers.get("host"));
+  const rejects = (workspaceId: string | null | undefined) =>
+    scope.restricted && (!scope.workspaceId || scope.workspaceId !== workspaceId);
+
   // Legacy /b/{uuid} — resolve and redirect to the canonical slug URL so previously-shared links
   // keep working and search engines consolidate on one address.
   if (segments.length === 1 && UUID_RE.test(segments[0])) {
@@ -57,7 +65,7 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
       .eq("id", segments[0])
       .eq("status", "published")
       .maybeSingle();
-    if (!post) return notFound();
+    if (!post || rejects(post.workspace_id as string)) return notFound();
     const { data: settings } = await admin
       .from("blog_settings")
       .select("slug")
@@ -77,7 +85,7 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
     .select("workspace_id, blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html")
     .ilike("slug", segments[0])
     .maybeSingle();
-  if (!settings) return notFound();
+  if (!settings || rejects(settings.workspace_id as string)) return notFound();
 
   if (segments.length === 1) {
     const index = await loadBlogIndex(admin, settings.workspace_id as string, new URL(req.url).searchParams);

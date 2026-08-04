@@ -101,6 +101,14 @@ export async function middleware(request: NextRequest) {
     if (PUBLIC_EXACT_PATHS.includes(pathname)) {
       return redirectToHost(new URL(pathname + request.nextUrl.search, process.env.NEXT_PUBLIC_APP_URL));
     }
+    // The blog is indexable on the canonical host (content marketing); serving the same posts on
+    // a subdomain would be duplicate content. The renderers' canonical tags already point at the
+    // canonical host, and this header makes the subdomain copy explicitly non-indexable.
+    if (pathname.startsWith("/b/")) {
+      const res = NextResponse.next({ request });
+      res.headers.set("X-Robots-Tag", "noindex");
+      return res;
+    }
   }
 
   // The `(app)` layout redirects a canonical-host visit to the workspace's subdomain, and a

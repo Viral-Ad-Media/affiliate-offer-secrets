@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { publicWorkspaceScope } from "@/lib/publicPage";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 // (lib/funnelSteps.ts resolves each step's own CTA href at render time) — never independently
 // domain-mapped or split-tested in this phase (see CLAUDE.md).
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { campaignId: string; stepIndex: string } }
 ) {
   const stepIndex = Number(params.stepIndex);
@@ -20,12 +21,19 @@ export async function GET(
   const admin = createAdminClient();
   const { data: campaign } = await admin
     .from("campaigns")
-    .select("id")
+    .select("id, workspace_id")
     .eq("id", params.campaignId)
     .eq("status", "ready")
     .eq("bridge_published", true)
     .maybeSingle();
   if (!campaign) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  // Same host scoping as the opt-in page (lib/publicPage.ts): a workspace subdomain only ever
+  // serves its own workspace's funnel steps, same generic 404 on a mismatch.
+  const scope = await publicWorkspaceScope(admin, req.headers.get("host"));
+  if (scope.restricted && (!scope.workspaceId || scope.workspaceId !== campaign.workspace_id)) {
     return new Response("Not found", { status: 404 });
   }
 

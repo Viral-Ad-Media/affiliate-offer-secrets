@@ -1,6 +1,35 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { classifyHost } from "@/lib/host";
 import { IMAGE_DATA_URL_RE } from "@/lib/images/validate";
 import { pickWeightedVariant, readStickyVariantId, buildStickyVariantCookie } from "@/lib/bridgeVariants";
+
+// Which workspace's content a PUBLIC request's host is allowed to serve. Campaign UUIDs are
+// unguessable, but they are also host-independent — without this check,
+// acme.{root}/p/{globex-campaign-id}/bridge would serve ANOTHER tenant's funnel under acme's
+// branded subdomain. On the canonical host and on tenants' custom domains nothing is restricted
+// (the canonical host serves everyone by design; a custom domain's own route mapping already
+// scopes it). On a workspace subdomain, only that workspace's content serves; an unknown slug
+// serves nothing at all. Every mismatch is the same generic 404 as everything else here.
+//
+// Admin-client lookup, not the workspace_id_for_slug RPC — these are anonymous visitors, and that
+// RPC folds in membership on purpose. Not an oracle: the caller collapses every miss to 404.
+export async function publicWorkspaceScope(
+  admin: SupabaseClient,
+  host: string | null
+): Promise<{ restricted: false } | { restricted: true; workspaceId: string | null }> {
+  const kind = classifyHost(host);
+  if (kind.kind !== "workspace") return { restricted: false };
+  const { data } = await admin.from("workspaces").select("id").eq("slug", kind.slug).maybeSingle();
+  return { restricted: true, workspaceId: (data?.id as string | null) ?? null };
+}
+
+function scopeRejects(
+  scope: Awaited<ReturnType<typeof publicWorkspaceScope>>,
+  workspaceId: string | null | undefined
+): boolean {
+  return scope.restricted && (!scope.workspaceId || scope.workspaceId !== workspaceId);
+}
 
 // Serves a campaign's bridge (lead-capture landing) page HTML at a real public URL — needed so a
 // real Meta ad's link_url has somewhere to point (previously this HTML only ever rendered inside
@@ -25,13 +54,18 @@ export async function servePublicCampaignPage(campaignId: string, req: Request):
   const admin = createAdminClient();
   const { data: campaign } = await admin
     .from("campaigns")
-    .select("bridge_html")
+    .select("bridge_html, workspace_id")
     .eq("id", campaignId)
     .eq("status", "ready")
     .eq("bridge_published", true)
     .maybeSingle();
 
   if (!campaign?.bridge_html) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  const scope = await publicWorkspaceScope(admin, req.headers.get("host"));
+  if (scopeRejects(scope, campaign.workspace_id as string)) {
     return new Response("Not found", { status: 404 });
   }
 
@@ -84,14 +118,26 @@ export async function servePublicCampaignPage(campaignId: string, req: Request):
 // everywhere else this app touches an embedded image (lib/images/validate.ts) — never trust the
 // DB row's format is guaranteed just because the write paths validate it; a non-matching value is
 // treated as "not found", not served with whatever Content-Type it happens to claim.
-export async function servePublicCampaignImage(campaignId: string): Promise<Response> {
+//
+// Deliberately NO bridge_published condition, unlike the page above — this image's consumer is
+// Instagram's servers fetching it for a feed post, which is legitimate whether or not the funnel
+// is published. Gating it on publish state would 404 the fetch mid-post for any campaign whose
+// funnel is still a draft.
+export async function servePublicCampaignImage(campaignId: string, req?: Request): Promise<Response> {
   const admin = createAdminClient();
   const { data: campaign } = await admin
     .from("campaigns")
-    .select("embedded_image_data_url")
+    .select("embedded_image_data_url, workspace_id")
     .eq("id", campaignId)
     .eq("status", "ready")
     .maybeSingle();
+
+  if (campaign && req) {
+    const scope = await publicWorkspaceScope(admin, req.headers.get("host"));
+    if (scopeRejects(scope, campaign.workspace_id as string)) {
+      return new Response("Not found", { status: 404 });
+    }
+  }
 
   const dataUrl = campaign?.embedded_image_data_url as string | null | undefined;
   const match = dataUrl ? IMAGE_DATA_URL_RE.exec(dataUrl) : null;
