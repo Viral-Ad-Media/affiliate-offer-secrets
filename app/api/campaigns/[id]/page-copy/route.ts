@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { seoPatchFrom } from "@/lib/seo";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -21,7 +22,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const campaignId = params.id;
 

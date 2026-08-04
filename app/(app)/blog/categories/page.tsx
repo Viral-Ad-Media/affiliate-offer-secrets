@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import BlogCategoriesPanel from "@/components/BlogCategoriesPanel";
 
@@ -12,7 +13,7 @@ export default async function BlogCategoriesPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const [{ data: categories }, { data: posts }] = await Promise.all([
     supabase.from("blog_categories").select("id, name, description").eq("workspace_id", ws).order("name"),

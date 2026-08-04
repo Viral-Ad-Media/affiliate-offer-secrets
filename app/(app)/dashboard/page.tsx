@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -75,7 +76,7 @@ export default async function Overview() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const [
     { count: productsCount },

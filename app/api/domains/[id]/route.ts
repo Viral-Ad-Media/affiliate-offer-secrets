@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { removeDomainFromProject, VercelApiError } from "@/lib/vercel/client";
@@ -12,7 +13,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const admin = createAdminClient();
   const { data: domainRow } = await admin
@@ -51,7 +52,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const body = await req.json().catch(() => ({}));
   const patch: { serves_blog?: boolean; is_primary?: boolean } = {};

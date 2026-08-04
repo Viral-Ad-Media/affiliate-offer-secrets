@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createPostFromCampaign } from "@/lib/blog/fromCampaign";
@@ -20,7 +21,7 @@ export async function POST() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   // RLS-scoped read — the caller's campaigns only. Campaigns that errored mid-build can still
   // hold a finished article (the content stage runs before the ones that failed), and that draft

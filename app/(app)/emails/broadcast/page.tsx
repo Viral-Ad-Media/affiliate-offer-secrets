@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import BroadcastComposer from "@/components/BroadcastComposer";
 
@@ -15,7 +16,7 @@ export default async function BroadcastPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const [{ data: campaigns }, { data: sent }, { data: provider }, { data: contactRows }] = await Promise.all([
     supabase.from("campaigns").select("id, products(product_title)"),

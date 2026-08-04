@@ -1,4 +1,5 @@
 import { redirect, notFound } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import BlogPostEditor from "@/components/BlogPostEditor";
 
@@ -11,7 +12,7 @@ export default async function BlogPostPage({ params }: { params: { postId: strin
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const [{ data: post }, { data: categories }] = await Promise.all([
     // RLS-scoped — another tenant's post id reads as nonexistent.

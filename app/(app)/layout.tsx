@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { hasAppAccess } from "@/lib/shared";
 import Sidebar from "@/components/Sidebar";
@@ -16,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!user) redirect("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const { data: profile } = await supabase
     .from("profiles")

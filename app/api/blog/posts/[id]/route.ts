@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MAX_POST_TITLE, MAX_POST_EXCERPT, MAX_FEATURED_IMAGE_CHARS, blogRenderCtx, renderBlockTree, slugify } from "@/lib/blog";
@@ -39,7 +40,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const body = await req.json().catch(() => ({}));
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -110,7 +111,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const admin = createAdminClient();
   const { data, error } = await admin

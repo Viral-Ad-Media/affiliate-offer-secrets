@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import type { BroadcastSequence } from "@/lib/shared";
 import BroadcastSequenceList from "@/components/BroadcastSequenceList";
@@ -11,7 +12,7 @@ export default async function BroadcastPage({ searchParams }: { searchParams: { 
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const { count } = await supabase
     .from("broadcast_sequences")

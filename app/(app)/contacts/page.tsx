@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import type { Contact } from "@/lib/shared";
 import ContactsTable from "@/components/ContactsTable";
@@ -18,7 +19,7 @@ export default async function ContactsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const { count } = await supabase
     .from("contacts")

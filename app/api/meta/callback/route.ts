@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -54,7 +55,7 @@ export async function GET(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return redirectClearingCookie("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   try {
     const { access_token: shortLived } = await exchangeCodeForToken(code);

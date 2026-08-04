@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { BarChart3, Users, Eye, Send, FileText, TrendingUp } from "lucide-react";
@@ -51,7 +52,7 @@ export default async function AnalyticsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   // head:true count queries — none of these pull rows, so the page cost doesn't grow with the
   // data behind it.

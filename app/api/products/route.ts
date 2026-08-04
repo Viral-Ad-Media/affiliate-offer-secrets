@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { PAGE_SIZE, pageRange } from "@/components/Pager";
 import { PRODUCT_STATUSES } from "@/lib/shared";
@@ -16,7 +17,7 @@ export async function GET(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const url = new URL(req.url);
   const rawPage = Number.parseInt(url.searchParams.get("page") ?? "1", 10);

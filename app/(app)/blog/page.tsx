@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import BlogManager from "@/components/BlogManager";
 import Pager, { PAGE_SIZE, pageFromParam, pageRange } from "@/components/Pager";
@@ -14,7 +15,7 @@ export default async function BlogPage({ searchParams }: { searchParams: { page?
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const { count } = await supabase
     .from("blog_posts")

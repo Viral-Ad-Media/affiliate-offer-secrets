@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import Link from "next/link";
 import { CheckCircle2, XCircle, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -17,7 +18,7 @@ export default async function BillingPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const { data: profile } = await supabase
     .from("profiles")

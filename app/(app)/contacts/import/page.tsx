@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import ContactImportPanel from "@/components/ContactImportPanel";
 
@@ -11,7 +12,7 @@ export default async function ContactImportPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   const [{ data: tags }, { data: campaigns }] = await Promise.all([
     supabase.from("contact_tags").select("id, name").eq("workspace_id", ws).order("name"),

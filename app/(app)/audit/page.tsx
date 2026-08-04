@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import type { AuditEntry, AuditPlatform, UsageEntry } from "@/lib/shared";
 import AuditTrail from "@/components/AuditTrail";
@@ -51,7 +52,7 @@ export default async function AuditPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: ws } = await supabase.rpc("current_workspace_id");
+  const ws = await currentWorkspaceId();
 
   // Counts first: the page number can't be clamped to a real range without knowing the totals, and
   // head:true means neither count pulls a single row.
