@@ -2,6 +2,8 @@
 // app/api/public/leads/route.ts (only ever reads it, to attribute a captured lead) — one place
 // owns the cookie name/flags so the two call sites can never drift apart.
 
+import { cookieDomainForHost } from "@/lib/supabase/cookieOptions";
+
 export type WeightedVariant = { id: string; weight: number };
 
 function cookieName(campaignId: string): string {
@@ -40,7 +42,18 @@ export function readStickyVariantId(req: Request, campaignId: string): string | 
 // single visitor bouncing between variants across sessions. HttpOnly (nothing client-side ever
 // needs to read this), SameSite=Lax + Secure-in-production matching the exact flag convention
 // app/api/meta/connect/route.ts already uses for its OAuth state cookie.
-export function buildStickyVariantCookie(campaignId: string, variantId: string): string {
+//
+// `host` decides the Domain attribute via cookieDomainForHost: on the canonical host or a
+// workspace subdomain the assignment is shared domain-wide (a visitor who sees the funnel on both
+// keeps one variant); on a tenant's bring-your-own custom domain it MUST stay host-only — a
+// Domain naming a domain the page isn't on makes the browser reject the entire Set-Cookie.
+export function buildStickyVariantCookie(
+  campaignId: string,
+  variantId: string,
+  host?: string | null
+): string {
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  return `${cookieName(campaignId)}=${variantId}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax${secure}`;
+  const d = cookieDomainForHost(host);
+  const domain = d ? `; Domain=${d}` : "";
+  return `${cookieName(campaignId)}=${variantId}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax${domain}${secure}`;
 }

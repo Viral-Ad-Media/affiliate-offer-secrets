@@ -30,6 +30,9 @@ export async function GET() {
     sameSite: "lax",
     maxAge: 600,
     path: "/",
+    // Domain-wide for the same reason as meta_oauth_state: the flow can start on a workspace
+    // subdomain but TikTok redirects back to the canonical host's registered callback.
+    domain: process.env.NEXT_PUBLIC_COOKIE_DOMAIN,
   });
   return res;
 }

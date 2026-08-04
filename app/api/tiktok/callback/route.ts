@@ -24,7 +24,12 @@ export async function GET(req: Request) {
 
   function redirectClearingCookie(pathWithQuery: string) {
     const res = NextResponse.redirect(appUrl(pathWithQuery));
-    res.cookies.set("tiktok_oauth_state", "", { maxAge: 0, path: "/" });
+    // Same domain as the set, or the clear silently no-ops against a different cookie.
+    res.cookies.set("tiktok_oauth_state", "", {
+      maxAge: 0,
+      path: "/",
+      domain: process.env.NEXT_PUBLIC_COOKIE_DOMAIN,
+    });
     return res;
   }
 

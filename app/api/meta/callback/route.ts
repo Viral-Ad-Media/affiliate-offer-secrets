@@ -38,7 +38,13 @@ export async function GET(req: Request) {
   // The state cookie is single-use — always cleared on this response, success or failure.
   function redirectClearingCookie(pathWithQuery: string) {
     const res = NextResponse.redirect(appUrl(pathWithQuery));
-    res.cookies.set("meta_oauth_state", "", { maxAge: 0, path: "/" });
+    // The clear must carry the same domain as the set, or the browser treats it as a different
+    // cookie and the real one survives its own "single-use" clearing.
+    res.cookies.set("meta_oauth_state", "", {
+      maxAge: 0,
+      path: "/",
+      domain: process.env.NEXT_PUBLIC_COOKIE_DOMAIN,
+    });
     return res;
   }
 

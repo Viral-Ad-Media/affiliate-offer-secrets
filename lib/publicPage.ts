@@ -49,7 +49,7 @@ export async function servePublicCampaignPage(campaignId: string, req: Request):
     let chosen = stickyId ? activeVariants.find((v) => v.id === stickyId) : undefined;
     if (!chosen) {
       chosen = pickWeightedVariant(activeVariants);
-      setCookie = buildStickyVariantCookie(campaignId, chosen.id);
+      setCookie = buildStickyVariantCookie(campaignId, chosen.id, req.headers.get("host"));
     }
 
     html = chosen.is_control ? (campaign.bridge_html as string) : ((chosen.bridge_html as string) ?? html);

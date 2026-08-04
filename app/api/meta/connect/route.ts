@@ -30,6 +30,10 @@ export async function GET() {
     sameSite: "lax", // Meta's redirect back is a top-level cross-site GET — "strict" drops this cookie
     maxAge: 600, // 10 minutes, matching Meta's authorization-code TTL
     path: "/",
+    // Domain-wide: the connect flow can start on a workspace subdomain, but Meta only ever
+    // redirects back to the canonical host's registered callback — a host-only cookie set on the
+    // subdomain would never be sent there and every such flow would fail CSRF validation.
+    domain: process.env.NEXT_PUBLIC_COOKIE_DOMAIN,
   });
   return res;
 }
