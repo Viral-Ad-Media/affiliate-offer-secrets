@@ -2050,10 +2050,16 @@ the app behaves exactly as pre-Phase-3, which is also how dev runs by default.
   workspace from the host, not the RPC — the checkmark must agree with the URL.
   `/settings/team` resolves through `currentWorkspaceId()` now; it used to pick the first
   membership by `created_at`, so a two-workspace user could edit A while the switcher showed B.
-- **Ship checklist** (external, cannot be done from code): add `*.affiliateoffersecrets.com` to
-  the Vercel project; wildcard TLS needs either Vercel nameservers (recommended — also fixes the
-  apex A records) or a persistent `_acme-challenge` TXT record; set both env vars; redeploy.
-  First production deploy with `NEXT_PUBLIC_COOKIE_DOMAIN` signs every session out once, by design.
+- **LIVE since 2026-08-04.** The ship checklist is done: wildcard on the Vercel project,
+  nameservers moved to Vercel (which also fixed the apex A records), both env vars set, rebuilt.
+  Two snags worth remembering: Vercel showed "DNS zone not enabled … cannot solve dns-01" until
+  the zone was explicitly enabled on the team (nameserver delegation alone is not enough), and
+  resolvers/OS caches that queried a subdomain during the transition held the failure for a
+  while — "page did not load" right after cutover is stale negative cache, not a bug. **The
+  Vercel DNS zone starts with ONLY the system records (ALIAS + CAA)** — anything that lived in
+  GoDaddy's zone (email MX/SPF/DKIM, verification TXTs) must be re-created in Vercel DNS or it is
+  silently gone; there is currently no MX record, so nothing delivers to @affiliateoffersecrets.com
+  addresses until one is added.
 
 ## Settings
 
