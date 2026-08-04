@@ -34,7 +34,7 @@ export default function BroadcastSequencePage({ params }: { params: { id: string
           .order("step_index", { ascending: true }),
         supabase
           .from("contacts")
-          .select("id, campaign_id, first_name, email, extra_fields, created_at")
+          .select("id, campaign_id, first_name, email, extra_fields, created_at, unsubscribed_at")
           .order("created_at", { ascending: false })
           .limit(1000),
         supabase.from("campaigns").select("id, products(product_title)"),
@@ -64,6 +64,10 @@ export default function BroadcastSequencePage({ params }: { params: { id: string
         email: r.email,
         extra_fields: r.extra_fields ?? {},
         created_at: r.created_at,
+        unsubscribed_at: r.unsubscribed_at ?? null,
+        // The manual-audience picker only needs identity to choose rows; it never renders tags, so
+        // they're deliberately not fetched here rather than paying for a join this screen ignores.
+        tags: [],
       }))
     );
     setCampaignOptions(

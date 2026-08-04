@@ -182,6 +182,11 @@ export type AuditEntry = {
   externalUrl: string | null;
 };
 
+// Imported for use in Contact below AND re-exported, so consumers get a Contact and its tag shape
+// from the same place rather than importing two modules to describe one row.
+import type { ContactTag } from "@/lib/contactTags";
+export type { ContactTag };
+
 export type Contact = {
   id: string;
   campaign_id: string | null;
@@ -193,6 +198,10 @@ export type Contact = {
   // before this shipped, and for any form that never had extra fields to begin with.
   extra_fields: Record<string, string>;
   created_at: string;
+  // Global per-contact unsubscribe (0021), surfaced here so the leads table can mark a lead that
+  // no longer receives email rather than leaving the operator to discover it at send time.
+  unsubscribed_at: string | null;
+  tags: ContactTag[];
 };
 
 export type BroadcastAudienceType = "campaign" | "all" | "manual";

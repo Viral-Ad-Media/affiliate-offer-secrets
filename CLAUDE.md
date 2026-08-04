@@ -2216,6 +2216,49 @@ Three read surfaces over data other code already writes — no new tables for th
   (`/api/contacts/export`), not the client-side CSV builder** — `ContactsTable` only holds the
   current page since pagination landed, so a client-built file would silently export 50 rows.
 
+### Editing, tagging and bulk actions on leads
+
+Tags existed since 0047 but could only ever be ATTACHED at import time — there was no way to tag
+an existing lead, no way to edit one, and no bulk anything. All three now exist, and none of it
+needed a new table: `contacts`, `contact_tags` and `contact_tag_links` already had the right shape.
+
+- **`contact_tags` gained `color` and `description` (0062).** The colour is CHECK-constrained to a
+  fully-anchored `^#[0-9a-fA-F]{6}$`, and `lib/contactTags.ts` re-states the identical pattern for
+  the API routes. Both layers are deliberate: the value ends up as a CSS colour on a rendered chip,
+  and PostgREST is directly reachable, so the constraint — not the route — is the boundary. Verified
+  live that `red; background: url(...)`, `javascript:alert(1)`, `#12345`, `#1234567` and `#ggg000`
+  are all rejected by the database while `#10B981` round-trips. Never loosen either to a
+  `startsWith`/`includes` check; that is exactly the gap that turns a colour field into CSS
+  injection, the same bug class `styleToInlineCss()` and `isValidImageDataUrl()` already close.
+  `NULL` means "no colour" and renders as the neutral chip, so every pre-existing tag kept working
+  with no backfill.
+- **`/api/contacts/bulk` re-resolves every caller-supplied id against the caller's workspace before
+  acting, and operates only on that resolved set.** This is the whole security story of the
+  endpoint: it writes on the admin client, which bypasses RLS, so `.eq("workspace_id", ws)` is
+  authorization, not a filter. Ids from another workspace are silently dropped rather than acted on.
+  `tag_id` gets the same treatment — it is a second caller-supplied reference, and without its own
+  check a caller could staple another workspace's tag onto their own leads. Same discipline as
+  `set_broadcast_sequence_contacts` validating every element of its array: a determined caller talks
+  to the endpoint, not the UI, and "the UI only sends ids it rendered" is not an authorization
+  argument. Verified live against the real database: of 3 supplied ids (1 real, 2 foreign) exactly 1
+  passed the filter.
+- **`/api/contacts/[id]` lowercases an edited email**, because the de-dupe index is a plain
+  `(campaign_id, email)` index and case is only collapsed in application code (see the de-dupe note
+  above) — an edit that skipped this would create a second row differing solely in case. A collision
+  with an existing lead on the same campaign returns a named 409 rather than a raw constraint string.
+- **The tag filter is an inner join, not an id list.** `?tag=` uses
+  `contact_tag_links!inner(tag_id)` so `count` and `.range()` stay correct at any size; fetching ids
+  and passing them to `.in()` would have silently capped the filter at whatever that first query
+  returned. The per-row tag chips are fetched separately for the current page precisely because the
+  filtering join returns only the MATCHING link — reusing it for display would show a lead with
+  three tags carrying one.
+- **PATCH on a tag always writes all three fields.** A partial-patch shape would leave no way to
+  clear a description or drop a colour back to neutral.
+- **Not verified in a browser**: this session has no signed-in app session, so the new table,
+  bulk bar, filter chips and edit dialog were verified by typecheck, a clean production build, and
+  direct database-level tests of the authorization filter and the colour constraint — not by
+  clicking through the UI. Worth a manual pass.
+
 ## Form fields in the page editor
 
 The lead-capture form's tenant-added fields were text/email/tel only. They now cover

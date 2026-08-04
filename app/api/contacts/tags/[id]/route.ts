@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeTagFields } from "@/lib/contactTags";
 
 export const dynamic = "force-dynamic";
 
-// Rename or delete a tag. Both writes are scoped to (id, user_id) — 0 rows means
+// Edit or delete a tag. Both writes are scoped to (id, workspace_id) — 0 rows means
 // not-yours-or-nonexistent, one generic 404 either way, same idiom as the blog category routes.
+//
+// Name, colour and description are all written on every PATCH, so clearing a description or
+// removing a colour is expressible; a partial-patch shape would leave no way to unset either.
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
   const {
@@ -17,13 +21,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const ws = await currentWorkspaceId();
 
   const body = await req.json().catch(() => ({}));
-  const name = typeof body.name === "string" ? body.name.trim().slice(0, 60) : "";
+  const { name, color, description } = normalizeTagFields(body);
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
 
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("contact_tags")
-    .update({ name })
+    .update({ name, color, description })
     .eq("id", params.id)
     .eq("workspace_id", ws)
     .select("id");

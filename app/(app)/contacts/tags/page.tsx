@@ -17,7 +17,11 @@ export default async function ContactTagsPage() {
   const ws = await currentWorkspaceId();
 
   const [{ data: tags }, { data: links }] = await Promise.all([
-    supabase.from("contact_tags").select("id, name").eq("workspace_id", ws).order("name"),
+    supabase
+      .from("contact_tags")
+      .select("id, name, color, description")
+      .eq("workspace_id", ws)
+      .order("name"),
     supabase.from("contact_tag_links").select("tag_id").eq("workspace_id", ws),
   ]);
 
@@ -26,7 +30,13 @@ export default async function ContactTagsPage() {
 
   return (
     <ContactTagsPanel
-      tags={(tags ?? []).map((t) => ({ id: t.id, name: t.name, contactCount: counts.get(t.id) ?? 0 }))}
+      tags={(tags ?? []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        color: t.color ?? null,
+        description: t.description ?? null,
+        contactCount: counts.get(t.id) ?? 0,
+      }))}
     />
   );
 }

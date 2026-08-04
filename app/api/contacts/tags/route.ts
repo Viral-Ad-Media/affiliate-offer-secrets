@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeTagFields } from "@/lib/contactTags";
 
 export const dynamic = "force-dynamic";
 
-const MAX_TAG_NAME = 60;
-
 // Create a contact tag. Writes go through the admin client (contact_tags has no client write
-// grants, 0047); user_id always comes from the live session, never the body.
+// grants, 0047); user_id always comes from the live session, never the body, and workspace_id is
+// filled by the stamp_workspace_id() trigger (0058) rather than trusted from the caller.
 export async function POST(req: Request) {
   const supabase = createClient();
   const {
@@ -16,14 +16,14 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const name = typeof body.name === "string" ? body.name.trim().slice(0, MAX_TAG_NAME) : "";
+  const { name, color, description } = normalizeTagFields(body);
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
 
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("contact_tags")
-    .insert({ user_id: user.id, name })
-    .select("id, name")
+    .insert({ user_id: user.id, name, color, description })
+    .select("id, name, color, description")
     .single();
   if (error) {
     const dup = error.code === "23505" || error.message.includes("duplicate");
