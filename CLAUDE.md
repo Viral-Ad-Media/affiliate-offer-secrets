@@ -2096,6 +2096,25 @@ verify the current password — it trusts the session — so `SecuritySettings` 
 hijacked session could silently lock the real owner out. Don't "simplify" this away.
 "Sign out everywhere" uses `signOut({scope:"global"})`, which revokes every refresh token.
 
+**The forgot-password link must NOT rely on PKCE, and this was a real live failure.** Supabase's
+default `{{ .ConfirmationURL }}` recovery link round-trips through `/auth/v1/verify`, which then
+redirects to `/reset-password?code=…`. Exchanging that code needs a `code_verifier` written to
+`localStorage` when the reset was *requested* — so the link only works in the same browser that
+asked for it. A reset link is opened from an email client by definition, frequently on another
+device and very often inside the mail app's own in-app browser, where that storage doesn't exist.
+Observed live: Supabase verified the token and created a session (`recovery_token` cleared,
+`last_sign_in_at` moved) while the page still showed "invalid or has expired" — and because the
+token is single-use, it was already burned, so retrying the same link could never work. The
+misleading message sent the user to check the clock when the cause was the browser.
+
+`app/reset-password/page.tsx` now tries `token_hash` first (`verifyOtp` — the whole credential
+rides in the URL, nothing read from storage, works in any browser), then the PKCE `code`, then the
+implicit fragment. **The first branch stays dormant unless the Supabase "Reset Password" email
+template links to `{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&type=recovery`**
+instead of the default — a dashboard setting no migration can carry, so it has to be re-applied by
+hand if the project is ever recreated. When PKCE does fail for a missing verifier, the page now
+says so specifically rather than claiming expiry.
+
 **Changing the sign-in email and deleting the account both live on Security**, and both
 re-authenticate with the current password first — a session is not proof of identity for an
 account-level change, the same reasoning as the password form.

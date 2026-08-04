@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
+import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
 // Where the "forgot password" email link lands. Necessarily a real page, not a modal — it is the
@@ -16,7 +17,7 @@ import { createClient } from "@/lib/supabase/client";
 // guessing wrong would mean a reset link that silently does nothing.
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const [ready, setReady] = useState<"checking" | "ok" | "invalid">("checking");
+  const [ready, setReady] = useState<"checking" | "ok" | "invalid" | "wrong-browser">("checking");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [show, setShow] = useState(false);
@@ -27,10 +28,39 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const supabase = createClient();
     (async () => {
-      const code = new URLSearchParams(window.location.search).get("code");
+      const params = new URLSearchParams(window.location.search);
+
+      // Preferred shape, and the only one that survives being opened in a DIFFERENT browser than
+      // the one that asked for the reset — which is the normal case, not the edge case: a reset
+      // link is opened from an email client, often on another device, often inside the mail app's
+      // own in-app browser. verifyOtp carries the whole credential in the URL and needs nothing
+      // from local storage.
+      //
+      // Requires the Supabase "Reset Password" email template to link to
+      //   {{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&type=recovery
+      // rather than the default {{ .ConfirmationURL }}. With the default template this branch is
+      // simply never taken and the two below still handle it.
+      const tokenHash = params.get("token_hash");
+      if (tokenHash) {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: (params.get("type") as EmailOtpType) ?? "recovery",
+        });
+        if (error) return setReady("invalid");
+        return setReady("ok");
+      }
+
+      const code = params.get("code");
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) return setReady("invalid");
+        if (error) {
+          // PKCE stores a code_verifier in localStorage when the reset is REQUESTED; the exchange
+          // fails without it. Supabase has already burned the token by this point, so retrying
+          // this same link can never work — the person needs a fresh one, and telling them "the
+          // link expired" sends them to check the clock instead of the browser.
+          const missingVerifier = /verifier|code challenge|code_verifier/i.test(error.message);
+          return setReady(missingVerifier ? "wrong-browser" : "invalid");
+        }
         return setReady("ok");
       }
       // Implicit flow: the client picks the fragment up on construction, but that is async, so a
@@ -78,6 +108,21 @@ export default function ResetPasswordPage() {
           {ready === "invalid" && (
             <div className="space-y-3 text-center text-sm text-zinc-300">
               <p>This reset link is invalid or has expired.</p>
+              <Link href="/login" className="block text-xs text-emerald-300 hover:underline">
+                Request a new one
+              </Link>
+            </div>
+          )}
+
+          {ready === "wrong-browser" && (
+            <div className="space-y-3 text-center text-sm text-zinc-300">
+              <p>
+                This link was opened in a different browser than the one that requested it, so it
+                couldn&apos;t be verified.
+              </p>
+              <p className="text-xs text-zinc-400">
+                Request a new link below, then open it in this same browser.
+              </p>
               <Link href="/login" className="block text-xs text-emerald-300 hover:underline">
                 Request a new one
               </Link>
