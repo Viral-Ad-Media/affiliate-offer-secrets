@@ -21,6 +21,7 @@ export default function ProfileSettings({
   email,
   firstName,
   lastName,
+  phone: initialPhone,
   timezone,
   avatarUrl,
   memberSince,
@@ -28,6 +29,7 @@ export default function ProfileSettings({
   email: string;
   firstName: string | null;
   lastName: string | null;
+  phone: string | null;
   timezone: string | null;
   avatarUrl: string | null;
   memberSince: string;
@@ -35,6 +37,7 @@ export default function ProfileSettings({
   const router = useRouter();
   const [first, setFirst] = useState(firstName ?? "");
   const [last, setLast] = useState(lastName ?? "");
+  const [phone, setPhone] = useState(initialPhone ?? "");
   const [tz, setTz] = useState(timezone ?? "");
   // null = "no avatar right now". Distinguishing "cleared" from "unchanged" matters: the RPC
   // leaves the stored avatar alone unless told otherwise, so saving the form without touching the
@@ -53,6 +56,7 @@ export default function ProfileSettings({
       p_first_name: first,
       p_last_name: last,
       p_timezone: tz,
+      p_phone: phone,
       p_avatar_url: avatarChanged ? avatar : null,
       p_clear_avatar: avatarChanged && avatar === null,
     });
@@ -98,6 +102,18 @@ export default function ProfileSettings({
           />
         </label>
       </div>
+
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-zinc-400">Phone</span>
+        <input
+          type="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          maxLength={32}
+          placeholder="+1 (555) 010-9999"
+          className={field}
+        />
+      </label>
 
       <label className="block">
         <span className="mb-1 block text-xs font-medium text-zinc-400">Timezone</span>

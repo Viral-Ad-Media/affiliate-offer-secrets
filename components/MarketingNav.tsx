@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import AppLogo from "@/components/AppLogo";
 import { Menu, X } from "lucide-react";
+import AuthModal from "@/components/AuthModal";
 
 const LINKS = [
   { href: "/about", label: "About" },
@@ -38,12 +39,12 @@ export default function MarketingNav() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
-          <Link href="/login" className="btn-ghost">
+          <AuthModal mode="login" className="btn-ghost">
             Sign in
-          </Link>
-          <Link href="/login" className="btn-primary">
+          </AuthModal>
+          <AuthModal mode="signup" className="btn-primary">
             Get started
-          </Link>
+          </AuthModal>
         </div>
 
         <button
@@ -72,12 +73,12 @@ export default function MarketingNav() {
             ))}
           </nav>
           <div className="mt-3 flex items-center gap-2">
-            <Link href="/login" onClick={() => setOpen(false)} className="btn-ghost flex-1 justify-center">
+            <AuthModal mode="login" className="btn-ghost flex-1 justify-center">
               Sign in
-            </Link>
-            <Link href="/login" onClick={() => setOpen(false)} className="btn-primary flex-1 justify-center">
+            </AuthModal>
+            <AuthModal mode="signup" className="btn-primary flex-1 justify-center">
               Get started
-            </Link>
+            </AuthModal>
           </div>
         </div>
       )}

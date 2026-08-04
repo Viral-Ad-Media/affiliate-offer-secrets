@@ -1,0 +1,151 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+
+// Where the "forgot password" email link lands. Necessarily a real page, not a modal — it is the
+// target of a link in an email opened in whatever browser the person happens to be using.
+//
+// Supabase hands the recovery credential over in one of two shapes depending on the project's
+// auth flow: a `?code=` query param (PKCE) or a `#access_token=…&type=recovery` fragment
+// (implicit, which the browser client consumes itself via detectSessionInUrl). Both are handled,
+// because which one arrives is a project setting rather than something this code controls, and
+// guessing wrong would mean a reset link that silently does nothing.
+export default function ResetPasswordPage() {
+  const router = useRouter();
+  const [ready, setReady] = useState<"checking" | "ok" | "invalid">("checking");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    (async () => {
+      const code = new URLSearchParams(window.location.search).get("code");
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) return setReady("invalid");
+        return setReady("ok");
+      }
+      // Implicit flow: the client picks the fragment up on construction, but that is async, so a
+      // single immediate getSession() can race it. One short retry covers the gap without a
+      // spinner that never resolves.
+      const { data } = await supabase.auth.getSession();
+      if (data.session) return setReady("ok");
+      await new Promise((r) => setTimeout(r, 600));
+      const retry = await supabase.auth.getSession();
+      setReady(retry.data.session ? "ok" : "invalid");
+    })();
+  }, []);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (password !== confirm) return setError("Passwords don't match.");
+    setBusy(true);
+    const { error } = await createClient().auth.updateUser({ password });
+    setBusy(false);
+    if (error) return setError(error.message);
+    setDone(true);
+  }
+
+  const field =
+    "w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-emerald-500";
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-ink-950 px-4 py-10">
+      <div className="w-full max-w-sm">
+        <div className="mb-6 text-center">
+          <h1 className="text-2xl font-bold text-zinc-100">
+            Affiliate Offer <span className="text-emerald-400">Secrets</span>
+          </h1>
+          <p className="mt-1 text-sm text-zinc-400">Choose a new password</p>
+        </div>
+
+        <div className="card p-5">
+          {ready === "checking" && (
+            <p className="flex items-center justify-center gap-2 text-sm text-zinc-400">
+              <Loader2 className="h-4 w-4 animate-spin" /> Checking your link…
+            </p>
+          )}
+
+          {ready === "invalid" && (
+            <div className="space-y-3 text-center text-sm text-zinc-300">
+              <p>This reset link is invalid or has expired.</p>
+              <Link href="/login" className="block text-xs text-emerald-300 hover:underline">
+                Request a new one
+              </Link>
+            </div>
+          )}
+
+          {ready === "ok" && done && (
+            <div className="space-y-3 text-center text-sm text-zinc-300">
+              <p>Password updated. You&apos;re signed in.</p>
+              <button
+                onClick={() => {
+                  router.push("/dashboard");
+                  router.refresh();
+                }}
+                className="btn-primary w-full justify-center"
+              >
+                Go to dashboard
+              </button>
+            </div>
+          )}
+
+          {ready === "ok" && !done && (
+            <form onSubmit={submit} className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-400">New password</label>
+                <div className="relative">
+                  <input
+                    type={show ? "text" : "password"}
+                    required
+                    minLength={6}
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={`${field} pr-9`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShow((v) => !v)}
+                    tabIndex={-1}
+                    aria-label={show ? "Hide password" : "Show password"}
+                    className="absolute inset-y-0 right-0 flex items-center px-2.5 text-zinc-500 hover:text-zinc-300"
+                  >
+                    {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-400">
+                  Confirm new password
+                </label>
+                <input
+                  type={show ? "text" : "password"}
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  className={field}
+                />
+              </div>
+              {error && <p className="text-sm text-red-400">{error}</p>}
+              <button type="submit" disabled={busy} className="btn-primary w-full justify-center">
+                {busy ? "Saving…" : "Update password"}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </main>
+  );
+}

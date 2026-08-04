@@ -1,12 +1,13 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { AUTH_COOKIE_OPTIONS } from "@/lib/supabase/cookieOptions";
+import { AUTH_COOKIE_OPTIONS, REMEMBER_COOKIE, makeSessionScoped } from "@/lib/supabase/cookieOptions";
 import { classifyHost } from "@/lib/host";
 
 // Exact-match only — "/" as a prefix would match every path and disable the auth gate entirely.
 const PUBLIC_EXACT_PATHS = [
   "/",
   "/login",
+  "/reset-password", // password-recovery landing: reached from an email link, no session yet
   "/about",
   "/pricing",
   "/faq",
@@ -176,6 +177,14 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/_next") ||
     ICON_PATHS.includes(pathname) ||
     CRAWLER_PATHS.includes(pathname);
+
+  // "Remember me" unchecked -> the auth cookie must die with the browser. This runs on every
+  // response rather than once at sign-in because @supabase/ssr re-sets the cookie with its fixed
+  // 400-day Max-Age each time it refreshes the access token (~hourly), which would silently make
+  // the session persistent again. Only the expiry attributes are touched; the token is untouched.
+  if (request.cookies.get(REMEMBER_COOKIE)?.value === "0") {
+    makeSessionScoped(response.cookies);
+  }
 
   if (!user && !isPublic && !isAsset) {
     // On a workspace subdomain, go straight to the canonical login — a same-host /login would
