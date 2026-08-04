@@ -5,6 +5,15 @@ import Link from "next/link";
 import AppLogo from "@/components/AppLogo";
 import { Menu, X } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
+import ExitIntentAuth from "@/components/ExitIntentAuth";
+import TopBarAccount from "@/components/TopBarAccount";
+
+export type NavUser = {
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  avatarUrl: string | null;
+};
 
 const LINKS = [
   { href: "/about", label: "About" },
@@ -16,7 +25,9 @@ const LINKS = [
 // Marketing-site header. Desktop (md+): inline links + auth buttons. Mobile: hamburger toggling a
 // dropdown panel — previously the three flex groups wrapped into a messy multi-row header on
 // narrow screens.
-export default function MarketingNav() {
+// `user` comes from the marketing layout, which reads the session server-side — resolving it
+// client-side instead would flash "Sign in" at someone who is already signed in on every page load.
+export default function MarketingNav({ user }: { user: NavUser | null }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -39,12 +50,25 @@ export default function MarketingNav() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
-          <AuthModal mode="login" className="btn-ghost">
-            Sign in
-          </AuthModal>
-          <AuthModal mode="signup" className="btn-primary">
-            Get started
-          </AuthModal>
+          {user ? (
+            // Same account menu as the dashboard's top bar, so a signed-in visitor gets the
+            // identity and shortcuts they already know rather than a sign-in button they don't need.
+            <TopBarAccount
+              email={user.email}
+              firstName={user.firstName}
+              lastName={user.lastName}
+              avatarUrl={user.avatarUrl}
+            />
+          ) : (
+            <>
+              <AuthModal mode="login" className="btn-ghost">
+                Sign in
+              </AuthModal>
+              <AuthModal mode="signup" className="btn-primary">
+                Get started
+              </AuthModal>
+            </>
+          )}
         </div>
 
         <button
@@ -73,15 +97,27 @@ export default function MarketingNav() {
             ))}
           </nav>
           <div className="mt-3 flex items-center gap-2">
-            <AuthModal mode="login" className="btn-ghost flex-1 justify-center">
-              Sign in
-            </AuthModal>
-            <AuthModal mode="signup" className="btn-primary flex-1 justify-center">
-              Get started
-            </AuthModal>
+            {user ? (
+              <TopBarAccount
+                email={user.email}
+                firstName={user.firstName}
+                lastName={user.lastName}
+                avatarUrl={user.avatarUrl}
+              />
+            ) : (
+              <>
+                <AuthModal mode="login" className="btn-ghost flex-1 justify-center">
+                  Sign in
+                </AuthModal>
+                <AuthModal mode="signup" className="btn-primary flex-1 justify-center">
+                  Get started
+                </AuthModal>
+              </>
+            )}
           </div>
         </div>
       )}
+      {!user && <ExitIntentAuth />}
     </header>
   );
 }
