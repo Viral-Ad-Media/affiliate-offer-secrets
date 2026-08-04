@@ -44,6 +44,24 @@ const PUBLIC_PREFIX_PATHS = [
   "/r/", // referral link capture — the visitor has no account yet, that's the point
 ];
 
+// Public API routes authorize themselves — a Stripe/Meta HMAC signature, or the x-engine-secret
+// header — never by which hostname the request arrived on. So they must resolve on ANY host that
+// reaches this deployment, not only the canonical one, and are exempt from the custom-domain
+// rewrite below.
+//
+// This is not hypothetical tidiness. The Stripe webhook was registered against the project's old
+// `*.vercel.app` hostname, which is still attached to the project: every delivery was classified
+// as a tenant custom domain, rewritten to /d/api/billing/webhook, and answered 405 by the
+// GET-only catch-all — so no payment ever granted access or credited an account, silently.
+// Confirmed live (405 on the old host, 400 "missing signature" on the canonical one) before this
+// fix. Third instance of this bug class in this file, after ICON_PATHS and CRAWLER_PATHS.
+//
+// Derived from the list above rather than hand-written, so a future public API route can't be
+// added in one place and forgotten here. Deliberately API-only: /p/, /b/ and /r/ are CONTENT
+// routes whose whole purpose is to be host-scoped (custom-domain serving, and the per-workspace
+// subdomain scoping in lib/publicPage.ts) — exempting those would break both.
+const PUBLIC_API_PREFIXES = PUBLIC_PREFIX_PATHS.filter((p) => p.startsWith("/api/"));
+
 // Cross-HOST redirects must write the Location header by hand, and must never target bare
 // localhost. Two layered problems, both observed live rather than theorized:
 //
@@ -81,7 +99,13 @@ export async function middleware(request: NextRequest) {
   // under /api/public/ already does its own campaign-scoped authorization, so it's safe to resolve
   // regardless of the arriving Host — same reasoning as the /_next exemption, just for API routes
   // client-side JS running inside a /d/-served page needs to call back into.
-  const isPublicApiPath = pathname.startsWith("/api/public/");
+  //
+  // The same is true of every other public API route (see PUBLIC_API_PREFIXES): each verifies a
+  // signature or a shared secret, so its authorization never depended on the hostname. The blanket
+  // /api/public/ prefix stays as well, so a new route under it is covered even before someone
+  // remembers to list it above.
+  const isPublicApiPath =
+    pathname.startsWith("/api/public/") || PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p));
 
   if (hostKind.kind === "custom" && !isAssetPath && !isPublicApiPath) {
     const url = request.nextUrl.clone();

@@ -1445,6 +1445,15 @@ after this contact signed up", never a shared calendar date). Reuses the existin
   the primary gate, this covers the narrow race window between that check and the job running).
   `failJob()` mirrors terminal failure onto `broadcast_enrollment_steps.status='failed'`, the
   `ad_launches`/`campaign_creatives` convention.
+- **`broadcast_sends` is the audit trail, and ALL its source FKs are `on delete set null`** —
+  `sequence_id`/`step_id`/`contact_id` shipped that way in 0021 so send history outlives its
+  sources (the `contacts.campaign_id` precedent), and `0061_broadcast_sends_preserve_history.sql`
+  brought `enrollment_step_id` in line: 0021 had given it `on delete cascade` (the
+  `ad_launches.campaign_id` precedent — wrong one for an audit table), which let deleting a
+  sequence cascade sequence → enrollments → enrollment_steps → `broadcast_sends`, erasing history
+  and undercounting the pooled daily cap that counts these rows. Safe because nothing selects
+  `broadcast_sends` by `enrollment_step_id` — every call site filtering on that value targets
+  `broadcast_enrollment_steps.id` or `jobs.payload`.
 - **Rate cap is pooled across `mail_sends` + `broadcast_sends`, and provider-aware** — it exists
   to protect a personal mailbox from being flagged (Gmail's free tier is ~500/day; 300/day is the
   nominal headroom figure). Since `0027_provider_aware_send_cap.sql`, the shared
@@ -2359,6 +2368,20 @@ the SVG changes; they are not linked automatically.
 top-level routes, not from `/_next`, so without the exemption the auth gate 307s them to `/login`
 and every logged-out visitor — the whole marketing site, every public funnel and blog page — gets
 a broken favicon. That was live until it was caught here.
+
+**`PUBLIC_API_PREFIXES` is the third instance, and the most expensive.** The host-mismatch rewrite
+(not the auth gate this time) sent every public API route on a non-canonical Host to
+`/d/api/...`, where the GET-only catch-all answered **405**. The Stripe webhook was still
+registered against the project's old `*.vercel.app` hostname — which is still attached to the
+project — so **every `checkout.session.completed` was being rejected before reaching the billing
+route: no access granted, no credits added, no error anywhere the operator would see.** Confirmed
+live before fixing (405 on the old host, 400 "missing signature" on the canonical one). Public API
+routes authorize themselves with an HMAC signature or `x-engine-secret`, never by hostname, so
+they are now exempt from the rewrite — derived by filtering `PUBLIC_PREFIX_PATHS` for `/api/` so
+the two lists can't drift. `/p/`, `/b/` and `/r/` are deliberately NOT exempt: those are content
+routes whose host-scoping is the whole point (custom domains, and per-workspace subdomains).
+**A webhook registered anywhere other than the canonical host is now served rather than silently
+dropped** — but registrations should still name `www.affiliateoffersecrets.com`.
 
 **`CRAWLER_PATHS` (`/robots.txt`, `/sitemap.xml`) is the same bug, found the same way.**
 `app/robots.ts` and `app/sitemap.ts` are also real top-level App Router routes, and both were

@@ -14,7 +14,15 @@ function base64UrlDecode(input: string): Buffer {
 }
 
 export async function POST(req: Request) {
-  const form = await req.formData();
+  // formData() THROWS on a non-form body, which on a public unauthenticated endpoint surfaced as
+  // an unhandled 500 rather than a clean rejection. Meta always posts form-encoded, so this never
+  // affected real traffic — found while probing the route during the webhook-host fix.
+  let form: FormData;
+  try {
+    form = await req.formData();
+  } catch {
+    return NextResponse.json({ error: "expected form-encoded body" }, { status: 400 });
+  }
   const signedRequest = form.get("signed_request");
   if (typeof signedRequest !== "string") {
     return NextResponse.json({ error: "missing signed_request" }, { status: 400 });
