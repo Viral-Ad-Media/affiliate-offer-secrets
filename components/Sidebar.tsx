@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Megaphone,
+  Package,
   Filter,
   Target,
   Users,
@@ -43,7 +44,10 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: (p: string) => p === "/dashboard" },
-  { href: "/marketplace", label: "Marketplace", icon: Megaphone, match: (p: string) => p === "/marketplace" || p.startsWith("/product/") },
+  { href: "/marketplace", label: "Marketplace", icon: Megaphone, match: (p: string) => p === "/marketplace" },
+  // Product detail pages hang off this entry, not Marketplace — you reach a kit from the list of
+  // offers you already track, not from discovery.
+  { href: "/products", label: "My Products", icon: Package, match: (p: string) => p === "/products" || p.startsWith("/product/") },
   { href: "/funnels", label: "Funnels", icon: Filter, match: (p: string) => p.startsWith("/funnels") },
   // Read-only view over every ad_launches row. Launching/activating stays on the angle's own card
   // on the campaign page — see the comment at the top of app/(app)/ads/page.tsx.
