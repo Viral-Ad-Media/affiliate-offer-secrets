@@ -14,7 +14,7 @@ export default async function BlogPostPage({ params }: { params: { postId: strin
 
   const ws = await currentWorkspaceId();
 
-  const [{ data: post }, { data: categories }] = await Promise.all([
+  const [{ data: post }, { data: categories }, { data: settings }] = await Promise.all([
     // RLS-scoped — another tenant's post id reads as nonexistent.
     supabase
       .from("blog_posts")
@@ -23,9 +23,19 @@ export default async function BlogPostPage({ params }: { params: { postId: strin
       )
       .eq("id", params.postId)
       .maybeSingle(),
-    supabase.from("blog_categories").select("id, name").eq("workspace_id", ws).order("name"),
+    // slug too: the "category-post" permalink style puts the CATEGORY slug in the post's URL, so
+    // without it the editor can't show the real link.
+    supabase.from("blog_categories").select("id, name, slug").eq("workspace_id", ws).order("name"),
+    supabase.from("blog_settings").select("slug, permalink_style").eq("workspace_id", ws).maybeSingle(),
   ]);
   if (!post) notFound();
 
-  return <BlogPostEditor post={post} categories={categories ?? []} />;
+  return (
+    <BlogPostEditor
+      post={post}
+      categories={categories ?? []}
+      blogSlug={settings?.slug ?? null}
+      permalinkStyle={settings?.permalink_style ?? null}
+    />
+  );
 }

@@ -25,19 +25,28 @@ export default async function BlogPage({ searchParams }: { searchParams: { page?
   const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
   const [from, to] = pageRange(page);
 
-  const [{ data: posts }, { data: categories }] = await Promise.all([
+  const [{ data: posts }, { data: categories }, { data: settings }] = await Promise.all([
     supabase
       .from("blog_posts")
-      .select("id, title, status, category_id, campaign_id, published_at, updated_at")
+      .select("id, title, slug, status, category_id, campaign_id, published_at, updated_at, blog_categories(slug)")
       .eq("workspace_id", ws)
       .order("updated_at", { ascending: false })
       .range(from, to),
     supabase.from("blog_categories").select("id, name").eq("workspace_id", ws).order("name"),
+    supabase.from("blog_settings").select("slug, permalink_style").eq("workspace_id", ws).maybeSingle(),
   ]);
 
   return (
     <div className="space-y-4">
-      <BlogManager posts={posts ?? []} categories={categories ?? []} />
+      <BlogManager
+        posts={(posts ?? []).map((p) => ({
+          ...p,
+          category_slug: ((p as any).blog_categories?.slug as string | null) ?? null,
+        }))}
+        categories={categories ?? []}
+        blogSlug={settings?.slug ?? null}
+        permalinkStyle={settings?.permalink_style ?? null}
+      />
       <Pager page={page} total={total} basePath="/blog" label="posts" />
     </div>
   );

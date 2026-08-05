@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2, CheckCircle2, ExternalLink, Copy } from "lucide-react";
 import type { PageBlockTree } from "@/lib/engine/renderPages";
-import { markdownToBlockTree, blogRenderCtx, renderBlockTree, renderPublicPostHtml } from "@/lib/blog";
+import { markdownToBlockTree, blogRenderCtx, renderBlockTree, renderPublicPostHtml, blogPostPath, type PermalinkStyle } from "@/lib/blog";
 import EditorPreviewButton from "@/components/EditorPreview";
 import StatusDropdownButton from "@/components/StatusDropdownButton";
 import { toast } from "@/lib/toast";
@@ -37,7 +37,7 @@ type Post = {
   previous_version: unknown;
   previous_saved_at: string | null;
 };
-type Category = { id: string; name: string };
+type Category = { id: string; name: string; slug?: string | null };
 
 
 // Same client-side downscale helper as PageEditor.tsx — UX only, the server's validator is the
@@ -50,7 +50,17 @@ function isTree(v: unknown): v is PageBlockTree {
 // Blog post editor — the same WysiwygCanvas the funnel opt-in/step editors use, with the "blog"
 // validator profile server-side (locked disclosure, no campaign-shaped blocks). Legacy posts
 // (content_md only, pre-block-tree) are converted client-side on open and upgraded on first save.
-export default function BlogPostEditor({ post, categories }: { post: Post; categories: Category[] }) {
+export default function BlogPostEditor({
+  post,
+  categories,
+  blogSlug,
+  permalinkStyle,
+}: {
+  post: Post;
+  categories: Category[];
+  blogSlug: string | null;
+  permalinkStyle: string | null;
+}) {
   const router = useRouter();
   const [title, setTitle] = useState(post.title);
   const [tree, setTree] = useState<PageBlockTree>(() =>
@@ -119,7 +129,24 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
   // first render differ from the server HTML (hydration mismatch, caught live).
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
-  const publicUrl = `${origin}/b/${post.id}`;
+  // The REAL permalink, built with the same helper the public route uses — not `/b/{uuid}`, which
+  // is only the legacy form kept alive as a 301. Showing the uuid meant the link you copied from
+  // here was never the link visitors (or Google) actually see.
+  //
+  // Derived from the SAVED post, not the in-editor state: it's labelled "Live", and a URL built
+  // from an unsaved slug would 404 until you pressed Save. router.refresh() after each save is
+  // what keeps it current.
+  const postPath = blogPostPath(
+    blogSlug,
+    post.slug,
+    post.id,
+    {
+      published_at: post.published_at,
+      category_slug: categories.find((c) => c.id === post.category_id)?.slug ?? null,
+    },
+    permalinkStyle as PermalinkStyle | null
+  );
+  const publicUrl = `${origin}${postPath}`;
 
   // Full-screen overlay, always covering 100% of the viewport — same treatment as the funnel
   // editor's edit views (app/(app)/funnels/[campaignId]/page.tsx): the app shell stays mounted
@@ -188,7 +215,7 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
       {status === "published" && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-300">
           <span className="font-medium">Live:</span>
-          <a href={`/b/${post.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 underline decoration-emerald-700 hover:text-emerald-200">
+          <a href={postPath} target="_blank" rel="noreferrer" className="flex items-center gap-1 underline decoration-emerald-700 hover:text-emerald-200">
             {publicUrl} <ExternalLink className="h-3 w-3" />
           </a>
           <button

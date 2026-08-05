@@ -6,10 +6,13 @@ import Link from "next/link";
 import { Newspaper, Plus, Loader2, Tag, ExternalLink, Trash2, Eye, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
+import { blogPostPath, type PermalinkStyle } from "@/lib/blog";
 
 type PostRow = {
   id: string;
   title: string;
+  slug: string | null;
+  category_slug?: string | null;
   status: string;
   category_id: string | null;
   campaign_id: string | null;
@@ -23,9 +26,13 @@ type Category = { id: string; name: string };
 export default function BlogManager({
   posts,
   categories,
+  blogSlug,
+  permalinkStyle,
 }: {
   posts: PostRow[];
   categories: Category[];
+  blogSlug: string | null;
+  permalinkStyle: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -274,7 +281,7 @@ export default function BlogManager({
                 </a>
                 {p.status === "published" && (
                   <a
-                    href={`/b/${p.id}`}
+                    href={blogPostPath(blogSlug, p.slug, p.id, p, permalinkStyle as PermalinkStyle | null)}
                     target="_blank"
                     rel="noreferrer"
                     title="View public post"
