@@ -181,6 +181,40 @@ export type TestimonialBlock = Base & {
 
 export const TESTIMONIAL_MEDIA_KINDS = ["text", "image", "video"] as const;
 
+// Swipeable image slides. Rendered as a CSS scroll-snap track, NOT a JS carousel: it swipes
+// natively on touch, scrolls with a trackpad, takes keyboard arrows once focused, and needs no
+// script at all — which is what lets it appear on a blog post without breaking the "public pages
+// ship zero JS" property. The trade is no auto-advance and no arrow buttons; both would need a
+// script for something a finger already does.
+export type CarouselBlock = Base & {
+  type: "carousel";
+  content: { slides: { imageDataUrl: string | null; caption: string }[] };
+};
+
+// A countdown is the one block here that genuinely cannot work without JS.
+//
+// `date` counts to a real deadline. `evergreen` counts N minutes from a visitor's FIRST view and
+// remembers it (localStorage, keyed by block id) — so a refresh does not hand them a fresh
+// timer. That persistence is the whole point: a countdown that resets on reload is telling every
+// visitor the offer expires and then proving it doesn't, which is the deceptive-urgency pattern
+// regulators actually act on, and content rule 2 already forbids inventing urgency. It does not
+// loop, and when it hits zero it says so.
+export type CountdownMode = "date" | "evergreen";
+export const COUNTDOWN_MODES = ["date", "evergreen"] as const;
+
+export type CountdownBlock = Base & {
+  type: "countdown";
+  content: {
+    mode: CountdownMode;
+    /** ISO instant, `date` mode only. */
+    deadline: string | null;
+    /** Minutes from first view, `evergreen` mode only. */
+    minutes: number;
+    label: string;
+    expiredText: string;
+  };
+};
+
 export type ElementBlock =
   | HeadingBlock
   | SubheadingBlock
@@ -193,7 +227,9 @@ export type ElementBlock =
   | ButtonBlock
   | VideoBlock
   | FaqItemBlock
-  | TestimonialBlock;
+  | TestimonialBlock
+  | CarouselBlock
+  | CountdownBlock;
 
 export const ELEMENT_BLOCK_TYPES = [
   "heading",
@@ -208,6 +244,8 @@ export const ELEMENT_BLOCK_TYPES = [
   "video",
   "faq_item",
   "testimonial",
+  "carousel",
+  "countdown",
 ] as const;
 
 // Only ever a child of a lead_capture_form block — never part of ElementBlock, so a Column's
@@ -439,6 +477,8 @@ export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readon
   divider: DIVIDER_STYLE_KEYS,
   image_list: TEXT_STYLE_KEYS,
   testimonial: TEXT_STYLE_KEYS,
+  carousel: BOX_STYLE_KEYS,
+  countdown: TEXT_STYLE_KEYS,
   button: BUTTON_STYLE_KEYS,
   video: BOX_STYLE_KEYS,
   faq_item: TEXT_STYLE_KEYS,
@@ -545,8 +585,84 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
         quote
       )}</blockquote>${attribution ? `<figcaption>${attribution}</figcaption>` : ""}</figure>`;
     }
+    case "carousel": {
+      const slides = block.content.slides.filter((s) => s.imageDataUrl);
+      if (slides.length === 0) return "";
+      // A scroll-snap track, not a JS carousel: native swipe on touch, trackpad scroll on desktop,
+      // arrow keys once focused (tabindex makes the overflow container focusable, which is also
+      // what makes it keyboard-reachable at all). No script, so this block is safe to drop on a
+      // blog post without breaking that page's zero-JS property.
+      return `<div class="carousel" tabindex="0" role="group" aria-roledescription="carousel" aria-label="Images"${styleAttr(
+        block.style,
+        BOX_STYLE_KEYS
+      )}>${slides
+        .map(
+          (s, i) =>
+            `<figure class="slide" aria-label="${i + 1} of ${slides.length}"><img src="${escapeHtml(
+              s.imageDataUrl as string
+            )}" alt="${escapeHtml(s.caption)}" loading="lazy" />${
+              s.caption.trim() ? `<figcaption>${escapeHtml(s.caption)}</figcaption>` : ""
+            }</figure>`
+        )
+        .join("")}</div>`;
+    }
+    case "countdown": {
+      const { mode, deadline, minutes, label, expiredText } = block.content;
+      const target = mode === "date" ? Date.parse(deadline ?? "") : NaN;
+      // A date-mode block with no usable deadline renders nothing rather than a stuck "00:00:00".
+      if (mode === "date" && !Number.isFinite(target)) return "";
+
+      // Only NUMBERS reach the script — the deadline as epoch ms, the minutes as an integer. All
+      // visible text is escaped into the HTML, never interpolated into JS. The script itself is
+      // code-owned and constant; it reads data attributes and writes textContent only.
+      const data =
+        mode === "date"
+          ? ` data-mode="date" data-until="${target}"`
+          : ` data-mode="evergreen" data-minutes="${Math.round(minutes)}"`;
+      return `<div class="countdown" id="${escapeHtml(block.id)}"${data}${styleAttr(block.style, TEXT_STYLE_KEYS)}>${
+        label.trim() ? `<div class="cd-label">${escapeHtml(label)}</div>` : ""
+      }<div class="cd-clock" aria-live="polite">--:--:--</div><div class="cd-expired" hidden>${escapeHtml(
+        expiredText
+      )}</div></div>${COUNTDOWN_SCRIPT}`;
+    }
   }
 }
+
+// Emitted once per countdown block (browsers are fine with that; the guard makes re-runs cheap).
+// Inlined next to the block rather than in the page shell so a page WITHOUT a countdown still
+// ships no script at all — which is what keeps blog posts zero-JS by default.
+//
+// Evergreen deadlines persist in localStorage keyed by block id: a countdown that resets on every
+// refresh tells each visitor the offer is expiring and then proves it isn't, which is the
+// deceptive-urgency pattern content rule 2 already rules out. It does not loop; at zero it swaps
+// in the expired message.
+const COUNTDOWN_SCRIPT = `<script>(function(){
+if (window.__aosCountdown) return; window.__aosCountdown = 1;
+function pad(n){return (n<10?"0":"")+n;}
+function start(el){
+  var until;
+  if (el.dataset.mode === "date") { until = Number(el.dataset.until); }
+  else {
+    var key = "aos_cd_" + el.id, saved = null;
+    try { saved = localStorage.getItem(key); } catch (e) {}
+    until = saved ? Number(saved) : Date.now() + Number(el.dataset.minutes) * 60000;
+    if (!saved) { try { localStorage.setItem(key, String(until)); } catch (e) {} }
+  }
+  var clock = el.querySelector(".cd-clock"), expired = el.querySelector(".cd-expired");
+  function tick(){
+    var ms = until - Date.now();
+    if (!(ms > 0)) {
+      clock.hidden = true; expired.hidden = false;
+      var lbl = el.querySelector(".cd-label"); if (lbl) lbl.hidden = true;
+      clearInterval(timer); return;
+    }
+    var s = Math.floor(ms/1000), d = Math.floor(s/86400);
+    clock.textContent = (d > 0 ? d + "d " : "") + pad(Math.floor(s/3600)%24) + ":" + pad(Math.floor(s/60)%60) + ":" + pad(s%60);
+  }
+  var timer = setInterval(tick, 1000); tick();
+}
+document.querySelectorAll(".countdown").forEach(start);
+})();</script>`;
 
 function renderColumn(col: ColumnBlock, ctx: RenderCtx): string {
   return `<div class="col"${styleAttr(col.style, BOX_STYLE_KEYS)}>${col.children
@@ -897,6 +1013,12 @@ function defaultElementContent(type: (typeof ELEMENT_BLOCK_TYPES)[number]): Elem
       return { source: null, title: "" };
     case "faq_item":
       return { question: "New question", answer: "Answer" };
+    case "carousel":
+      return { slides: [{ imageDataUrl: null, caption: "" }, { imageDataUrl: null, caption: "" }] };
+    case "countdown":
+      // Evergreen by default: a date-mode block with no deadline yet would render nothing, and a
+      // block that vanishes the moment you insert it reads as broken.
+      return { mode: "evergreen", deadline: null, minutes: 15, label: "This offer ends in", expiredText: "This offer has ended." };
     case "testimonial":
       // Defaults to the text variant: it is the only one that is complete the moment you insert
       // it, so the block never starts life looking broken while you go find an image.

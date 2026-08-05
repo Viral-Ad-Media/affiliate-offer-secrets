@@ -1907,6 +1907,29 @@ this reason, and their templates seed an empty video block above the copy (`VIDE
 since a VSL template without one is just a squeeze page with a different headline. Survey
 (`needs_branching`) and Book (`needs_payment`) are still correctly blocked.
 
+## Carousel and countdown blocks
+
+**Carousel is CSS scroll-snap, not a JS carousel.** It swipes natively on touch, scrolls with a
+trackpad, and takes arrow keys once focused (`tabindex` on the overflow container is what makes it
+keyboard-reachable at all). It emits **no script**, which is what lets it sit on a blog post
+without breaking that page's zero-JS property — verified. The trade is no auto-advance and no
+arrow buttons; both would need a script for something a finger already does. A carousel whose
+slides all lack an image renders nothing rather than an empty track.
+
+**Countdown is the one block that genuinely cannot work without JS**, so it inlines a small
+code-owned script NEXT TO the block rather than in the page shell — a page without a countdown
+still ships zero JS. Only numbers reach that script (deadline as epoch ms, minutes as an integer)
+via data attributes; every visible string is escaped into the HTML and never interpolated into JS.
+Verified: `minutes: "1);alert(1);//"` stores as 15 and renders `data-minutes="15"`, a script-tag
+deadline stores as null and renders nothing at all, and label/caption XSS is escaped.
+
+**Evergreen countdowns persist per visitor** (localStorage, keyed by block id) and **do not loop**;
+at zero they swap in an expired message. That is deliberate and shouldn't be "simplified" away: a
+countdown that resets on refresh tells every visitor the offer is expiring and then proves it
+isn't, which is the deceptive-urgency pattern content rule 2 already rules out and the one
+regulators actually act on. The evergreen window is capped at 7 days for the same reason. `date`
+mode counts to a real instant and renders nothing until one is set.
+
 ## Page theme (palette / typography / buttons / form)
 
 `PageBlockTree.theme` — same slot as `contentWidth`, for the same reason: one setting covers the

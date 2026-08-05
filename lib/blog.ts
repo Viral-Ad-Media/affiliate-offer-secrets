@@ -402,6 +402,16 @@ const PUBLIC_CSS = `
   .testimonial .tm-avatar { width:64px; height:64px; margin:0 0 12px; border-radius:50%; overflow:hidden; }
   .testimonial .tm-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
   .testimonial .tm-media.video-wrap { margin:0 0 14px; }
+  .carousel { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory; scroll-behavior:smooth; margin:24px 0; padding-bottom:8px; -webkit-overflow-scrolling:touch; }
+  .carousel .slide { flex:0 0 88%; scroll-snap-align:center; margin:0; }
+  .carousel .slide img { width:100%; height:auto; display:block; border-radius:12px; }
+  .carousel .slide figcaption { margin-top:8px; font-size:14px; color:#666; text-align:center; }
+  .carousel:focus-visible { outline:2px solid #16a34a; outline-offset:4px; }
+  @media (min-width:700px) { .carousel .slide { flex-basis:60%; } }
+  .countdown { margin:24px 0; text-align:center; }
+  .countdown .cd-label { font-size:14px; color:#666; margin-bottom:4px; }
+  .countdown .cd-clock { font-size:34px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:1px; }
+  .countdown .cd-expired { font-size:16px; font-weight:600; }
   .faq-item { margin-bottom: 16px; }
   .faq-item h3 { font-size:16px; margin-bottom:4px; }
   .row { display:flex; gap:24px; flex-wrap:wrap; }

@@ -196,6 +196,43 @@ function validateElement(raw: unknown, count: { n: number }): ElementBlock {
         content: { source: parseVideoUrl(candidate), title: clampStr(content.title, MAX_TEXT_SHORT) },
       };
     }
+    case "carousel": {
+      const raw = Array.isArray(content.slides) ? content.slides : [];
+      return {
+        id,
+        type: "carousel",
+        style,
+        content: {
+          slides: raw.slice(0, MAX_LIST_ITEMS).map((r) => {
+            const it = (r ?? {}) as Record<string, unknown>;
+            const dataUrl = typeof it.imageDataUrl === "string" && it.imageDataUrl ? it.imageDataUrl : null;
+            // Same allowlist and same throw as every other image in this codebase.
+            if (dataUrl && !isValidImageDataUrl(dataUrl)) throw new Error("invalid image data url");
+            return { imageDataUrl: dataUrl, caption: clampStr(it.caption, MAX_TEXT_MEDIUM) };
+          }),
+        },
+      };
+    }
+    case "countdown": {
+      const mode = content.mode === "date" ? "date" : "evergreen";
+      // Re-parsed, never stored as typed: only a real instant survives, and it is re-serialised
+      // from Date so a hand-edited row can't smuggle anything into the data attribute.
+      const parsed = typeof content.deadline === "string" ? Date.parse(content.deadline) : NaN;
+      return {
+        id,
+        type: "countdown",
+        style,
+        content: {
+          mode,
+          deadline: Number.isFinite(parsed) ? new Date(parsed).toISOString() : null,
+          // 1 minute to 7 days. An "evergreen" window longer than that isn't urgency, it's a lie
+          // with extra steps.
+          minutes: Math.min(10080, Math.max(1, Math.round(Number(content.minutes) || 15))),
+          label: clampStr(content.label, MAX_TEXT_SHORT),
+          expiredText: clampStr(content.expiredText, MAX_TEXT_SHORT),
+        },
+      };
+    }
     case "testimonial": {
       const rawMedia = (content.media ?? null) as { kind?: unknown; dataUrl?: unknown; source?: unknown } | null;
       const kind =

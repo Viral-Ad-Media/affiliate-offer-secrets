@@ -22,6 +22,8 @@ import {
   Video,
   HelpCircle,
   Quote,
+  GalleryHorizontal,
+  Timer,
   Settings2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -172,6 +174,8 @@ const ELEMENT_PALETTE: { type: ElementBlockTypeLocal; label: string; icon: any }
   { type: "video", label: "Video", icon: Video },
   { type: "faq_item", label: "FAQ item", icon: HelpCircle },
   { type: "testimonial", label: "Testimonial", icon: Quote },
+  { type: "carousel", label: "Carousel", icon: GalleryHorizontal },
+  { type: "countdown", label: "Countdown", icon: Timer },
 ];
 
 // Sets the DOM node's text exactly once, at mount, then never touches it again on re-render (no
@@ -1330,6 +1334,135 @@ export default function WysiwygCanvas({
                 className="text-[13px] text-gray-500"
               />
             </div>
+          </div>
+        );
+      }
+      case "carousel": {
+        const slides = el.content.slides;
+        const setSlides = (next: typeof slides) => commit(el.id, { slides: next });
+        return (
+          <div className="my-3" style={blockInlineStyle(el)}>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {slides.map((s, i) => (
+                <div key={i} className="group/sl relative w-40 shrink-0">
+                  {s.imageDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={s.imageDataUrl} alt="" className="h-24 w-full rounded-lg object-cover" />
+                  ) : (
+                    <label className="flex h-24 w-full cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-[11px] text-gray-400 hover:border-emerald-400">
+                      Add image
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (file)
+                            pickImage(el.id, file, (dataUrl) => ({
+                              slides: slides.map((x, j) => (j === i ? { ...x, imageDataUrl: dataUrl } : x)),
+                            }));
+                        }}
+                      />
+                    </label>
+                  )}
+                  <EditableText
+                    value={s.caption}
+                    onCommit={(v) => setSlides(slides.map((x, j) => (j === i ? { ...x, caption: v } : x)))}
+                    maxLength={1000}
+                    placeholder="Caption"
+                    className="mt-1 block text-center text-[11px] text-gray-500"
+                  />
+                  {slides.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setSlides(slides.filter((_, j) => j !== i))}
+                      className="absolute right-1 top-1 rounded bg-black/60 p-0.5 text-white opacity-0 group-hover/sl:opacity-100"
+                      title="Remove slide"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSlides([...slides, { imageDataUrl: null, caption: "" }])}
+                className="text-[11px] text-emerald-600 hover:underline"
+              >
+                + Add slide
+              </button>
+              {/* Says what the published block actually is, because the editor shows a row of
+                  thumbnails and the real page shows one slide at a time. */}
+              <span className="text-[11px] text-gray-400">Visitors swipe or scroll through these.</span>
+            </div>
+          </div>
+        );
+      }
+      case "countdown": {
+        const cd = el.content;
+        return (
+          <div className="my-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-center" style={blockInlineStyle(el)}>
+            <EditableText
+              value={cd.label}
+              onCommit={(v) => commit(el.id, { label: v })}
+              maxLength={200}
+              placeholder="Label above the clock"
+              className="block text-[13px] text-gray-500"
+            />
+            <div className="my-1 text-[28px] font-bold tabular-nums text-gray-800">
+              {cd.mode === "evergreen"
+                ? `${String(Math.floor(cd.minutes / 60)).padStart(2, "0")}:${String(cd.minutes % 60).padStart(2, "0")}:00`
+                : "--:--:--"}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-2 text-[11px]">
+              <select
+                value={cd.mode}
+                onChange={(e) => commit(el.id, { mode: e.target.value })}
+                className="rounded border border-gray-300 px-1.5 py-0.5 text-gray-600"
+              >
+                <option value="evergreen">Per visitor</option>
+                <option value="date">Fixed date</option>
+              </select>
+              {cd.mode === "evergreen" ? (
+                <label className="flex items-center gap-1 text-gray-500">
+                  <input
+                    type="number"
+                    min={1}
+                    max={10080}
+                    value={cd.minutes}
+                    onChange={(e) => commit(el.id, { minutes: Number(e.target.value) })}
+                    className="w-16 rounded border border-gray-300 px-1 py-0.5"
+                  />
+                  minutes
+                </label>
+              ) : (
+                <input
+                  type="datetime-local"
+                  value={cd.deadline ? new Date(cd.deadline).toISOString().slice(0, 16) : ""}
+                  onChange={(e) =>
+                    commit(el.id, { deadline: e.target.value ? new Date(e.target.value).toISOString() : null })
+                  }
+                  className="rounded border border-gray-300 px-1 py-0.5 text-gray-600"
+                />
+              )}
+            </div>
+
+            <EditableText
+              value={cd.expiredText}
+              onCommit={(v) => commit(el.id, { expiredText: v })}
+              maxLength={200}
+              placeholder="Shown when it reaches zero"
+              className="mt-1.5 block text-[11px] text-gray-400"
+            />
+            <p className="mt-1 text-[10px] leading-snug text-gray-400">
+              {cd.mode === "evergreen"
+                ? "Each visitor gets their own countdown, remembered across refreshes — it won't restart."
+                : "Counts to a real date. Hidden entirely until you set one."}
+            </p>
           </div>
         );
       }
