@@ -34,7 +34,7 @@ export default function MarketingNav({ user }: { user: NavUser | null }) {
     <header className="border-b border-ink-700 bg-ink-950/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4">
         <Link href="/" onClick={() => setOpen(false)}>
-          <AppLogo markClassName="h-8 w-8" textClassName="font-heading text-lg font-bold text-zinc-100" />
+          <AppLogo textClassName="font-heading text-lg font-bold text-zinc-100" />
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">

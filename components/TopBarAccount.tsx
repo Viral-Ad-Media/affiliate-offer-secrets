@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import {
   ChevronDown,
   CreditCard,
+  LayoutDashboard,
   Link2,
   Loader2,
   LogOut,
@@ -16,6 +17,11 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
+// Dashboard sits at the top, separated from the account items below it, because it's the only
+// entry here that isn't about your account — it's the way back INTO the app. That matters most on
+// the marketing site: MarketingNav renders this same menu for a signed-in visitor, and until now
+// someone who landed on the homepage or a legal page had no route back to their dashboard except
+// editing the URL. Inside the app it's redundant with the sidebar, and harmlessly so.
 const MENU: { href: string; label: string; icon: typeof User }[] = [
   { href: "/settings/profile", label: "Profile", icon: User },
   { href: "/settings/security", label: "Security", icon: ShieldCheck },
@@ -126,6 +132,18 @@ export default function TopBarAccount({
               <div className="truncate text-xs text-zinc-500" title={email}>
                 {email}
               </div>
+            </div>
+
+            <div className="border-b border-ink-700 py-1">
+              <Link
+                href="/dashboard"
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-100 hover:bg-ink-800"
+              >
+                <LayoutDashboard className="h-4 w-4 shrink-0 text-emerald-400" />
+                Dashboard
+              </Link>
             </div>
 
             <div className="py-1">

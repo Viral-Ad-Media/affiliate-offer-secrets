@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PRODUCT_STATUSES } from "@/lib/shared";
+import { creditCostFor } from "@/lib/credits";
+import { toast } from "@/lib/toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import JobsQueue from "@/components/JobsQueue";
 import { useCredits } from "@/components/CreditsProvider";
 import CostBadge from "@/components/CostBadge";
 import Link from "next/link";
@@ -105,6 +110,9 @@ export default function Marketplace() {
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [jobsOpen, setJobsOpen] = useState(false);
 
   const statusKey = statusFilters.join(",");
 
@@ -137,6 +145,69 @@ export default function Marketplace() {
   const openJobs = jobs.filter((j) => j.status === "pending" || j.status === "running");
 
   const { refresh: refreshCredits } = useCredits();
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  async function bulkStatus(status: string) {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    const res = await fetch("/api/products/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, product_ids: ids }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setBulkBusy(false);
+    if (!res.ok) return toast.error(data.error ?? "Something went wrong");
+    toast.success(`${data.affected} product(s) set to ${status}`);
+    setSelected(new Set());
+    await load();
+  }
+
+  // Calls the SAME /api/promote the single button uses, once per product, rather than a bulk
+  // endpoint — that route owns the entitlement check, the credit charge and the rollback, and a
+  // second server-side copy of that loop would be a second billing path to keep in step. Stops on
+  // the first 402 instead of hammering: once credits run out every remaining call would fail the
+  // same way, and the person needs to know how far it got.
+  async function bulkPromote() {
+    const ids = Array.from(selected).filter(
+      (id) => !products.find((p) => p.id === id)?.campaign_status
+    );
+    if (ids.length === 0) return toast.error("Those products already have a kit or one in progress");
+    const cost = ids.length * creditCostFor("build_campaign");
+    if (!window.confirm(`Build ${ids.length} campaign kit(s) for ${cost} credits?`)) return;
+
+    setBulkBusy(true);
+    let queued = 0;
+    let stopped: string | null = null;
+    for (const id of ids) {
+      const res = await fetch("/api/promote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ product_id: id }),
+      });
+      if (res.ok) {
+        queued++;
+        continue;
+      }
+      const d = await res.json().catch(() => ({}));
+      stopped = d.error ?? "Something went wrong";
+      break;
+    }
+    setBulkBusy(false);
+    setSelected(new Set());
+    await load();
+    refreshCredits();
+    if (stopped) toast.error(`Queued ${queued}, then stopped: ${stopped}`);
+    else toast.success(`Queued ${queued} campaign build(s)`);
+  }
 
   async function promote(id: string) {
     setBusy(id);
@@ -294,13 +365,17 @@ export default function Marketplace() {
           value={stats.promoting}
           sub={`${stats.selected} selected`}
         />
-        <StatTile
-          icon={<Hourglass className="h-5 w-5" />}
-          label="Open jobs"
-          value={openJobs.length}
-          sub={openJobs.some((j) => j.status === "running") ? "engine running" : undefined}
-          href="/settings/jobs"
-        />
+        {/* The queue is something you consult when something looks stuck, not part of the
+            discovery loop — so it lives behind this tile as a dialog rather than taking permanent
+            space on the page or forcing a trip to Settings mid-flow. */}
+        <button type="button" onClick={() => setJobsOpen(true)} className="text-left">
+          <StatTile
+            icon={<Hourglass className="h-5 w-5" />}
+            label="Open jobs"
+            value={openJobs.length}
+            sub={openJobs.some((j) => j.status === "running") ? "engine running" : "view queue"}
+          />
+        </button>
       </section>
 
       {/* What the marketplace looks like today, before you've queued anything — the discovery form
@@ -323,10 +398,60 @@ export default function Marketplace() {
         <div className="border-b border-ink-700 px-4 py-2.5">
           <ManualAddProduct onAdded={load} />
         </div>
+        {selected.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-ink-800 bg-ink-800/40 px-4 py-2">
+            <span className="text-xs text-zinc-300">{selected.size} selected</span>
+            <div className="h-4 w-px bg-ink-600" />
+            <select
+              disabled={bulkBusy}
+              defaultValue=""
+              onChange={(e) => {
+                const v = e.target.value;
+                e.target.value = "";
+                if (v) bulkStatus(v);
+              }}
+              className="rounded border border-ink-600 bg-ink-900 px-2 py-1 text-xs text-zinc-200"
+            >
+              <option value="">Set status…</option>
+              {PRODUCT_STATUSES.map((st) => (
+                <option key={st} value={st}>
+                  {st}
+                </option>
+              ))}
+            </select>
+            <button onClick={bulkPromote} disabled={bulkBusy} className="btn-ghost text-xs">
+              <Rocket className="h-3.5 w-3.5" /> Promote selected
+              <CostBadge jobType="build_campaign" />
+            </button>
+            {bulkBusy && <RefreshCw className="h-3.5 w-3.5 animate-spin text-zinc-400" />}
+            <button
+              onClick={() => setSelected(new Set())}
+              className="ml-auto text-xs text-zinc-500 hover:text-zinc-300"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="data-table w-full text-sm">
             <thead>
               <tr>
+                <th className="w-8 px-3">
+                  <input
+                    type="checkbox"
+                    checked={products.length > 0 && products.every((p) => selected.has(p.id))}
+                    onChange={() =>
+                      setSelected(
+                        products.every((p) => selected.has(p.id))
+                          ? new Set()
+                          : new Set(products.map((p) => p.id))
+                      )
+                    }
+                    aria-label="Select all on this page"
+                    className="accent-emerald-500"
+                  />
+                </th>
                 <th>Product</th>
                 <th>Niche</th>
                 <th className="text-right">Gravity</th>
@@ -340,6 +465,15 @@ export default function Marketplace() {
             <tbody>
               {products.map((p) => (
                 <tr key={p.id}>
+                  <td className="px-3 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(p.id)}
+                      onChange={() => toggle(p.id)}
+                      aria-label={`Select ${p.product_title}`}
+                      className="accent-emerald-500"
+                    />
+                  </td>
                   <td className="max-w-xs px-4 py-2.5">
                     <Link
                       href={`/product/${p.id}`}
@@ -458,6 +592,14 @@ export default function Marketplace() {
           </div>
         )}
       </section>
+      <Dialog open={jobsOpen} onOpenChange={setJobsOpen}>
+        <DialogContent className="max-h-[85vh] max-w-[min(56rem,calc(100vw-2rem))] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Jobs queue</DialogTitle>
+          </DialogHeader>
+          <JobsQueue />
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

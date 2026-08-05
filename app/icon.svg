@@ -1,9 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Affiliate Offer Secrets">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AOS — Affiliate Offer Secrets">
   <rect width="64" height="64" rx="14" fill="#0a0f1a"/>
-  <!-- "A" for Affiliate Offer Secrets, replacing the old "C" (ClickBank) mark. Drawn as strokes rather
-       than a filled glyph so it stays legible at 16px, where a real typeface's thin joins fill in.
-       Emerald matches the wordmark accent. -->
-  <path d="M20 46 L32 18 L44 46" fill="none" stroke="#34d399" stroke-width="7"
-        stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M25.5 37 H38.5" fill="none" stroke="#34d399" stroke-width="6" stroke-linecap="round"/>
+  <!-- "AOS" monogram, replacing the single "A" (which itself replaced the old ClickBank "C").
+       Drawn as strokes rather than a filled typeface: at 16px a real face's thin joins fill in and
+       the counters close up, where open strokes hold their shape. Three glyphs in a 64px square is
+       genuinely tight — the weight and spacing here are tuned so it still reads as a distinct mark
+       at favicon size, even at the point where the individual letters stop being separable.
+       Emerald (#34d399) matches the wordmark accent in components/AppLogo.tsx — same identity in
+       two places, keep them in sync. -->
+  <g fill="none" stroke="#34d399" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 44 L13.5 22 L20 44"/>
+    <path d="M9.6 37.5 H17.4"/>
+    <circle cx="32" cy="33" r="9.2"/>
+    <path d="M56.6 26 C56.6 22.2 51.4 20.6 48 22.4 C44.6 24.2 44.6 29.2 48.4 31 L52.2 32.8 C56 34.6 56 40.6 52.2 42.6 C48.8 44.4 44.4 43.2 43.4 40.2"/>
+  </g>
 </svg>
