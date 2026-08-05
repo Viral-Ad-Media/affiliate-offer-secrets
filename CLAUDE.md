@@ -2190,8 +2190,25 @@ the app behaves exactly as pre-Phase-3, which is also how dev runs by default.
   while — "page did not load" right after cutover is stale negative cache, not a bug. **The
   Vercel DNS zone starts with ONLY the system records (ALIAS + CAA)** — anything that lived in
   GoDaddy's zone (email MX/SPF/DKIM, verification TXTs) must be re-created in Vercel DNS or it is
-  silently gone; there is currently no MX record, so nothing delivers to @affiliateoffersecrets.com
-  addresses until one is added.
+  silently gone.
+
+**Mail DNS, as of 2026-08-04.** Present: SendGrid's full domain authentication (`em2078`
+return-path, `s1`/`s2._domainkey`, `url7871` link branding), a `_dmarc` TXT at `p=none`
+(monitoring), and an apex SPF — `v=spf1 include:sendgrid.net ~all`, verified resolving with the
+include chain expanding to SendGrid's real IP ranges. `~all` (softfail) rather than `-all` is
+deliberate while SendGrid is the only confirmed sender; tighten it only once every sending source
+is known, since a hardfail with a missing include silently drops real mail. **Adding another
+sending service means EDITING that one record, not adding a second** — multiple SPF TXT records on
+one name is a permanent fail, not a merge.
+
+**There is deliberately still no MX record, and that is a live compliance gap, not an oversight.**
+Nothing delivers to any @affiliateoffersecrets.com address, including
+`support@affiliateoffersecrets.com` — which `lib/brand.ts`'s `SUPPORT_EMAIL` prints on Contact,
+Privacy and Terms as the address for support and for GDPR/CCPA erasure requests. The choice was
+offered (forwarder / Google Workspace / Zoho / skip) and skip was chosen knowingly. Until MX
+exists, either point `SUPPORT_EMAIL` at an address that actually receives, or add MX — a published
+erasure contact that bounces is a claim the product can't honour. Whichever mail host is chosen
+will also need its own `include:` folded into the SPF record above.
 
 ## Settings
 
