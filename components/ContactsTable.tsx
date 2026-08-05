@@ -12,6 +12,7 @@ import {
   Pencil,
   TagsIcon,
   MailX,
+  Plus,
   X,
 } from "lucide-react";
 import type { Contact, ContactTag } from "@/lib/shared";
@@ -67,6 +68,7 @@ export default function ContactsTable({
   total: number;
 }) {
   const router = useRouter();
+  const [adding, setAdding] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -137,15 +139,20 @@ export default function ContactsTable({
               Every visitor who submitted a bridge page opt-in form.
             </p>
           </div>
-          {total > 0 && (
-            <a
-              href="/api/contacts/export"
-              title="Download every contact, not just this page"
-              className={cn(buttonVariants({ variant: "outline" }), "text-xs")}
-            >
-              <Download className="h-3.5 w-3.5" /> Export CSV
-            </a>
-          )}
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setAdding(true)} className="text-xs">
+              <Plus className="h-3.5 w-3.5" /> Add contact
+            </Button>
+            {total > 0 && (
+              <a
+                href="/api/contacts/export"
+                title="Download every contact, not just this page"
+                className={cn(buttonVariants({ variant: "outline" }), "text-xs")}
+              >
+                <Download className="h-3.5 w-3.5" /> Export CSV
+              </a>
+            )}
+          </div>
         </div>
 
         {/* Tag filter. Plain links, so the filter is shareable and survives a refresh — and the
@@ -364,6 +371,17 @@ export default function ContactsTable({
         )}
       </Card>
 
+      {adding && (
+        <AddContactDialog
+          allTags={allTags}
+          onClose={() => setAdding(false)}
+          onSaved={() => {
+            setAdding(false);
+            router.refresh();
+          }}
+        />
+      )}
+
       {editing && (
         <EditContactDialog
           contact={editing}
@@ -376,6 +394,115 @@ export default function ContactsTable({
         />
       )}
     </>
+  );
+}
+
+/**
+ * Add one lead by hand — someone you met, or who replied, rather than someone who filled in a
+ * bridge page. Sibling to the CSV import at /contacts/import; this is the one-off case, which
+ * shouldn't cost a trip through a file picker.
+ *
+ * Tagging on the way in is offered because a manually added lead is exactly the kind that needs
+ * to be findable later: it has no campaign attached, so a tag is the only thing that will
+ * distinguish it from everything else in the list.
+ */
+function AddContactDialog({
+  allTags,
+  onClose,
+  onSaved,
+}: {
+  allTags: ContactTag[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [firstName, setFirstName] = useState("");
+  const [email, setEmail] = useState("");
+  const [tagId, setTagId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const field =
+    "w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-emerald-500";
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    const res = await fetch("/api/contacts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, first_name: firstName, tag_id: tagId || null }),
+    });
+    const json = await res.json().catch(() => ({}));
+    setSaving(false);
+    if (!res.ok) {
+      // The duplicate case is a 409 with a real explanation — surfacing it beats a generic
+      // failure, since "already on your list" is an answer, not an error.
+      setError(json.error ?? "Couldn't add that contact");
+      return;
+    }
+    toast.success(`Added ${email.trim().toLowerCase()}`);
+    onSaved();
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base">Add contact</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-zinc-400">First name</label>
+            <input
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="Optional"
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-zinc-400">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && email.trim() && !saving) save();
+              }}
+              placeholder="name@example.com"
+              autoFocus
+              className={field}
+            />
+          </div>
+
+          {allTags.length > 0 && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-zinc-400">Tag</label>
+              <select value={tagId} onChange={(e) => setTagId(e.target.value)} className={field}>
+                <option value="">No tag</option>
+                {allTags.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {error && <p className="text-sm text-red-400">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button onClick={onClose} variant="outline" className="text-sm">
+              Cancel
+            </Button>
+            <Button onClick={save} disabled={saving || !email.trim()} className="text-sm">
+              {saving ? "Adding…" : "Add contact"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

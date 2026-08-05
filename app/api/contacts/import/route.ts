@@ -80,6 +80,7 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return NextResponse.json({ error: "no workspace" }, { status: 400 });
 
   const body = await req.json().catch(() => ({}));
   const csv = typeof body.csv === "string" ? body.csv : "";
@@ -116,7 +117,13 @@ export async function POST(req: Request) {
   }
 
   const seen = new Set<string>();
-  const toInsert: { user_id: string; campaign_id: string | null; first_name: string | null; email: string }[] = [];
+  const toInsert: {
+    user_id: string;
+    workspace_id: string;
+    campaign_id: string | null;
+    first_name: string | null;
+    email: string;
+  }[] = [];
   let invalid = 0;
 
   for (const r of dataRows) {
@@ -129,7 +136,10 @@ export async function POST(req: Request) {
     if (seen.has(email)) continue;
     seen.add(email);
     const first_name = nameIdx >= 0 ? (r[nameIdx] ?? "").trim().slice(0, MAX_NAME) || null : null;
-    toInsert.push({ user_id: user.id, campaign_id: campaignId, first_name, email });
+    // workspace_id explicitly: this writes on the admin client, where auth.uid() is NULL, so
+    // stamp_workspace_id would fall back to the importer's OWN workspace — filing a list
+    // imported while viewing workspace B into workspace A, where it would then be invisible.
+    toInsert.push({ user_id: user.id, workspace_id: ws, campaign_id: campaignId, first_name, email });
   }
 
   if (toInsert.length === 0) {
@@ -162,7 +172,7 @@ export async function POST(req: Request) {
   if (tagId) {
     const allIds = [...insertedIds, ...toInsert.map((c) => existingByEmail.get(c.email)).filter(Boolean as unknown as (v: string | undefined) => v is string)];
     if (allIds.length > 0) {
-      const links = allIds.map((contact_id) => ({ contact_id, tag_id: tagId, user_id: user.id }));
+      const links = allIds.map((contact_id) => ({ contact_id, tag_id: tagId, user_id: user.id, workspace_id: ws }));
       const { error: linkErr } = await admin
         .from("contact_tag_links")
         .upsert(links, { onConflict: "contact_id,tag_id", ignoreDuplicates: true });
