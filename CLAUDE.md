@@ -1756,11 +1756,24 @@ URL.
   pre-escaping so preview always matches the published page. Verified live: `<script>`/`onerror`
   probes render as inert escaped text, bold/links render normally. Never replace this with a
   "sanitize later" approach without a real sanitizer.
-- **Import** (`POST /api/blog/posts` with `campaign_id`): RLS-scoped campaign read doubles as the
-  ownership check; the post title comes from `blog_md`'s first `# H1` (falling back to
-  "<product> review").
+- **A kit's article becomes a draft post automatically, and that is now the ONLY path.**
+  `finalizeBuildCampaign` (`lib/engine/worker.ts`) calls `createPostFromCampaign`
+  (`lib/blog/fromCampaign.ts`) when a build finishes; the "Import from campaign" dropdown and
+  "Import all" button are gone, along with `app/api/blog/posts/import-all`. A button asking
+  someone to do by hand what already happened is just a way to be unsure whether it did. Draft,
+  never published: this is machine-written copy about someone else's product. Idempotent on
+  `campaign_id`, so a rebuild updates the kit rather than stacking posts. Untick "Blog article" in
+  the Build kit dialog and there is no `blog_md`, so no post — correct, and worth knowing.
+- **`createPostFromCampaign` had NEVER once worked, and the try/catch is why nobody knew.** Its
+  insert omitted `user_id`, which is NOT NULL on `blog_posts`, so every call threw — silently in
+  the worker (swallowed, `console.error` only) and as a 500 from the import button. The 7 posts
+  that exist predate the helper and came from the older inline import. The post now inherits the
+  CAMPAIGN's `user_id` (created-by attribution for a derived row, and it needs no signature
+  change), and the worker's catch additionally sends a notification, so a future failure surfaces
+  to the person who'd notice the post missing instead of dying in a log. **Best-effort must still
+  be visible** — that is the lesson, not "add a try/catch".
 - **UI**: `components/BlogManager.tsx` (category chips with inline create/delete + filter, posts
-  list, import dropdown of campaigns with `blog_md`), `components/BlogPostEditor.tsx`
+  list, New post), `components/BlogPostEditor.tsx`
   (title/category, Write↔Preview markdown editor, Save, Publish/Unpublish — publishing always
   saves current edits first — live-URL bar with copy). Note: the editor's public-URL origin is
   applied post-mount via `useEffect` — reading `window.location` during render was a real

@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, Check, ExternalLink, Link2, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
-import { toast } from "@/lib/toast";
+import { AlertTriangle, Check, Link2, X } from "lucide-react";
 import { analyzePostSeo, scoreTone, type SeoInput } from "@/lib/blogSeo";
 
 /**
- * SEO score, link counts, and the regenerate/revert pair, for one post.
+ * SEO score, link counts and on-page checks for one post. Analysis only — Regenerate/Undo/Redo
+ * live in the editor's top bar (components/PostRevisionControls.tsx), beside the other actions
+ * that change the whole post. Rewriting an article isn't something you go looking for under a
+ * score, and keeping it in both places would be two ways to fire the same expensive call.
  *
  * Scored live from what's in the editor, not from what's saved — the point is to react while
  * you're writing. It calls the same analyzePostSeo the rest of the app uses, so the number here
@@ -15,22 +17,8 @@ import { analyzePostSeo, scoreTone, type SeoInput } from "@/lib/blogSeo";
  * The score is on-page hygiene, not a ranking prediction, and the panel says so. A number that
  * implies knowledge of a search engine it can't see would be worse than no number.
  */
-export default function PostSeoPanel({
-  postId,
-  input,
-  hasSnapshot,
-  snapshotAt,
-  onApplied,
-}: {
-  postId: string;
-  input: SeoInput;
-  hasSnapshot: boolean;
-  snapshotAt: string | null;
-  onApplied: () => void;
-}) {
+export default function PostSeoPanel({ input }: { input: SeoInput }) {
   const report = useMemo(() => analyzePostSeo(input), [input]);
-  const [busy, setBusy] = useState<"regenerate" | "revert" | null>(null);
-  const [instruction, setInstruction] = useState("");
   const [showLinks, setShowLinks] = useState(false);
 
   const tone = scoreTone(report.score);
@@ -38,29 +26,6 @@ export default function PostSeoPanel({
     tone === "good" ? "text-emerald-300" : tone === "ok" ? "text-amber-300" : "text-red-300";
   const ringClass =
     tone === "good" ? "border-emerald-500/40" : tone === "ok" ? "border-amber-500/40" : "border-red-500/40";
-
-  async function run(kind: "regenerate" | "revert") {
-    setBusy(kind);
-    try {
-      const res = await fetch(`/api/blog/posts/${postId}/${kind}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(kind === "regenerate" ? { instruction } : {}),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(json.error ?? "Something went wrong");
-        return;
-      }
-      toast.success(kind === "regenerate" ? "Post rewritten" : "Previous version restored");
-      setInstruction("");
-      onApplied();
-    } catch {
-      toast.error("Something went wrong");
-    } finally {
-      setBusy(null);
-    }
-  }
 
   return (
     <section className="card space-y-4 p-4">
@@ -134,45 +99,6 @@ export default function PostSeoPanel({
         ))}
       </ul>
 
-      <div className="space-y-2 border-t border-ink-700 pt-3">
-        <input
-          value={instruction}
-          onChange={(e) => setInstruction(e.target.value)}
-          maxLength={400}
-          placeholder="Optional: what to change (e.g. more detail on pricing)"
-          className="w-full rounded-lg border border-ink-600 bg-ink-900 px-2.5 py-1.5 text-xs outline-none placeholder:text-zinc-600 focus:border-emerald-500"
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => run("regenerate")} disabled={busy !== null} className="btn-primary text-xs">
-            {busy === "regenerate" ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="h-3.5 w-3.5" />
-            )}
-            Regenerate
-          </button>
-          <button
-            onClick={() => run("revert")}
-            disabled={busy !== null || !hasSnapshot}
-            title={hasSnapshot ? undefined : "Nothing to revert to yet"}
-            className="btn-ghost text-xs"
-          >
-            {busy === "revert" ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RotateCcw className="h-3.5 w-3.5" />
-            )}
-            Revert
-          </button>
-        </div>
-        {/* One snapshot, not a history — saying so beats letting someone assume otherwise and lose
-            the original to a second regeneration. */}
-        <p className="text-[11px] text-zinc-600">
-          {hasSnapshot
-            ? `Revert restores the version from ${snapshotAt ? new Date(snapshotAt).toLocaleString() : "before the last rewrite"}. Only the last one is kept — regenerating twice replaces it.`
-            : "Regenerating saves the current version first, so you can undo it."}
-        </p>
-      </div>
     </section>
   );
 }

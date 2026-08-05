@@ -12,6 +12,7 @@ import { toast } from "@/lib/toast";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
 import PostSeoPanel from "@/components/PostSeoPanel";
+import PostRevisionControls from "@/components/PostRevisionControls";
 import FeaturedImageField from "@/components/FeaturedImageField";
 import { resizeImageFile } from "@/lib/images/resizeClient";
 
@@ -159,6 +160,13 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
               })
             }
           />
+          <PostRevisionControls
+            postId={post.id}
+            hasSnapshot={!!post.previous_version}
+            snapshotAt={post.previous_saved_at}
+            onApplied={() => router.refresh()}
+            disabled={busy !== null}
+          />
           <button type="button" onClick={save} disabled={busy !== null} className="btn-ghost text-xs">
             {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Save
@@ -281,7 +289,6 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
           while you write. Rendering the tree here (rather than reading post.html) is what makes
           the link and heading counts reflect unsaved edits. */}
       <PostSeoPanel
-        postId={post.id}
         input={{
           title,
           contentMd: post.content_md,
@@ -293,9 +300,6 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
           slug,
           siteHosts: origin ? [new URL(origin).hostname] : [],
         }}
-        hasSnapshot={!!post.previous_version}
-        snapshotAt={post.previous_saved_at}
-        onApplied={() => router.refresh()}
       />
 
       <p className="text-xs text-zinc-500">

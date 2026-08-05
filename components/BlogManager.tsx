@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Newspaper, Plus, Loader2, Tag, Import, ExternalLink, Trash2, Layers, Eye, Pencil } from "lucide-react";
+import { Newspaper, Plus, Loader2, Tag, ExternalLink, Trash2, Eye, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
 
@@ -23,16 +23,13 @@ type Category = { id: string; name: string };
 export default function BlogManager({
   posts,
   categories,
-  importableCampaigns,
 }: {
   posts: PostRow[];
   categories: Category[];
-  importableCampaigns: { id: string; title: string }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [importCampaignId, setImportCampaignId] = useState("");
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -96,29 +93,17 @@ export default function BlogManager({
     }
   }
 
-  async function createPost(campaignId?: string) {
-    const data = await call(campaignId ? "import" : "new", "/api/blog/posts", {
+  // Blank post only. Importing from a campaign is gone as a UI action — a kit's article becomes a
+  // draft post automatically when the build finishes (finalizeBuildCampaign in lib/engine/worker.ts),
+  // so a button asking someone to do by hand what already happened was just a way to be confused
+  // about whether it had.
+  async function createPost() {
+    const data = await call("new", "/api/blog/posts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(campaignId ? { campaign_id: campaignId } : {}),
+      body: JSON.stringify({}),
     });
     if (data?.post_id) router.push(`/blog/${data.post_id}`);
-  }
-
-  // Backfill for campaigns built before posts were created automatically. Idempotent, so the
-  // button stays useful (and harmless) afterwards.
-  async function importAll() {
-    const data = await call("import-all", "/api/blog/posts/import-all", { method: "POST" });
-    if (!data) return;
-    if (data.created > 0) {
-      toast.success(
-        `${data.created} draft ${data.created === 1 ? "post" : "posts"} created from your campaigns`
-      );
-    } else {
-      toast.info("Every campaign with an article already has a post");
-    }
-    if (data.failed > 0) toast.error(`${data.failed} couldn't be imported — check the campaign kits`);
-    router.refresh();
   }
 
   return (
@@ -128,8 +113,8 @@ export default function BlogManager({
           <Newspaper className="h-5 w-5 text-emerald-400" /> Blog
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Import a campaign&apos;s generated article or write your own, organize with categories, then
-          publish — each published post gets its own public URL.
+          Every campaign kit turns into a draft post automatically. Write your own too, organize
+          with categories, then publish — each published post gets its own public URL.
         </p>
       </div>
 
@@ -172,27 +157,6 @@ export default function BlogManager({
             Posts {filterCategory ? `— ${categoryName.get(filterCategory)}` : ""}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={importCampaignId}
-              onChange={(e) => setImportCampaignId(e.target.value)}
-              className="max-w-56 rounded-lg border border-ink-600 bg-ink-900 py-1.5 px-2 text-xs outline-none focus:border-emerald-500"
-            >
-              <option value="">Import from campaign…</option>
-              {importableCampaigns.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              disabled={!importCampaignId || busy === "import"}
-              onClick={() => createPost(importCampaignId)}
-              className="btn-ghost text-xs"
-            >
-              {busy === "import" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Import className="h-3.5 w-3.5" />}
-              Import
-            </button>
             <a
               href="/api/blog/preview"
               target="_blank"
@@ -202,20 +166,6 @@ export default function BlogManager({
             >
               <Eye className="h-3.5 w-3.5" /> Preview blog
             </a>
-            <button
-              type="button"
-              disabled={busy === "import-all"}
-              onClick={importAll}
-              title="Create a draft post from every campaign that has a generated article"
-              className="btn-ghost text-xs"
-            >
-              {busy === "import-all" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Layers className="h-3.5 w-3.5" />
-              )}
-              Import all
-            </button>
             <button type="button" disabled={busy === "new"} onClick={() => createPost()} className="btn-primary text-xs">
               {busy === "new" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               New post
@@ -269,7 +219,7 @@ export default function BlogManager({
 
         {visiblePosts.length === 0 ? (
           <p className="py-8 text-center text-sm text-zinc-500">
-            No posts yet. Import a campaign&apos;s generated article or start from scratch.
+            No posts yet. Build a campaign kit and its article lands here as a draft, or start from scratch.
           </p>
         ) : (
           <div className="divide-y divide-ink-800">

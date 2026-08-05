@@ -65,7 +65,7 @@ export async function createPostFromCampaign(
 
   const { data: campaign } = await admin
     .from("campaigns")
-    .select("id, blog_md, embedded_image_data_url, products(product_title)")
+    .select("id, user_id, blog_md, embedded_image_data_url, products(product_title)")
     .eq("id", campaignId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -89,6 +89,11 @@ export async function createPostFromCampaign(
     .from("blog_posts")
     .insert({
       workspace_id: workspaceId,
+      // blog_posts.user_id is NOT NULL, and omitting it made every call to this function throw —
+      // silently in the worker (its try/catch swallowed it) and as a 500 from the import button.
+      // The post is derived from the campaign, so it inherits the campaign's created-by
+      // attribution rather than whoever happened to trigger the import.
+      user_id: campaign.user_id as string,
       campaign_id: campaign.id as string,
       title,
       slug: await uniquePostSlug(admin, workspaceId, slugify(title) || "post"),

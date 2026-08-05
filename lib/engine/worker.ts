@@ -407,7 +407,17 @@ async function finalizeBuildCampaign(job: JobRow, productId: string): Promise<vo
     try {
       await createPostFromCampaign(db, job.workspace_id, builtCampaign.id as string);
     } catch (err) {
+      // Still best-effort — a blog-post problem must not fail a built kit. But it must not be
+      // INVISIBLE either: this catch hid a NOT NULL violation that meant the auto-create never
+      // once worked, and nothing anywhere said so. A notification is the cheapest way for the
+      // failure to reach the person who'd notice the post missing.
       console.error("auto blog post failed", err);
+      await notify(db, job.user_id, {
+        kind: "job_failed",
+        title: "Blog post wasn't created",
+        body: "The kit built fine, but its article couldn't be turned into a draft post.",
+        href: "/blog",
+      });
     }
   }
 
