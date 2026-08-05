@@ -115,13 +115,6 @@ export default function FunnelStepEditor({
 
       <PageChecklist items={funnelStepChecklist(stepType, tree)} subtitle={STEP_TYPE_LABELS[stepType]} />
 
-      <SeoFields
-        values={seo}
-        onChange={setSeo}
-        fallbackTitle={productTitle}
-        noteWhenNoindex="Funnel pages are never indexed by search engines — these control how the page looks when the URL is shared."
-      />
-
       <WysiwygCanvas
         tree={tree}
         onChange={setTree}
@@ -136,6 +129,14 @@ export default function FunnelStepEditor({
             <div className="space-y-4">
               <ContentWidthField tree={tree} onChange={setTree} />
               <PageThemePanel tree={tree} onChange={setTree} />
+              {/* Behind the ⚙ with the other page-level settings, matching the blog post editor
+                  and the opt-in editor. */}
+              <SeoFields
+                values={seo}
+                onChange={setSeo}
+                fallbackTitle={productTitle}
+                noteWhenNoindex="Funnel pages are never indexed by search engines — these control how the page looks when the URL is shared."
+              />
               {/* Same analyzePostSeo the blog editor runs, in funnel mode — see lib/blogSeo.ts for
                   which checks drop out and why. Scored from the CURRENT tree, not the last save. */}
               <PostSeoPanel

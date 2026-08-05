@@ -115,15 +115,6 @@ export default function PageEditor({
         subtitle={funnelType ? (funnelTypeLabel(funnelType) ?? undefined) : undefined}
       />
 
-      {showSeo && (
-        <SeoFields
-          values={seo}
-          onChange={setSeo}
-          fallbackTitle={productTitle}
-          noteWhenNoindex="Funnel pages are never indexed by search engines — these control how the page looks when the URL is shared."
-        />
-      )}
-
       <WysiwygCanvas
         tree={tree}
         onChange={setTree}
@@ -138,6 +129,17 @@ export default function PageEditor({
             <div className="space-y-4">
               <ContentWidthField tree={tree} onChange={setTree} />
               <PageThemePanel tree={tree} onChange={setTree} />
+              {/* SEO lives behind the ⚙ with the other page-level settings, the way the blog post
+                  editor already does it — it's about the page, not about a block on it, and above
+                  the canvas it pushed the actual editing surface down the screen. */}
+              {showSeo && (
+                <SeoFields
+                  values={seo}
+                  onChange={setSeo}
+                  fallbackTitle={productTitle}
+                  noteWhenNoindex="Funnel pages are never indexed by search engines — these control how the page looks when the URL is shared."
+                />
+              )}
               {/* Same analyzePostSeo the blog editor runs, in funnel mode — see lib/blogSeo.ts for
                   which checks drop out and why. Scored from the CURRENT tree, not the last save. */}
               <PostSeoPanel
