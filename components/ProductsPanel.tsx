@@ -13,6 +13,7 @@ import {
   Rocket,
 } from "lucide-react";
 import PromoteKitDialog from "@/components/PromoteKitDialog";
+import BuildProgressDialog from "@/components/BuildProgressDialog";
 import ManualAddProduct from "@/components/ManualAddProduct";
 import ProductStatusSelect from "@/components/ProductStatusSelect";
 import CostBadge from "@/components/CostBadge";
@@ -79,6 +80,9 @@ export default function ProductsPanel({
   const [bulkBusy, setBulkBusy] = useState(false);
   // Which products the promote dialog is about: one row, or the whole bulk selection.
   const [promoteIds, setPromoteIds] = useState<string[] | null>(null);
+  // The jobs this run queued, so the progress dialog tracks exactly what you just started rather
+  // than every build in the workspace.
+  const [progress, setProgress] = useState<{ jobIds: string[]; titles: Record<string, string> } | null>(null);
 
   const statusKey = statusFilters.join(",");
   const { refresh: refreshCredits } = useCredits();
@@ -160,7 +164,8 @@ export default function ProductsPanel({
   // same way, and the person needs to know how far it got.
   async function runPromote(ids: string[], assets: string[]) {
     setBulkBusy(true);
-    let queued = 0;
+    const jobIds: string[] = [];
+    const titles: Record<string, string> = {};
     let stopped: string | null = null;
     for (const id of ids) {
       const res = await fetch("/api/promote", {
@@ -168,11 +173,14 @@ export default function ProductsPanel({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ product_id: id, assets }),
       });
+      const d = await res.json().catch(() => ({}));
       if (res.ok) {
-        queued++;
+        if (d.job_id) {
+          jobIds.push(d.job_id);
+          titles[d.job_id] = products.find((p) => p.id === id)?.product_title ?? "Campaign kit";
+        }
         continue;
       }
-      const d = await res.json().catch(() => ({}));
       stopped = d.error ?? "Something went wrong";
       break;
     }
@@ -181,8 +189,10 @@ export default function ProductsPanel({
     setSelected(new Set());
     await load();
     refreshCredits();
-    if (stopped) toast.error(`Queued ${queued}, then stopped: ${stopped}`);
-    else toast.success(queued === 1 ? "Kit queued" : `Queued ${queued} campaign build(s)`);
+    // A failure still gets a toast — it's the one outcome that needs saying out loud. Success
+    // doesn't: the progress dialog below IS the confirmation, and a toast on top would be noise.
+    if (stopped) toast.error(`Queued ${jobIds.length}, then stopped: ${stopped}`);
+    if (jobIds.length > 0) setProgress({ jobIds, titles });
   }
 
   function copyHoplink(p: Product) {
@@ -406,6 +416,14 @@ export default function ProductsPanel({
           </div>
         )}
       </section>
+
+      <BuildProgressDialog
+        open={progress !== null}
+        onOpenChange={(o) => !o && setProgress(null)}
+        jobIds={progress?.jobIds ?? []}
+        titleByJobId={progress?.titles ?? {}}
+        onAllDone={load}
+      />
 
       <PromoteKitDialog
         open={promoteIds !== null}

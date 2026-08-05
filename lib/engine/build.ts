@@ -6,8 +6,10 @@ import { db } from "./core";
 import type { FbAdAngle, SocialPost } from "@/lib/shared";
 import { wants, type KitAssetKey } from "@/lib/kitAssets";
 
-export const BUILD_CAMPAIGN_STAGES = ["context", "image", "ads", "pages", "content", "social"] as const;
-export type BuildStage = (typeof BUILD_CAMPAIGN_STAGES)[number];
+// Re-exported so every existing server-side importer keeps working; the list itself is
+// isomorphic (see lib/buildStages.ts) because the progress checklist reads it in the browser.
+export { BUILD_CAMPAIGN_STAGES, type BuildStage } from "@/lib/buildStages";
+import { BUILD_CAMPAIGN_STAGES } from "@/lib/buildStages";
 
 export type ProductRow = {
   id: string;

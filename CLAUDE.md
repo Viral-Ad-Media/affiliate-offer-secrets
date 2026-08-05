@@ -185,6 +185,30 @@ design rationale. Mechanics:
   useful for inspecting a job's context or manually driving/failing something stuck — but it is
   no longer the primary path.
 
+#### Build kit shows a live checklist, not "Queued"
+
+Pressing Build kit opens `components/BuildProgressDialog.tsx` — a per-job progress bar and a
+six-step checklist, polling `/api/jobs` every 2s (faster than the list's 5s: this is the one screen
+where someone is watching a stage change, and a 5s gap reads as a stall). It filters to the job ids
+*this* run queued, so an unrelated build never shows up as yours. `runPromote`'s success toast was
+removed — the dialog is the confirmation.
+
+`lib/buildProgress.ts` maps stages to what the work actually is ("Reading the sales page", not
+`context`). A stage the chosen assets skip renders as **skipped, not hidden**: someone who unticked
+blog should see the blog step isn't running, not wonder why the list is shorter than last time —
+and `buildPercent` counts skipped as complete, since it isn't work still owed. State comes from
+`jobs.stage`, which the worker advances as it commits each stage, so a step reads done only once its
+output is really saved.
+
+**The dialog says it can be closed, and that promise is real** — `lib/engine/worker.ts` calls
+`notify()` on completion (checked before writing the copy). Nothing about the build depends on the
+dialog being open; a modal implying otherwise would trap someone watching a spinner.
+
+**`BUILD_CAMPAIGN_STAGES` lives in `lib/buildStages.ts`, not `lib/engine/build.ts`.** Importing it
+from `build.ts` pulls the Anthropic SDK — and `node:path` — into a client bundle: `tsc` passes and
+`next build` fails. `build.ts` re-exports it so every server-side importer is unchanged. Any other
+engine constant the browser needs belongs in the same isomorphic file.
+
 ### Marketplace preload cache (instant discovery)
 
 The products analogue of `lib/categories.ts`'s static category snapshot — kept in a table
