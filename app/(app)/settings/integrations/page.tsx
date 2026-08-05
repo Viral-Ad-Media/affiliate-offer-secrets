@@ -33,16 +33,20 @@ export default async function ConnectionsPage({
     supabase
       .rpc("get_meta_connection_status", { p_workspace_id: ws })
       .then((r) => r.data ?? { connected: false }),
-    supabase.rpc("get_tiktok_connection_status").then((r) => r.data ?? { connected: false }),
     supabase
-      .rpc("get_mail_provider_connections")
+      .rpc("get_tiktok_connection_status", { p_workspace_id: ws })
+      .then((r) => r.data ?? { connected: false }),
+    supabase
+      .rpc("get_mail_provider_connections", { p_workspace_id: ws })
       .then((r) => (r.data ?? { active_provider: null, providers: [] }) as MailProvidersStatus),
     supabase
       .from("network_connections")
       .select("network, affiliate_id")
       .then((r) => r.data ?? []),
     // Sanitized status only — the API key itself never leaves Vault (0046).
-    supabase.rpc("get_everflow_connection_status").then((r) => (r.data ?? [])[0] ?? null),
+    supabase
+      .rpc("get_everflow_connection_status", { p_workspace_id: ws })
+      .then((r) => (r.data ?? [])[0] ?? null),
   ]);
   const networkConnections = Object.fromEntries(networkRows.map((r) => [r.network, r.affiliate_id]));
 
@@ -109,7 +113,7 @@ export default async function ConnectionsPage({
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
           Affiliate networks
         </h2>
-        <NetworkConnectionsPanel userId={user.id} initialConnections={networkConnections} />
+        <NetworkConnectionsPanel userId={user.id} workspaceId={ws!} initialConnections={networkConnections} />
       </div>
 
       <EverflowPanel initial={everflowStatus} />

@@ -33,12 +33,16 @@ export async function sendViaActiveSender(
   workspaceId: string,
   args: { to: string; subject: string; html: string }
 ): Promise<SendResult | SendFailure> {
-  const { data: profile } = await admin
-    .from("profiles")
+  // Workspace, not user (0072). This used to read profiles.active_mail_provider — keyed by the
+  // person — and then look the connection up by workspace_id just below, which only agrees while
+  // a workspace has exactly one member. The Broadcast engine passes job.user_id, so whoever
+  // happened to create a sequence silently decided the whole workspace's sending provider.
+  const { data: workspace } = await admin
+    .from("workspaces")
     .select("active_mail_provider")
-    .eq("id", userId)
+    .eq("id", workspaceId)
     .maybeSingle();
-  const provider = profile?.active_mail_provider as MailProvider | null | undefined;
+  const provider = workspace?.active_mail_provider as MailProvider | null | undefined;
 
   // Null = no sender configured (0037 retired Gmail and dropped it as the implicit default).
   // Same "not_connected" outcome a brand-new account gets, so callers need no new branch.

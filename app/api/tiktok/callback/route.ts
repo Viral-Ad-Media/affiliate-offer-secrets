@@ -74,6 +74,7 @@ export async function GET(req: Request) {
 
     const row = {
       user_id: user.id,
+      workspace_id: ws,
       tiktok_user_id: userInfo.open_id,
       tiktok_username: userInfo.display_name,
       avatar_url: userInfo.avatar_url,

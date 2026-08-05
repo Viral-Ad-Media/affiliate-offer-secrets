@@ -437,10 +437,24 @@ are Phase C, documented separately below). Schema in `supabase/migrations/0006_m
   `user_id = auth.uid() OR is_workspace_member(...)`, which let a person *removed* from a
   workspace keep passing the ownership check on rows they originally created.
 
-**Still user-keyed, same latent bug, not yet fixed**: `tiktok_connections` (`unique(user_id)`),
-`mail_provider_connections` (`unique(user_id, provider)`) and `network_connections`
-(`unique(user_id, network)`), plus their own `get_*_connection_status`/`disconnect_*` RPCs. Same
-shape, same fix — do these before anyone is genuinely in two workspaces.
+**Every other connector got the same treatment in `0072_connector_workspace_scope.sql`**: TikTok,
+YouTube, Gmail (`mail_connections`), the mail providers, Everflow and the affiliate networks — all
+re-keyed to `(workspace_id, …)`, all their `get_*_connection_status`/`disconnect_*` RPCs
+workspace-scoped with the same optional `p_workspace_id` shape. Three more admin-client writes
+that relied on the trigger now stamp `workspace_id` explicitly (`tiktok/callback`,
+`everflow/connect`, `mail-providers`), and their `onConflict` targets moved with the constraints.
+
+- **`active_mail_provider` moved from `profiles` to `workspaces`** as part of that, because it was
+  a genuine split-brain, not just an inconsistency: `lib/mail/send.ts` read the provider *name*
+  from `profiles` (keyed by person) and then looked the *connection* up by `workspace_id`. That
+  only agrees while a workspace has one member. The Broadcast engine passes `job.user_id`, so
+  whoever happened to create a sequence silently decided the whole workspace's sending provider —
+  and if their personal pointer named a provider the workspace hadn't connected, every send in
+  that sequence failed `not_connected` with nothing in the UI explaining why. The backfill only
+  carried a pointer across when the workspace actually has that provider connected; a pointer
+  naming an unconnected provider *is* the broken state and was deliberately dropped.
+  `profiles.active_mail_provider` stays as an unread legacy mirror (same call as
+  `profiles.nickname` in 0015).
 
 - **Tokens are never stored as plaintext columns.** `meta_connections.user_token_secret_id` /
   `meta_pages.page_token_secret_id` point into Supabase Vault (`vault.create_secret`, via the

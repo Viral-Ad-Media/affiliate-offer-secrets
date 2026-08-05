@@ -118,6 +118,9 @@ export async function POST(req: Request) {
 
   const row = {
     user_id: user.id,
+    // Explicit: this runs on the admin client, where auth.uid() is NULL and the
+    // stamp_workspace_id trigger would fall back to the user's own workspace (0071/0072).
+    workspace_id: ws,
     provider,
     secret_id: secretId,
     from_address: fromAddress,
@@ -130,7 +133,7 @@ export async function POST(req: Request) {
 
   const { error: upsertErr } = await admin
     .from("mail_provider_connections")
-    .upsert(row, { onConflict: "user_id,provider" });
+    .upsert(row, { onConflict: "workspace_id,provider" });
   if (upsertErr) {
     await admin.rpc("delete_oauth_secret", { p_secret_id: secretId });
     return NextResponse.json({ error: "failed to save connection" }, { status: 500 });
@@ -179,10 +182,12 @@ export async function DELETE(req: Request) {
 
   await admin.from("mail_provider_connections").delete().eq("id", existing.id);
   await admin.rpc("delete_oauth_secret", { p_secret_id: existing.secret_id });
+  // Clearing the workspace's pointer, not the person's — disconnecting the provider the
+  // workspace was sending through has to stop the whole workspace sending through it.
   await admin
-    .from("profiles")
+    .from("workspaces")
     .update({ active_mail_provider: null })
-    .eq("id", user.id)
+    .eq("id", ws)
     .eq("active_mail_provider", provider);
 
   return NextResponse.json({ ok: true });

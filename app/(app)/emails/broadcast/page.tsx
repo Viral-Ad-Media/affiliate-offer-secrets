@@ -27,7 +27,7 @@ export default async function BroadcastPage() {
       .eq("kind", "broadcast")
       .order("created_at", { ascending: false })
       .limit(25),
-    supabase.from("profiles").select("active_mail_provider").eq("id", user.id).maybeSingle(),
+    supabase.from("workspaces").select("active_mail_provider").eq("id", ws).maybeSingle(),
     // Manual send needs the real recipient list client-side (mailto/copy happen in the browser).
     // Capped for the same reason /contacts is: a busy funnel can accumulate these fast.
     supabase

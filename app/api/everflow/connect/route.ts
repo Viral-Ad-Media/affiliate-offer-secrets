@@ -67,12 +67,13 @@ export async function POST(req: Request) {
   const { error: connErr } = await admin.from("everflow_connections").upsert(
     {
       user_id: user.id,
+      workspace_id: ws,
       api_key_secret_id: secretId,
       network_name: networkName,
       status: "connected",
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "user_id" }
+    { onConflict: "workspace_id" }
   );
   if (connErr) return NextResponse.json({ error: connErr.message }, { status: 500 });
 

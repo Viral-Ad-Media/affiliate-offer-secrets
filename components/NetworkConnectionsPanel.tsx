@@ -29,15 +29,17 @@ const NETWORKS: NetworkConfig[] = [
 
 export default function NetworkConnectionsPanel({
   userId,
+  workspaceId,
   initialConnections,
 }: {
   userId: string;
+  workspaceId: string;
   initialConnections: Record<string, string>;
 }) {
   return (
     <div className="space-y-3">
       {NETWORKS.map((cfg) => (
-        <NetworkCard key={cfg.network} userId={userId} config={cfg} initialValue={initialConnections[cfg.network] ?? ""} />
+        <NetworkCard key={cfg.network} userId={userId} workspaceId={workspaceId} config={cfg} initialValue={initialConnections[cfg.network] ?? ""} />
       ))}
     </div>
   );
@@ -45,10 +47,12 @@ export default function NetworkConnectionsPanel({
 
 function NetworkCard({
   userId,
+  workspaceId,
   config,
   initialValue,
 }: {
   userId: string;
+  workspaceId: string;
   config: NetworkConfig;
   initialValue: string;
 }) {
@@ -74,8 +78,14 @@ function NetworkCard({
     const { error: upsertErr } = await supabase
       .from("network_connections")
       .upsert(
-        { user_id: userId, network: config.network, affiliate_id: trimmed, updated_at: new Date().toISOString() },
-        { onConflict: "user_id,network" }
+        {
+          user_id: userId,
+          workspace_id: workspaceId,
+          network: config.network,
+          affiliate_id: trimmed,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "workspace_id,network" }
       );
     setBusy(false);
     if (upsertErr) {
