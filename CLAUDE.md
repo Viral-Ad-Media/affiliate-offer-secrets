@@ -3139,6 +3139,59 @@ Load-bearing details, none of them incidental:
 - Claims expire 7 days after signup, so an established account can't retroactively attribute
   itself to a friend's code.
 
+## Onboarding: empty states, setup checklist, tooltips, product tour
+
+Four pieces that share one goal — never leave someone looking at a screen that states a fact and
+stops. Each has a rule worth keeping.
+
+**Empty states — `components/EmptyState.tsx`.** Funnels and Ads already did this well (icon, what's
+missing, the next step as a real link); Contacts, Blog and Domains had drifted to a bare sentence.
+The component is the good version lifted out. `children` is required and `action` is optional
+because an empty screen is the one moment you know exactly what someone is trying to do and hasn't
+managed yet — so it should always answer "what now", and the answer should be clickable rather than
+merely named. The Contacts one names all three ways a lead can arrive (opt-in form, Add contact,
+CSV import) because two of them aren't discoverable from that page; the tag-filtered variant is its
+own state, since "no leads carry this tag" wants *clear the filter*, not *go make a funnel*.
+
+**Setup checklist — `components/SetupChecklist.tsx`, `0073`.** Four steps: connect a network, find
+products, build a kit, publish a funnel.
+
+- **Every step is DERIVED from live counts at render time. Do not convert this to stored flags.**
+  A flag would say "kit built" forever after the last campaign was deleted, and every write path
+  would have to remember to set it. Derived, a step un-ticks itself and there is no sync to get
+  wrong. Only the *dismissal* is stored.
+- Dismissal is on `workspaces`, not `profiles` — connecting a network is something the org does
+  once, so a teammate joining an established workspace shouldn't be handed a finished checklist.
+- It renders nothing when every step is done. If you're testing and see nothing, that's probably
+  correct — check the counts before assuming it's broken.
+
+**Tooltips — `components/ui/tooltip.tsx` (`Hint`).** Native `title` is not simply the worse option:
+no JS, no layout shift, predictable for screen readers. It's bad at anything you want someone to
+*read*, because the ~1s delay and OS-styled box mean it goes unseen. So `Hint` is for controls whose
+purpose isn't guessable and where the explanation earns its place; `title` stays where the tooltip
+would just be the label spelled out. A tooltip describes — it doesn't name, so icon-only buttons
+still need `aria-label`. **Wrap a disabled trigger in a span**: disabled buttons fire no pointer
+events, and the disabled state is usually where the explanation matters most.
+
+**Product tour — `components/ProductTour.tsx`, `0074`.** Spotlight overlay over real elements,
+auto-starts once per person.
+
+- **Per-USER (`profiles.tour_completed_at`), unlike the checklist.** "Has this workspace connected a
+  network" is a fact about the org; "has this human been shown around" is a fact about the human.
+- Targets are `data-tour` attributes, never selectors or nth-child paths — restyling or reordering
+  the nav can't break a step, and the only thing that can (deleting the attribute) is greppable.
+- **`findVisible()`, not `querySelector`.** This is the one that bit: `CreditsChip` renders twice
+  (sidebar for mobile, top bar for desktop), so `querySelector` returned the hidden copy, whose
+  rect is all zeros, and the popover pinned itself to the top-left corner spotlighting nothing.
+  "In the DOM" and "on screen" are different questions. Responsive duplicates are normal here, so
+  visible-first has to be the default lookup rather than a special case — **any new tour target
+  must be checked for a hidden twin.**
+- A step whose target isn't visible is skipped, not rendered pointing at the origin; if nothing
+  resolves at all the tour closes itself. Positions are measured every frame because the sidebar
+  animates its width.
+- Replay lives in the account menu (`TopBarAccount`), deliberately not on the checklist — the
+  checklist disappears once setup is complete, which is exactly when someone wants a refresher.
+
 ## Dev
 
 ```bash
