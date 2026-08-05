@@ -11,6 +11,8 @@ import StatusDropdownButton from "@/components/StatusDropdownButton";
 import { toast } from "@/lib/toast";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
+import PageChecklist from "@/components/PageChecklist";
+import { blogPostChecklist } from "@/lib/pageChecklist";
 import PostSeoPanel from "@/components/PostSeoPanel";
 import PostRevisionControls from "@/components/PostRevisionControls";
 import ContentWidthField from "@/components/ContentWidthField";
@@ -266,6 +268,21 @@ export default function BlogPostEditor({
         affiliate disclosure is locked — it can&apos;t be edited or removed. Everything about the
         post itself — image, excerpt, URL, SEO, score — is behind the ⚙ above the canvas.
       </p>
+
+      {/* Spans the tree AND the fields behind the ⚙ (featured image, excerpt, category), because
+          half of what a post needs isn't in the canvas — and those are exactly the ones easiest to
+          forget now that they're behind a gear. */}
+      <PageChecklist
+        title="Post checklist"
+        items={blogPostChecklist({
+          tree,
+          title,
+          excerpt,
+          seoDescription: seo.seo_description,
+          featuredImageUrl: featuredImage,
+          categoryId: categoryId || null,
+        })}
+      />
 
       <WysiwygCanvas
         settings={{

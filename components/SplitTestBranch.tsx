@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Beaker, Eye, Pencil, Pause, Play, Plus, Trash2, LogIn, Loader2 } from "lucide-react";
+import { Beaker, Pencil, Pause, Play, Plus, Trash2, LogIn, Loader2 } from "lucide-react";
 import { useSplitTest } from "@/lib/useSplitTest";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import PreviewIconButton from "@/components/PreviewIconButton";
 
 // Renders the opt-in page's position in the funnel map (components/FunnelMap.tsx) — either as a
 // single plain node (no test running, the ~100% common case) or, once a split test is started, as
@@ -19,13 +20,11 @@ import { Badge } from "@/components/ui/badge";
 export default function SplitTestBranch({
   campaignId,
   bridgeHtml,
-  onPreview,
   onEditControl,
   onEditVariant,
 }: {
   campaignId: string;
   bridgeHtml: string | null;
-  onPreview: (html: string | null, title: string) => void;
   onEditControl: () => void;
   onEditVariant: (variantId: string) => void;
 }) {
@@ -50,9 +49,7 @@ export default function SplitTestBranch({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <Button onClick={() => onPreview(bridgeHtml, "Opt-in page")}  title="Preview" variant="outline" className="!px-2 !py-1">
-            <Eye className="h-3.5 w-3.5" />
-          </Button>
+          <PreviewIconButton html={bridgeHtml} title="Opt-in page" />
           <Button onClick={onEditControl}  title="Edit" variant="outline" className="!px-2 !py-1">
             <Pencil className="h-3.5 w-3.5" />
           </Button>
@@ -111,12 +108,9 @@ export default function SplitTestBranch({
                 <span>{rate === "—" ? rate : `${rate}%`}</span>
               </div>
               <div className="mt-1.5 flex items-center gap-1">
-                <Button
-                  onClick={() => onPreview(v.is_control ? bridgeHtml : v.bridge_html, v.label)}
-                  
-                  title="Preview" variant="outline" className="!px-1.5 !py-1">
-                  <Eye className="h-3 w-3" />
-                </Button>
+                {/* The control's own content lives on the campaign row, never on its variant row
+                    (bridge_variants_control_no_content) — so its preview reads bridgeHtml. */}
+                <PreviewIconButton html={v.is_control ? bridgeHtml : v.bridge_html} title={v.label} />
                 <Button
                   onClick={() => (v.is_control ? onEditControl() : onEditVariant(v.id))}
                   

@@ -9,6 +9,9 @@ import PageThemePanel from "@/components/PageThemePanel";
 import PostSeoPanel from "@/components/PostSeoPanel";
 import EditorPreviewButton from "@/components/EditorPreview";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
+import PageChecklist from "@/components/PageChecklist";
+import { funnelPageChecklist } from "@/lib/pageChecklist";
+import { funnelType as funnelTypeDef } from "@/lib/funnelTypes";
 import { resizeImageFile } from "@/lib/images/resizeClient";
 import { Button } from "@/components/ui/button";
 
@@ -16,6 +19,11 @@ import { Button } from "@/components/ui/button";
 // Downscale/re-encode client-side so most real photos land under the server's size cap without
 // the user having to think about it — the server's own validation (route.ts) is the actual
 // boundary, this is just UX.
+
+/** Display name for the checklist header, so it's clear which funnel type set these rules. */
+function funnelTypeLabel(key: string): string | null {
+  return funnelTypeDef(key)?.label ?? null;
+}
 
 type Props = {
   campaignId: string;
@@ -31,6 +39,8 @@ type Props = {
   initialSeoTitle?: string | null;
   initialSeoDescription?: string | null;
   showSeo?: boolean;
+  /** lib/funnelTypes.ts key — drives which elements the checklist asks for. Null = generic list. */
+  funnelType?: string | null;
 };
 
 export default function PageEditor({
@@ -43,6 +53,7 @@ export default function PageEditor({
   initialSeoTitle,
   initialSeoDescription,
   showSeo = false,
+  funnelType = null,
 }: Props) {
   const [tree, setTree] = useState<PageBlockTree>(() => normalizePageCopy(initialCopy, null));
   const [saving, setSaving] = useState(false);
@@ -96,6 +107,13 @@ export default function PageEditor({
         reorder a block. The lead-capture form and disclosure are locked — they can't be edited
         or removed here.
       </p>
+
+      {/* Recomputed from the live tree on every edit, so ticking an item is immediate feedback
+          rather than something you find out about after saving. */}
+      <PageChecklist
+        items={funnelPageChecklist(funnelType, tree)}
+        subtitle={funnelType ? (funnelTypeLabel(funnelType) ?? undefined) : undefined}
+      />
 
       {showSeo && (
         <SeoFields

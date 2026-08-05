@@ -662,7 +662,10 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
     }
     case "form": {
       const { title, submitText, successText, popup } = block.content;
-      const fields = block.children
+      // `?? []` deliberately: this renders a page served to paid ad traffic, so a block missing
+      // its children array must degrade to "no extra fields" rather than throw and take the whole
+      // page down. The validator already normalizes this on save; this covers everything else.
+      const fields = (block.children ?? [])
         .map((f) => renderFormField(f))
         .join("");
       // Posts to the same endpoint as the locked opt-in form, with the same field-key validation
@@ -847,7 +850,7 @@ function renderFormField(f: FormInputBlock): string {
 }
 
 function renderLeadCaptureForm(block: LeadCaptureFormBlock, ctx: RenderCtx): string {
-  const extraInputs = block.children.map(renderFormField).filter(Boolean).join("\n          ");
+  const extraInputs = (block.children ?? []).map(renderFormField).filter(Boolean).join("\n          ");
   return `<div class="optin"${styleAttr(block.style, BOX_STYLE_KEYS)}>
         <form id="leadForm" data-campaign-id="${escapeHtml(ctx.campaignId)}" data-next-step-url="${
     ctx.nextStepUrl ? escapeHtml(ctx.nextStepUrl) : ""
@@ -1158,7 +1161,17 @@ export function insertElement(tree: PageBlockTree, ref: ContainerRef, index: num
   if (ref.kind === "root") return tree;
   const items = getContainer(tree, ref);
   if (!items) return tree;
-  const block: ElementBlock = { id: newBlockId(), type, style: {}, content: defaultElementContent(type) } as ElementBlock;
+  // `form` is the one element type that is ALSO a container (children: FormInputBlock[]), so it
+  // needs its array seeded here — every other element is content-only. Without this the block is
+  // inserted with children === undefined and the very next render throws on `.map`, which took
+  // the whole editor down (PageEditor calls renderBlockTree on every render to score SEO).
+  const block: ElementBlock = {
+    id: newBlockId(),
+    type,
+    style: {},
+    content: defaultElementContent(type),
+    ...(type === "form" ? { children: [] } : {}),
+  } as ElementBlock;
   const clamped = Math.max(0, Math.min(index, items.length));
   return withContainer(tree, ref, [...items.slice(0, clamped), block, ...items.slice(clamped)]);
 }

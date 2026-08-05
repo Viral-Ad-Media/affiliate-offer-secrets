@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizePageCopy } from "@/lib/engine/renderPages";
+import { funnelPageChecklist, funnelStepChecklist, type ChecklistItem } from "@/lib/pageChecklist";
+import { STEP_TYPE_LABELS } from "@/lib/funnelTypes";
+import type { FunnelStepType } from "@/lib/shared";
 
 export const dynamic = "force-dynamic";
+
+/** Labels of the REQUIRED items still outstanding. Recommended ones never block publishing. */
+function missingRequired(items: ChecklistItem[]): string[] {
+  return items.filter((i) => i.severity === "required" && !i.done).map((i) => i.label);
+}
 
 // Toggles whether a campaign's bridge page is publicly reachable (servePublicCampaignPage /
 // lib/publicPage.ts now requires bridge_published = true, not just status = 'ready'). Ownership
@@ -29,15 +38,49 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const admin = createAdminClient();
 
+  // Unpublishing is never gated. Taking a live page DOWN must always work — the one thing worse
+  // than an incomplete published page is an incomplete published page you can't retract.
   if (published) {
     const { data: campaign } = await admin
       .from("campaigns")
-      .select("status, bridge_html")
+      .select("status, bridge_html, page_copy, funnel_type")
       .eq("id", campaignId)
       .single();
     if (!campaign || campaign.status !== "ready" || !campaign.bridge_html) {
       return NextResponse.json(
         { error: "Bridge page isn't ready to publish yet — the campaign kit must finish building first" },
+        { status: 400 }
+      );
+    }
+
+    // Publishing is the gate; saving a draft never is. This is the real boundary — PublishBridge
+    // disables its own button too, but that's UX: this route is directly callable.
+    const missing = missingRequired(
+      funnelPageChecklist(campaign.funnel_type, normalizePageCopy(campaign.page_copy, null))
+    );
+
+    // One publish switch covers the opt-in page AND every step, so a step missing its essentials
+    // would go live under the same toggle — it has to be checked here too or the gate is a
+    // half-measure that only guards the first page of the funnel.
+    const { data: steps } = await admin
+      .from("funnel_steps")
+      .select("step_type, step_index, page_copy")
+      .eq("campaign_id", campaignId)
+      .order("step_index");
+
+    for (const s of steps ?? []) {
+      const stepMissing = missingRequired(
+        funnelStepChecklist(s.step_type, normalizePageCopy(s.page_copy, null, { stepType: s.step_type }))
+      );
+      missing.push(...stepMissing.map((m) => `Step ${s.step_index} (${STEP_TYPE_LABELS[s.step_type as FunnelStepType]}): ${m}`));
+    }
+
+    if (missing.length > 0) {
+      return NextResponse.json(
+        {
+          error: "This funnel is missing elements its type needs before it can go live.",
+          missing,
+        },
         { status: 400 }
       );
     }

@@ -57,6 +57,10 @@ export async function POST(req: Request) {
       user_id: user.id,
       workspace_id: ws,
       name,
+      // Recorded, not just used-and-discarded: the editor's required-elements checklist is keyed
+      // off it, and nothing else in the schema says what a funnel was meant to be. Already
+      // validated by isBuildable() above, so this is a known key.
+      funnel_type: typeKey,
       // 'ready' is what the public serving path gates on (alongside bridge_published), so a
       // hand-built funnel has to carry it or it could never go live. It means "this has something
       // servable", not "an AI kit was generated" — the kit fields stay null.

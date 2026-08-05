@@ -18,6 +18,9 @@ import ContentWidthField from "@/components/ContentWidthField";
 import PageThemePanel from "@/components/PageThemePanel";
 import PostSeoPanel from "@/components/PostSeoPanel";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
+import PageChecklist from "@/components/PageChecklist";
+import { funnelStepChecklist } from "@/lib/pageChecklist";
+import { STEP_TYPE_LABELS } from "@/lib/funnelTypes";
 import { resizeImageFile } from "@/lib/images/resizeClient";
 import { Button } from "@/components/ui/button";
 
@@ -109,6 +112,8 @@ export default function FunnelStepEditor({
         Click any text below to edit it in place, drag <span className="text-zinc-400">⠿</span> to
         reorder a block.
       </p>
+
+      <PageChecklist items={funnelStepChecklist(stepType, tree)} subtitle={STEP_TYPE_LABELS[stepType]} />
 
       <SeoFields
         values={seo}

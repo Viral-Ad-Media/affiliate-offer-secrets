@@ -152,6 +152,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
                   productTitle={productTitle}
                   initialCopy={campaign.page_copy}
                   initialBridgeHtml={campaign.bridge_html}
+                  funnelType={(campaign as any).funnel_type ?? null}
                   showSeo
                   initialSeoTitle={(campaign as any).seo_title ?? null}
                   initialSeoDescription={(campaign as any).seo_description ?? null}
@@ -169,6 +170,9 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
                   productTitle={productTitle}
                   initialCopy={variantInView.page_copy}
                   initialBridgeHtml={variantInView.bridge_html}
+                  // A variant is the same page with different copy, so it's held to the same
+                  // funnel type's requirements as the control.
+                  funnelType={(campaign as any).funnel_type ?? null}
                   saveEndpoint={`/api/bridge-variants/${variantInView.id}`}
                   onSaved={({ bridge_html, page_copy }) =>
                     setVariantInView((v) => (v ? { ...v, bridge_html, page_copy } : v))

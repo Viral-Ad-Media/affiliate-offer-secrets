@@ -21,6 +21,8 @@ export default function PublishBridge({
   const [published, setPublished] = useState(initialPublished);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Required elements the publish gate rejected on, straight from the server. */
+  const [missing, setMissing] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
 
   const [domains, setDomains] = useState<Domain[]>([]);
@@ -72,10 +74,14 @@ export default function PublishBridge({
     setBusy(false);
     if (!res.ok) {
       const message = data.error ?? "Failed to update";
+      // The publish gate returns WHICH elements are missing. Showing only "can't publish" would
+      // send someone hunting through the editor for what the server already knows.
+      setMissing(Array.isArray(data.missing) ? data.missing : []);
       setError(message);
       toast.error(message);
       return;
     }
+    setMissing([]);
     setPublished(data.published);
     toast.success(data.published ? "Funnel published" : "Funnel moved back to draft");
   }
@@ -141,6 +147,16 @@ export default function PublishBridge({
         />
       </div>
       {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
+      {missing.length > 0 && (
+        <ul className="mt-1 space-y-0.5 text-xs text-amber-300">
+          {missing.map((m) => (
+            <li key={m}>• {m}</li>
+          ))}
+          <li className="pt-1 text-zinc-500">
+            Your edits are saved — the funnel just stays a draft until these are added.
+          </li>
+        </ul>
+      )}
 
       {published && (
         <div className="mt-3 space-y-3">

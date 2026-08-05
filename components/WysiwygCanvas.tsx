@@ -29,6 +29,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Columns2,
+  Lock,
 } from "lucide-react";
 import { DndContext, closestCenter, useDroppable, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
@@ -63,6 +64,7 @@ import {
   type ContainerRef,
   type Block,
   type BlockStyle,
+  type ButtonAction,
 } from "@/lib/engine/renderPages";
 import { parseVideoUrl, sourceToDisplayUrl, embedUrl } from "@/lib/engine/videoEmbed";
 import BlockStylePanel from "@/components/BlockStylePanel";
@@ -180,6 +182,34 @@ const ELEMENT_PALETTE: { type: ElementBlockTypeLocal; label: string; icon: any }
   { type: "form", label: "Form", icon: TextCursorInput },
 ];
 
+/**
+ * Why each locked block can't be deleted, shown on its padlock. These four are rebuilt by
+ * validatePageBlockTree on every save regardless, so a delete button would be a lie — but the
+ * reason should be readable rather than left for someone to work out from a missing control.
+ */
+const LOCKED_REASONS: Record<string, string> = {
+  disclosure: "The affiliate disclosure is required on every page and always renders last.",
+  lead_capture_form: "This is the page's opt-in form — delete it and the funnel can't capture a lead.",
+  primary_cta: "This is the button that sends visitors to the offer.",
+  decline_link: "An upsell has to offer a visible way to decline.",
+};
+
+// A human-readable name for one block, for the button-action target dropdowns. Prefers the block's
+// own text so a page with four headings doesn't offer four entries called "Heading".
+function blockLabel(b: Block): string {
+  if (b.type === "section") return "Section";
+  if (b.type === "row") return "Row";
+  if ((b as LockedBlock).locked === "lead_capture_form") return "Opt-in form";
+  if ((b as LockedBlock).locked === "primary_cta") return "Main CTA button";
+  if ((b as LockedBlock).locked === "disclosure") return "Disclosure";
+  if ((b as LockedBlock).locked === "decline_link") return "Decline link";
+  const typeLabel = ELEMENT_PALETTE.find((p) => p.type === b.type)?.label ?? b.type;
+  const c = (b as ElementBlock).content as Record<string, unknown>;
+  const text = typeof c?.text === "string" ? c.text : typeof c?.title === "string" ? c.title : "";
+  const trimmed = text.trim();
+  return trimmed ? `${typeLabel} — ${trimmed.slice(0, 32)}` : typeLabel;
+}
+
 // Sets the DOM node's text exactly once, at mount, then never touches it again on re-render (no
 // children/dangerouslySetInnerHTML passed after that) — deliberately "uncontrolled" so editing a
 // SIBLING field (which re-renders this whole tree) can never reset whatever the user is mid-typing
@@ -240,11 +270,22 @@ function RootBlockWrapper({
   id,
   isSelected,
   onSelect,
+  onDelete,
+  lockedReason,
   children,
 }: {
   id: string;
   isSelected?: boolean;
   onSelect?: () => void;
+  /** Absent for the locked compliance blocks — see lockedReason. */
+  onDelete?: () => void;
+  /**
+   * Why this block has no delete button. Rendered as a padlock rather than nothing: a control that
+   * is simply missing reads as a bug, and "I can't delete this" was exactly the report that led
+   * here. Locked blocks stay undeletable — the validator rebuilds them anyway — but silence about
+   * it is what made that feel broken.
+   */
+  lockedReason?: string;
   children: React.ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -292,6 +333,26 @@ function RootBlockWrapper({
         >
           <GripVertical className="h-3.5 w-3.5" />
         </button>
+        {onDelete ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            title="Delete this section"
+            className="flex h-6 w-6 items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-red-600"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        ) : lockedReason ? (
+          <span
+            title={lockedReason}
+            className="flex h-6 w-6 cursor-help items-center justify-center rounded bg-white text-gray-300 shadow ring-1 ring-gray-200"
+          >
+            <Lock className="h-3.5 w-3.5" />
+          </span>
+        ) : null}
       </div>
       {children}
     </div>
@@ -832,8 +893,37 @@ export default function WysiwygCanvas({
     onChange(updateBlockContent(tree, blockId, patch));
   }
 
+  // Every block on the page a button could point at, flattened with a readable label. Offered as a
+  // dropdown rather than a free-text id field: the ids are generated, so asking someone to type one
+  // is asking them to get it wrong, and the validator hard-rejects a malformed target — meaning a
+  // typo wouldn't fail at the button, it would fail the whole page save.
+  function actionTargets(): { id: string; label: string; isForm: boolean }[] {
+    const out: { id: string; label: string; isForm: boolean }[] = [];
+    const push = (b: Block) => {
+      const isForm = b.type === "form" || (b as LockedBlock).locked === "lead_capture_form";
+      out.push({ id: b.id, label: blockLabel(b), isForm });
+    };
+    for (const b of tree.blocks) {
+      push(b);
+      if (b.type !== "section") continue;
+      for (const c of b.children) {
+        push(c);
+        if (c.type !== "row") continue;
+        for (const col of c.columns) for (const el of col.children) push(el);
+      }
+    }
+    return out;
+  }
+
   function deleteChild(containerId: string, childId: string) {
     onChange(removeChildBlock(tree, containerId, childId));
+  }
+
+  // Root-level delete, for Sections. Clears the selection when the selected block goes with it,
+  // or the style panel would keep a dead id and render nothing with no explanation.
+  function deleteRootBlock(blockId: string) {
+    if (selectedBlockId === blockId) setSelectedBlockId(null);
+    onChange({ ...tree, blocks: tree.blocks.filter((b) => b.id !== blockId) });
   }
 
   function addElement(ref: ContainerRef, type: ElementBlockTypeLocal) {
@@ -1115,7 +1205,39 @@ export default function WysiwygCanvas({
             </button>
           </div>
         );
-      case "button":
+      case "button": {
+        // Read through `action`, falling back to a pre-actions bare `href` exactly the way the
+        // validator and renderer already do. This editor used to read and write `content.href`
+        // directly, which stopped doing anything the moment actions landed: the validator resolves
+        // `action.href ?? content.href`, so a newly-inserted button (which always has an `action`)
+        // silently discarded every URL typed here.
+        const action: ButtonAction = el.content.action ?? { kind: "link", href: el.content.href ?? "" };
+        const targets = actionTargets().filter((t) => t.id !== el.id);
+        const forms = targets.filter((t) => t.isForm);
+        // A scroll/popup target that isn't a real id is a hard reject in the validator — it would
+        // fail the whole page save, not just this block — so a kind with nothing to point at is
+        // never offered, and switching to one always seeds a real id.
+        const kinds: { value: ButtonAction["kind"]; label: string; enabled: boolean }[] = [
+          { value: "link", label: "Go to URL", enabled: true },
+          { value: "scroll", label: "Scroll to…", enabled: targets.length > 0 },
+          { value: "popup", label: "Open form…", enabled: forms.length > 0 },
+          { value: "submit", label: "Submit this form", enabled: true },
+        ];
+        const actionForKind = (kind: ButtonAction["kind"]): ButtonAction => {
+          switch (kind) {
+            case "scroll":
+              return { kind: "scroll", targetId: targets[0]?.id ?? "" };
+            case "popup":
+              return { kind: "popup", formId: forms[0]?.id ?? "" };
+            case "submit":
+              return { kind: "submit" };
+            default:
+              // Keep whatever URL was already there; "" would fail isValidRedirectUrl on save.
+              return { kind: "link", href: action.kind === "link" ? action.href : "https://example.com" };
+          }
+        };
+        const selectCls =
+          "rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600";
         return (
           <div className="my-2">
             <EditableText
@@ -1126,15 +1248,60 @@ export default function WysiwygCanvas({
               className="inline-block rounded-lg bg-[#16a34a] px-6 py-3 text-[15px] font-semibold text-white"
               style={blockInlineStyle(el)}
             />
-            <input
-              type="url"
-              defaultValue={el.content.href}
-              onBlur={(e) => commit(el.id, { href: e.target.value })}
-              placeholder="https://example.com"
-              className="mt-1 block w-full max-w-xs rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
-            />
+            <div className="mt-1 flex max-w-md flex-wrap items-center gap-1.5">
+              <select
+                value={action.kind}
+                onChange={(e) => commit(el.id, { action: actionForKind(e.target.value as ButtonAction["kind"]) })}
+                className={selectCls}
+              >
+                {kinds.map((k) => (
+                  <option key={k.value} value={k.value} disabled={!k.enabled}>
+                    {k.label}
+                  </option>
+                ))}
+              </select>
+
+              {action.kind === "link" && (
+                <input
+                  type="url"
+                  defaultValue={action.href}
+                  onBlur={(e) => commit(el.id, { action: { kind: "link", href: e.target.value } })}
+                  placeholder="https://example.com"
+                  className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
+                />
+              )}
+
+              {action.kind === "scroll" && (
+                <select
+                  value={action.targetId}
+                  onChange={(e) => commit(el.id, { action: { kind: "scroll", targetId: e.target.value } })}
+                  className={`${selectCls} min-w-0 flex-1`}
+                >
+                  {targets.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {action.kind === "popup" && (
+                <select
+                  value={action.formId}
+                  onChange={(e) => commit(el.id, { action: { kind: "popup", formId: e.target.value } })}
+                  className={`${selectCls} min-w-0 flex-1`}
+                >
+                  {forms.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
         );
+      }
       case "video": {
         const src = el.content.source;
         return (
@@ -1468,6 +1635,92 @@ export default function WysiwygCanvas({
           </div>
         );
       }
+      case "form": {
+        // The standalone, droppable form — distinct from the locked opt-in one, which has fixed
+        // name/email inputs it renders itself. This one starts empty, so it needs its own field
+        // presets or an inserted form is a box with a button and nothing to fill in.
+        const fields = el.content ? (el as unknown as { children?: FormInputBlock[] }).children ?? [] : [];
+        return (
+          <div
+            className="my-3 rounded-xl border border-[#e5e5e5] bg-gray-50 p-5"
+            style={blockInlineStyle(el)}
+          >
+            <EditableText
+              value={el.content.title}
+              onCommit={(v) => commit(el.id, { title: v })}
+              maxLength={120}
+              placeholder="Form heading (optional)"
+              className="mb-2 block text-[17px] font-semibold text-gray-800"
+            />
+            <div className="mb-3 space-y-2">
+              {/* Email is what a contact row is keyed on (contacts.email is NOT NULL), so the form
+                  always renders it and it isn't a removable field. */}
+              <div className="rounded-lg border border-gray-300 bg-white px-3.5 py-3 text-[13px] text-gray-400">
+                Email address (required)
+              </div>
+              {fields.map((f) => renderFormField(f, el.id))}
+            </div>
+
+            <div className="mb-3 flex flex-wrap gap-1">
+              {FIELD_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() =>
+                    onChange(
+                      addChildBlock(tree, el.id, {
+                        id: newBlockId(),
+                        type: "form_input",
+                        style: {},
+                        content: {
+                          label: preset.label,
+                          fieldKey: uniqueFieldKey(preset.fieldKey, fields),
+                          fieldType: preset.fieldType,
+                          placeholder: preset.placeholder ?? "",
+                          required: false,
+                          ...(CHOICE_FIELD_TYPES.includes(preset.fieldType)
+                            ? { options: ["Option 1", "Option 2"] }
+                            : {}),
+                        },
+                      } as FormInputBlock)
+                    )
+                  }
+                  disabled={fields.length >= 10}
+                  className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 hover:border-emerald-500 hover:text-emerald-700 disabled:opacity-40"
+                >
+                  <Plus className="h-2.5 w-2.5" /> {preset.label}
+                </button>
+              ))}
+            </div>
+
+            <EditableText
+              as="div"
+              value={el.content.submitText}
+              onCommit={(v) => commit(el.id, { submitText: v })}
+              maxLength={60}
+              className="rounded-lg bg-[#16a34a] px-6 py-3 text-center text-[15px] font-semibold text-white"
+            />
+
+            <div className="mt-2 space-y-1.5">
+              <EditableText
+                value={el.content.successText}
+                onCommit={(v) => commit(el.id, { successText: v })}
+                maxLength={200}
+                placeholder="Shown after a successful submit"
+                className="block text-[11px] text-gray-400"
+              />
+              <label className="flex items-center gap-1.5 text-[11px] text-gray-500">
+                <input
+                  type="checkbox"
+                  checked={el.content.popup}
+                  onChange={(e) => commit(el.id, { popup: e.target.checked })}
+                />
+                Hidden until a button opens it
+              </label>
+            </div>
+          </div>
+        );
+      }
     }
   };
 
@@ -1581,7 +1834,7 @@ export default function WysiwygCanvas({
                   and store none — the form as a whole is removable instead. */}
               <div className="rounded-lg border border-gray-300 bg-white px-3.5 py-3 text-[13px] text-gray-400">First name</div>
               <div className="rounded-lg border border-gray-300 bg-white px-3.5 py-3 text-[13px] text-gray-400">Email address (required)</div>
-              {block.children.map((f) => renderFormField(f, block.id))}
+              {(block.children ?? []).map((f) => renderFormField(f, block.id))}
             </div>
             <div className="mb-3 flex flex-wrap gap-1">
               {FIELD_PRESETS.map((preset) => (
@@ -1599,7 +1852,7 @@ export default function WysiwygCanvas({
                           // A readable key, not a uuid: it becomes the CSV column header and the
                           // JSON key in contacts.extra_fields, and "last_name" beats "b3f9a1…".
                           // Suffixed when it would collide with a field already on the form.
-                          fieldKey: uniqueFieldKey(preset.fieldKey, block.children),
+                          fieldKey: uniqueFieldKey(preset.fieldKey, block.children ?? []),
                           fieldType: preset.fieldType,
                           placeholder: preset.placeholder ?? "",
                           required: false,
@@ -1610,7 +1863,7 @@ export default function WysiwygCanvas({
                       } as FormInputBlock)
                     )
                   }
-                  disabled={block.children.length >= 10}
+                  disabled={(block.children ?? []).length >= 10}
                   className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 hover:border-emerald-500 hover:text-emerald-700 disabled:opacity-40"
                 >
                   <Plus className="h-2.5 w-2.5" /> {preset.label}
@@ -1721,7 +1974,17 @@ export default function WysiwygCanvas({
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={tree.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
               {tree.blocks.map((b) => (
-                <RootBlockWrapper key={b.id} id={b.id} isSelected={selectedBlockId === b.id} onSelect={() => setSelectedBlockId(b.id)}>
+                <RootBlockWrapper
+                  key={b.id}
+                  id={b.id}
+                  isSelected={selectedBlockId === b.id}
+                  onSelect={() => setSelectedBlockId(b.id)}
+                  // Sections are deletable (they weren't — you could add one and never remove it);
+                  // the four locked compliance blocks are not, and now say so instead of silently
+                  // having no control.
+                  onDelete={b.type === "section" ? () => deleteRootBlock(b.id) : undefined}
+                  lockedReason={b.type === "section" ? undefined : LOCKED_REASONS[(b as LockedBlock).locked]}
+                >
                   {b.type === "section" ? (
                     <SectionBody
                       section={b}

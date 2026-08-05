@@ -7,23 +7,20 @@ import {
   Plus,
   Trash2,
   Pencil,
-  Eye,
   CheckCircle2,
   TrendingUp,
   CreditCard,
   ArrowDown,
 } from "lucide-react";
 import type { FunnelStep, FunnelStepType } from "@/lib/shared";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import SplitTestBranch from "@/components/SplitTestBranch";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import PreviewIconButton from "@/components/PreviewIconButton";
+import { STEP_TYPE_LABELS } from "@/lib/funnelTypes";
 
-const STEP_LABELS: Record<FunnelStepType, string> = {
-  thank_you: "Thank-you",
-  upsell: "Upsell",
-  order: "Order",
-};
+// Shared with the step editor's checklist header — see lib/funnelTypes.ts.
+const STEP_LABELS = STEP_TYPE_LABELS;
 
 const STEP_ICONS: Record<FunnelStepType, typeof CheckCircle2> = {
   thank_you: CheckCircle2,
@@ -51,13 +48,6 @@ export default function FunnelMap({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [addType, setAddType] = useState<FunnelStepType>("thank_you");
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
-  const [previewTitle, setPreviewTitle] = useState("");
-
-  function preview(html: string | null, title: string) {
-    setPreviewHtml(html ?? "<p style='font-family:sans-serif;padding:2rem'>Nothing to preview yet.</p>");
-    setPreviewTitle(title);
-  }
 
   async function addStep() {
     setBusy("add");
@@ -106,7 +96,6 @@ export default function FunnelMap({
         <SplitTestBranch
           campaignId={campaignId}
           bridgeHtml={bridgeHtml}
-          onPreview={preview}
           onEditControl={onSelectOptin}
           onEditVariant={onSelectVariant}
         />
@@ -124,7 +113,7 @@ export default function FunnelMap({
                 sublabel={
                   step.step_type === "upsell" ? "Accept/decline cross-sell" : "Shown after the previous page"
                 }
-                onPreview={() => preview(step.html, `${i + 1}. ${STEP_LABELS[step.step_type]}`)}
+                previewHtml={step.html}
                 onEdit={() => onSelectStep(step.id)}
                 extra={
                   <>
@@ -175,19 +164,6 @@ export default function FunnelMap({
         </div>
       </div>
 
-      <Dialog open={previewHtml !== null} onOpenChange={(open) => !open && setPreviewHtml(null)}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{previewTitle}</DialogTitle>
-          </DialogHeader>
-          <iframe
-            srcDoc={previewHtml ?? ""}
-            className="h-[70vh] w-full rounded-lg border border-ink-700 bg-white"
-            sandbox=""
-            title={previewTitle}
-          />
-        </DialogContent>
-      </Dialog>
     </Card>
   );
 }
@@ -196,14 +172,15 @@ function MapNode({
   icon: Icon,
   label,
   sublabel,
-  onPreview,
+  previewHtml,
   onEdit,
   extra,
 }: {
   icon: typeof CheckCircle2;
   label: string;
   sublabel: string;
-  onPreview: () => void;
+  /** The page's currently-STORED html. Null for a step that's never been saved. */
+  previewHtml: string | null;
   onEdit: () => void;
   extra?: React.ReactNode;
 }) {
@@ -219,9 +196,7 @@ function MapNode({
         </div>
       </div>
       <div className="flex items-center gap-1.5">
-        <Button onClick={onPreview}  title="Preview" variant="outline" className="!px-2 !py-1">
-          <Eye className="h-3.5 w-3.5" />
-        </Button>
+        <PreviewIconButton html={previewHtml} title={label} />
         <Button onClick={onEdit}  title="Edit" variant="outline" className="!px-2 !py-1">
           <Pencil className="h-3.5 w-3.5" />
         </Button>

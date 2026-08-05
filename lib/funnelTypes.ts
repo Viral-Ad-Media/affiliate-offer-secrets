@@ -108,6 +108,17 @@ export const FUNNEL_TYPES: FunnelTypeDef[] = [
   },
 ];
 
+/**
+ * Display names for the step types. Lives here rather than inside FunnelMap (where it started)
+ * because the step editor's checklist header needs the same words — two copies of a label map is
+ * how a "Thank-you" page ends up called "Thank you" one screen over.
+ */
+export const STEP_TYPE_LABELS: Record<FunnelStepType, string> = {
+  thank_you: "Thank-you",
+  upsell: "Upsell",
+  order: "Order",
+};
+
 export const SUPPORT_REASON: Record<Exclude<FunnelSupport, "ready">, string> = {
   needs_video: "Needs a video block — not in the page builder yet",
   needs_branching: "Needs answer-based routing — funnel steps run in a fixed order today",
