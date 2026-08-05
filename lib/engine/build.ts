@@ -21,6 +21,10 @@ export type ProductRow = {
   recurring: number | null;
   sales_page_url: string | null;
   hoplink: string | null;
+  // Tenant-supplied link that replaces the derived one (0064). Null for every product until
+  // someone sets it; the worker reads the row with select("*"), so nothing else had to change to
+  // make it available here.
+  hoplink_override: string | null;
 };
 
 export type StageOutput = {
@@ -44,9 +48,11 @@ function productContext(product: ProductRow, salesText: string | null): string {
     .join("\n");
 }
 
-function buildHoplinks(network: Network, affiliateId: string, vendorId: string) {
+function buildHoplinks(network: Network, affiliateId: string, vendorId: string, override?: string | null) {
   const tids = ["fb", "tt", "blog", "email", "page"] as const;
-  const link = (tid: string) => buildHoplink(network, affiliateId, vendorId, tid);
+  // With an override set every channel resolves to the same URL — see buildHoplink. The per-channel
+  // map is still built so downstream shapes are unchanged, it just stops being per-channel.
+  const link = (tid: string) => buildHoplink(network, affiliateId, vendorId, tid, override);
   const byChannel = Object.fromEntries(tids.map((t) => [t, link(t)])) as Record<
     (typeof tids)[number],
     string
@@ -59,7 +65,7 @@ async function stageContext(product: ProductRow, affiliateId: string): Promise<S
   const page = product.sales_page_url
     ? await fetchSalesPage(product.sales_page_url)
     : { ok: false, text: null, imageCandidates: [] as ImageCandidate[] };
-  const hoplinks = buildHoplinks(product.network, affiliateId, product.vendor_id);
+  const hoplinks = buildHoplinks(product.network, affiliateId, product.vendor_id, product.hoplink_override);
   return {
     stageData: {
       sales_text: page.text,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import HoplinkOverride from "@/components/HoplinkOverride";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { marked } from "marked";
@@ -64,8 +65,11 @@ export default function ProductPage({ params }: { params: { id: string } }) {
   }
 
   function copyHoplink() {
-    if (!product?.hoplink) return;
-    navigator.clipboard.writeText(product.hoplink);
+    // The custom link wins here too — copying the generated one while the kit uses an override
+    // would hand out a link that credits nobody.
+    const link = product?.hoplink_override || product?.hoplink;
+    if (!link) return;
+    navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
@@ -134,6 +138,11 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         {product.angle_notes && (
           <p className="mt-4 rounded-lg bg-ink-800 p-3 text-sm text-zinc-300">{product.angle_notes}</p>
         )}
+        <HoplinkOverride
+          productId={product.id}
+          derived={product.hoplink}
+          initialOverride={product.hoplink_override}
+        />
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button onClick={copyHoplink} className="btn-primary">
             {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}

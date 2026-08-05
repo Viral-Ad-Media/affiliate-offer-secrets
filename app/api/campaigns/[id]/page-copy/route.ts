@@ -77,7 +77,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: product, error: productErr } = await admin
     .from("products")
-    .select("product_title, network, vendor_id, hoplink")
+    .select("product_title, network, vendor_id, hoplink, hoplink_override")
     .eq("id", campaign.product_id)
     .single();
   if (productErr || !product) {
@@ -97,7 +97,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     );
   }
 
-  const hoplink = buildHoplink(product.network, connection.affiliate_id, product.vendor_id, "page");
+  const hoplink = buildHoplink(product.network, connection.affiliate_id, product.vendor_id, "page", product.hoplink_override);
 
   // If this campaign's funnel has added steps after opt-in (0023_funnel_steps.sql), the
   // post-submit CTA redirects to step 1 instead of revealing in place — resolved here, not

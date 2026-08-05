@@ -83,7 +83,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: product, error: productErr } = await admin
     .from("products")
-    .select("product_title, network, vendor_id, hoplink")
+    .select("product_title, network, vendor_id, hoplink, hoplink_override")
     .eq("id", campaign.product_id)
     .single();
   if (productErr || !product) {
@@ -103,7 +103,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     );
   }
 
-  const hoplink = buildHoplink(product.network, connection.affiliate_id, product.vendor_id, "page");
+  const hoplink = buildHoplink(product.network, connection.affiliate_id, product.vendor_id, "page", product.hoplink_override);
 
   // Variants serve at the same URL as the control, so they carry the same post-submit
   // redirect (multi-step funnels) and the same tracking snippets — part of the same gap fix as

@@ -241,6 +241,25 @@ must never be lost. Read-only Supabase queries (via the `mcp__supabase__execute_
    below) — there is no silent `"YOURNICK"`-style placeholder anymore; a missing connection is a
    clear 400 at the API route (or a thrown error in the worker as a defensive re-check), never a
    broken hoplink shipped to real ad traffic.
+   **`products.hoplink_override` (0064) replaces the derived link wholesale** when the constructed
+   one is wrong for an offer — a non-standard hop domain, a sub-affiliate account, a network that
+   hands out a pre-built tracking URL, a vendor id read wrong from the marketplace feed. An
+   OVERRIDE column rather than making `hoplink` editable, because `hoplink` is rewritten by
+   discovery/upsert on every sweep and an edit there would be silently reverted; clearing the
+   override falls straight back to the derived link with no second "is this custom?" flag.
+   **The per-channel tid is deliberately LOST while an override is set** — `buildHoplink` returns
+   it verbatim for every channel, because the tid convention is specific to each network's own URL
+   shape (ClickBank's `tid` query param, Digistore24's campaignkey path segment) and an arbitrary
+   pasted URL gives no reliable way to know where one belongs. Guessing would produce links that
+   look tracked and silently aren't; the UI says so at the point of entry.
+   **Setting it must re-render**, and `PATCH /api/products/[id]/hoplink` does: hrefs are baked into
+   stored HTML at write time, so without `rerenderFunnelSequence` over the product's campaigns,
+   published pages would keep sending paid traffic to the old link while the UI claimed otherwise.
+   Re-render failures are counted and returned rather than thrown — the override IS saved by then,
+   and reporting "couldn't save" would invite a destructive retry. Scheme-constrained at the
+   database (`^https?://`), because `products` RLS is `for all` and is directly PATCH-able through
+   PostgREST, so the route cannot be the only check — verified live that `javascript:`, `data:`,
+   protocol-relative and scheme-less values are all rejected.
 5. Marketplace data changes daily — on discovery, always pull fresh numbers (`lib/engine/clickbank.ts`
    hits `https://accounts.clickbank.com/graphql` live on every run). Never reuse stale rows as
    "current stats". Discovery jobs are queued from the dashboard's category/subcategory dropdown

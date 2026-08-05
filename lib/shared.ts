@@ -18,6 +18,9 @@ export type Product = {
   sales_page_url: string | null;
   affiliate_page_url: string | null;
   hoplink: string | null;
+  // Tenant-supplied link that replaces the derived one (0064). Null until someone sets it;
+  // buildHoplink returns it verbatim when present.
+  hoplink_override: string | null;
   score: number | null;
   angle_notes: string | null;
   page_verified: boolean;
