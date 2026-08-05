@@ -3,11 +3,52 @@ import { FB_GRAPH_BASE, getFbClientId, getFbClientSecret, getFbRedirectUri } fro
 export class MetaApiError extends Error {
   code?: number;
   subcode?: number;
-  constructor(message: string, code?: number, subcode?: number) {
+  /** Meta's own human-readable explanation, when it sends one. */
+  userTitle?: string;
+  userMessage?: string;
+
+  constructor(
+    message: string,
+    code?: number,
+    subcode?: number,
+    userTitle?: string,
+    userMessage?: string
+  ) {
     super(message);
     this.code = code;
     this.subcode = subcode;
+    this.userTitle = userTitle;
+    this.userMessage = userMessage;
   }
+}
+
+/**
+ * Meta's `error.message` is frequently a generic wrapper — "Invalid parameter" is the classic,
+ * and on its own it tells you nothing about which parameter or why. The actionable text lives in
+ * error_user_title/error_user_msg, which we were discarding: a real failed ad launch surfaced in
+ * the UI as literally "Launch failed: Invalid parameter", with no way to find out more short of
+ * reading Vercel logs.
+ *
+ * So the thrown message prefers Meta's user-facing text and keeps the generic one as context,
+ * and the code/subcode ride along for the OAuth-expiry checks that already switch on them.
+ */
+function metaError(err: {
+  message?: string;
+  code?: number;
+  error_subcode?: number;
+  error_user_title?: string;
+  error_user_msg?: string;
+}): MetaApiError {
+  const generic = err.message ?? "Meta API error";
+  const detail = err.error_user_msg ?? err.error_user_title;
+  const message = detail ? `${detail} (${generic})` : generic;
+  return new MetaApiError(
+    message,
+    err.code,
+    err.error_subcode,
+    err.error_user_title,
+    err.error_user_msg
+  );
 }
 
 async function graphGet(path: string, params: Record<string, string>) {
@@ -15,7 +56,7 @@ async function graphGet(path: string, params: Record<string, string>) {
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const res = await fetch(url.toString(), { signal: AbortSignal.timeout(15_000) });
   const json = await res.json();
-  if (json.error) throw new MetaApiError(json.error.message, json.error.code, json.error.error_subcode);
+  if (json.error) throw metaError(json.error);
   return json;
 }
 
@@ -28,7 +69,7 @@ async function graphPost(path: string, params: Record<string, string>) {
     signal: AbortSignal.timeout(15_000),
   });
   const json = await res.json();
-  if (json.error) throw new MetaApiError(json.error.message, json.error.code, json.error.error_subcode);
+  if (json.error) throw metaError(json.error);
   return json;
 }
 
@@ -111,7 +152,7 @@ export async function publishPhotoBytes(
     signal: AbortSignal.timeout(20_000),
   });
   const json = await res.json();
-  if (json.error) throw new MetaApiError(json.error.message, json.error.code, json.error.error_subcode);
+  if (json.error) throw metaError(json.error);
   return json;
 }
 
@@ -319,7 +360,7 @@ export async function uploadAdVideo(adAccountId: string, userAccessToken: string
     signal: AbortSignal.timeout(60_000),
   });
   const json = await res.json();
-  if (json.error) throw new MetaApiError(json.error.message, json.error.code, json.error.error_subcode);
+  if (json.error) throw metaError(json.error);
   const id = json.id ?? json.video_id;
   if (!id) throw new MetaApiError("No video id returned from Meta");
   return id as string;

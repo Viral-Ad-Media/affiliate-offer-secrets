@@ -3159,7 +3159,8 @@ products, build a kit, publish a funnel.
 - **Every step is DERIVED from live counts at render time. Do not convert this to stored flags.**
   A flag would say "kit built" forever after the last campaign was deleted, and every write path
   would have to remember to set it. Derived, a step un-ticks itself and there is no sync to get
-  wrong. Only the *dismissal* is stored.
+  wrong. Only the *dismissal* is stored (`workspaces.setup_dismissed_at`, written by
+  `dismiss_workspace_setup()`).
 - Dismissal is on `workspaces`, not `profiles` — connecting a network is something the org does
   once, so a teammate joining an established workspace shouldn't be handed a finished checklist.
 - It renders nothing when every step is done. If you're testing and see nothing, that's probably
