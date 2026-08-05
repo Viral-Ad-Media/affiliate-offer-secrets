@@ -1,5 +1,6 @@
 import type { PageBlockTree, Block, ElementBlock, LockedBlock } from "@/lib/engine/renderPages";
 import type { FunnelStepType } from "@/lib/shared";
+import { isStarterCopy } from "@/lib/funnelTemplates";
 
 /**
  * What a page of a given kind still needs, checked against what's actually on it.
@@ -204,6 +205,58 @@ function item(
 }
 
 /**
+ * How many verbatim-template blocks a page is allowed before it counts as unedited.
+ *
+ * TWO, not one, because a single match is genuinely ambiguous: one real AI-written campaign here
+ * has the FAQ "How does it work?" — a sensible question that a template also happens to ask, and
+ * failing an otherwise-original page over that collision would be the gate crying wolf. An
+ * actually-untouched template matches on many blocks at once, so the signal is the cluster.
+ */
+const STARTER_BLOCKS_TOLERATED = 2;
+
+/** Text-bearing blocks still saying exactly what the template put there. */
+function starterBlockCount(blocks: Block[]): number {
+  let n = 0;
+  for (const b of blocks) {
+    // Locked blocks are skipped: their text is app-owned (the disclosure) or comes from the same
+    // small set of defaults on every page ("Continue"), so matching them says nothing about
+    // whether the tenant wrote their copy. The CTA's quality has its own check.
+    if ((b as LockedBlock).locked) continue;
+    const c = (b as ElementBlock).content as Record<string, unknown> | undefined;
+    if (!c) continue;
+    for (const key of ["text", "title", "question", "answer", "quote"] as const) {
+      const v = c[key];
+      if (typeof v === "string" && isStarterCopy(v)) n++;
+    }
+    if (Array.isArray(c.items)) {
+      for (const it of c.items) {
+        const v = typeof it === "string" ? it : (it as Record<string, unknown>)?.text;
+        if (typeof v === "string" && isStarterCopy(v)) n++;
+      }
+    }
+  }
+  return n;
+}
+
+/**
+ * "Write your own copy" — required, on every page kind that can come from a template.
+ *
+ * Deliberately counts rather than naming each block: the number is what tells you how much is
+ * left, and a list of eight identical "still the starter text" rows would bury the rest of the
+ * checklist. An AI-generated kit writes its own copy, so this ticks for those from the start.
+ */
+function starterCopyItem(blocks: Block[]): ChecklistItem {
+  const n = starterBlockCount(blocks);
+  return item(
+    "starter",
+    "Replace the starter copy",
+    `${n} blocks still say exactly what the template put there. The starter text is a prompt written to you, not to a visitor.`,
+    "required",
+    n < STARTER_BLOCKS_TOLERATED
+  );
+}
+
+/**
  * The opt-in (entry) page's checklist, by funnel type.
  *
  * A null/unknown type falls back to the generic list rather than rendering nothing — an older
@@ -280,6 +333,12 @@ export function funnelPageChecklist(
     b.some((x) => x.type === "video" && !!((x as ElementBlock).content as Record<string, unknown>)?.source)
   );
 
+  // Appended to every type. The starter copy is prompts, not claims — "Open with the problem your
+  // reader already knows they have" is instructions to the author, and publishing it sends real ad
+  // traffic to a page telling them to write something.
+  const starter = starterCopyItem(b);
+
+  const byType = ((): ChecklistItem[] => {
   switch (funnelType) {
     // Squeeze deliberately asks for MORE than the schema minimum, not less. Being the shortest
     // page type makes it the easiest to publish empty — headline + form alone is a blank page with
@@ -400,6 +459,9 @@ export function funnelPageChecklist(
     default:
       return [headline, body, form, cta, benefits, image];
   }
+  })();
+
+  return [...byType, starter];
 }
 
 /** A post-opt-in step page, by step type. These have no lead form — the visitor is already a lead. */
@@ -415,9 +477,11 @@ export function funnelStepChecklist(
     "A headline",
     "Tells someone immediately that the last step worked.",
     "required",
-    has(b, "heading")
+    hasTextBlock(b, ["heading"])
   );
+  const starter = starterCopyItem(b);
 
+  const byType = ((): ChecklistItem[] => {
   switch (stepType) {
     case "thank_you":
       return [
@@ -494,6 +558,9 @@ export function funnelStepChecklist(
     default:
       return [headline, item("cta", "A call to action", "What the visitor does next.", "required", hasButton)];
   }
+  })();
+
+  return [...byType, starter];
 }
 
 /** A blog post. Takes the fields that live outside the tree, since they're half of what a post needs. */

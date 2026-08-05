@@ -345,3 +345,108 @@ export function stepsForType(typeKey: string): FunnelStepType[] | null {
   const def = funnelType(typeKey);
   return def ? def.steps : null;
 }
+
+/* ------------------------------------------------------------------------------------------------
+ * Recognising copy nobody has touched yet
+ *
+ * The starter copy is deliberately prompts rather than claims ("Open with the problem your reader
+ * already knows they have") — useful scaffolding, and a page that ships with it live is a page
+ * telling real ad traffic to write something. So the publish gate needs to know whether a block
+ * still says what the template put there.
+ *
+ * Rather than hand-listing the strings — which would silently rot the first time anyone edits
+ * TEMPLATES or VOICE_PROMPTS — this GENERATES every page the builder can produce (every type x
+ * every start, plus every step type) and remembers the text. Whatever the templates say is what
+ * this matches, permanently and by construction.
+ * ---------------------------------------------------------------------------------------------- */
+
+/** Stands in for the funnel title while collecting, so the title itself is wildcarded. */
+const TITLE_SENTINEL = "TITLE";
+
+function collectTreeText(tree: PageBlockTree, out: Set<string>): void {
+  const add = (s: unknown) => {
+    if (typeof s === "string" && s.trim()) out.add(s.trim());
+  };
+  const visit = (b: any) => {
+    const c = b?.content as Record<string, unknown> | undefined;
+    if (c) {
+      add(c.text);
+      add(c.title);
+      add(c.question);
+      add(c.answer);
+      add(c.quote);
+      add(c.caption);
+      add(c.ctaText);
+      add(c.submitText);
+      if (Array.isArray(c.items)) {
+        for (const it of c.items) add(typeof it === "string" ? it : (it as any)?.text);
+      }
+    }
+    for (const k of ["children", "columns"] as const) {
+      const kids = (b as any)?.[k];
+      if (Array.isArray(kids)) kids.forEach(visit);
+    }
+  };
+  tree.blocks.forEach(visit);
+}
+
+/**
+ * Text normalizePageCopy adds itself, whatever the copy is — the section headings ("How it works",
+ * "What you get", "Questions") and the locked blocks' defaults.
+ *
+ * These have to be subtracted or the check is worthless: they appear identically on an untouched
+ * template AND on every AI-written kit, so counting them flagged all 14 real campaigns, both live
+ * ones included. Found by running the adapter over copy made entirely of sentinels — anything that
+ * comes out without a sentinel in it was contributed by the adapter, not by the content.
+ */
+function adapterOwnedText(): Set<string> {
+  const S = "SENTINEL";
+  const seed: any = {
+    headline: `${S}h`,
+    lead: `${S}l`,
+    mechanism: `${S}m`,
+    benefits: [`${S}b1`, `${S}b2`],
+    proof: `${S}p`,
+    faq: [{ q: `${S}q`, a: `${S}a` }],
+    cta: `${S}c`,
+  };
+  const found = new Set<string>();
+  collectTreeText(normalizePageCopy(seed, null), found);
+  for (const stepType of Object.keys(STEP_TEMPLATES) as FunnelStepType[]) {
+    collectTreeText(normalizePageCopy(seed, null, { stepType }), found);
+  }
+  return new Set(Array.from(found).filter((t) => !t.includes(S)));
+}
+
+let starterMatchers: RegExp[] | null = null;
+
+function buildStarterMatchers(): RegExp[] {
+  const texts = new Set<string>();
+  const starts: FunnelStart[] = ["scratch", "direct", "advertorial", "story", "authority", "minimal", "visual"];
+  for (const type of Object.keys(TEMPLATES)) {
+    for (const start of starts) collectTreeText(optInPageCopy(type, start, TITLE_SENTINEL, null), texts);
+  }
+  for (const stepType of Object.keys(STEP_TEMPLATES) as FunnelStepType[]) {
+    for (const start of starts) collectTreeText(stepPageCopy(stepType, start, TITLE_SENTINEL), texts);
+  }
+  for (const t of Array.from(adapterOwnedText())) texts.delete(t);
+  return Array.from(texts).map((t) => {
+    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // The title is wildcarded: "Save your seat: My Webinar" is still untouched starter copy — the
+    // builder filled that name in, the tenant didn't write it.
+    return new RegExp(`^${escaped.split(TITLE_SENTINEL).join(".*")}$`, "i");
+  });
+}
+
+/**
+ * Is this string still exactly what a template would have produced?
+ *
+ * Whole-string match, never a substring: someone who keeps a starter phrase inside copy they
+ * actually wrote has written the page, and blocking that would be the gate overreaching.
+ */
+export function isStarterCopy(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  starterMatchers ??= buildStarterMatchers();
+  return starterMatchers.some((re) => re.test(t));
+}
