@@ -681,11 +681,18 @@ asserting a benefit or a result in a template would put words in the affiliate's
 carrying their disclosure. "Scratch" builds its tree directly instead (the adapter always emits
 all five legacy sections by design), but still carries the disclosure and a working opt-in form.
 
-Steps are inserted with the admin client rather than via `add_funnel_step()`, whose ownership
-check is still `campaigns.user_id = auth.uid()` and predates workspaces — it would reject a
-teammate adding a step to a campaign another member created. **That RPC is still used by
-`POST /api/funnel-steps`, so the same gap is live there.** Worth closing when workspaces get
-another pass.
+Steps are inserted with the admin client rather than via `add_funnel_step()`, since ownership is
+already established by the workspace-scoped product lookup. **0066 fixed that RPC and its two
+siblings**, which were still authorized by `campaigns.user_id = auth.uid()` — 0023 wrote them
+when a tenant was a person, and the workspace migration updated `assert_owns_funnel_step` but
+missed these three. A teammate could see a campaign and its buttons, and got "Campaign not found".
+`move_funnel_step` had a quieter second bug: its NEIGHBOUR lookup was also filtered by `auth.uid()`,
+so in a funnel with steps from two members, "move up" jumped over the other member's step and
+swapped with the one beyond — reordering wrongly rather than failing, with no error. All three now
+resolve the campaign's workspace and check `is_workspace_member`. `add_funnel_step` also sets
+`workspace_id` explicitly from the campaign rather than leaving it to the `stamp_workspace_id`
+trigger, whose fallback is the CALLER's active workspace — for someone in two workspaces that
+could file a step somewhere other than where its own campaign lives.
 
 `rerenderFunnelSequence(admin, campaignId, workspaceId)` takes a WORKSPACE id. Five call sites
 passed `user.id` for months after `network_connections` became workspace-scoped, so the affiliate
