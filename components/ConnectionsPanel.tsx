@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Facebook, Instagram, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 type Page = { page_id: string; page_name: string; is_active: boolean; status: string };
 type AdAccount = { ad_account_id: string; ad_account_name: string; currency: string; is_active: boolean };
@@ -52,7 +53,7 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
         <p className="mb-4 text-sm text-zinc-400">
           Connect your Facebook Page to publish generated captions with one click.
         </p>
-        <a href="/api/meta/connect" className="btn-primary inline-flex w-fit">
+        <a href="/api/meta/connect" className={cn(buttonVariants(), "inline-flex w-fit")}>
           <Facebook className="h-4 w-4" /> Connect Facebook
         </a>
       </Card>

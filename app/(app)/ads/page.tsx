@@ -17,6 +17,8 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -131,7 +133,7 @@ export default async function AdsPage() {
               ? "Facebook is connected, but ad permissions weren't granted — reconnect and accept ads_management to launch ads."
               : "Connect Facebook with ad permissions before you can launch ads."}
           </p>
-          <Link href="/settings/integrations" className="btn-ghost text-xs">
+          <Link href="/settings/integrations" className={cn(buttonVariants({ variant: "outline" }), "text-xs")}>
             Go to Integrations
           </Link>
         </Card>
@@ -228,7 +230,7 @@ export default async function AdsPage() {
                         {r.productId ? (
                           <Link
                             href={`/product/${r.productId}?tab=fb_ads_md`}
-                            className="btn-ghost text-xs"
+                            className={cn(buttonVariants({ variant: "outline" }), "text-xs")}
                           >
                             <ExternalLink className="h-3.5 w-3.5" /> Manage
                           </Link>

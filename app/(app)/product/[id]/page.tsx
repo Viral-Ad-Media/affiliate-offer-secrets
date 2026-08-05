@@ -13,9 +13,10 @@ import GenerateVideo from "@/components/GenerateVideo";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
 import SocialPostsPanel from "@/components/SocialPostsPanel";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 const TABS = [
   { key: "fb_ads_md", label: "FB/IG Ads" },
@@ -152,17 +153,17 @@ export default function ProductPage({ params }: { params: { id: string } }) {
             Copy hoplink
           </Button>
           {product.sales_page_url && (
-            <a href={product.sales_page_url} target="_blank" rel="noreferrer" className="btn-ghost">
+            <a href={product.sales_page_url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline" })}>
               <ExternalLink className="h-4 w-4" /> Sales page
             </a>
           )}
           {product.affiliate_page_url && (
-            <a href={product.affiliate_page_url} target="_blank" rel="noreferrer" className="btn-ghost">
+            <a href={product.affiliate_page_url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline" })}>
               <ExternalLink className="h-4 w-4" /> Affiliate tools
             </a>
           )}
           {product.assets_link && (
-            <a href={product.assets_link} target="_blank" rel="noreferrer" className="btn-ghost">
+            <a href={product.assets_link} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline" })}>
               <ExternalLink className="h-4 w-4" /> Drive folder
             </a>
           )}
@@ -189,7 +190,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           </h2>
           {tab === "bridge_html" && campaign?.bridge_html && (
             <div className="flex items-center gap-2">
-              <Link href={`/funnels/${campaign.id}`} className="btn-primary !py-1 text-xs">
+              <Link href={`/funnels/${campaign.id}`} className={cn(buttonVariants(), "!py-1 text-xs")}>
                 <Layers className="h-3.5 w-3.5" /> Manage &amp; publish this funnel
               </Link>
               <Button onClick={downloadHtml} variant="outline" className="!py-1 text-xs">

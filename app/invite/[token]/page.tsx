@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +26,7 @@ export default async function InvitePage({ params }: { params: { token: string }
       <main className="mx-auto max-w-md px-4 py-20 text-center">
         <h1 className="text-xl font-bold text-zinc-100">This invitation didn&apos;t work</h1>
         <p className="mt-2 text-sm text-zinc-400">{error.message}</p>
-        <Link href="/dashboard" className="btn-primary mt-6 inline-flex">
+        <Link href="/dashboard" className={cn(buttonVariants(), "mt-6 inline-flex")}>
           Go to your dashboard
         </Link>
       </main>

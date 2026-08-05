@@ -127,7 +127,7 @@ export default async function Overview() {
             <Link
               key={link.href}
               href={link.href}
-              className="card flex items-start gap-3 p-4 transition-colors hover:border-emerald-500/50"
+              className="rounded-xl border border-ink-700 bg-ink-900 flex items-start gap-3 p-4 transition-colors hover:border-emerald-500/50"
             >
               <div className="rounded-lg border border-ink-700 bg-ink-800 p-2.5 text-emerald-400">
                 <link.icon className="h-5 w-5" />

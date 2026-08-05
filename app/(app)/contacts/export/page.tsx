@@ -1,5 +1,7 @@
 import { Download } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +28,7 @@ export default function ContactExportPage() {
           <li>Any extra form fields you added to that funnel, flattened into one column</li>
           <li>When they were captured</li>
         </ul>
-        <a href="/api/contacts/export" className="btn-primary inline-flex w-fit items-center gap-1.5 text-xs">
+        <a href="/api/contacts/export" className={cn(buttonVariants(), "inline-flex w-fit items-center gap-1.5 text-xs")}>
           <Download className="h-3.5 w-3.5" /> Download CSV
         </a>
         <p className="text-[12px] text-zinc-500">

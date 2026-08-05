@@ -25,7 +25,8 @@ import {
 } from "@/lib/blog";
 import { toast } from "@/lib/toast";
 import { resizeImageFile } from "@/lib/images/resizeClient";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 function isTree(v: unknown): v is PageBlockTree {
   return !!v && typeof v === "object" && (v as { version?: number }).version === 2;
@@ -308,7 +309,7 @@ export default function BlogHomeEditor({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <EditorPreviewButton
-            className="btn-ghost flex items-center gap-1.5 text-xs"
+            className={cn(buttonVariants({ variant: "outline" }), "flex items-center gap-1.5 text-xs")}
             label="Preview home"
             title="Preview — blog home"
             // Renders the whole index from the CURRENT intro plus the real posts, so what you see

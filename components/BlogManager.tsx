@@ -8,8 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "@/lib/toast";
 import { blogPostPath, type PermalinkStyle } from "@/lib/blog";
 import { scoreTone } from "@/lib/blogSeo";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type PostRow = {
   id: string;
@@ -173,7 +174,7 @@ export default function BlogManager({
               target="_blank"
               rel="noreferrer"
               title="Preview your blog home page — drafts included, so you can see the layout before publishing"
-              className="btn-ghost text-xs"
+              className={cn(buttonVariants({ variant: "outline" }), "text-xs")}
             >
               <Eye className="h-3.5 w-3.5" /> Preview blog
             </a>

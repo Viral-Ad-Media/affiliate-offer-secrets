@@ -6,9 +6,10 @@ import EditorPreviewButton from "@/components/EditorPreview";
 import { renderEmailPreviewHtml } from "@/lib/engine/broadcastEmail";
 import { createClient } from "@/lib/supabase/client";
 import type { BroadcastStep } from "@/lib/shared";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 type DraftStep = Partial<BroadcastStep> & { key: string; step_index: number; delay_days: number; subject: string; body_md: string };
 
@@ -130,7 +131,7 @@ export default function BroadcastStepsEditor({
               {editable && (
                 <div className="mt-2 flex items-center gap-2">
                   <EditorPreviewButton
-                    className="btn-ghost flex items-center gap-1.5 text-xs"
+                    className={cn(buttonVariants({ variant: "outline" }), "flex items-center gap-1.5 text-xs")}
                     label="Preview"
                     title={`Preview — ${d.subject || "email"}`}
                     render={() => renderEmailPreviewHtml({ subject: d.subject, body_md: d.body_md })}

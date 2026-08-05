@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Eye } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 // Preview button for the editors: opens the CURRENT draft — unsaved edits included — as a real
 // page in a new browser tab, so it looks and scrolls exactly like the live site instead of a panel
@@ -42,7 +44,7 @@ export default function EditorPreviewButton({
   render,
   title,
   label = "Preview",
-  className = "btn-ghost flex items-center gap-1.5",
+  className = cn(buttonVariants({ variant: "outline" }), "flex items-center gap-1.5"),
 }: {
   render: () => string;
   title: string;

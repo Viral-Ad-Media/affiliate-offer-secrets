@@ -7,6 +7,8 @@ import { Menu, X } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
 import ExitIntentAuth from "@/components/ExitIntentAuth";
 import TopBarAccount from "@/components/TopBarAccount";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export type NavUser = {
   email: string;
@@ -61,10 +63,10 @@ export default function MarketingNav({ user }: { user: NavUser | null }) {
             />
           ) : (
             <>
-              <AuthModal mode="login" className="btn-ghost">
+              <AuthModal mode="login" className={buttonVariants({ variant: "outline" })}>
                 Sign in
               </AuthModal>
-              <AuthModal mode="signup" className="btn-primary">
+              <AuthModal mode="signup" className={buttonVariants()}>
                 Get started
               </AuthModal>
             </>
@@ -106,10 +108,10 @@ export default function MarketingNav({ user }: { user: NavUser | null }) {
               />
             ) : (
               <>
-                <AuthModal mode="login" className="btn-ghost flex-1 justify-center">
+                <AuthModal mode="login" className={cn(buttonVariants({ variant: "outline" }), "flex-1 justify-center")}>
                   Sign in
                 </AuthModal>
-                <AuthModal mode="signup" className="btn-primary flex-1 justify-center">
+                <AuthModal mode="signup" className={cn(buttonVariants(), "flex-1 justify-center")}>
                   Get started
                 </AuthModal>
               </>

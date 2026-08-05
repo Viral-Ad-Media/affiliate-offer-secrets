@@ -8,6 +8,7 @@ import { Radio, ExternalLink, Inbox, Beaker, Layers } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
+import { buttonVariants } from "@/components/ui/button";
 
 // A "funnel" isn't its own entity — it's a derived view over campaigns that already have a bridge
 // (lead-capture) page generated. A funnel appears here automatically the moment stagePages
@@ -164,7 +165,7 @@ export default async function FunnelsPage() {
                     </td>
                     <td className="px-2 py-2.5 text-right tabular-nums">{f.leads}</td>
                     <td className="px-4 py-2.5 text-right">
-                      <Link href={`/funnels/${f.id}`} className="btn-ghost">
+                      <Link href={`/funnels/${f.id}`} className={buttonVariants({ variant: "outline" })}>
                         <Layers className="h-3.5 w-3.5" /> Manage
                       </Link>
                     </td>

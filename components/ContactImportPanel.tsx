@@ -64,7 +64,7 @@ export default function ContactImportPanel({
         </p>
       </div>
 
-      <form onSubmit={submit} className="card space-y-4 p-4">
+      <form onSubmit={submit} className="rounded-xl border border-ink-700 bg-ink-900 space-y-4 p-4">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-zinc-400">CSV</span>
           <textarea

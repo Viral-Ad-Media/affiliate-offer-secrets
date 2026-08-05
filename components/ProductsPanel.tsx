@@ -22,10 +22,11 @@ import { DataTableFilter, type FilterOption } from "@/components/ui/data-table-f
 import Pager, { pageFromParam } from "@/components/Pager";
 import { PRODUCT_STATUSES, type Job, type Product } from "@/lib/shared";
 import { toast } from "@/lib/toast";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 /**
  * The tracked-products table, with its filter, bulk bar, status editing and Promote flow.
@@ -362,20 +363,20 @@ export default function ProductsPanel({
                           target="_blank"
                           rel="noreferrer"
                           title="Open sales page"
-                          className="btn-ghost !px-2"
+                          className={cn(buttonVariants({ variant: "outline" }), "!px-2")}
                         >
                           <ExternalLink className="h-4 w-4" />
                         </a>
                       )}
                       {p.campaign_status === "ready" ? (
-                        <Link href={`/product/${p.id}`} className="btn-ghost">
+                        <Link href={`/product/${p.id}`} className={buttonVariants({ variant: "outline" })}>
                           View kit
                         </Link>
                       ) : p.campaign_status === "building" ||
                         openJobs.some(
                           (j) => j.type === "build_campaign" && j.payload.product_id === p.id
                         ) ? (
-                        <span className="btn-ghost pointer-events-none">
+                        <span className={cn(buttonVariants({ variant: "outline" }), "pointer-events-none")}>
                           <RefreshCw className="h-4 w-4 animate-spin" /> Queued
                         </span>
                       ) : (

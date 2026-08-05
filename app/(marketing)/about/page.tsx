@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export const metadata = {
   title: "About",
@@ -71,10 +73,10 @@ export default function AboutPage() {
       </div>
 
       <div className="mt-12 flex flex-wrap gap-3">
-        <Link href="/login" className="btn-primary px-5 py-2.5 text-base">
+        <Link href="/login" className={cn(buttonVariants(), "px-5 py-2.5 text-base")}>
           Start your free trial
         </Link>
-        <Link href="/contact" className="btn-ghost px-5 py-2.5 text-base">
+        <Link href="/contact" className={cn(buttonVariants({ variant: "outline" }), "px-5 py-2.5 text-base")}>
           Get in touch
         </Link>
       </div>

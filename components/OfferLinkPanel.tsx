@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { CheckCircle2, ExternalLink, Link2, Loader2 } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 /**
  * Where a standalone funnel's call to action sends people.
@@ -82,7 +83,7 @@ export default function OfferLinkPanel({
             target="_blank"
             rel="noreferrer"
             title="Open in a new tab"
-            className="btn-ghost !px-2"
+            className={cn(buttonVariants({ variant: "outline" }), "!px-2")}
           >
             <ExternalLink className="h-4 w-4" />
           </a>

@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 // Everything claimed on this page has actually shipped. Two things deliberately NOT claimed,
 // because they haven't: automated marketplace discovery for anything but ClickBank (Digistore24 is
@@ -136,10 +138,10 @@ export default function HomePage() {
             dashboard.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/login" className="btn-primary px-5 py-2.5 text-base">
+            <Link href="/login" className={cn(buttonVariants(), "px-5 py-2.5 text-base")}>
               Start your free trial
             </Link>
-            <Link href="/pricing" className="btn-ghost px-5 py-2.5 text-base">
+            <Link href="/pricing" className={cn(buttonVariants({ variant: "outline" }), "px-5 py-2.5 text-base")}>
               See pricing
             </Link>
           </div>
@@ -209,7 +211,7 @@ export default function HomePage() {
           Start a 30-day free trial and generate your first full campaign kit today.
         </p>
         <div className="mt-7">
-          <Link href="/login" className="btn-primary px-5 py-2.5 text-base">
+          <Link href="/login" className={cn(buttonVariants(), "px-5 py-2.5 text-base")}>
             Start your free trial
           </Link>
         </div>

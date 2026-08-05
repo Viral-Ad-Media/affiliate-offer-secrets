@@ -24,8 +24,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 // Flattens a lead's user-added form fields (Phase O.5) into one "key: value; key: value" string —
 // deliberate v1 scope cut, matching the plan's own call: no dynamic per-field columns, since the
@@ -140,7 +141,7 @@ export default function ContactsTable({
             <a
               href="/api/contacts/export"
               title="Download every contact, not just this page"
-              className="btn-ghost text-xs"
+              className={cn(buttonVariants({ variant: "outline" }), "text-xs")}
             >
               <Download className="h-3.5 w-3.5" /> Export CSV
             </a>

@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Flame, TrendingUp, Sparkles, Plus, Check, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 type Highlight = {
   network: string;
@@ -178,7 +179,7 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
                     target="_blank"
                     rel="noreferrer"
                     title="Open sales page"
-                    className="btn-ghost !px-2"
+                    className={cn(buttonVariants({ variant: "outline" }), "!px-2")}
                   >
                     <ExternalLink className="h-4 w-4" />
                   </a>

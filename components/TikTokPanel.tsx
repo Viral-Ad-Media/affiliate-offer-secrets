@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Music2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type Status = { connected: boolean; status?: string; tiktok_username?: string; avatar_url?: string };
 
@@ -26,7 +27,7 @@ export default function TikTokPanel({ status }: { status: Status }) {
         <p className="mb-4 text-sm text-zinc-400">
           Connect your TikTok account now so it's ready the moment video posting ships.
         </p>
-        <a href="/api/tiktok/connect" className="btn-primary inline-flex w-fit">
+        <a href="/api/tiktok/connect" className={cn(buttonVariants(), "inline-flex w-fit")}>
           <Music2 className="h-4 w-4" /> Connect TikTok
         </a>
       </Card>

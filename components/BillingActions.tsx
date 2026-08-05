@@ -69,7 +69,7 @@ export function BuyCreditsGrid() {
             setBusy(pack.credits);
             await startCheckout({ type: "credits", credits: pack.credits });
           }}
-          className="card p-4 text-center hover:border-emerald-500 disabled:opacity-50"
+          className="rounded-xl border border-ink-700 bg-ink-900 p-4 text-center hover:border-emerald-500 disabled:opacity-50"
         >
           <div className="text-lg font-bold text-zinc-100">{pack.credits} credits</div>
           <div className="text-xs text-zinc-500">${pack.cents / 100}</div>

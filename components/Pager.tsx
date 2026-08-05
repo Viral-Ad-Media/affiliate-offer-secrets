@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 // Shared pager for the app's list pages. Server-rendered links, not client state: the page number
 // lives in the URL so a row you were looking at survives a refresh, a back button, and a shared
@@ -65,11 +67,11 @@ export default function Pager({
       {totalPages > 1 && (
         <div className="flex items-center gap-1">
           {page > 1 ? (
-            <Link href={href(page - 1)} rel="prev" className="btn-ghost !py-1 text-xs">
+            <Link href={href(page - 1)} rel="prev" className={cn(buttonVariants({ variant: "outline" }), "!py-1 text-xs")}>
               <ChevronLeft className="h-3.5 w-3.5" /> Newer
             </Link>
           ) : (
-            <span className="btn-ghost !py-1 text-xs opacity-40">
+            <span className={cn(buttonVariants({ variant: "outline" }), "!py-1 text-xs opacity-40")}>
               <ChevronLeft className="h-3.5 w-3.5" /> Newer
             </span>
           )}
@@ -77,11 +79,11 @@ export default function Pager({
             Page {page} of {totalPages}
           </span>
           {page < totalPages ? (
-            <Link href={href(page + 1)} rel="next" className="btn-ghost !py-1 text-xs">
+            <Link href={href(page + 1)} rel="next" className={cn(buttonVariants({ variant: "outline" }), "!py-1 text-xs")}>
               Older <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           ) : (
-            <span className="btn-ghost !py-1 text-xs opacity-40">
+            <span className={cn(buttonVariants({ variant: "outline" }), "!py-1 text-xs opacity-40")}>
               Older <ChevronRight className="h-3.5 w-3.5" />
             </span>
           )}

@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { Settings, Loader2, CheckCircle2, ExternalLink, ImagePlus, Trash2, Eye } from "lucide-react";
 import { PERMALINK_STYLES, type PermalinkStyle } from "@/lib/blog";
 import { toast } from "@/lib/toast";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 export type Settings = {
   blog_title: string | null;
@@ -112,7 +113,7 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
           href="/api/blog/preview"
           target="_blank"
           rel="noreferrer"
-          className="btn-ghost inline-flex items-center gap-1.5 text-xs"
+          className={cn(buttonVariants({ variant: "outline" }), "inline-flex items-center gap-1.5 text-xs")}
           title="Preview your blog home page — drafts included"
         >
           <Eye className="h-3.5 w-3.5" /> Preview blog home

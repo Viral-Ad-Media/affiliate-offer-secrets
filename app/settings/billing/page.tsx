@@ -7,6 +7,8 @@ import { hasAppAccess } from "@/lib/shared";
 import { BuyAccessButton, BuyCreditsGrid, StartTrialButton } from "@/components/BillingActions";
 import LogoutButton from "@/components/LogoutButton";
 import { Card } from "@/components/ui/card";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export default async function BillingPage({
   searchParams,
@@ -105,7 +107,7 @@ export default async function BillingPage({
             </p>
             <BuyCreditsGrid />
           </Card>
-          <Link href="/dashboard" className="btn-ghost block text-center">
+          <Link href="/dashboard" className={cn(buttonVariants({ variant: "outline" }), "block text-center")}>
             Back to dashboard
           </Link>
         </div>

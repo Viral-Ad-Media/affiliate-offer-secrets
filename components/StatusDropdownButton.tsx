@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { ChevronDown, Check, Globe, FileText, Loader2 } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export type PublishStatus = "published" | "draft";
 
@@ -19,7 +21,7 @@ export default function StatusDropdownButton({
   status,
   busy = false,
   onChange,
-  className = "btn-primary flex items-center gap-1.5 text-xs",
+  className = cn(buttonVariants(), "flex items-center gap-1.5 text-xs"),
 }: {
   status: PublishStatus;
   busy?: boolean;

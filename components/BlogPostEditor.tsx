@@ -17,8 +17,9 @@ import ContentWidthField from "@/components/ContentWidthField";
 import PageThemePanel from "@/components/PageThemePanel";
 import FeaturedImageField from "@/components/FeaturedImageField";
 import { resizeImageFile } from "@/lib/images/resizeClient";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type Post = {
   id: string;
@@ -167,7 +168,7 @@ export default function BlogPostEditor({
             </span>
           )}
           <EditorPreviewButton
-            className="btn-ghost flex items-center gap-1.5 text-xs"
+            className={cn(buttonVariants({ variant: "outline" }), "flex items-center gap-1.5 text-xs")}
             title={`Preview — ${title || "Untitled post"}`}
             render={() =>
               renderPublicPostHtml({

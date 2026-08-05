@@ -3,6 +3,8 @@ import { Check } from "lucide-react";
 import { ACCESS_FEE_CENTS, CREDIT_PACKS } from "@/lib/pricing";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export const metadata = {
   title: "Pricing",
@@ -56,7 +58,7 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          <Link href="/login" className="btn-primary mt-8 w-full py-2.5 text-base">
+          <Link href="/login" className={cn(buttonVariants(), "mt-8 w-full py-2.5 text-base")}>
             Start your free trial
           </Link>
         </Card>
