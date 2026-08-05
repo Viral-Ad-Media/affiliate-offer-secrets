@@ -160,6 +160,26 @@ export type VideoBlock = Base & {
 };
 export type FaqItemBlock = Base & { type: "faq_item"; content: { question: string; answer: string } };
 
+// One testimonial, in one of three media shapes. `media` is what varies; quote/name/role are
+// shared, because an attributed name is the part that makes a testimonial a testimonial — a
+// floating quote with nobody behind it is just a pull-quote.
+//
+// The video variant reuses VideoSource (a PARSED {provider, videoId}), not a URL string, for
+// exactly the reason the video block does: the renderer rebuilds the embed URL from a fixed
+// template, so no tenant-typed string ever reaches an iframe src. Adding a second place that
+// accepts a raw URL would reopen that hole in the one block type most likely to be pasted into.
+export type TestimonialMedia =
+  | { kind: "text" }
+  | { kind: "image"; dataUrl: string | null }
+  | { kind: "video"; source: VideoSource | null };
+
+export type TestimonialBlock = Base & {
+  type: "testimonial";
+  content: { quote: string; name: string; role: string; media: TestimonialMedia };
+};
+
+export const TESTIMONIAL_MEDIA_KINDS = ["text", "image", "video"] as const;
+
 export type ElementBlock =
   | HeadingBlock
   | SubheadingBlock
@@ -171,7 +191,8 @@ export type ElementBlock =
   | ImageListBlock
   | ButtonBlock
   | VideoBlock
-  | FaqItemBlock;
+  | FaqItemBlock
+  | TestimonialBlock;
 
 export const ELEMENT_BLOCK_TYPES = [
   "heading",
@@ -185,6 +206,7 @@ export const ELEMENT_BLOCK_TYPES = [
   "button",
   "video",
   "faq_item",
+  "testimonial",
 ] as const;
 
 // Only ever a child of a lead_capture_form block — never part of ElementBlock, so a Column's
@@ -392,6 +414,7 @@ export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readon
   icon_list: TEXT_STYLE_KEYS,
   divider: DIVIDER_STYLE_KEYS,
   image_list: TEXT_STYLE_KEYS,
+  testimonial: TEXT_STYLE_KEYS,
   button: BUTTON_STYLE_KEYS,
   video: BOX_STYLE_KEYS,
   faq_item: TEXT_STYLE_KEYS,
@@ -465,6 +488,39 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       return `<div class="faq-item"${styleAttr(block.style, TEXT_STYLE_KEYS)}><h3>${escapeHtml(
         block.content.question
       )}</h3><p>${escapeHtml(block.content.answer)}</p></div>`;
+    case "testimonial": {
+      const { quote, name, role, media } = block.content;
+      // An empty testimonial renders nothing rather than an attributed-to-nobody quote box — same
+      // call as the video block's null source: a half-filled block must not ship to real traffic.
+      if (!quote.trim() && !name.trim() && media.kind === "text") return "";
+
+      let mediaHtml = "";
+      if (media.kind === "image" && media.dataUrl) {
+        mediaHtml = `<div class="tm-media tm-avatar"><img src="${escapeHtml(media.dataUrl)}" alt="${escapeHtml(
+          name
+        )}" /></div>`;
+      } else if (media.kind === "video" && media.source) {
+        const label = escapeHtml(name ? `${name} — testimonial` : "Testimonial");
+        mediaHtml =
+          media.source.provider === "file"
+            ? `<div class="tm-media video-wrap"><video controls playsinline preload="metadata" src="${escapeHtml(
+                media.source.url
+              )}" title="${label}"></video></div>`
+            : `<div class="tm-media video-wrap"><iframe src="${escapeHtml(
+                embedUrl(media.source)
+              )}" title="${label}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+      }
+
+      // <figure>/<figcaption> because that is what this is: a quotation with an attribution.
+      // cite carries the name for anything reading the page structurally.
+      const attribution = [
+        name.trim() ? `<span class="tm-name">${escapeHtml(name)}</span>` : "",
+        role.trim() ? `<span class="tm-role">${escapeHtml(role)}</span>` : "",
+      ].join("");
+      return `<figure class="testimonial tm-${media.kind}"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${mediaHtml}<blockquote>${escapeHtml(
+        quote
+      )}</blockquote>${attribution ? `<figcaption>${attribution}</figcaption>` : ""}</figure>`;
+    }
   }
 }
 
@@ -808,6 +864,10 @@ function defaultElementContent(type: (typeof ELEMENT_BLOCK_TYPES)[number]): Elem
       return { source: null, title: "" };
     case "faq_item":
       return { question: "New question", answer: "Answer" };
+    case "testimonial":
+      // Defaults to the text variant: it is the only one that is complete the moment you insert
+      // it, so the block never starts life looking broken while you go find an image.
+      return { quote: "", name: "", role: "", media: { kind: "text" } };
   }
 }
 

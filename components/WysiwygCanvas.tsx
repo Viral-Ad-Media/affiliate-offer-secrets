@@ -21,6 +21,7 @@ import {
   MousePointerClick,
   Video,
   HelpCircle,
+  Quote,
   Settings2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -54,6 +55,7 @@ import {
   type FormInputBlock,
   type FormFieldType,
   CHOICE_FIELD_TYPES,
+  TESTIMONIAL_MEDIA_KINDS,
   type ContainerRef,
   type Block,
   type BlockStyle,
@@ -168,6 +170,7 @@ const ELEMENT_PALETTE: { type: ElementBlockTypeLocal; label: string; icon: any }
   { type: "button", label: "Button", icon: MousePointerClick },
   { type: "video", label: "Video", icon: Video },
   { type: "faq_item", label: "FAQ item", icon: HelpCircle },
+  { type: "testimonial", label: "Testimonial", icon: Quote },
 ];
 
 // Sets the DOM node's text exactly once, at mount, then never touches it again on re-render (no
@@ -182,6 +185,7 @@ function EditableText({
   style,
   multiline = false,
   maxLength,
+  placeholder,
 }: {
   value: string;
   onCommit: (v: string) => void;
@@ -190,6 +194,9 @@ function EditableText({
   style?: React.CSSProperties;
   multiline?: boolean;
   maxLength?: number;
+  /** Shown via CSS ::before while empty. An empty contentEditable collapses to a caret-sized
+   *  target nobody can find — which is exactly the state a freshly-inserted block starts in. */
+  placeholder?: string;
 }) {
   const setRef = useCallback((el: HTMLElement | null) => {
     if (el) el.textContent = value;
@@ -215,7 +222,8 @@ function EditableText({
           e.currentTarget.blur();
         }
       }}
-      className={`min-h-[1.2em] cursor-text rounded-sm outline-none focus:bg-emerald-50 focus:ring-1 focus:ring-emerald-300 ${className ?? ""}`}
+      data-placeholder={placeholder}
+      className={`min-h-[1.2em] cursor-text rounded-sm outline-none empty:before:text-gray-400 empty:before:content-[attr(data-placeholder)] focus:bg-emerald-50 focus:ring-1 focus:ring-emerald-300 ${className ?? ""}`}
       style={style}
     />
   );
@@ -861,11 +869,17 @@ export default function WysiwygCanvas({
     if (lastSection) addRow(lastSection.id, layout);
   }
 
-  async function pickImage(blockId: string, file: File) {
+  // toPatch defaults to the plain image block's shape; the testimonial passes its own, so both
+  // go through the same resize (which is what actually keeps a phone photo under the size cap).
+  async function pickImage(
+    blockId: string,
+    file: File,
+    toPatch: (dataUrl: string) => Record<string, unknown> = (dataUrl) => ({ dataUrl })
+  ) {
     onImageBusyChange(blockId);
     try {
       const resized = await resizeImageFile(file);
-      onChange(updateBlockContent(tree, blockId, { dataUrl: resized }));
+      onChange(updateBlockContent(tree, blockId, toPatch(resized)));
     } catch (err: any) {
       onImageError(err?.message ?? "Could not process image");
     } finally {
@@ -1182,6 +1196,142 @@ export default function WysiwygCanvas({
             <EditableText as="p" value={el.content.answer} onCommit={(v) => commit(el.id, { answer: v })} maxLength={1000} multiline />
           </div>
         );
+      case "testimonial": {
+        const media = el.content.media;
+        return (
+          <div className="my-3 rounded-lg border-l-4 border-gray-300 bg-gray-50 px-4 py-3" style={blockInlineStyle(el)}>
+            {/* The three variants are one block with a media switch, not three block types: the
+                quote and the attribution are the same fields either way, and splitting them would
+                mean losing what you'd typed when you decided to add a photo. */}
+            <div className="mb-2 flex gap-1">
+              {TESTIMONIAL_MEDIA_KINDS.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() =>
+                    commit(el.id, {
+                      media:
+                        k === "image"
+                          ? { kind: "image", dataUrl: media.kind === "image" ? media.dataUrl : null }
+                          : k === "video"
+                            ? { kind: "video", source: media.kind === "video" ? media.source : null }
+                            : { kind: "text" },
+                    })
+                  }
+                  className={`rounded px-2 py-0.5 text-[11px] capitalize ${
+                    media.kind === k ? "bg-gray-800 text-white" : "bg-gray-200 text-gray-600"
+                  }`}
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+
+            {media.kind === "image" && (
+              <div className="mb-2 flex items-center gap-2">
+                {media.dataUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={media.dataUrl} alt="" className="h-16 w-16 rounded-full object-cover" />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-gray-300 bg-white">
+                    <ImageIcon className="h-5 w-5 text-gray-400" />
+                  </div>
+                )}
+                <label className="cursor-pointer rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-600">
+                  {media.dataUrl ? "Replace" : "Upload photo"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) pickImage(el.id, file, (dataUrl) => ({ media: { kind: "image", dataUrl } }));
+                    }}
+                  />
+                </label>
+                {media.dataUrl && (
+                  <button
+                    type="button"
+                    onClick={() => commit(el.id, { media: { kind: "image", dataUrl: null } })}
+                    className="text-[11px] text-gray-500 underline"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            )}
+
+            {media.kind === "video" && (
+              <div className="mb-2">
+                {media.source ? (
+                  <div className="relative w-full overflow-hidden rounded-lg bg-black" style={{ paddingTop: "56.25%" }}>
+                    {media.source.provider === "file" ? (
+                      <video controls playsInline preload="metadata" src={media.source.url} className="absolute inset-0 h-full w-full" />
+                    ) : (
+                      <iframe
+                        src={embedUrl(media.source)}
+                        title="Testimonial video"
+                        loading="lazy"
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        allowFullScreen
+                        className="absolute inset-0 h-full w-full border-0"
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex aspect-video w-full items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white text-[12px] text-gray-500">
+                    Paste the video link below
+                  </div>
+                )}
+                <input
+                  type="url"
+                  defaultValue={sourceToDisplayUrl(media.source)}
+                  onBlur={(e) => {
+                    const parsed = parseVideoUrl(e.target.value);
+                    if (!parsed && e.target.value.trim()) {
+                      onImageError("That video link isn't supported — use YouTube, Vimeo, or a direct .mp4 URL.");
+                      return;
+                    }
+                    onImageError("");
+                    commit(el.id, { media: { kind: "video", source: parsed } });
+                  }}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className="mt-1.5 block w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
+                />
+              </div>
+            )}
+
+            <EditableText
+              as="p"
+              value={el.content.quote}
+              onCommit={(v) => commit(el.id, { quote: v })}
+              maxLength={3000}
+              multiline
+              placeholder="What did they say?"
+              className="block text-[17px] italic leading-relaxed text-gray-700"
+            />
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-2">
+              <EditableText
+                as="span"
+                value={el.content.name}
+                onCommit={(v) => commit(el.id, { name: v })}
+                maxLength={200}
+                placeholder="Name"
+                className="text-[14px] font-semibold text-gray-900"
+              />
+              <EditableText
+                as="span"
+                value={el.content.role}
+                onCommit={(v) => commit(el.id, { role: v })}
+                maxLength={200}
+                placeholder="Role or location"
+                className="text-[13px] text-gray-500"
+              />
+            </div>
+          </div>
+        );
+      }
     }
   };
 

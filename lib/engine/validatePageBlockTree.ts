@@ -23,6 +23,8 @@ import {
   type BlockStyle,
   type BlockType,
   type FunnelStepType,
+  TESTIMONIAL_MEDIA_KINDS,
+  type TestimonialMedia,
 } from "./blockTree";
 import { isValidImageDataUrl } from "@/lib/images/validate";
 import { parseVideoUrl, sourceToDisplayUrl } from "@/lib/engine/videoEmbed";
@@ -190,6 +192,50 @@ function validateElement(raw: unknown, count: { n: number }): ElementBlock {
         type: "video",
         style,
         content: { source: parseVideoUrl(candidate), title: clampStr(content.title, MAX_TEXT_SHORT) },
+      };
+    }
+    case "testimonial": {
+      const rawMedia = (content.media ?? null) as { kind?: unknown; dataUrl?: unknown; source?: unknown } | null;
+      const kind =
+        rawMedia && typeof rawMedia === "object" && TESTIMONIAL_MEDIA_KINDS.includes(rawMedia.kind as never)
+          ? (rawMedia.kind as (typeof TESTIMONIAL_MEDIA_KINDS)[number])
+          : "text";
+
+      let media: TestimonialMedia;
+      if (kind === "image") {
+        // Same allowlist and same throw-on-invalid as the image and image_list blocks — a
+        // testimonial avatar is no more trusted than a hero image, and consistency here matters
+        // more than being lenient about one field.
+        const dataUrl = typeof rawMedia?.dataUrl === "string" && rawMedia.dataUrl ? rawMedia.dataUrl : null;
+        if (dataUrl && !isValidImageDataUrl(dataUrl)) throw new Error("invalid image data url");
+        media = { kind: "image", dataUrl };
+      } else if (kind === "video") {
+        // Re-parsed from the display URL, never trusted as stored — identical reasoning to the
+        // video block above. A forged {provider, videoId} can't reach an iframe src.
+        const rs = rawMedia?.source as { provider?: unknown; videoId?: unknown; url?: unknown } | null;
+        const candidate =
+          rs && typeof rs === "object"
+            ? sourceToDisplayUrl({
+                provider: rs.provider,
+                videoId: typeof rs.videoId === "string" ? rs.videoId : "",
+                url: typeof rs.url === "string" ? rs.url : "",
+              } as any)
+            : "";
+        media = { kind: "video", source: parseVideoUrl(candidate) };
+      } else {
+        media = { kind: "text" };
+      }
+
+      return {
+        id,
+        type: "testimonial",
+        style,
+        content: {
+          quote: clampStr(content.quote, MAX_TEXT_LONG),
+          name: clampStr(content.name, MAX_TEXT_SHORT),
+          role: clampStr(content.role, MAX_TEXT_SHORT),
+          media,
+        },
       };
     }
     case "faq_item":

@@ -389,6 +389,14 @@ const PUBLIC_CSS = `
      size) and a <video> (which does) lay out identically. */
   .video-wrap { position:relative; width:100%; margin:24px 0; padding-top:56.25%; border-radius:12px; overflow:hidden; background:#000; }
   .video-wrap iframe, .video-wrap video { position:absolute; inset:0; width:100%; height:100%; border:0; display:block; }
+  .testimonial { margin:24px 0; padding:20px 24px; border-left:4px solid #e0e0e0; background:#fafafa; border-radius:8px; }
+  .testimonial blockquote { margin:0; font-size:17px; line-height:1.6; font-style:italic; color:#333; }
+  .testimonial figcaption { margin-top:10px; font-size:14px; color:#666; }
+  .testimonial .tm-name { font-weight:600; color:#1a1a1a; }
+  .testimonial .tm-role { display:block; font-size:13px; color:#888; }
+  .testimonial .tm-avatar { width:64px; height:64px; margin:0 0 12px; border-radius:50%; overflow:hidden; }
+  .testimonial .tm-avatar img { width:100%; height:100%; object-fit:cover; display:block; }
+  .testimonial .tm-media.video-wrap { margin:0 0 14px; }
   .faq-item { margin-bottom: 16px; }
   .faq-item h3 { font-size:16px; margin-bottom:4px; }
   .row { display:flex; gap:24px; flex-wrap:wrap; }

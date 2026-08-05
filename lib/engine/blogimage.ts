@@ -73,10 +73,19 @@ async function stageSubmit(stageData: Record<string, unknown>): Promise<BlogImag
   // failed every real run with "output_format is not within the range of allowed options". The
   // lesson is the one this codebase already applies to every other external API: check the real
   // shape before writing against it, and treat an inferred value as a known defect until you have.
+  // resolution "1K" is explicit for the same reason output_format is: leaving it off means the
+  // API's own default applies, and a 3033KB JPEG came back against a ~1953KB cap — so the job
+  // failed on size after paying for the generation. VERIFIED against kie.ai's parameter schema,
+  // whose resolution enum is exactly ["1K", "2K", "4K"].
+  //
+  // 1K is the right size, not a workaround: this image is a blog hero rendered at ~1200px at most
+  // and a small card thumbnail on the index, and it ships base64-inlined in the HTML of every page
+  // that shows it. 2K/4K would buy detail nobody sees and re-send it on every page load.
   const taskId = await createKieTask("nano-banana-2", {
     prompt: stageData.image_prompt,
     aspect_ratio: "16:9",
     output_format: "jpg",
+    resolution: "1K",
   });
   return { stageData: { ...stageData, task_id: taskId } };
 }
@@ -104,7 +113,7 @@ async function stageFinalize(stageData: Record<string, unknown>): Promise<BlogIm
       allowed
         ? `Generated image is too large to embed (${Math.round(bytes.length / 1024)}KB, limit ${Math.round(
             MAX_FEATURED_IMAGE_CHARS / 1024
-          )}KB of encoded data). Try generating again — the model's output size varies.`
+          )}KB of encoded data). Upload your own image instead.`
         : `Generated image had an unsupported content-type (${contentType})`
     );
   }

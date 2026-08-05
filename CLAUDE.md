@@ -1907,6 +1907,31 @@ this reason, and their templates seed an empty video block above the copy (`VIDE
 since a VSL template without one is just a squeeze page with a different headline. Survey
 (`needs_branching`) and Book (`needs_payment`) are still correctly blocked.
 
+## Testimonial block
+
+One element type with three media shapes (`text` | `image` | `video`), not three block types —
+quote/name/role are the same fields either way, and splitting them would lose what you'd typed the
+moment you decided to add a photo. Switching media in the editor keeps the other variant's value,
+so flipping image↔video↔text and back doesn't destroy anything.
+
+**The video variant stores a PARSED `VideoSource`, never a URL string** — same rule as the video
+block, and it matters more here: a testimonial is the block most likely to have a link pasted into
+it. `validatePageBlockTree` re-parses from the display URL on every save rather than trusting the
+stored shape, so a hand-edited row can't smuggle anything into an iframe `src`. Verified directly:
+a forged `videoId` containing `"><script>` and a `provider:"file"` + `javascript:` URL both
+normalize to `null` and render no iframe at all; XSS in the quote and name is escaped; an unknown
+`media.kind` falls back to text rather than failing the save.
+
+**An empty testimonial renders nothing**, like the video block's null source — a quote box
+attributed to nobody is worse than no block. The image variant goes through the same
+`resizeImageFile` + `isValidImageDataUrl` path as every other image here (`pickImage` gained a
+patch-shape argument so both call sites share one resize, rather than the testimonial growing its
+own FileReader).
+
+`EditableText` gained `placeholder`, rendered via `empty:before:content-[attr(data-placeholder)]`.
+An empty contentEditable collapses to a caret-sized target nobody can find, which is exactly the
+state a freshly-inserted testimonial starts in.
+
 ## Freeform block-based page builder (Phase O — complete, all 5 sub-phases landed)
 
 Replaces the fixed-field bridge/funnel-step content model (headline/lead/mechanism/benefits/
