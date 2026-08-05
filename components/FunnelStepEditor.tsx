@@ -13,6 +13,7 @@ import {
 import EditorPreviewButton from "@/components/EditorPreview";
 import type { FunnelStepCtaAction } from "@/lib/shared";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
+import ContentWidthField from "@/components/ContentWidthField";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
 import { resizeImageFile } from "@/lib/images/resizeClient";
 
@@ -76,6 +77,7 @@ export default function FunnelStepEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           blocks: tree.blocks,
+          contentWidth: tree.contentWidth,
           image_data_url: firstImageDataUrl(tree),
           cta_action: ctaAction,
           redirect_url: ctaAction === "redirect_url" ? redirectUrl : null,
@@ -118,6 +120,10 @@ export default function FunnelStepEditor({
         onImageBusyChange={setImageBusyBlockId}
         onImageError={setError}
         productTitle={productTitle}
+        settings={{
+          title: "Step settings",
+          panel: <ContentWidthField tree={tree} onChange={setTree} />,
+        }}
       />
 
       <p className="mx-auto flex max-w-[680px] items-center gap-1.5 text-xs text-zinc-500">

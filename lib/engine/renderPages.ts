@@ -21,6 +21,7 @@ import {
   escapeHtml,
   styleToInlineCss,
   renderBlockTree,
+  contentWidthOf,
   type PageBlockTree,
   type RenderCtx,
   type SectionBlock,
@@ -228,7 +229,10 @@ export function normalizePageCopy(
 
 const PAGE_STYLE = `
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background:#fafafa; color:#1a1a1a; margin:0; padding:0; line-height:1.6; }
-  .wrap { max-width: 680px; margin: 0 auto; padding: 40px 20px 80px; }
+  /* width:90% gives narrow screens a gutter with no media query; the px cap stops a wide
+     monitor stretching a line of text across the whole display. --content-w is emitted per
+     page from the tree's own contentWidth (see contentWidthOf), so PAGE_STYLE stays a const. */
+  .wrap { width: 90%; max-width: var(--content-w, 1280px); margin: 0 auto; padding: 40px 20px 80px; }
   h1 { font-size: 32px; line-height:1.2; margin-bottom: 16px; }
   h2 { font-size: 22px; margin-top: 32px; margin-bottom: 8px; }
   ul { padding-left: 20px; }
@@ -312,7 +316,7 @@ export function renderBridgeHtml(
 <title>${escapeHtml(meta.title)}</title>
 ${meta.head}
 ${t.head}
-<style>${PAGE_STYLE}</style>
+<style>:root{--content-w:${contentWidthOf(tree)}px}${PAGE_STYLE}</style>
 </head>
 <body>
 ${t.bodyStart}
@@ -429,7 +433,7 @@ export function renderFunnelStepHtml(
 <title>${escapeHtml(meta.title)}</title>
 ${meta.head}
 ${t.head}
-<style>${PAGE_STYLE}
+<style>:root{--content-w:${contentWidthOf(tree)}px}${PAGE_STYLE}
   .cta-wrap { max-width: 420px; margin: 40px auto 0; text-align:center; }
 </style>
 </head>

@@ -51,7 +51,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     patch.title = title;
   }
   if (Array.isArray(body.blocks)) {
-    const result = validatePageBlockTree({ blocks: body.blocks }, { pageKind: "blog" });
+    const result = validatePageBlockTree({ blocks: body.blocks, contentWidth: body.contentWidth }, { pageKind: "blog" });
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     patch.page_copy = result.tree;
     patch.html = renderBlockTree(result.tree, blogRenderCtx());

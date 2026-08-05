@@ -24,6 +24,7 @@ import {
   type BlockType,
   type FunnelStepType,
   TESTIMONIAL_MEDIA_KINDS,
+  contentWidthOf,
   type TestimonialMedia,
 } from "./blockTree";
 import { isValidImageDataUrl } from "@/lib/images/validate";
@@ -451,7 +452,9 @@ export function validatePageBlockTree(raw: unknown, opts: ValidatePageBlockTreeO
     }
     if (!blocks.some((b) => b.type === "section")) return { ok: false, error: "page has no sections" };
 
-    return { ok: true, tree: { version: 2, blocks } };
+    // contentWidth rides on the tree, so it has to survive validation like anything else —
+    // dropping it here would silently reset every page to the default on its next save.
+    return { ok: true, tree: { version: 2, blocks, contentWidth: contentWidthOf(body) } };
   } catch (err) {
     if (err instanceof BlockCountLimit) return { ok: false, error: err.message };
     return { ok: false, error: err instanceof Error ? err.message : "invalid page content" };

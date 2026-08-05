@@ -1,3 +1,4 @@
+import { contentWidthOf } from "@/lib/engine/renderPages";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   renderPublicPostHtml,
@@ -149,7 +150,7 @@ async function renderPost(admin: ReturnType<typeof createAdminClient>, postId: s
   const { data: post } = await admin
     .from("blog_posts")
     .select(
-      "id, workspace_id, title, slug, content_md, html, excerpt, featured_image_url, published_at, seo_title, seo_description, seo_index, blog_categories(name)"
+      "id, workspace_id, title, slug, content_md, html, page_copy, excerpt, featured_image_url, published_at, seo_title, seo_description, seo_index, blog_categories(name)"
     )
     .eq("id", postId)
     .eq("status", "published")
@@ -163,6 +164,7 @@ async function renderPost(admin: ReturnType<typeof createAdminClient>, postId: s
     .maybeSingle();
 
   const html = renderPublicPostHtml({
+    content_width: contentWidthOf(post.page_copy),
     id: post.id as string,
     title: post.title as string,
     slug: post.slug as string | null,

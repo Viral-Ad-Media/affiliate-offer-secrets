@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, CheckCircle2, Lock } from "lucide-react";
 import { DISCLOSURE, normalizePageCopy, firstImageDataUrl, type PageBlockTree , renderBridgeHtml} from "@/lib/engine/renderPages";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
+import ContentWidthField from "@/components/ContentWidthField";
 import EditorPreviewButton from "@/components/EditorPreview";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
 import { resizeImageFile } from "@/lib/images/resizeClient";
@@ -59,6 +60,7 @@ export default function PageEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           blocks: tree.blocks,
+          contentWidth: tree.contentWidth,
           image_data_url: firstImageDataUrl(tree),
           ...(showSeo ? seo : {}),
         }),
@@ -108,6 +110,10 @@ export default function PageEditor({
         onImageBusyChange={setImageBusyBlockId}
         onImageError={setError}
         productTitle={productTitle}
+        settings={{
+          title: "Page settings",
+          panel: <ContentWidthField tree={tree} onChange={setTree} />,
+        }}
       />
 
       <p className="mx-auto flex max-w-[680px] items-center gap-1.5 text-xs text-zinc-500">

@@ -273,7 +273,28 @@ export type LockedBlock = DisclosureBlock | LeadCaptureFormBlock | PrimaryCtaBlo
 export type Block = SectionBlock | RowBlock | ColumnBlock | ElementBlock | FormInputBlock | LockedBlock;
 export type BlockType = Block["type"];
 
-export type PageBlockTree = { version: 2; blocks: (SectionBlock | LockedBlock)[] };
+export type PageBlockTree = {
+  version: 2;
+  blocks: (SectionBlock | LockedBlock)[];
+  /** Max width of the page's content column, in px. See contentWidthOf() below. */
+  contentWidth?: number;
+};
+
+// The content column is `width:90%; max-width:<contentWidth>px` — a percentage so narrow screens
+// get a gutter without a media query, and a px cap so a wide monitor doesn't stretch a line of
+// text to 2000px. Stored on the TREE rather than on campaigns/blog_posts because page_copy is the
+// one thing every page kind already has: funnel opt-in, split-test variants, funnel steps and blog
+// posts all get this from one field with no migration.
+export const DEFAULT_CONTENT_WIDTH = 1280;
+export const MIN_CONTENT_WIDTH = 480;
+export const MAX_CONTENT_WIDTH = 1600;
+
+/** Reads a stored width off any page_copy shape, clamped. Legacy/absent → the default. */
+export function contentWidthOf(raw: unknown): number {
+  const n = (raw as { contentWidth?: unknown } | null)?.contentWidth;
+  if (typeof n !== "number" || !Number.isFinite(n)) return DEFAULT_CONTENT_WIDTH;
+  return Math.min(MAX_CONTENT_WIDTH, Math.max(MIN_CONTENT_WIDTH, Math.round(n)));
+}
 
 // ---------------------------------------------------------------------------------------------
 // Icons — a curated, bounded set (not the full lucide-react catalog). Rendering happens as a

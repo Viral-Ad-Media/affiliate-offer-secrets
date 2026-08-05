@@ -1,3 +1,4 @@
+import { contentWidthOf } from "@/lib/engine/renderPages";
 import { createClient } from "@/lib/supabase/server";
 import { renderPublicPostHtml } from "@/lib/blog";
 
@@ -28,7 +29,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const { data: post } = await supabase
     .from("blog_posts")
     .select(
-      "id, title, slug, content_md, html, excerpt, featured_image_url, published_at, seo_title, seo_description, seo_index, blog_categories(name)"
+      "id, title, slug, content_md, html, page_copy, excerpt, featured_image_url, published_at, seo_title, seo_description, seo_index, blog_categories(name)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -40,6 +41,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .maybeSingle();
 
   const html = renderPublicPostHtml({
+    content_width: contentWidthOf(post.page_copy),
     id: post.id as string,
     title: post.title as string,
     slug: post.slug as string | null,

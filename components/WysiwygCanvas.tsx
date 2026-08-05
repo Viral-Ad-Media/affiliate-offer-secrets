@@ -45,6 +45,7 @@ import {
   ALLOWED_ICON_NAMES,
   ELEMENT_BLOCK_TYPES,
   styleToInlineCss,
+  contentWidthOf,
   STYLE_KEYS_BY_TYPE,
   type PageBlockTree,
   type SectionBlock,
@@ -1570,7 +1571,14 @@ export default function WysiwygCanvas({
           // real published page, which is always light. The shadow keeps it reading as a distinct
           // "sheet" in light mode, where the app background is itself near-white.
           className="mx-auto rounded-lg border border-ink-700 bg-white px-6 py-10 text-[#1a1a1a] shadow-sm transition-[max-width] duration-200"
-          style={{ fontFamily: PAGE_FONT, lineHeight: 1.6, maxWidth: DEVICE_WIDTHS[device] }}
+          style={{
+            fontFamily: PAGE_FONT,
+            lineHeight: 1.6,
+            // Desktop reflects the page's OWN content width (capped by the column it sits in), so
+            // the ⚙ width control has a visible effect here rather than only after publishing.
+            // Tablet/mobile stay pinned to real device widths — that's what the toggle is for.
+            maxWidth: device === "desktop" ? `min(100%, ${contentWidthOf(tree)}px)` : DEVICE_WIDTHS[device],
+          }}
         >
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={tree.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>

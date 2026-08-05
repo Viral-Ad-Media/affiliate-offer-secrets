@@ -1907,6 +1907,32 @@ this reason, and their templates seed an empty video block above the copy (`VIDE
 since a VSL template without one is just a squeeze page with a different headline. Survey
 (`needs_branching`) and Book (`needs_payment`) are still correctly blocked.
 
+## Content width
+
+`PageBlockTree.contentWidth` (px) drives `width:90%; max-width:<n>px` on the published content
+column. **Stored on the TREE, not on a column of `campaigns`/`blog_posts`** — `page_copy` is the
+one field a funnel opt-in, a split-test variant, a funnel step and a blog post all already have,
+so one setting covers four page kinds with no migration. Edited from the canvas ⚙
+(`components/ContentWidthField.tsx`, shared by all three editors).
+
+The percentage is why there is no separate mobile setting: a narrow screen gets a gutter for free
+and this number only decides how wide the page may become on a big display. It reaches the
+published CSS as `--content-w`, so `PAGE_STYLE`/`PUBLIC_CSS` stay constants and only one
+declaration varies per page. **Only a clamped integer is ever interpolated** (`contentWidthOf`,
+480-1600) — verified that a string like `"wide; background:url(x)"` collapses to the default
+rather than reaching the stylesheet.
+
+**The default changed from 680px to 1280px, which visibly reflows every existing page.** Pages
+built before this have no stored `contentWidth`, so they take the new default the next time they
+render. "Narrow · 680" is a one-click preset for exactly that reason — the old measure had to stay
+one click away, not be a number you have to remember.
+
+Two things that would silently break it, both handled: the validator rebuilds the tree, so it has
+to carry `contentWidth` through or every save would reset the page to default; and the blog's
+public routes had to start selecting `page_copy` (they only ever needed the pre-rendered `html`
+before). The canvas's desktop preview honours the width too, so the control does something visible
+before you publish.
+
 ## Testimonial block
 
 One element type with three media shapes (`text` | `image` | `video`), not three block types —

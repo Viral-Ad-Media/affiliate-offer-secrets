@@ -1,3 +1,4 @@
+import { contentWidthOf } from "@/lib/engine/renderPages";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { servePublicCampaignPage } from "@/lib/publicPage";
 import {
@@ -71,7 +72,7 @@ async function serveBlogOnDomain(
   const { data: post } = await admin
     .from("blog_posts")
     .select(
-      "id, title, slug, content_md, html, excerpt, featured_image_url, published_at, seo_title, seo_description, seo_index, blog_categories(name, slug)"
+      "id, title, slug, content_md, html, page_copy, excerpt, featured_image_url, published_at, seo_title, seo_description, seo_index, blog_categories(name, slug)"
     )
     .eq("workspace_id", workspaceId)
     .ilike("slug", segments[segments.length - 1] ?? path)
@@ -93,6 +94,7 @@ async function serveBlogOnDomain(
   }
 
   const html = renderPublicPostHtml({
+    content_width: contentWidthOf(post.page_copy),
     id: post.id as string,
     title: post.title as string,
     slug: post.slug as string | null,

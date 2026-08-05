@@ -2,6 +2,7 @@ import { marked } from "marked";
 import {
   escapeHtml,
   renderBlockTree,
+  contentWidthOf,
   DISCLOSURE,
   type PageBlockTree,
   type RenderCtx,
@@ -315,7 +316,10 @@ const PUBLIC_CSS = `
   * { box-sizing: border-box; }
   body { margin: 0; background: #fff; color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.7; }
   a { color: var(--accent); }
-  main { max-width: 720px; margin: 0 auto; padding: 48px 20px 80px; }
+  /* Post content column. width:90% gives narrow screens a gutter with no media query; the px
+     cap keeps a line of text readable on a wide monitor. --content-w comes from the post's own
+     page_copy.contentWidth; the index grid below keeps its own fixed 1040px on purpose. */
+  main { width: 90%; max-width: var(--content-w, 1280px); margin: 0 auto; padding: 48px 20px 80px; }
   .site-head { border-bottom: 1px solid var(--line); }
   .site-head-inner { max-width: 1040px; margin: 0 auto; padding: 20px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .site-title { font-size: 1.15rem; font-weight: 700; text-decoration: none; color: var(--ink); }
@@ -540,6 +544,8 @@ export function renderPublicPostHtml(post: {
   // Set by the owner-only preview routes. When present, internal links target the preview instead
   // of the real public paths — see the comment where `base` is computed.
   previewBase?: string | null;
+  /** From the post's page_copy (contentWidthOf). Absent → the shared default. */
+  content_width?: number | null;
 }): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.affiliateoffersecrets.com";
   const origin = post.siteOrigin || appUrl;
@@ -590,7 +596,7 @@ ${post.published_at ? `<meta property="article:published_time" content="${escape
 ${post.featured_image_url ? `<meta property="og:image" content="${escapeHtml(post.featured_image_url)}">` : ""}
 <meta name="twitter:card" content="${post.featured_image_url ? "summary_large_image" : "summary"}">
 ${post.seo_index === false ? '<meta name="robots" content="noindex, nofollow">' : ""}
-<style>${PUBLIC_CSS}</style>
+<style>:root{--content-w:${contentWidthOf({ contentWidth: post.content_width ?? undefined })}px}${PUBLIC_CSS}</style>
 </head>
 <body>
 ${siteHeader(post.settings, base)}

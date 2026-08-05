@@ -13,6 +13,7 @@ import WysiwygCanvas from "@/components/WysiwygCanvas";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
 import PostSeoPanel from "@/components/PostSeoPanel";
 import PostRevisionControls from "@/components/PostRevisionControls";
+import ContentWidthField from "@/components/ContentWidthField";
 import FeaturedImageField from "@/components/FeaturedImageField";
 import { resizeImageFile } from "@/lib/images/resizeClient";
 
@@ -98,7 +99,7 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
   }
 
   async function save() {
-    const ok = await patch("save", { title, blocks: tree.blocks, category_id: categoryId || null, slug, excerpt, featured_image_url: featuredImage, ...seo });
+    const ok = await patch("save", { title, blocks: tree.blocks, contentWidth: tree.contentWidth, category_id: categoryId || null, slug, excerpt, featured_image_url: featuredImage, ...seo });
     if (ok) toast.success("Post saved");
   }
 
@@ -106,7 +107,7 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
   // either state directly, and a toggle would do the wrong thing if the two ever disagreed.
   async function setPostStatus(next: "published" | "draft") {
     // Publishing always saves current edits too — publishing stale content would be surprising.
-    const ok = await patch("publish", { title, blocks: tree.blocks, category_id: categoryId || null, slug, excerpt, featured_image_url: featuredImage, ...seo, status: next });
+    const ok = await patch("publish", { title, blocks: tree.blocks, contentWidth: tree.contentWidth, category_id: categoryId || null, slug, excerpt, featured_image_url: featuredImage, ...seo, status: next });
     if (ok) {
       setStatus(next);
       toast.success(next === "published" ? "Post published" : "Post moved back to draft");
@@ -157,6 +158,7 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
                 seo_title: seo.seo_title,
                 seo_description: seo.seo_description,
                 seo_index: seo.seo_index,
+                content_width: tree.contentWidth,
               })
             }
           />
@@ -241,6 +243,7 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
           // the same components with the same state — nothing here is a second copy.
           panel: (
             <div className="space-y-4">
+              <ContentWidthField tree={tree} onChange={setTree} />
       <section className="card space-y-4 p-4">
         <FeaturedImageField
           postId={post.id}
