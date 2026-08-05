@@ -139,9 +139,12 @@ export default function BlockStylePanel({ block, onChange, onClose }: BlockStyle
   const showSpacing =
     has("paddingTop") || has("paddingRight") || has("paddingBottom") || has("paddingLeft") || has("marginTop") || has("marginBottom");
   const showBorder = has("borderWidth") || has("borderColor") || has("borderRadius");
-  const showLayout = has("maxWidth");
+  const showLayout = has("maxWidth") || has("width") || has("align");
+  const showFields =
+    has("fieldBackgroundColor") || has("fieldTextColor") || has("fieldBorderColor") ||
+    has("fieldBorderWidth") || has("fieldBorderRadius") || has("fieldGap");
 
-  if (!showTypography && !showBackground && !showSpacing && !showBorder && !showLayout) return null;
+  if (!showTypography && !showBackground && !showSpacing && !showBorder && !showLayout && !showFields) return null;
 
   return (
     <div className="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4 lg:mt-0">
@@ -277,7 +280,52 @@ export default function BlockStylePanel({ block, onChange, onClose }: BlockStyle
         {showLayout && (
           <div className="space-y-2">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Layout</div>
-            <NumberField label="Max width (px)" value={style.maxWidth} min={100} max={1200} onChange={(v) => set({ maxWidth: v })} />
+            {has("maxWidth") && (
+              <NumberField label="Max width (px)" value={style.maxWidth} min={100} max={1200} onChange={(v) => set({ maxWidth: v })} />
+            )}
+            {has("width") && (
+              <label className="col-span-2 block">
+                <span className={fieldLabelClass()}>Width</span>
+                <select
+                  value={style.width ?? "auto"}
+                  onChange={(e) => set({ width: e.target.value as "auto" | "full" })}
+                  className={fieldInputClass()}
+                >
+                  <option value="auto">Fit to text</option>
+                  <option value="full">Full width</option>
+                </select>
+              </label>
+            )}
+            {has("align") && (
+              <label className="col-span-2 block">
+                {/* Places the BOX. Text alignment inside it is the Typography group's job — they
+                    look alike and do different things, so both are labelled for what they move. */}
+                <span className={fieldLabelClass()}>Position on the page</span>
+                <select
+                  value={style.align ?? "left"}
+                  onChange={(e) => set({ align: e.target.value as "left" | "center" | "right" })}
+                  className={fieldInputClass()}
+                >
+                  <option value="left">Left</option>
+                  <option value="center">Centre</option>
+                  <option value="right">Right</option>
+                </select>
+              </label>
+            )}
+          </div>
+        )}
+
+        {showFields && (
+          <div className="space-y-2 sm:col-span-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Form fields</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ColorField label="Field background" value={style.fieldBackgroundColor} onChange={(v) => set({ fieldBackgroundColor: v })} />
+              <ColorField label="Field text" value={style.fieldTextColor} onChange={(v) => set({ fieldTextColor: v })} />
+              <ColorField label="Field border" value={style.fieldBorderColor} onChange={(v) => set({ fieldBorderColor: v })} />
+              <NumberField label="Border width (px)" value={style.fieldBorderWidth} min={0} max={8} onChange={(v) => set({ fieldBorderWidth: v })} />
+              <NumberField label="Corner radius (px)" value={style.fieldBorderRadius} min={0} max={40} onChange={(v) => set({ fieldBorderRadius: v })} />
+              <NumberField label="Space between (px)" value={style.fieldGap} min={0} max={40} onChange={(v) => set({ fieldGap: v })} />
+            </div>
           </div>
         )}
       </div>

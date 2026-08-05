@@ -56,6 +56,30 @@ export type BlockStyle = {
   borderColor?: HexColor;
   borderRadius?: number; // px, 0-64
   maxWidth?: number; // px, 100-1200 — section/row only, ignored elsewhere
+
+  /**
+   * Block-level LAYOUT, distinct from the text-level keys above.
+   *
+   * `textAlign` aligns text INSIDE a box; `align` places the box itself, which is the thing an
+   * inline-block button actually needed — with only textAlign, centring a button meant styling
+   * whatever happened to contain it. Emitted on a wrapper, never on the element (see renderButton).
+   */
+  width?: "auto" | "full";
+  align?: "left" | "center" | "right";
+
+  /**
+   * A form's INPUTS, not the form box. Emitted as CSS custom properties on the form wrapper, which
+   * the stylesheet's own `.aos-form input` rules read with their pre-existing values as fallbacks —
+   * so a form that sets none of these renders exactly as it did before these keys existed, and one
+   * that sets some overrides only those. Same mechanism as pageTheme.ts, for the same reason:
+   * per-input inline styles would mean the renderer knowing every control type's markup.
+   */
+  fieldBackgroundColor?: HexColor;
+  fieldTextColor?: HexColor;
+  fieldBorderColor?: HexColor;
+  fieldBorderWidth?: number; // px, 0-8
+  fieldBorderRadius?: number; // px, 0-40
+  fieldGap?: number; // px, 0-40 — vertical space between fields
 };
 
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
@@ -126,6 +150,36 @@ export function styleToInlineCss(style: BlockStyle | undefined, allowed: readonl
   if (has("maxWidth")) {
     const v = px(style.maxWidth, 100, 1200);
     if (v !== null) parts.push(`max-width:${v}px`);
+  }
+  if (has("width") && (style.width === "full" || style.width === "auto")) {
+    // "auto" is the default and emits nothing, so an explicit auto can still UNDO a full width
+    // when the panel writes it — the key being present is what matters, not the declaration.
+    if (style.width === "full") parts.push("display:block", "width:100%", "box-sizing:border-box");
+  }
+  if (has("align") && typeof style.align === "string" && TEXT_ALIGNS.has(style.align)) {
+    parts.push(`text-align:${style.align}`);
+  }
+  // Custom properties, not declarations: the stylesheet's own rules consume these with their
+  // pre-theme values as fallbacks, so unset keys change nothing.
+  for (const [key, prop, min, max] of [
+    ["fieldBorderWidth", "--f-bw", 0, 8],
+    ["fieldBorderRadius", "--f-br", 0, 40],
+    ["fieldGap", "--f-gap", 0, 40],
+  ] as const) {
+    if (has(key)) {
+      const v = px(style[key], min, max);
+      if (v !== null) parts.push(`${prop}:${v}px`);
+    }
+  }
+  for (const [key, prop] of [
+    ["fieldBackgroundColor", "--f-bg"],
+    ["fieldTextColor", "--f-fg"],
+    ["fieldBorderColor", "--f-bc"],
+  ] as const) {
+    if (has(key)) {
+      const v = hex(style[key]);
+      if (v) parts.push(`${prop}:${v}`);
+    }
   }
   return parts.join(";");
 }
@@ -318,6 +372,8 @@ export type FormInputBlock = Base & {
     required: boolean;
     /** radio/select only. Ignored for every other type. */
     options?: string[];
+    /** "half" lets two consecutive fields share a row. Defaults to full width. */
+    width?: "full" | "half";
   };
 };
 
@@ -500,8 +556,24 @@ export const BUTTON_STYLE_KEYS = [
   "borderRadius",
   "marginTop",
   "marginBottom",
+  "width",
 ] as const;
+/** Placement of the button box itself — emitted on its wrapper, not on the button. */
+export const BUTTON_WRAP_STYLE_KEYS = ["align"] as const;
+/** What the style PANEL offers for a button — the element's own keys plus its wrapper's. */
+export const BUTTON_PANEL_STYLE_KEYS = [...BUTTON_STYLE_KEYS, ...BUTTON_WRAP_STYLE_KEYS] as const;
 export const DIVIDER_STYLE_KEYS = ["borderColor", "borderWidth", "marginTop", "marginBottom"] as const;
+/** A form: the box (BOX keys) plus its inputs' own look and spacing. */
+export const FORM_STYLE_KEYS = [
+  ...BOX_STYLE_KEYS,
+  "align",
+  "fieldBackgroundColor",
+  "fieldTextColor",
+  "fieldBorderColor",
+  "fieldBorderWidth",
+  "fieldBorderRadius",
+  "fieldGap",
+] as const;
 
 // form_input has no entry here — it's never independently selectable/stylable in the editor (it
 // only ever renders inside the lead-capture form's fixed layout), but every other BlockType needs
@@ -518,16 +590,16 @@ export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readon
   testimonial: TEXT_STYLE_KEYS,
   carousel: BOX_STYLE_KEYS,
   countdown: TEXT_STYLE_KEYS,
-  form: BOX_STYLE_KEYS,
-  button: BUTTON_STYLE_KEYS,
+  form: FORM_STYLE_KEYS,
+  button: BUTTON_PANEL_STYLE_KEYS,
   video: BOX_STYLE_KEYS,
   faq_item: TEXT_STYLE_KEYS,
   column: BOX_STYLE_KEYS,
   row: BOX_STYLE_KEYS,
   section: BOX_STYLE_KEYS,
   disclosure: TEXT_STYLE_KEYS,
-  lead_capture_form: BOX_STYLE_KEYS,
-  primary_cta: BUTTON_STYLE_KEYS,
+  lead_capture_form: FORM_STYLE_KEYS,
+  primary_cta: BUTTON_PANEL_STYLE_KEYS,
   decline_link: TEXT_STYLE_KEYS,
 };
 
@@ -574,18 +646,25 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       // Legacy rows stored a bare href; treat that as {kind:"link"} rather than migrating.
       const action: ButtonAction =
         block.content.action ?? { kind: "link", href: block.content.href ?? "#" };
-      switch (action.kind) {
-        case "link":
-          return `<a class="block-btn" href="${escapeHtml(action.href)}"${style}>${label}</a>`;
-        case "scroll":
-          // A button, not an anchor: the target is a block id resolved by the page's own script,
-          // never a URL, so this can't be pointed off-site by editing the stored value.
-          return `<button type="button" class="block-btn" data-scroll-to="${escapeHtml(action.targetId)}"${style}>${label}</button>`;
-        case "popup":
-          return `<button type="button" class="block-btn" data-open-form="${escapeHtml(action.formId)}"${style}>${label}</button>`;
-        case "submit":
-          return `<button type="submit" class="block-btn"${style}>${label}</button>`;
-      }
+      const el = (() => {
+        switch (action.kind) {
+          case "link":
+            return `<a class="block-btn" href="${escapeHtml(action.href)}"${style}>${label}</a>`;
+          case "scroll":
+            // A button, not an anchor: the target is a block id resolved by the page's own script,
+            // never a URL, so this can't be pointed off-site by editing the stored value.
+            return `<button type="button" class="block-btn" data-scroll-to="${escapeHtml(action.targetId)}"${style}>${label}</button>`;
+          case "popup":
+            return `<button type="button" class="block-btn" data-open-form="${escapeHtml(action.formId)}"${style}>${label}</button>`;
+          case "submit":
+            return `<button type="submit" class="block-btn"${style}>${label}</button>`;
+        }
+      })();
+      // Placement goes on a wrapper because a button is inline-block: text-align on the button
+      // itself centres its LABEL, not the button. Only emitted when an alignment is actually set,
+      // so an untouched button's markup is unchanged.
+      const wrap = styleAttr(block.style, BUTTON_WRAP_STYLE_KEYS);
+      return wrap ? `<div${wrap}>${el}</div>` : el;
     }
     case "video": {
       const src = block.content.source;
@@ -672,7 +751,7 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       // server-side — a second write path for anonymous visitors is exactly what shouldn't exist.
       return `<div class="aos-form-wrap${popup ? " aos-form-popup" : ""}" id="${escapeHtml(block.id)}"${
         popup ? " hidden" : ""
-      }${styleAttr(block.style, BOX_STYLE_KEYS)}>
+      }${styleAttr(block.style, FORM_STYLE_KEYS)}>
   <form class="aos-form" data-aos-form="1" data-campaign="${escapeHtml(ctx.campaignId)}">
     ${popup ? '<button type="button" class="aos-form-close" data-close-form="1" aria-label="Close">&times;</button>' : ""}
     ${title.trim() ? `<h3>${escapeHtml(title)}</h3>` : ""}
@@ -809,10 +888,13 @@ function renderFormField(f: FormInputBlock): string {
   const placeholder = escapeHtml(f.content.placeholder || f.content.label);
   const required = f.content.required ? " required" : "";
   const options = (f.content.options ?? []).filter((o) => o.trim() !== "");
+  // Half-width fields sit side by side (two consecutive halves make a row) — the layout control
+  // people actually want on a form, without a nested row/column model inside the form itself.
+  const half = f.content.width === "half" ? ' class="fld-half"' : "";
 
   switch (f.content.fieldType) {
     case "textarea":
-      return `<textarea name="${name}" placeholder="${placeholder}" rows="4"${required}></textarea>`;
+      return `<textarea name="${name}"${half} placeholder="${placeholder}" rows="4"${required}></textarea>`;
 
     case "checkbox":
       // Value is only submitted when ticked, which is exactly the semantics a checkbox should
@@ -841,17 +923,17 @@ function renderFormField(f: FormInputBlock): string {
         .join("");
       // The placeholder option carries no value, so "nothing chosen" fails a required check
       // instead of submitting the prompt text as an answer.
-      return `<select name="${name}"${required}><option value="">${placeholder}</option>${opts}</select>`;
+      return `<select name="${name}"${half}${required}><option value="">${placeholder}</option>${opts}</select>`;
     }
 
     default:
-      return `<input name="${name}" type="${f.content.fieldType}" placeholder="${placeholder}"${required} />`;
+      return `<input name="${name}"${half} type="${f.content.fieldType}" placeholder="${placeholder}"${required} />`;
   }
 }
 
 function renderLeadCaptureForm(block: LeadCaptureFormBlock, ctx: RenderCtx): string {
   const extraInputs = (block.children ?? []).map(renderFormField).filter(Boolean).join("\n          ");
-  return `<div class="optin"${styleAttr(block.style, BOX_STYLE_KEYS)}>
+  return `<div class="optin"${styleAttr(block.style, FORM_STYLE_KEYS)}>
         <form id="leadForm" data-campaign-id="${escapeHtml(ctx.campaignId)}" data-next-step-url="${
     ctx.nextStepUrl ? escapeHtml(ctx.nextStepUrl) : ""
   }">

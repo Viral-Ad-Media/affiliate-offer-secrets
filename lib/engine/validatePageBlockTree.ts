@@ -103,6 +103,23 @@ function sanitizeStyle(raw: unknown): BlockStyle {
   if (br !== undefined) style.borderRadius = br;
   const mw = num(s.maxWidth, 100, 1200);
   if (mw !== undefined) style.maxWidth = mw;
+
+  // Block layout + form-field look. This function REBUILDS the style object rather than filtering
+  // it, so a key missing here is silently dropped on every save — the same trap contentWidth hit.
+  if (s.width === "auto" || s.width === "full") style.width = s.width;
+  if (typeof s.align === "string" && TEXT_ALIGNS.has(s.align)) style.align = s.align as BlockStyle["align"];
+  const fbg = hex(s.fieldBackgroundColor);
+  if (fbg) style.fieldBackgroundColor = fbg;
+  const ffg = hex(s.fieldTextColor);
+  if (ffg) style.fieldTextColor = ffg;
+  const fbc = hex(s.fieldBorderColor);
+  if (fbc) style.fieldBorderColor = fbc;
+  const fbw = num(s.fieldBorderWidth, 0, 8);
+  if (fbw !== undefined) style.fieldBorderWidth = fbw;
+  const fbr = num(s.fieldBorderRadius, 0, 40);
+  if (fbr !== undefined) style.fieldBorderRadius = fbr;
+  const fg = num(s.fieldGap, 0, 40);
+  if (fg !== undefined) style.fieldGap = fg;
   return style;
 }
 
@@ -342,6 +359,7 @@ function validateFormInput(raw: unknown, count: { n: number }): FormInputBlock {
 
   // Options are meaningless off a radio/select, so they're dropped rather than stored where
   // nothing will ever read them.
+  const width = content.width === "half" ? "half" : undefined;
   const rawOptions = Array.isArray(content.options) ? content.options : [];
   const options = CHOICE_FIELD_TYPES.includes(fieldType)
     ? rawOptions
@@ -360,6 +378,7 @@ function validateFormInput(raw: unknown, count: { n: number }): FormInputBlock {
       fieldType,
       placeholder: clampStr(content.placeholder, MAX_TEXT_SHORT),
       required: content.required === true,
+      ...(width ? { width } : {}),
       ...(options ? { options } : {}),
     },
   };

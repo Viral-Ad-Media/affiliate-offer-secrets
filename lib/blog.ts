@@ -423,7 +423,9 @@ const PUBLIC_CSS = `
   .aos-form-wrap { margin:24px 0; }
   .aos-form { background:var(--t-surface,#fff); border:1px solid var(--t-border,#e5e5e5); border-radius:12px; padding:20px; max-width:460px; margin:0 auto; }
   .aos-form h3 { margin:0 0 10px; font-size:18px; }
-  .aos-form input, .aos-form textarea, .aos-form select { width:100%; box-sizing:border-box; padding:var(--t-field-pad,12px); margin:6px 0; border:1px solid var(--t-field-border,#ccc); border-radius:var(--t-field-radius,8px); background:var(--t-field-bg,#fff); font-size:16px; font-family:inherit; }
+  .aos-form input, .aos-form textarea, .aos-form select { width:100%; box-sizing:border-box; padding:var(--t-field-pad,12px); margin:var(--f-gap,6px) 0; border:var(--f-bw,1px) solid var(--f-bc,var(--t-field-border,#ccc)); border-radius:var(--f-br,var(--t-field-radius,8px)); background:var(--f-bg,var(--t-field-bg,#fff)); color:var(--f-fg,inherit); font-size:16px; font-family:inherit; }
+  .aos-form .fld-half, .optin .fld-half { width:calc(50% - 5px); display:inline-block; vertical-align:top; }
+  .aos-form .fld-half + .fld-half, .optin .fld-half + .fld-half { margin-left:8px; }
   .aos-form .consent-note { font-size:11px; color:var(--t-muted,#888); margin:8px 0; }
   .aos-form-done { font-weight:600; text-align:center; }
   /* A popup form is hidden until a button's popup action shows it. */
