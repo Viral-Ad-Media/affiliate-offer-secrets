@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { queueChargedJob } from "@/lib/credits";
 import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -42,12 +43,12 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
 
   // jobs RLS already permits an authenticated user to insert their own row directly (same
   // pattern as app/api/promote/route.ts) — no admin client needed for this insert.
-  const { error } = await supabase.from("jobs").insert({
+  const queued = await queueChargedJob(supabase, {
     user_id: user.id,
     type: "generate_ad_image",
     payload: { campaign_id: params.id },
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!queued.ok) return NextResponse.json(queued.body, { status: queued.status });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, charged: queued.charged });
 }

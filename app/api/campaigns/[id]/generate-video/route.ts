@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { queueChargedJob } from "@/lib/credits";
 import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -61,17 +62,18 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     );
   }
 
-  const { error } = await supabase.from("jobs").insert({
-    user_id: user.id,
-    type: "generate_video",
-    payload: { campaign_id: params.id },
-  });
-  if (error) {
-    // Roll back the claim if the job insert itself failed, so the campaign isn't stuck
-    // "generating" forever.
-    await admin.from("campaigns").update({ video_status: "none" }).eq("id", params.id);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  const queued = await queueChargedJob(
+    supabase,
+    { user_id: user.id, type: "generate_video", payload: { campaign_id: params.id } },
+    {
+      // Roll back the claim if the insert failed OR the charge was declined, so the campaign
+      // isn't stuck "generating" forever after a job that will never run.
+      onRollback: async () => {
+        await admin.from("campaigns").update({ video_status: "none" }).eq("id", params.id);
+      },
+    }
+  );
+  if (!queued.ok) return NextResponse.json(queued.body, { status: queued.status });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, charged: queued.charged });
 }

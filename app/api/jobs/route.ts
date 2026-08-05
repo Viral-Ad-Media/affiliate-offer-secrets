@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { chargeForQueuedJob, insufficientCreditsResponse } from "@/lib/credits";
 import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { CLICKBANK_CATEGORIES } from "@/lib/categories";
@@ -96,6 +97,17 @@ export async function POST(req: Request) {
     .select("id")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Charged after the insert because the debit is keyed on the job's own id — that key is what
+  // makes it idempotent against a retried request and impossible to repeat from a worker retry.
+  // A declined charge deletes the job, so nothing is seeded or processed for free below.
+  const charge = await chargeForQueuedJob(supabase, job.id, "discover_products");
+  if (!charge.ok) {
+    await supabase.from("jobs").delete().eq("id", job.id);
+    return charge.reason === "insufficient"
+      ? NextResponse.json(insufficientCreditsResponse(charge.cost), { status: 402 })
+      : NextResponse.json({ error: charge.message }, { status: 500 });
+  }
 
   // Instant seeding from the marketplace preload cache (marketplace_products, refreshed daily —
   // see lib/engine/marketplaceCache.ts): bare product rows appear in the dashboard on the very

@@ -289,6 +289,54 @@ must never be lost. Read-only Supabase queries (via the `mcp__supabase__execute_
   letting users `UPDATE` their own `profiles` row directly** — an earlier broad policy allowed
   self-granting `access_granted` via a raw PATCH to `/rest/v1/profiles`, which this migration
   closed. Do not re-add a general profiles update policy; add narrowly-scoped RPCs instead.
+### Credits are consumed by work, not just by ad spend (0063)
+
+Until 0063 the ledger was debited in exactly ONE place — `reserve_ad_credits()` at ad activation —
+while every unit of real platform cost (Anthropic, kie.ai, Veo) went to `usage_ledger` as tracking
+with nothing deducted. Queueing a job is now a purchase.
+
+- **`lib/credits.ts`'s `JOB_CREDIT_COST` is the price list**, deliberately a plain literal so
+  reading it tells you the whole pricing model. `launch_ad` and `send_broadcast_email` are `0` on
+  purpose: the first already reserves its budget via `reserve_ad_credits` at activation (charging
+  to queue the paused draft too would bill twice for one action, and free drafts are the point of
+  the Phase C design), and the second is governed by the pooled daily send cap protecting a real
+  mailbox. Current numbers are a starting point above marginal cost, not a modelled margin.
+- **A job is charged ONCE, at queue time, keyed on its own id — never inside a stage handler.**
+  `worker.ts` re-runs stages, reclaims jobs whose `locked_at` went stale, and retries to
+  `MAX_ATTEMPTS`; a debit written inside a stage would fire on every one of those. The partial
+  unique index `credits_ledger_one_charge_per_job` makes "once" a database guarantee rather than
+  app discipline, and `charge_job_credits` swallows the duplicate and returns the current balance,
+  so a retried request is idempotent too.
+- **Ordering is insert-then-charge, and the routes MUST delete the job when the charge is
+  declined.** The debit is keyed on the job's id, so the row has to exist first. `queueChargedJob`
+  pairs the two (plus an `onRollback` for the routes that take a concurrency claim first —
+  `campaigns.video_status`, `claim_campaign_creative` — or the entity sits "generating" forever
+  after a declined charge). A route that inserts without charging gives work away; one that charges
+  without deleting bills for a job that never runs.
+- **Balance is summed by WORKSPACE, and this fixed a real pre-existing bug.**
+  `reserve_ad_credits` summed `where user_id = auth.uid()` while the ledger has been
+  workspace-scoped since 0057 and the credits chip sums by `workspace_id` — so in a multi-member
+  workspace, credits bought by one member were invisible to another trying to spend them while the
+  chip showed the shared total. Everything now goes through `workspace_credit_balance()`.
+- **Both debit paths share the advisory lock key `'credits:' || workspace_id`**, so a job charge
+  and an ad reservation serialise against each other. Two debits racing under READ COMMITTED can
+  both read the same starting balance and both pass — the race 0008 documented, which only holds
+  if every debit takes the same lock.
+- **Refund happens only on TERMINAL failure** (`failJob`, attempts exhausted). A job with retries
+  left may still succeed, and refunding early would let a flaky-then-successful job run free.
+  `refund_job_credits` mirrors the original debit rather than taking an amount, so a price change
+  between queueing and failing can't refund the wrong number, and it is idempotent. A refund
+  failure is logged and never aborts `failJob` — the job being correctly marked failed matters
+  more, and an unrefunded credit is recoverable by hand.
+- **Verified live against the database**, impersonating a real signed-in user: a charge beyond
+  balance returns NULL and writes zero rows; a real charge debits exactly once; charging the same
+  job again leaves the balance unchanged with one debit row; refund returns exactly the original
+  amount; a second refund returns 0; and `charge_job_credits` on another workspace's job is
+  refused with the same generic "Job not found" as a nonexistent one. All test rows removed.
+- **Operational note**: this makes a zero balance block all generation. Superadmins can comp
+  credits via `admin_adjust_credits` (audited, see the Superadmin section); everyone else tops up
+  through Stripe.
+
 - **Usage/cost audit trail**: every Anthropic call the worker makes writes a row to
   `usage_ledger` (`supabase/migrations/0005_usage_ledger.sql`) with exact token counts and a
   computed dollar cost (`recordUsage()` in `lib/engine/anthropic.ts`, using the introductory

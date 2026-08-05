@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { queueChargedJob } from "@/lib/credits";
 import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -54,13 +55,16 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     .maybeSingle();
   if (!claimed) return NextResponse.json({ error: "an image is already generating for this post" }, { status: 409 });
 
-  const { error } = await supabase
-    .from("jobs")
-    .insert({ user_id: user.id, type: "generate_blog_image", payload: { post_id: params.id } });
-  if (error) {
-    await admin.from("blog_posts").update({ featured_image_status: "none" }).eq("id", params.id);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  const queued = await queueChargedJob(
+    supabase,
+    { user_id: user.id, type: "generate_blog_image", payload: { post_id: params.id } },
+    {
+      onRollback: async () => {
+        await admin.from("blog_posts").update({ featured_image_status: "none" }).eq("id", params.id);
+      },
+    }
+  );
+  if (!queued.ok) return NextResponse.json(queued.body, { status: queued.status });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, charged: queued.charged });
 }

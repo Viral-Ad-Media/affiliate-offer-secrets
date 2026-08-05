@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { queueChargedJob } from "@/lib/credits";
 import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -96,18 +97,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "This creative is already generating" }, { status: 409 });
   }
 
-  const { error: jobErr } = await supabase.from("jobs").insert({
-    user_id: user.id,
-    type: jobType,
-    payload: { campaign_creative_id: creativeId },
-  });
-  if (jobErr) {
-    // Roll back the claim if the job insert itself failed, so the row isn't stuck "generating"
-    // forever — authenticated has no UPDATE grant on campaign_creatives, so this needs the admin
-    // client (mirrors generate-video/route.ts's existing rollback pattern).
-    await admin.from("campaign_creatives").update({ status: "none" }).eq("id", creativeId);
-    return NextResponse.json({ error: jobErr.message }, { status: 500 });
-  }
+  const queued = await queueChargedJob(
+    supabase,
+    { user_id: user.id, type: jobType, payload: { campaign_creative_id: creativeId } },
+    {
+      // Roll back the claim if the insert failed OR the charge was declined, so the row isn't
+      // stuck "generating" forever — authenticated has no UPDATE grant on campaign_creatives, so
+      // this needs the admin client (mirrors generate-video/route.ts's rollback pattern).
+      onRollback: async () => {
+        await admin.from("campaign_creatives").update({ status: "none" }).eq("id", creativeId);
+      },
+    }
+  );
+  if (!queued.ok) return NextResponse.json(queued.body, { status: queued.status });
 
-  return NextResponse.json({ ok: true, creative_id: creativeId });
+  return NextResponse.json({ ok: true, creative_id: creativeId, charged: queued.charged });
 }

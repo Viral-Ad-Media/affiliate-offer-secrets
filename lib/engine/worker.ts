@@ -142,6 +142,19 @@ async function failJob(job: JobRow, message: string) {
       .from("jobs")
       .update({ status: "error", result: message, updated_at: new Date().toISOString() })
       .eq("id", job.id);
+
+    // Credits were debited when this job was queued (see lib/credits.ts). A job that will never
+    // produce anything must give them back — the client paid for work, not for an attempt.
+    // Only TERMINAL failure refunds: a job that still has retries left may yet succeed, and
+    // refunding early would let a flaky-then-successful job run for free. The RPC mirrors the
+    // original debit exactly and is idempotent, so a double call cannot over-credit.
+    const { error: refundErr } = await db.rpc("refund_job_credits", {
+      p_job_id: job.id,
+      p_reason: `refund: ${job.type} failed`,
+    });
+    // Never let a refund failure mask the real error or abort the rest of failJob — the job being
+    // correctly marked failed matters more, and an unrefunded credit is recoverable by hand.
+    if (refundErr) console.error(`[worker] refund failed for job ${job.id}:`, refundErr.message);
     // Only TERMINAL failures notify (attempts exhausted) — a job that will still retry is not yet
     // something the tenant needs to act on, and notifying per attempt would be pure noise.
     await notify(db, job.user_id, {

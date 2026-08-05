@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { chargeForQueuedJob, insufficientCreditsResponse } from "@/lib/credits";
 import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 
@@ -68,5 +69,20 @@ export async function POST(req: Request) {
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, job_id: job.id });
+  const charge = await chargeForQueuedJob(supabase, job.id, "build_campaign", product.vendor_id);
+  if (!charge.ok) {
+    // Undo both sides: the job must not run, and the product must not sit in "Selected" implying
+    // a build is under way when the client was never charged for one.
+    await supabase.from("jobs").delete().eq("id", job.id);
+    await supabase
+      .from("products")
+      .update({ status: "New", updated_at: new Date().toISOString() })
+      .eq("id", productId)
+      .eq("workspace_id", ws);
+    return charge.reason === "insufficient"
+      ? NextResponse.json(insufficientCreditsResponse(charge.cost), { status: 402 })
+      : NextResponse.json({ error: charge.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, job_id: job.id, charged: charge.charged });
 }
