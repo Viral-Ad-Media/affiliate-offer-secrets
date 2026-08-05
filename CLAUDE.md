@@ -662,10 +662,23 @@ opt-in page plus a link to `/funnels/{campaignId}`); it no longer mounts `Publis
 
 **Creating one by hand.** "New funnel" on that page (`components/NewFunnelButton.tsx` →
 `NewFunnelDialog.tsx` → `POST /api/funnels`) writes an opt-in page and its steps directly — no AI,
-no credits, the alternative to Promote. Three steps: which product, which funnel type, template or
-scratch. The product step is not optional decoration — a funnel IS a campaign's opt-in page, and
-the affiliate link behind its CTA comes from that product, so there is nothing to build without
-one. `lib/funnelTypes.ts` lists eight types and, honestly, which four this app can actually
+no credits, the alternative to Promote. Two steps: funnel type, then name + layout.
+
+**A funnel needs no product** (0068 dropped `campaigns.product_id`'s NOT NULL and added `name` and
+`cta_url`). It's a page — a webinar registration, a lead magnet, something to point ads at before
+an offer is chosen — and requiring one only made people attach an arbitrary product to get past the
+dialog, which is worse data than none. Without a product there's no hoplink to bake, so the CTA
+falls back to `campaigns.cta_url` and to `"#"` until one is set; `rerenderFunnelSequence`'s
+`offerHref()` is the single place that decision lives. Its old early-return when the product or
+affiliate id was missing would have left every standalone funnel with no HTML at all.
+
+**Six layout styles** (`lib/funnelStyles.ts`), composed against the type rather than hand-written
+6 × 6: the TYPE decides what the page is about, the STYLE decides which sections exist, in what
+order, and how the placeholder prompts read. 36 authored blobs would drift apart the first time
+anyone edited one. `pruneEmptySections` is what actually drops what a style leaves out —
+`normalizePageCopy` appends every missing section by design (right for the AI path, wrong here), so
+without it "Minimal" shipped with an empty "How it works" and an empty "Questions" heading.
+Verified all six produce distinct block shapes per type. `lib/funnelTypes.ts` lists eight types and, honestly, which four this app can actually
 deliver: VSL and Webinar need a video block that `blockTree.ts` doesn't have, Survey needs
 answer-based routing that `funnel_steps` (a linear chain ordered by `step_index`) can't express,
 and Book/free-plus-shipping needs checkout charging the VISITOR, which is a different system from

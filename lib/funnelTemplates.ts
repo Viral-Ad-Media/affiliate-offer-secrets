@@ -8,6 +8,7 @@ import {
   type FormInputBlock,
 } from "@/lib/engine/renderPages";
 import { funnelType } from "@/lib/funnelTypes";
+import { funnelStyle, VOICE_PROMPTS, type FunnelStyle, type FunnelStyleId } from "@/lib/funnelStyles";
 
 /**
  * Starter page content for a newly created funnel.
@@ -156,6 +157,42 @@ function fill(t: Template, productTitle: string): PageCopy {
 }
 
 /**
+ * Composes a type's subject matter with a style's shape.
+ *
+ * The TYPE decides what the page is about (a squeeze page's headline is about a free resource, a
+ * webinar's about a session); the STYLE decides which sections exist, in what order, and how the
+ * placeholder prompts are pitched. Written as a composition rather than 36 hand-authored
+ * templates, which would drift apart the first time anyone edited one of them.
+ *
+ * `sectionOrder` is what actually drops the sections a style leaves out — resolveSectionOrder
+ * appends every missing key by design, so the sections themselves are emptied here and the order
+ * is set to just the ones this style keeps.
+ */
+function styled(base: PageCopy, style: FunnelStyle): PageCopy {
+  const v = VOICE_PROMPTS[style.voice];
+  const keep = new Set(style.sections);
+  return {
+    headline: base.headline,
+    // The style's voice replaces the type's generic prompt wherever it has an opinion; where it
+    // doesn't (spare/captioned leave mechanism and proof empty), the section is dropped anyway.
+    lead: keep.has("lead") ? v.lead || base.lead : "",
+    mechanism: keep.has("mechanism") ? v.mechanism || base.mechanism : "",
+    proof: keep.has("proof") ? v.proof || base.proof : "",
+    benefits: keep.has("benefits")
+      ? Array.from({ length: style.bullets }, (_, i) => v.bullet(i) || base.benefits[i] || "").filter(Boolean)
+      : [],
+    faq: keep.has("faq")
+      ? Array.from({ length: style.faqs }, (_, i) => ({
+          q: v.faqQ(i) || base.faq[i]?.q || "",
+          a: v.faqA || base.faq[i]?.a || "",
+        })).filter((f) => f.q)
+      : [],
+    cta: base.cta,
+    sectionOrder: style.sections,
+  };
+}
+
+/**
  * An empty page — built directly rather than via normalizePageCopy, because that adapter always
  * emits all five legacy sections (resolveSectionOrder appends any missing key by design), so
  * "empty" through it would mean five stray subheadings the user has to delete one by one.
@@ -234,22 +271,60 @@ function withVideoBlock(tree: PageBlockTree, headline: string): PageBlockTree {
   return { ...tree, blocks: [{ ...first, children }, ...tree.blocks.slice(1)] };
 }
 
-export type FunnelStart = "template" | "scratch";
+/** Which starting layout — one of the six styles, or an empty page. */
+
+/**
+ * Drops the sections a style left out.
+ *
+ * normalizePageCopy always emits all five legacy sections — resolveSectionOrder appends every
+ * missing key by design, which is right for the AI path (a model that skips a field still gets a
+ * complete page) and wrong here. Without this, "Minimal" shipped with an empty "How it works", an
+ * empty "What you get" and an empty "Questions" — three headings introducing nothing.
+ *
+ * Prunes in two passes because order matters: empty content first, then any heading left
+ * introducing nothing (trailing, or immediately followed by another heading).
+ */
+function pruneEmptySections(tree: PageBlockTree): PageBlockTree {
+  const first = tree.blocks[0];
+  if (!first || first.type !== "section") return tree;
+
+  const hasContent = (b: any): boolean => {
+    if (b.type === "subheading") return true; // decided in the second pass
+    if (b.type === "paragraph" || b.type === "heading") return !!(b.content?.text ?? "").trim();
+    if (b.type === "bullet_list") return (b.content?.items ?? []).some((i: string) => i.trim());
+    if (b.type === "faq_item") return !!(b.content?.question ?? "").trim();
+    return true; // images, video, dividers — presence is the content
+  };
+
+  const kept = first.children.filter(hasContent);
+  const final = kept.filter((b: any, i: number) => {
+    if (b.type !== "subheading") return true;
+    const next = kept[i + 1] as any;
+    return !!next && next.type !== "subheading";
+  });
+
+  return { ...tree, blocks: [{ ...first, children: final }, ...tree.blocks.slice(1)] };
+}
+
+export type FunnelStart = FunnelStyleId | "scratch";
 
 /** The opt-in (bridge) page's starting content for a given funnel type. */
 export function optInPageCopy(
   typeKey: string,
+  /** A style id, or "scratch" for an empty page. */
   start: FunnelStart,
-  productTitle: string,
+  title: string,
   imageDataUrl: string | null
 ): PageBlockTree {
   if (start === "scratch") return blankTree();
   const t = TEMPLATES[typeKey];
-  // An unknown/unsupported type falls back to blank rather than to another type's copy — a squeeze
+  const style = funnelStyle(start);
+  // An unknown type or style falls back to blank rather than to another one's copy — a squeeze
   // page's words on a funnel someone asked to be something else is worse than an empty page.
-  if (!t) return blankTree();
-  const filled = fill(t, productTitle);
-  const tree = normalizePageCopy(filled, imageDataUrl);
+  if (!t || !style) return blankTree();
+  const filled = styled(fill(t, title), style);
+  const tree = pruneEmptySections(normalizePageCopy(filled, style.mediaFirst ? imageDataUrl : null));
+  // Video-first types always get a player; styles that open with words put it under the lead.
   return VIDEO_FIRST_TYPES.has(typeKey) ? withVideoBlock(tree, filled.headline) : tree;
 }
 
@@ -257,10 +332,12 @@ export function optInPageCopy(
 export function stepPageCopy(
   stepType: FunnelStepType,
   start: FunnelStart,
-  productTitle: string
+  title: string
 ): PageBlockTree {
   if (start === "scratch") return blankTree(stepType);
-  return normalizePageCopy(fill(STEP_TEMPLATES[stepType], productTitle), null, { stepType });
+  // Steps deliberately ignore the style: a thank-you page has one job whatever shape the opt-in
+  // page took, and restyling it would mean six variants of "check your inbox".
+  return normalizePageCopy(fill(STEP_TEMPLATES[stepType], title), null, { stepType });
 }
 
 /** The step types a funnel type creates after its opt-in page, or null if the type isn't real. */

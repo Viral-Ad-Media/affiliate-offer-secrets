@@ -25,11 +25,10 @@ export default async function FunnelsPage() {
     { data: contactRows },
     { data: variantRows },
     { data: stepRows },
-    { data: productRows },
   ] = await Promise.all([
       supabase
         .from("campaigns")
-        .select("id, product_id, bridge_published, updated_at, products(product_title)")
+        .select("id, product_id, name, bridge_published, updated_at, products(product_title)")
         .not("bridge_html", "is", null)
         .order("updated_at", { ascending: false }),
       supabase
@@ -39,14 +38,6 @@ export default async function FunnelsPage() {
       supabase.from("contacts").select("campaign_id").not("campaign_id", "is", null).limit(1000),
       supabase.from("bridge_variants").select("campaign_id"),
       supabase.from("funnel_steps").select("campaign_id"),
-      // Offers a funnel can be built for. Dead/Paused products are left out — they're not what
-      // anyone is about to build a landing page for, and a long picker list is its own problem.
-      supabase
-        .from("products")
-        .select("id, product_title")
-        .not("status", "in", "(Dead,Paused)")
-        .order("product_title", { ascending: true })
-        .limit(200),
     ]);
 
   const leadCounts = new Map<string, number>();
@@ -79,23 +70,14 @@ export default async function FunnelsPage() {
 
   const funnels = (campaigns ?? []).map((c: any) => ({
     id: c.id as string,
-    productId: c.product_id as string,
-    title: (c.products?.product_title as string | undefined) ?? "Untitled",
+    productId: c.product_id as string | null,
+    // A hand-built funnel has no product to borrow a title from, so it carries its own name.
+    title: (c.products?.product_title as string | undefined) ?? (c.name as string | null) ?? "Untitled",
     published: c.bridge_published as boolean,
     leads: leadCounts.get(c.id) ?? 0,
     url: domainUrlByCampaign.get(c.id) ?? `${appUrl}/p/${c.id}/bridge`,
     variantCount: variantCounts.get(c.id) ?? 0,
     stepCount: stepCounts.get(c.id) ?? 0,
-  }));
-
-  // A product with a funnel already can't get a second one — one campaign per product, one opt-in
-  // page per campaign — so the picker shows it greyed rather than silently omitting it, which
-  // would read as "that offer is gone".
-  const withFunnel = new Set(funnels.map((f) => f.productId));
-  const productOptions = (productRows ?? []).map((p: any) => ({
-    id: p.id as string,
-    title: (p.product_title as string) ?? "Untitled",
-    hasFunnel: withFunnel.has(p.id as string),
   }));
 
   return (
@@ -108,7 +90,7 @@ export default async function FunnelsPage() {
             kit finishes building — or build one by hand.
           </p>
         </div>
-        <NewFunnelButton products={productOptions} />
+        <NewFunnelButton />
       </header>
 
       <section className="card overflow-hidden">

@@ -4,25 +4,25 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { toast } from "@/lib/toast";
-import NewFunnelDialog, { type FunnelProductOption } from "@/components/NewFunnelDialog";
+import NewFunnelDialog from "@/components/NewFunnelDialog";
 import type { FunnelStart } from "@/lib/funnelTypes";
 
 /**
  * "New funnel" on the Funnels list. Builds the pages by hand — no AI, no credits — as the
  * alternative to Promote, which generates a whole campaign kit and charges for it.
  */
-export default function NewFunnelButton({ products }: { products: FunnelProductOption[] }) {
+export default function NewFunnelButton() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  async function create(productId: string, typeKey: string, start: FunnelStart) {
+  async function create(typeKey: string, name: string, start: FunnelStart) {
     setBusy(true);
     try {
       const res = await fetch("/api/funnels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ product_id: productId, type: typeKey, start }),
+        body: JSON.stringify({ type: typeKey, name, start }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -45,13 +45,7 @@ export default function NewFunnelButton({ products }: { products: FunnelProductO
       <button onClick={() => setOpen(true)} className="btn-primary text-sm">
         <Plus className="h-4 w-4" /> New funnel
       </button>
-      <NewFunnelDialog
-        open={open}
-        onOpenChange={setOpen}
-        products={products}
-        busy={busy}
-        onConfirm={create}
-      />
+      <NewFunnelDialog open={open} onOpenChange={setOpen} busy={busy} onConfirm={create} />
     </>
   );
 }

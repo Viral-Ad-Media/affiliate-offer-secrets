@@ -1,4 +1,5 @@
 import type { FunnelStepType } from "@/lib/shared";
+import { isFunnelStyleId, type FunnelStyleId } from "@/lib/funnelStyles";
 
 /**
  * The funnel shapes a tenant can build, and — honestly — which ones this app can actually deliver
@@ -22,6 +23,9 @@ import type { FunnelStepType } from "@/lib/shared";
  * someone who came looking for a webinar funnel should learn why it isn't there, not conclude the
  * feature is missing.
  */
+/** Display name for a funnel — the tenant's own label, never shown to visitors. */
+export const MAX_FUNNEL_NAME = 80;
+
 export type FunnelSupport = "ready" | "needs_video" | "needs_branching" | "needs_payment";
 
 export type FunnelTypeDef = {
@@ -118,9 +122,9 @@ export function isBuildable(key: string): boolean {
   return funnelType(key)?.support === "ready";
 }
 
-/** Start point for the funnel's pages. */
-export type FunnelStart = "template" | "scratch";
+/** Start point for the funnel's pages: one of the six styles, or an empty page. */
+export type FunnelStart = FunnelStyleId | "scratch";
 
 export function isFunnelStart(v: unknown): v is FunnelStart {
-  return v === "template" || v === "scratch";
+  return v === "scratch" || isFunnelStyleId(v);
 }

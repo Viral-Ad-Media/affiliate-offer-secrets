@@ -50,26 +50,47 @@ export async function rerenderFunnelSequence(
 ): Promise<void> {
   const { data: campaign } = await admin
     .from("campaigns")
-    .select("product_id, page_copy, embedded_image_data_url, tracking, seo_title, seo_description")
+    .select("product_id, name, cta_url, page_copy, embedded_image_data_url, tracking, seo_title, seo_description")
     .eq("id", campaignId)
     .single();
   if (!campaign) return;
   const tracking = (campaign.tracking ?? null) as TrackingSettings | null;
 
-  const { data: product } = await admin
-    .from("products")
-    .select("product_title, network, vendor_id, hoplink_override")
-    .eq("id", campaign.product_id)
-    .single();
-  if (!product) return;
+  // A hand-built funnel has no product (0068). It still renders — it just has no hoplink to bake,
+  // so its call to action falls back to campaigns.cta_url, and to "#" until one is set. Returning
+  // early here (as this did when the product lookup failed) would have left every standalone
+  // funnel with no HTML at all.
+  const { data: productRow } = campaign.product_id
+    ? await admin
+        .from("products")
+        .select("product_title, network, vendor_id, hoplink_override")
+        .eq("id", campaign.product_id)
+        .maybeSingle()
+    : { data: null };
+  const product = productRow ?? {
+    product_title: (campaign.name as string | null) ?? "Funnel",
+    network: null as string | null,
+    vendor_id: "",
+    hoplink_override: null as string | null,
+  };
 
-  const { data: connection } = await admin
-    .from("network_connections")
-    .select("affiliate_id")
-    .eq("workspace_id", workspaceId)
-    .eq("network", product.network)
-    .maybeSingle();
+  const { data: connection } = product.network
+    ? await admin
+        .from("network_connections")
+        .select("affiliate_id")
+        .eq("workspace_id", workspaceId)
+        .eq("network", product.network)
+        .maybeSingle()
+    : { data: null };
   const affiliateId = connection?.affiliate_id ?? null;
+
+  // The opt-in page's primary destination: the product's hoplink when there is one, otherwise the
+  // funnel's own cta_url. One source of truth, never two competing ones.
+  const fallbackHref = (campaign.cta_url as string | null) ?? "#";
+  const offerHref = (tid: string) =>
+    product.network && affiliateId
+      ? buildHoplink(product.network as any, affiliateId, product.vendor_id, tid, product.hoplink_override)
+      : fallbackHref;
 
   const { data: stepsRaw } = await admin
     .from("funnel_steps")
@@ -82,8 +103,8 @@ export async function rerenderFunnelSequence(
 
   // Opt-in page: redirect to step 1 if any steps exist, else today's in-place reveal (unchanged
   // behavior for the ~100% of campaigns with no added funnel steps).
-  if (campaign.page_copy && affiliateId) {
-    const hoplink = buildHoplink(product.network, affiliateId, product.vendor_id, "page", product.hoplink_override);
+  if (campaign.page_copy) {
+    const hoplink = offerHref("page");
     const nextStepUrl = steps.length > 0 ? stepUrl(campaignId, steps[0].step_index) : null;
     const bridgeHtml = renderBridgeHtml(
       product,
@@ -122,8 +143,6 @@ export async function rerenderFunnelSequence(
       await admin.from("bridge_variants").update({ bridge_html: variantHtml }).eq("id", v.id);
     }
   }
-
-  if (!affiliateId) return; // can't resolve hoplinks without an affiliate id — leave step html as-is
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
@@ -164,19 +183,25 @@ export async function rerenderFunnelSequence(
             }
           }
         }
-        acceptHref = targetAffiliateId
-          ? buildHoplink(targetProduct.network, targetAffiliateId, targetProduct.vendor_id, `step-${step.step_index}-upsell`, targetProduct.hoplink_override)
-          : "#";
+        acceptHref =
+          targetAffiliateId && targetProduct.network
+            ? buildHoplink(
+                targetProduct.network as any,
+                targetAffiliateId,
+                targetProduct.vendor_id,
+                `step-${step.step_index}-upsell`,
+                targetProduct.hoplink_override
+              )
+            : fallbackHref;
       }
 
       let declineHref: string;
       if (step.decline_action === "redirect_url" && step.decline_redirect_url) {
         declineHref = step.decline_redirect_url;
       } else if (step.decline_action === "hoplink") {
-        declineHref = buildHoplink(product.network, affiliateId, product.vendor_id, `step-${step.step_index}-decline`, product.hoplink_override);
+        declineHref = offerHref(`step-${step.step_index}-decline`);
       } else {
-        declineHref =
-          nextUrl ?? buildHoplink(product.network, affiliateId, product.vendor_id, `step-${step.step_index}-decline`, product.hoplink_override);
+        declineHref = nextUrl ?? offerHref(`step-${step.step_index}-decline`);
       }
 
       const html = renderFunnelStepHtml(
@@ -197,7 +222,7 @@ export async function rerenderFunnelSequence(
       } else if (step.cta_action === "next_step" && nextUrl) {
         primaryHref = nextUrl;
       } else {
-        primaryHref = buildHoplink(product.network, affiliateId, product.vendor_id, `step-${step.step_index}`, product.hoplink_override);
+        primaryHref = offerHref(`step-${step.step_index}`);
       }
       const html = renderFunnelStepHtml(
         product,
