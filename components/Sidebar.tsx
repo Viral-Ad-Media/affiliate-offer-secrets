@@ -131,6 +131,29 @@ const SUPERADMIN_NAV: NavItem = {
   match: (p: string) => p.startsWith("/admin"),
 };
 
+// Flattened href -> label, derived from NAV rather than hand-written, so components/Breadcrumbs.tsx
+// can never disagree with the sidebar about what a section is called. Adding a nav entry updates
+// the breadcrumbs for free; renaming one renames both.
+export const NAV_LABELS: Record<string, string> = (() => {
+  const out: Record<string, string> = {};
+  for (const item of [...NAV, SUPERADMIN_NAV]) {
+    out[item.href] = item.label;
+    for (const child of item.children ?? []) out[child.href] = child.label;
+  }
+  return out;
+})();
+
+// Section names only. Needed as a SEPARATE map because several sections point at one of their own
+// children — /blog's nav href is "/blog" and so is its "Posts" child, /contacts' is "/contacts" and
+// so is its "Leads" child — so in the flattened map above the child label wins and the section name
+// is lost. A breadcrumb wants "Blog / Categories", not "Posts / Categories", so it reads this first
+// for any non-final segment and NAV_LABELS for the page it actually landed on.
+export const NAV_SECTION_LABELS: Record<string, string> = (() => {
+  const out: Record<string, string> = {};
+  for (const item of [...NAV, SUPERADMIN_NAV]) out[item.href] = item.label;
+  return out;
+})();
+
 type Props = {
   email: string;
   creditBalance: number;

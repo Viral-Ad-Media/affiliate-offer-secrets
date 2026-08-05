@@ -9,6 +9,7 @@ import ReferralClaimer from "@/components/ReferralClaimer";
 import NotificationsBell from "@/components/NotificationsBell";
 import CreditsChip from "@/components/CreditsChip";
 import CreditsProvider from "@/components/CreditsProvider";
+import Breadcrumbs from "@/components/Breadcrumbs";
 import TrialChip from "@/components/TrialChip";
 import TopBarAccount from "@/components/TopBarAccount";
 
@@ -114,7 +115,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <TrialChip trialDaysLeft={trialDaysLeft} />
           </div>
         )}
-        <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
+        {/* Above the content, inside the same wrapper so it lines up with the page heading.
+            Renders nothing at depth 1 — see the component. The funnel editor's full-screen overlay
+            sits above this on purpose: it has its own "← Funnel map" back affordance. */}
+        <div className="mx-auto max-w-7xl px-4 py-6">
+          <Breadcrumbs />
+          {children}
+        </div>
       </div>
     </div>
     </CreditsProvider>
