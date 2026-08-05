@@ -11,6 +11,7 @@ import {
   Loader2,
   Pencil,
   TagsIcon,
+  Inbox,
   MailX,
   Plus,
   X,
@@ -28,6 +29,7 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import EmptyState from "@/components/EmptyState";
 
 // Flattens a lead's user-added form fields (Phase O.5) into one "key: value; key: value" string —
 // deliberate v1 scope cut, matching the plan's own call: no dynamic per-field columns, since the
@@ -255,11 +257,21 @@ export default function ContactsTable({
         )}
 
         {contacts.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-zinc-500">
-            {activeTag
-              ? "No leads carry this tag yet."
-              : "No leads captured yet — leads appear here once visitors submit a bridge page's opt-in form."}
-          </p>
+          activeTag ? (
+            <EmptyState icon={TagsIcon} title="No leads carry this tag yet" compact>
+              Tag a lead from its row, or clear the filter above to see everyone.
+            </EmptyState>
+          ) : (
+            <EmptyState icon={Inbox} title="No leads captured yet" action={{ href: "/funnels", label: "Go to funnels" }}>
+              Leads arrive here when someone submits a funnel&apos;s opt-in form. You can also
+              add one by hand with <span className="text-zinc-400">Add contact</span>, or bring a
+              list in from{" "}
+              <Link href="/contacts/import" className="underline">
+                CSV import
+              </Link>
+              .
+            </EmptyState>
+          )
         ) : (
           <div className="max-h-[32rem] overflow-y-auto">
             <table className="w-full text-sm">

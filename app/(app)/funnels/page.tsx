@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
 import { buttonVariants } from "@/components/ui/button";
+import EmptyState from "@/components/EmptyState";
 
 // A "funnel" isn't its own entity — it's a derived view over campaigns that already have a bridge
 // (lead-capture) page generated. A funnel appears here automatically the moment stagePages
@@ -99,18 +100,14 @@ export default async function FunnelsPage() {
 
       <Card as="section" className="overflow-hidden">
         {funnels.length === 0 ? (
-          <div className="px-4 py-14 text-center">
-            <Inbox className="mx-auto mb-2.5 h-7 w-7 text-zinc-600" />
-            <p className="text-sm text-zinc-400">No funnels yet</p>
-            <p className="mt-1 text-xs text-zinc-600">
-              Use <span className="text-zinc-400">New funnel</span> to build one by hand, or
-              promote an offer from the{" "}
-              <Link href="/marketplace" className="underline">
-                Marketplace
-              </Link>{" "}
-              — a generated kit's bridge page becomes a funnel here automatically.
-            </p>
-          </div>
+          <EmptyState icon={Inbox} title="No funnels yet" action={{ href: "/marketplace", label: "Browse the marketplace" }}>
+            Use <span className="text-zinc-400">New funnel</span> to build one by hand, or promote
+            an offer from the{" "}
+            <Link href="/marketplace" className="underline">
+              Marketplace
+            </Link>{" "}
+            — a generated kit&apos;s bridge page becomes a funnel here automatically.
+          </EmptyState>
         ) : (
           <div className="overflow-x-auto">
             <Table className="w-full text-sm">

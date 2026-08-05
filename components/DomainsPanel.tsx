@@ -20,6 +20,7 @@ import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import EmptyState from "@/components/EmptyState";
 
 type DomainRoute = {
   id: string;
@@ -534,7 +535,11 @@ export default function DomainsPanel({
       </Card>
 
       {domains.length === 0 ? (
-        <p className="text-sm text-zinc-500">No domains connected yet.</p>
+        <EmptyState icon={Globe} title="No domains connected yet" compact>
+          Funnels and blog posts are already reachable on your own subdomain — a custom domain is
+          for serving them under a brand you own. Add one above, then point its DNS at the records
+          shown.
+        </EmptyState>
       ) : (
         <div className="space-y-3">
           {domains.map((d) => (

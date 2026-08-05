@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Newspaper, Plus, Loader2, Tag, ExternalLink, Trash2, Eye, Pencil } from "lucide-react";
+import { Newspaper, Plus, Loader2, Tag, ExternalLink, Trash2, Eye, Pencil, FileText } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
 import { blogPostPath, type PermalinkStyle } from "@/lib/blog";
@@ -11,6 +11,7 @@ import { scoreTone } from "@/lib/blogSeo";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import EmptyState from "@/components/EmptyState";
 
 type PostRow = {
   id: string;
@@ -228,9 +229,11 @@ export default function BlogManager({
         )}
 
         {visiblePosts.length === 0 ? (
-          <p className="py-8 text-center text-sm text-zinc-500">
-            No posts yet. Build a campaign kit and its article lands here as a draft, or start from scratch.
-          </p>
+          <EmptyState icon={FileText} title="No posts yet" compact action={{ href: "/marketplace", label: "Find an offer" }}>
+            Every campaign kit writes an article and files it here as a draft — so the fastest way
+            to fill this page is to promote an offer. You can also start one from scratch with
+            <span className="text-zinc-400"> New post</span>.
+          </EmptyState>
         ) : (
           <div className="divide-y divide-ink-800">
             <label className="flex items-center gap-2 py-1.5 text-[12px] text-zinc-500">

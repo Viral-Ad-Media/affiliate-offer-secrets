@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import EmptyState from "@/components/EmptyState";
 
 export const dynamic = "force-dynamic";
 
@@ -167,18 +168,14 @@ export default async function AdsPage() {
 
       <Card as="section" className="overflow-hidden">
         {rows.length === 0 ? (
-          <div className="px-4 py-14 text-center">
-            <Inbox className="mx-auto mb-2.5 h-7 w-7 text-zinc-600" />
-            <p className="text-sm text-zinc-400">No ads launched yet</p>
-            <p className="mt-1 text-xs text-zinc-600">
-              Open a campaign from{" "}
-              <Link href="/marketplace" className="underline">
-                Marketplace
-              </Link>
-              , pick an ad angle, generate its image or video, then launch it from that
-              angle&apos;s card.
-            </p>
-          </div>
+          <EmptyState icon={Inbox} title="No ads launched yet" action={{ href: "/marketplace", label: "Browse the marketplace" }}>
+            Open a campaign from{" "}
+            <Link href="/marketplace" className="underline">
+              Marketplace
+            </Link>
+            , pick an ad angle, generate its image or video, then launch it from that
+            angle&apos;s card.
+          </EmptyState>
         ) : (
           <div className="overflow-x-auto">
             <Table className="w-full text-sm">
