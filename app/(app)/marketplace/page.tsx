@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useCredits } from "@/components/CreditsProvider";
+import CostBadge from "@/components/CostBadge";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -134,6 +136,8 @@ export default function Marketplace() {
 
   const openJobs = jobs.filter((j) => j.status === "pending" || j.status === "running");
 
+  const { refresh: refreshCredits } = useCredits();
+
   async function promote(id: string) {
     setBusy(id);
     await fetch("/api/promote", {
@@ -142,6 +146,7 @@ export default function Marketplace() {
       body: JSON.stringify({ product_id: id }),
     });
     await load();
+    refreshCredits();
     setBusy(null);
   }
 
@@ -163,6 +168,7 @@ export default function Marketplace() {
     setKeyword("");
     setSubCategory("");
     await load();
+    refreshCredits();
   }
 
   const subCategoryOptions =
@@ -267,6 +273,7 @@ export default function Marketplace() {
             />
             <button type="submit" className="btn-primary">
               <Rocket className="h-4 w-4" /> Queue discovery
+              <CostBadge jobType="discover_products" />
             </button>
           </div>
         </form>
@@ -418,6 +425,7 @@ export default function Marketplace() {
                           className="btn-primary"
                         >
                           <Rocket className="h-4 w-4" /> Promote
+                          <CostBadge jobType="build_campaign" />
                         </button>
                       )}
                     </div>

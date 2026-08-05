@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCredits } from "@/components/CreditsProvider";
+import CostBadge from "@/components/CostBadge";
 import { Image as ImageIcon, Video, Loader2, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { CreativeKind, CreativeSource, CreativeStatus } from "@/lib/shared";
@@ -77,6 +79,8 @@ export default function CreativeItemCard({
       .then((d) => setVideoPreviewUrl(d.url ?? null));
   }, [video.status, videoCreativeId]);
 
+  const { refresh: refreshCredits } = useCredits();
+
   async function generate(kind: CreativeKind) {
     setBusy(kind);
     const res = await fetch("/api/campaign-creatives/generate", {
@@ -91,6 +95,9 @@ export default function CreativeItemCard({
       else setVideo((s) => ({ ...s, status: "failed", error: data.error ?? "Failed to start" }));
       return;
     }
+    // The charge already happened server-side; pull the new balance so every cost badge on the
+    // page reflects it without a full reload.
+    refreshCredits();
     if (kind === "image") setImage((s) => ({ ...s, status: "generating", error: null }));
     else setVideo((s) => ({ ...s, status: "generating", error: null }));
   }
@@ -123,6 +130,7 @@ export default function CreativeItemCard({
             <button onClick={() => generate("image")} disabled={busy === "image"} className="btn-ghost !py-1 text-xs">
               {busy === "image" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Generate image
+              <CostBadge jobType="generate_creative_image" />
             </button>
           </>
         )}
@@ -154,6 +162,7 @@ export default function CreativeItemCard({
             <button onClick={() => generate("video")} disabled={busy === "video"} className="btn-ghost !py-1 text-xs">
               {busy === "video" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Generate video
+              <CostBadge jobType="generate_creative_video" />
             </button>
           </>
         )}

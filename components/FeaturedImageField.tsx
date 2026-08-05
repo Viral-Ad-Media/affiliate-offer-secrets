@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useCredits } from "@/components/CreditsProvider";
+import CostBadge from "@/components/CostBadge";
 import { ImagePlus, Loader2, Sparkles, Trash2 } from "lucide-react";
 
 // Featured image control for the post editor: upload your own, or generate one from the post's
@@ -66,6 +68,8 @@ export default function FeaturedImageField({
     }
   }
 
+  const { refresh: refreshCredits } = useCredits();
+
   async function generate() {
     setBusy(true);
     setLocalError(null);
@@ -73,6 +77,7 @@ export default function FeaturedImageField({
       const res = await fetch(`/api/blog/posts/${postId}/generate-image`, { method: "POST" });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? "Could not start generation");
+      refreshCredits();
       setLiveStatus("generating");
       setLiveError(null);
     } catch (err: any) {
@@ -114,6 +119,7 @@ export default function FeaturedImageField({
             <button type="button" onClick={generate} disabled={busy || generating} className="btn-ghost text-xs">
               {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               {generating ? "Generating…" : "Generate with AI"}
+              <CostBadge jobType="generate_blog_image" />
             </button>
             {liveUrl && !generating && (
               <button

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCredits } from "@/components/CreditsProvider";
+import CostBadge from "@/components/CostBadge";
 import { Video, Loader2, Instagram, Music2, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -85,6 +87,8 @@ export default function GenerateVideo({
       .then((d) => setPreviewUrl(d.url ?? null));
   }, [status, campaignId]);
 
+  const { refresh: refreshCredits } = useCredits();
+
   async function generate() {
     setBusy("generate");
     setVideoError(null);
@@ -95,6 +99,7 @@ export default function GenerateVideo({
       setVideoError(data.error ?? "Failed to start generation");
       return;
     }
+    refreshCredits();
     setStatus("generating");
   }
 
@@ -137,6 +142,7 @@ export default function GenerateVideo({
           <button onClick={generate} disabled={busy === "generate"} className="btn-primary">
             {busy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             Generate video
+            <CostBadge jobType="generate_video" />
           </button>
         </>
       ) : status === "generating" ? (

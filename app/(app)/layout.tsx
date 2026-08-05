@@ -8,6 +8,7 @@ import Sidebar from "@/components/Sidebar";
 import ReferralClaimer from "@/components/ReferralClaimer";
 import NotificationsBell from "@/components/NotificationsBell";
 import CreditsChip from "@/components/CreditsChip";
+import CreditsProvider from "@/components/CreditsProvider";
 import TrialChip from "@/components/TrialChip";
 import TopBarAccount from "@/components/TopBarAccount";
 
@@ -61,6 +62,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const creditBalance = (creditRows ?? []).reduce((sum, r) => sum + r.delta, 0);
 
   return (
+    // Seeded with the balance already computed above, so cost badges are correct on first paint
+    // and nothing flashes. Client components call refresh() after spending rather than forcing a
+    // full router.refresh() for one number.
+    <CreditsProvider initialBalance={creditBalance}>
     <div className="flex min-h-screen flex-col sm:flex-row">
       <ReferralClaimer />
       <Sidebar
@@ -112,5 +117,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
       </div>
     </div>
+    </CreditsProvider>
   );
 }
