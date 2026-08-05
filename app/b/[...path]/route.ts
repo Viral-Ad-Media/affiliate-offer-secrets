@@ -165,6 +165,7 @@ async function renderPost(admin: ReturnType<typeof createAdminClient>, postId: s
 
   const html = renderPublicPostHtml({
     content_width: contentWidthOf(post.page_copy),
+    theme: (post.page_copy as { theme?: unknown } | null)?.theme,
     id: post.id as string,
     title: post.title as string,
     slug: post.slug as string | null,

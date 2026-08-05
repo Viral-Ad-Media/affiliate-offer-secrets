@@ -1907,6 +1907,44 @@ this reason, and their templates seed an empty video block above the copy (`VIDE
 since a VSL template without one is just a squeeze page with a different headline. Survey
 (`needs_branching`) and Book (`needs_payment`) are still correctly blocked.
 
+## Page theme (palette / typography / buttons / form)
+
+`PageBlockTree.theme` — same slot as `contentWidth`, for the same reason: one setting covers the
+funnel opt-in, split-test variants, funnel steps and blog posts with no migration. Edited from the
+canvas ⚙ (`components/PageThemePanel.tsx`).
+
+**`lib/engine/pageTheme.ts` is the only place a theme becomes CSS**, and it works exactly like
+`styleToInlineCss`: a fixed key table, per-key regex/range checks, and nothing but a clamped number
+or a `#rrggbb` string is ever interpolated. Fonts are an enum mapped through `THEME_FONT_STACKS`,
+never the stored string. Verified that `"#fff;} body{display:none}"` as a colour is dropped rather
+than closing the rule.
+
+**It emits CSS variables; the stylesheets stay constants.** Every themeable rule in `PAGE_STYLE`
+and `PUBLIC_CSS` reads `var(--t-…, <its pre-theme value>)`, so a page with no theme renders exactly
+as it did before themes existed, and a themed page overrides only what it set. That fallback is
+what makes this safe to ship against pages already serving ad traffic.
+
+**Themes are generated as part of the kit, from the product's own sales page.**
+`extractBrandColors` (`lib/engine/salespage.ts`) reads hex/rgb colours out of the RAW html —
+it has to run before cheerio strips `<style>`, which is where the colours live — drops greys,
+near-white and near-black as structure rather than brand, and ranks the rest by frequency.
+`themeFromBrandColors` then takes **only the accent**: the brand colour drives buttons, links and
+the testimonial rule, while the page background and body text stay at the defaults. A palette
+generated wholly from a vendor page would regularly be unreadable (dark-red-on-black is a common
+sales-page look) and this page exists to convert paid traffic. The hover shade is computed by
+darkening, and the button label is black or white chosen by the primary's real WCAG luminance —
+verified that a pale brand colour yields a dark label rather than white-on-yellow.
+
+## The affiliate disclosure always renders last
+
+`renderBlockTree` hoists the `disclosure` block to the end regardless of where it sits in the
+stored tree. It's a footer notice by convention and every ad reviewer expects it there, but it was
+a root-level draggable block, so a page could legitimately ship with the disclosure above the fold.
+Hoisting at render (rather than reordering stored trees) means existing pages get the right
+placement on their next render with no migration, and nothing can drag it back out of place.
+Content rule 3 says the disclosure is mandatory; this decides where. Verified across three stored
+orders — disclosure first, middle and last all render it last.
+
 ## Content width
 
 `PageBlockTree.contentWidth` (px) drives `width:90%; max-width:<n>px` on the published content

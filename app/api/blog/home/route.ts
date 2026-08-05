@@ -29,7 +29,7 @@ export async function PATCH(req: Request) {
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const result = validatePageBlockTree({ blocks: body.blocks, contentWidth: body.contentWidth }, { pageKind: "blog" });
+  const result = validatePageBlockTree({ blocks: body.blocks, contentWidth: body.contentWidth, theme: body.theme }, { pageKind: "blog" });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
 
   const html = renderBlockTree(result.tree, blogRenderCtx());

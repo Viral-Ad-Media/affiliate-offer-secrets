@@ -31,6 +31,7 @@ import {
   type FunnelStepType,
 } from "./blockTree";
 import { renderTrackingHtml, type TrackingSettings } from "./tracking";
+import { themeToCssVars } from "./pageTheme";
 
 export { escapeHtml };
 export * from "./blockTree";
@@ -228,21 +229,24 @@ export function normalizePageCopy(
 // ---------------------------------------------------------------------------------------------
 
 const PAGE_STYLE = `
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background:#fafafa; color:#1a1a1a; margin:0; padding:0; line-height:1.6; }
+  /* Every themeable rule reads a --t-* var with its PRE-THEME value as the fallback, so a page
+     with no theme renders exactly as it did before themes existed. See lib/engine/pageTheme.ts —
+     only clamped numbers and #rrggbb strings ever reach these variables. */
+  body { font-family: var(--t-body-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif); background:var(--t-bg,#fafafa); color:var(--t-text,#1a1a1a); margin:0; padding:0; line-height:var(--t-line-height,1.6); font-size:var(--t-base-size,16px); }
   /* width:90% gives narrow screens a gutter with no media query; the px cap stops a wide
      monitor stretching a line of text across the whole display. --content-w is emitted per
      page from the tree's own contentWidth (see contentWidthOf), so PAGE_STYLE stays a const. */
   .wrap { width: 90%; max-width: var(--content-w, 1280px); margin: 0 auto; padding: 40px 20px 80px; }
-  h1 { font-size: 32px; line-height:1.2; margin-bottom: 16px; }
-  h2 { font-size: 22px; margin-top: 32px; margin-bottom: 8px; }
+  h1 { font-family:var(--t-heading-font,inherit); font-size: var(--t-h1-size,32px); font-weight:var(--t-heading-weight,700); line-height:1.2; margin-bottom: 16px; }
+  h2 { font-family:var(--t-heading-font,inherit); font-size: var(--t-h2-size,22px); font-weight:var(--t-heading-weight,700); margin-top: 32px; margin-bottom: 8px; }
   ul { padding-left: 20px; }
-  hr { border: none; border-top: 1px solid #e5e5e5; margin: 24px 0; }
+  hr { border: none; border-top: 1px solid var(--t-border,#e5e5e5); margin: 24px 0; }
   .block-img { max-width:100%; border-radius:12px; margin:24px 0; display:block; }
   /* 16:9 responsive frame — the wrapper owns the ratio so an iframe (which has no intrinsic
      size) and a <video> (which does) lay out identically. */
   .video-wrap { position:relative; width:100%; margin:24px 0; padding-top:56.25%; border-radius:12px; overflow:hidden; background:#000; }
   .video-wrap iframe, .video-wrap video { position:absolute; inset:0; width:100%; height:100%; border:0; display:block; }
-  .testimonial { margin:24px 0; padding:20px 24px; border-left:4px solid #e0e0e0; background:#fafafa; border-radius:8px; }
+  .testimonial { margin:24px 0; padding:20px 24px; border-left:4px solid var(--t-primary,#e0e0e0); background:var(--t-surface,#fafafa); border-radius:8px; }
   .testimonial blockquote { margin:0; font-size:17px; line-height:1.6; font-style:italic; color:#333; }
   .testimonial figcaption { margin-top:10px; font-size:14px; color:#666; }
   .testimonial .tm-name { font-weight:600; color:#1a1a1a; }
@@ -257,22 +261,22 @@ const PAGE_STYLE = `
   .icon-list-item, .image-list-item { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
   .icon-list-item svg { flex-shrink:0; }
   .image-list-item img { width:48px; height:48px; object-fit:cover; border-radius:8px; flex-shrink:0; }
-  .block-btn { display:inline-block; background:#16a34a; color:#fff; padding:12px 24px; border-radius:8px; font-weight:600; text-decoration:none; }
-  .optin { max-width: 420px; margin: 40px auto 0; padding: 24px; background:#fff; border:1px solid #e5e5e5; border-radius:12px; text-align:center; }
-  .optin input, .optin textarea, .optin select { width:100%; box-sizing:border-box; padding:14px; margin:8px 0; border:1px solid #ccc; border-radius:8px; font-size:16px; font-family:inherit; }
+  .block-btn { display:inline-block; background:var(--t-btn-bg,#16a34a); color:var(--t-btn-fg,#fff); border:var(--t-btn-border,none); padding:var(--t-btn-py,12px) var(--t-btn-px,24px); border-radius:var(--t-btn-radius,8px); font-weight:var(--t-btn-weight,600); text-decoration:none; }
+  .optin { max-width: 420px; margin: 40px auto 0; padding: 24px; background:var(--t-surface,#fff); border:1px solid var(--t-border,#e5e5e5); border-radius:12px; text-align:center; }
+  .optin input, .optin textarea, .optin select { width:100%; box-sizing:border-box; padding:var(--t-field-pad,14px); margin:8px 0; border:1px solid var(--t-field-border,#ccc); border-radius:var(--t-field-radius,8px); background:var(--t-field-bg,#fff); font-size:16px; font-family:inherit; }
   .optin textarea { resize:vertical; min-height:96px; }
   /* Tick-boxes and radios sit inline with their label, so they must opt out of the full-width
      rule above rather than stretching across the form. */
   .optin .field-check { display:flex; align-items:center; gap:8px; margin:8px 0; font-size:15px; text-align:left; }
   .optin .field-check input { width:auto; margin:0; padding:0; flex-shrink:0; }
-  .optin .field-group { border:1px solid #ccc; border-radius:8px; padding:10px 14px; margin:8px 0; text-align:left; }
+  .optin .field-group { border:1px solid var(--t-field-border,#ccc); border-radius:var(--t-field-radius,8px); padding:10px 14px; margin:8px 0; text-align:left; }
   .optin .field-group legend { font-size:14px; color:#555; padding:0 4px; }
-  .cta { display:inline-block; background:#16a34a; color:#fff; border:none; padding:16px 32px; border-radius:8px; font-weight:600; font-size:18px; margin-top: 12px; cursor:pointer; width:100%; text-decoration:none; box-sizing:border-box; }
-  .cta:hover { background:#15803d; }
+  .cta { display:inline-block; background:var(--t-btn-bg,#16a34a); color:var(--t-btn-fg,#fff); border:var(--t-btn-border,none); padding:var(--t-btn-py,16px) var(--t-btn-px,32px); border-radius:var(--t-btn-radius,8px); font-weight:var(--t-btn-weight,600); font-size:var(--t-btn-size,18px); margin-top: 12px; cursor:pointer; width:100%; text-decoration:none; box-sizing:border-box; }
+  .cta:hover { background:var(--t-btn-bg-hover,#15803d); color:var(--t-btn-fg-hover,#fff); }
   .hidden { display:none; }
   .reveal { max-width: 420px; margin: 40px auto 0; text-align:center; }
   .decline-wrap { text-align:center; margin-top:16px; }
-  .decline { color:#888; text-decoration:underline; font-size:14px; }
+  .decline { color:var(--t-muted,#888); text-decoration:underline; font-size:14px; }
   .disclosure { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e5e5; font-size: 12px; color: #888; }
   .optin .disclosure { margin-top: 12px; padding-top: 0; border-top: none; text-align: left; }
 `;
@@ -316,7 +320,7 @@ export function renderBridgeHtml(
 <title>${escapeHtml(meta.title)}</title>
 ${meta.head}
 ${t.head}
-<style>:root{--content-w:${contentWidthOf(tree)}px}${PAGE_STYLE}</style>
+<style>:root{--content-w:${contentWidthOf(tree)}px;${themeToCssVars((tree as any).theme)}}${PAGE_STYLE}</style>
 </head>
 <body>
 ${t.bodyStart}
@@ -433,7 +437,7 @@ export function renderFunnelStepHtml(
 <title>${escapeHtml(meta.title)}</title>
 ${meta.head}
 ${t.head}
-<style>:root{--content-w:${contentWidthOf(tree)}px}${PAGE_STYLE}
+<style>:root{--content-w:${contentWidthOf(tree)}px;${themeToCssVars((tree as any).theme)}}${PAGE_STYLE}
   .cta-wrap { max-width: 420px; margin: 40px auto 0; text-align:center; }
 </style>
 </head>

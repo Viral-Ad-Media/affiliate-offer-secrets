@@ -1,0 +1,243 @@
+/**
+ * Per-page theme: palette, typography, buttons, form fields.
+ *
+ * Stored on the block tree (`PageBlockTree.theme`) for the same reason contentWidth is — page_copy
+ * is the one field a funnel opt-in, a split-test variant, a funnel step and a blog post all
+ * already have, so one theme covers four page kinds with no schema change.
+ *
+ * SECURITY: this file is the single place a theme becomes CSS, and it works exactly like
+ * styleToInlineCss — a fixed key table, per-key range/regex checks, and NOTHING but a clamped
+ * number or a `#rrggbb` string is ever interpolated. Font families are an enum mapped through a
+ * lookup, never the stored string. There is no code path from a stored theme to a stylesheet that
+ * concatenates tenant text, which matters because these pages serve real ad traffic on a shared
+ * origin.
+ *
+ * Every field is optional and every getter falls back to the value the page had before themes
+ * existed, so a page with no theme renders byte-identically to how it did before.
+ */
+
+export type ThemeFont = "system" | "serif" | "mono" | "rounded" | "condensed";
+
+// Real stacks, all web-safe — no webfont fetch, because these pages must stay self-contained
+// (same reason images are inlined rather than hotlinked).
+export const THEME_FONT_STACKS: Record<ThemeFont, string> = {
+  system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+  serif: 'Georgia, "Times New Roman", Times, serif',
+  mono: '"SF Mono", SFMono-Regular, Consolas, "Liberation Mono", monospace',
+  rounded: '"Trebuchet MS", "Segoe UI", Verdana, sans-serif',
+  condensed: '"Arial Narrow", "Helvetica Neue", Arial, sans-serif',
+};
+
+export type ButtonShape = "rounded" | "pill" | "square";
+export type ButtonFill = "solid" | "outline";
+
+export type PageTheme = {
+  colors?: {
+    primary?: string; // buttons, links — the brand colour
+    primaryHover?: string;
+    onPrimary?: string; // text on top of primary
+    text?: string;
+    muted?: string;
+    background?: string; // page background
+    surface?: string; // cards: the opt-in box, testimonials
+    border?: string;
+  };
+  typography?: {
+    headingFont?: ThemeFont;
+    bodyFont?: ThemeFont;
+    baseSize?: number; // px, 14-22
+    h1Size?: number; // px, 20-72
+    h2Size?: number; // px, 16-48
+    headingWeight?: 400 | 500 | 600 | 700 | 800;
+    lineHeight?: number; // 1.2-2.2
+  };
+  button?: {
+    shape?: ButtonShape;
+    fill?: ButtonFill;
+    paddingY?: number; // px, 6-32
+    paddingX?: number; // px, 8-64
+    fontSize?: number; // px, 12-28
+    weight?: 400 | 500 | 600 | 700 | 800;
+  };
+  form?: {
+    radius?: number; // px, 0-32
+    borderColor?: string;
+    background?: string;
+    fieldPadding?: number; // px, 6-28
+  };
+};
+
+const HEX = /^#[0-9a-f]{6}$/i;
+const WEIGHTS = new Set([400, 500, 600, 700, 800]);
+const SHAPES = new Set<ButtonShape>(["rounded", "pill", "square"]);
+const FILLS = new Set<ButtonFill>(["solid", "outline"]);
+
+// The pre-theme values. A page with no theme must render exactly as it did before, so these are
+// lifted from the original PAGE_STYLE rather than chosen fresh.
+export const THEME_DEFAULTS = {
+  primary: "#16a34a",
+  primaryHover: "#15803d",
+  onPrimary: "#ffffff",
+  text: "#1a1a1a",
+  muted: "#666666",
+  background: "#fafafa",
+  surface: "#ffffff",
+  border: "#e5e5e5",
+  baseSize: 16,
+  h1Size: 32,
+  h2Size: 22,
+  headingWeight: 700 as const,
+  lineHeight: 1.6,
+  buttonPaddingY: 16,
+  buttonPaddingX: 32,
+  buttonFontSize: 18,
+  buttonWeight: 600 as const,
+  buttonRadius: 8,
+  formRadius: 8,
+  fieldPadding: 14,
+} as const;
+
+const hex = (v: unknown, fallback: string) => (typeof v === "string" && HEX.test(v) ? v.toLowerCase() : fallback);
+const num = (v: unknown, min: number, max: number, fallback: number) =>
+  typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : fallback;
+
+/** Strips a stored theme to known keys and legal values. Anything else is dropped, not coerced. */
+export function sanitizeTheme(raw: unknown): PageTheme | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const t = raw as Record<string, any>;
+  const out: PageTheme = {};
+
+  if (t.colors && typeof t.colors === "object") {
+    const c: Record<string, string> = {};
+    for (const k of ["primary", "primaryHover", "onPrimary", "text", "muted", "background", "surface", "border"]) {
+      if (typeof t.colors[k] === "string" && HEX.test(t.colors[k])) c[k] = t.colors[k].toLowerCase();
+    }
+    if (Object.keys(c).length) out.colors = c;
+  }
+
+  if (t.typography && typeof t.typography === "object") {
+    const ty: PageTheme["typography"] = {};
+    const g = t.typography;
+    if (typeof g.headingFont === "string" && g.headingFont in THEME_FONT_STACKS) ty.headingFont = g.headingFont;
+    if (typeof g.bodyFont === "string" && g.bodyFont in THEME_FONT_STACKS) ty.bodyFont = g.bodyFont;
+    if (typeof g.baseSize === "number") ty.baseSize = num(g.baseSize, 14, 22, THEME_DEFAULTS.baseSize);
+    if (typeof g.h1Size === "number") ty.h1Size = num(g.h1Size, 20, 72, THEME_DEFAULTS.h1Size);
+    if (typeof g.h2Size === "number") ty.h2Size = num(g.h2Size, 16, 48, THEME_DEFAULTS.h2Size);
+    if (WEIGHTS.has(g.headingWeight)) ty.headingWeight = g.headingWeight;
+    if (typeof g.lineHeight === "number" && g.lineHeight >= 1.2 && g.lineHeight <= 2.2) ty.lineHeight = g.lineHeight;
+    if (Object.keys(ty).length) out.typography = ty;
+  }
+
+  if (t.button && typeof t.button === "object") {
+    const b: PageTheme["button"] = {};
+    if (SHAPES.has(t.button.shape)) b.shape = t.button.shape;
+    if (FILLS.has(t.button.fill)) b.fill = t.button.fill;
+    if (typeof t.button.paddingY === "number") b.paddingY = num(t.button.paddingY, 6, 32, THEME_DEFAULTS.buttonPaddingY);
+    if (typeof t.button.paddingX === "number") b.paddingX = num(t.button.paddingX, 8, 64, THEME_DEFAULTS.buttonPaddingX);
+    if (typeof t.button.fontSize === "number") b.fontSize = num(t.button.fontSize, 12, 28, THEME_DEFAULTS.buttonFontSize);
+    if (WEIGHTS.has(t.button.weight)) b.weight = t.button.weight;
+    if (Object.keys(b).length) out.button = b;
+  }
+
+  if (t.form && typeof t.form === "object") {
+    const f: PageTheme["form"] = {};
+    if (typeof t.form.radius === "number") f.radius = num(t.form.radius, 0, 32, THEME_DEFAULTS.formRadius);
+    if (typeof t.form.borderColor === "string" && HEX.test(t.form.borderColor)) f.borderColor = t.form.borderColor.toLowerCase();
+    if (typeof t.form.background === "string" && HEX.test(t.form.background)) f.background = t.form.background.toLowerCase();
+    if (typeof t.form.fieldPadding === "number") f.fieldPadding = num(t.form.fieldPadding, 6, 28, THEME_DEFAULTS.fieldPadding);
+    if (Object.keys(f).length) out.form = f;
+  }
+
+  return Object.keys(out).length ? out : undefined;
+}
+
+/**
+ * The theme as a `:root { --… }` declaration block.
+ *
+ * Emitting variables (rather than rewriting the stylesheet) is what keeps PAGE_STYLE and
+ * PUBLIC_CSS constants: every rule references a var with its historical value as the fallback, so
+ * an unthemed page is unchanged and a themed one overrides exactly the variables it set.
+ */
+export function themeToCssVars(raw: unknown): string {
+  const t = sanitizeTheme(raw);
+  const d = THEME_DEFAULTS;
+  const c = t?.colors ?? {};
+  const ty = t?.typography ?? {};
+  const b = t?.button ?? {};
+  const f = t?.form ?? {};
+
+  const radius =
+    b.shape === "pill" ? 999 : b.shape === "square" ? 0 : d.buttonRadius;
+
+  const primary = hex(c.primary, d.primary);
+  const onPrimary = hex(c.onPrimary, d.onPrimary);
+  const outline = b.fill === "outline";
+
+  const vars: [string, string][] = [
+    ["--t-primary", primary],
+    ["--t-primary-hover", hex(c.primaryHover, d.primaryHover)],
+    ["--t-on-primary", onPrimary],
+    ["--t-text", hex(c.text, d.text)],
+    ["--t-muted", hex(c.muted, d.muted)],
+    ["--t-bg", hex(c.background, d.background)],
+    ["--t-surface", hex(c.surface, d.surface)],
+    ["--t-border", hex(c.border, d.border)],
+    ["--t-heading-font", THEME_FONT_STACKS[ty.headingFont ?? "system"]],
+    ["--t-body-font", THEME_FONT_STACKS[ty.bodyFont ?? "system"]],
+    ["--t-base-size", `${num(ty.baseSize, 14, 22, d.baseSize)}px`],
+    ["--t-h1-size", `${num(ty.h1Size, 20, 72, d.h1Size)}px`],
+    ["--t-h2-size", `${num(ty.h2Size, 16, 48, d.h2Size)}px`],
+    ["--t-heading-weight", String(WEIGHTS.has(ty.headingWeight as number) ? ty.headingWeight : d.headingWeight)],
+    ["--t-line-height", String(typeof ty.lineHeight === "number" ? ty.lineHeight : d.lineHeight)],
+    ["--t-btn-radius", `${radius}px`],
+    ["--t-btn-py", `${num(b.paddingY, 6, 32, d.buttonPaddingY)}px`],
+    ["--t-btn-px", `${num(b.paddingX, 8, 64, d.buttonPaddingX)}px`],
+    ["--t-btn-size", `${num(b.fontSize, 12, 28, d.buttonFontSize)}px`],
+    ["--t-btn-weight", String(WEIGHTS.has(b.weight as number) ? b.weight : d.buttonWeight)],
+    // Outline buttons are the same knobs with the fill removed — the border colour is always the
+    // primary, so an outline button can never end up invisible against the page.
+    ["--t-btn-bg", outline ? "transparent" : primary],
+    ["--t-btn-fg", outline ? primary : onPrimary],
+    ["--t-btn-bg-hover", outline ? primary : hex(c.primaryHover, d.primaryHover)],
+    ["--t-btn-fg-hover", outline ? onPrimary : onPrimary],
+    ["--t-btn-border", outline ? `2px solid ${primary}` : "none"],
+    ["--t-field-radius", `${num(f.radius, 0, 32, d.formRadius)}px`],
+    ["--t-field-border", hex(f.borderColor, "#cccccc")],
+    ["--t-field-bg", hex(f.background, "#ffffff")],
+    ["--t-field-pad", `${num(f.fieldPadding, 6, 28, d.fieldPadding)}px`],
+  ];
+
+  return vars.map(([k, v]) => `${k}:${v}`).join(";");
+}
+
+/**
+ * A theme derived from the colours found on the product's own sales page.
+ *
+ * Deliberately conservative: the brand colour drives the BUTTONS, LINKS and accents, and the
+ * reading surface (page background, body text) is left at the defaults. A palette generated wholly
+ * from a vendor page would regularly produce unreadable pages — plenty of sales pages are
+ * dark-red-on-black — and this page has to convert paid traffic, not win a design award.
+ *
+ * The hover shade and the on-primary text colour are COMPUTED, not guessed: hover is the primary
+ * darkened, and the label is black or white based on the primary's actual luminance, so a
+ * light brand colour doesn't produce white-on-yellow.
+ */
+export function themeFromBrandColors(colors: string[]): PageTheme | undefined {
+  const primary = colors.find((c) => /^#[0-9a-f]{6}$/i.test(c));
+  if (!primary) return undefined;
+
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(primary.slice(i, i + 2), 16));
+  const darken = (n: number) => Math.max(0, Math.round(n * 0.82));
+  const hover = "#" + [darken(r), darken(g), darken(b)].map((n) => n.toString(16).padStart(2, "0")).join("");
+
+  // WCAG relative luminance, so the CTA label is legible on whatever the brand colour turns out
+  // to be. 0.45 rather than 0.5 because white-on-mid is more forgiving than black-on-mid.
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const luminance = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  const onPrimary = luminance > 0.45 ? "#1a1a1a" : "#ffffff";
+
+  return { colors: { primary, primaryHover: hover, onPrimary } };
+}

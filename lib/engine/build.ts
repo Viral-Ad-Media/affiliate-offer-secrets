@@ -2,6 +2,7 @@ import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic"
 import { fetchSalesPage, type ImageCandidate } from "./salespage";
 import { pickProductImage, fetchImageAsDataUrl } from "./images";
 import { renderBridgeHtml, buildHoplink, normalizePageCopy, type PageCopy, type Network, type TrackingSettings } from "./renderPages";
+import { themeFromBrandColors } from "./pageTheme";
 import { db } from "./core";
 import type { FbAdAngle, SocialPost } from "@/lib/shared";
 import { wants, type KitAssetKey } from "@/lib/kitAssets";
@@ -67,13 +68,14 @@ function buildHoplinks(network: Network, affiliateId: string, vendorId: string, 
 async function stageContext(product: ProductRow, affiliateId: string): Promise<StageOutput> {
   const page = product.sales_page_url
     ? await fetchSalesPage(product.sales_page_url)
-    : { ok: false, text: null, imageCandidates: [] as ImageCandidate[] };
+    : { ok: false, text: null, imageCandidates: [] as ImageCandidate[], brandColors: [] as string[] };
   const hoplinks = buildHoplinks(product.network, affiliateId, product.vendor_id, product.hoplink_override);
   return {
     stageData: {
       sales_text: page.text,
       image_candidates: page.imageCandidates,
       page_ok: page.ok,
+      brand_colors: page.brandColors,
       hoplink_by_channel: hoplinks.byChannel,
     },
     campaignPatch: { hoplinks_txt: hoplinks.text },
@@ -201,6 +203,12 @@ async function stagePages(
   // every newly-built campaign persists version-2 page_copy going forward, rather than relying on
   // renderBridgeHtml's own internal (idempotent) normalization at every future read.
   const tree = normalizePageCopy(copy, imageDataUrl);
+  // Theme the page from the colours on the product's OWN sales page (stage 0 collected them).
+  // Only the accent is taken — see themeFromBrandColors for why the reading surface is left
+  // alone. A rebuild re-derives it; a tenant's own edits live on the saved tree and are only
+  // replaced when they deliberately rebuild the kit, same as every other generated field.
+  const brandTheme = themeFromBrandColors((prior.brand_colors as string[] | undefined) ?? []);
+  if (brandTheme) tree.theme = brandTheme;
   // A REBUILD of a campaign whose funnel already has tracking settings must keep its snippets —
   // fresh builds just read null here (the column defaults to null until funnel settings set it).
   const { data: trackingRow } = await db.from("campaigns").select("tracking").eq("id", campaignId).maybeSingle();

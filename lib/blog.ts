@@ -1,4 +1,5 @@
 import { marked } from "marked";
+import { themeToCssVars } from "@/lib/engine/pageTheme";
 import {
   escapeHtml,
   renderBlockTree,
@@ -314,8 +315,8 @@ export function blogIndexPath(blogSlug: string | null | undefined): string | nul
 const PUBLIC_CSS = `
   :root { --ink:#1a1a1a; --muted:#6b7280; --line:#e5e7eb; --accent:#047857; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #fff; color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.7; }
-  a { color: var(--accent); }
+  body { margin: 0; background: var(--t-bg, #fff); color: var(--t-text, var(--ink)); font-family: var(--t-body-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif); line-height: var(--t-line-height, 1.7); font-size: var(--t-base-size, 16px); }
+  a { color: var(--t-primary, var(--accent)); }
   /* Post content column. width:90% gives narrow screens a gutter with no media query; the px
      cap keeps a line of text readable on a wide monitor. --content-w comes from the post's own
      page_copy.contentWidth; the index grid below keeps its own fixed 1040px on purpose. */
@@ -546,6 +547,8 @@ export function renderPublicPostHtml(post: {
   previewBase?: string | null;
   /** From the post's page_copy (contentWidthOf). Absent → the shared default. */
   content_width?: number | null;
+  /** From the post's page_copy.theme. Absent → the pre-theme look, unchanged. */
+  theme?: unknown;
 }): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.affiliateoffersecrets.com";
   const origin = post.siteOrigin || appUrl;
@@ -596,7 +599,7 @@ ${post.published_at ? `<meta property="article:published_time" content="${escape
 ${post.featured_image_url ? `<meta property="og:image" content="${escapeHtml(post.featured_image_url)}">` : ""}
 <meta name="twitter:card" content="${post.featured_image_url ? "summary_large_image" : "summary"}">
 ${post.seo_index === false ? '<meta name="robots" content="noindex, nofollow">' : ""}
-<style>:root{--content-w:${contentWidthOf({ contentWidth: post.content_width ?? undefined })}px}${PUBLIC_CSS}</style>
+<style>:root{--content-w:${contentWidthOf({ contentWidth: post.content_width ?? undefined })}px;${themeToCssVars(post.theme)}}${PUBLIC_CSS}</style>
 </head>
 <body>
 ${siteHeader(post.settings, base)}

@@ -1,4 +1,5 @@
 import { embedUrl, type VideoSource } from "./videoEmbed";
+import type { PageTheme } from "./pageTheme";
 
 // The freeform block-tree page model (Phase O) — sections/rows/columns/elements, each stylable.
 // Isomorphic, no server-only imports (same discipline as renderPages.ts, which re-exports this
@@ -278,6 +279,8 @@ export type PageBlockTree = {
   blocks: (SectionBlock | LockedBlock)[];
   /** Max width of the page's content column, in px. See contentWidthOf() below. */
   contentWidth?: number;
+  /** Palette / typography / button / form styling. See lib/engine/pageTheme.ts. */
+  theme?: PageTheme;
 };
 
 // The content column is `width:90%; max-width:<contentWidth>px` — a percentage so narrow screens
@@ -655,7 +658,16 @@ function renderLockedBlock(block: LockedBlock, ctx: RenderCtx): string {
 // Returns a body-fragment string — renderBridgeHtml/renderFunnelStepHtml in renderPages.ts own
 // the outer <!doctype>/<head>/<style>/submit-script and splice this in unchanged.
 export function renderBlockTree(tree: PageBlockTree, ctx: RenderCtx): string {
-  return tree.blocks
+  // The affiliate disclosure always renders LAST, wherever it sits in the block order. It's a
+  // footer notice by convention — every network and ad reviewer expects it there — and it was
+  // previously draggable to any root position, so a page could legitimately ship with the
+  // disclosure above the fold and the offer below it. Hoisting here rather than reordering the
+  // stored tree means old pages get the right placement on their next render with no migration,
+  // and nothing can drag it back out of place. Content rule 3 says the disclosure is mandatory;
+  // this decides where.
+  const disclosure = tree.blocks.filter((b) => b.type === "disclosure");
+  const rest = tree.blocks.filter((b) => b.type !== "disclosure");
+  return [...rest, ...disclosure]
     .map((b) => (b.type === "section" ? renderSection(b, ctx) : renderLockedBlock(b, ctx)))
     .join("\n");
 }

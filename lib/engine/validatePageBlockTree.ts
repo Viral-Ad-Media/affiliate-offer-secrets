@@ -30,6 +30,7 @@ import {
 import { isValidImageDataUrl } from "@/lib/images/validate";
 import { parseVideoUrl, sourceToDisplayUrl } from "@/lib/engine/videoEmbed";
 import { isValidRedirectUrl } from "@/lib/validate";
+import { sanitizeTheme } from "./pageTheme";
 
 export type PageKind = "bridge" | "funnel_step" | "blog";
 export type ValidatePageBlockTreeOptions = { pageKind: PageKind; stepType?: FunnelStepType };
@@ -454,7 +455,7 @@ export function validatePageBlockTree(raw: unknown, opts: ValidatePageBlockTreeO
 
     // contentWidth rides on the tree, so it has to survive validation like anything else —
     // dropping it here would silently reset every page to the default on its next save.
-    return { ok: true, tree: { version: 2, blocks, contentWidth: contentWidthOf(body) } };
+    return { ok: true, tree: { version: 2, blocks, contentWidth: contentWidthOf(body), theme: sanitizeTheme(body.theme) } };
   } catch (err) {
     if (err instanceof BlockCountLimit) return { ok: false, error: err.message };
     return { ok: false, error: err instanceof Error ? err.message : "invalid page content" };
