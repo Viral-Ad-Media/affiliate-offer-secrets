@@ -53,6 +53,38 @@ function countOf(blocks: Block[], type: string): number {
   return blocks.filter((b) => b.type === type).length;
 }
 
+function wordsIn(s: unknown): number {
+  return typeof s === "string" ? s.trim().split(/\s+/).filter(Boolean).length : 0;
+}
+
+/**
+ * A block of one of `types` that actually SAYS something — at least `minWords` of real text.
+ *
+ * Presence was the wrong test and it let a page through: a funnel built from the "Scratch" layout
+ * has a heading block with `text: ""`, so "A headline" ticked on an empty <h1> and the page was
+ * publishable with nothing on it. Same reasoning as hasVisibleMedia — the checklist has to ask
+ * whether a visitor would SEE the thing, not whether the block exists in the tree.
+ */
+function hasTextBlock(blocks: Block[], types: string[], minWords = 1): boolean {
+  return blocks.some((b) => {
+    if (!types.includes(b.type)) return false;
+    const c = (b as ElementBlock).content as Record<string, unknown> | undefined;
+    return wordsIn(c?.text) >= minWords;
+  });
+}
+
+/** A list block with at least one non-empty entry. */
+function hasFilledList(blocks: Block[]): boolean {
+  return blocks.some((b) => {
+    if (b.type !== "bullet_list" && b.type !== "icon_list") return false;
+    const items = ((b as ElementBlock).content as Record<string, unknown>)?.items;
+    if (!Array.isArray(items)) return false;
+    return items.some((i) =>
+      typeof i === "string" ? i.trim().length > 0 : wordsIn((i as Record<string, unknown>)?.text) > 0
+    );
+  });
+}
+
 /**
  * A block that will actually SHOW something, not just an empty placeholder.
  *
@@ -86,6 +118,40 @@ function hasRealTestimonial(blocks: Block[]): boolean {
 /** Any form a visitor can submit — the locked opt-in one or a dropped-in standalone form. */
 function hasForm(blocks: Block[]): boolean {
   return blocks.some((b) => b.type === "form" || (b as LockedBlock).locked === "lead_capture_form");
+}
+
+/**
+ * Button labels that are the template's own default, or so generic they say nothing. A squeeze
+ * page's button is one of about four things on it, so "Continue" is a wasted line rather than a
+ * small blemish — hence this is a required item there and nowhere else.
+ *
+ * Matched on the whole trimmed label, never as a substring: "Continue to my free guide" is a
+ * perfectly good button and must not be caught by "continue".
+ */
+const GENERIC_CTA_LABELS = new Set([
+  "continue",
+  "submit",
+  "send",
+  "sign up",
+  "subscribe",
+  "next",
+  "go",
+  "click here",
+  "get started",
+  "download",
+]);
+
+/** The form's submit label, from the locked opt-in form or a standalone form block. */
+function hasSpecificFormCta(blocks: Block[]): boolean {
+  return blocks.some((b) => {
+    const locked = (b as LockedBlock).locked;
+    if (b.type !== "form" && locked !== "lead_capture_form") return false;
+    const c = (b as ElementBlock).content as Record<string, unknown> | undefined;
+    const label = (locked === "lead_capture_form" ? c?.ctaText : c?.submitText) as unknown;
+    if (typeof label !== "string") return false;
+    const t = label.trim().toLowerCase().replace(/[.!…]+$/, "");
+    return t.length > 0 && !GENERIC_CTA_LABELS.has(t);
+  });
 }
 
 /** Fields the tenant added beyond the name/email the form renders itself. */
@@ -153,9 +219,9 @@ export function funnelPageChecklist(
   const headline = item(
     "headline",
     "A headline",
-    "The first thing a visitor reads, and usually the only thing they read before deciding to stay.",
+    "The first thing a visitor reads, and usually the only thing they read before deciding to stay. An empty heading block doesn't count.",
     "required",
-    has(b, "heading")
+    hasTextBlock(b, ["heading"])
   );
   const form = item(
     "form",
@@ -183,7 +249,7 @@ export function funnelPageChecklist(
     "A list of what they get",
     "Scannable bullets do the work for the majority of visitors who never read the paragraphs.",
     "recommended",
-    hasAny(b, ["bullet_list", "icon_list"])
+    hasFilledList(b)
   );
   const image = item(
     "image",
@@ -215,18 +281,42 @@ export function funnelPageChecklist(
   );
 
   switch (funnelType) {
+    // Squeeze deliberately asks for MORE than the schema minimum, not less. Being the shortest
+    // page type makes it the easiest to publish empty — headline + form alone is a blank page with
+    // a box on it, and that is exactly what a scratch build produces. Everything required here is
+    // something a visitor has to read before deciding to hand over an address.
     case "squeeze":
       return [
         headline,
+        item(
+          "promise",
+          "The offer, in a line",
+          "A subheading or short paragraph saying what they actually get. The headline alone is a claim; this is the thing being traded for their address.",
+          "required",
+          hasTextBlock(b, ["subheading", "paragraph"], 5)
+        ),
+        item(
+          "whatTheyGet",
+          "What's included",
+          "Two or three bullets. On a page this short they're most of the copy, and they're what turns a vague promise into something specific.",
+          "required",
+          hasFilledList(b)
+        ),
         form,
+        item(
+          "cta_text",
+          "A button that says what happens",
+          'The form\'s button text. "Continue" or "Submit" asks for an email and promises nothing — name the thing they get.',
+          "required",
+          hasSpecificFormCta(b)
+        ),
         item(
           "short",
           "Keep it short",
-          "A squeeze page trades one promise for an email. Under ~150 words is the whole idea; long copy belongs on a bridge page.",
+          `A squeeze page trades one promise for an email. Under ~150 words is the whole idea; long copy belongs on a bridge page. Currently ${words}.`,
           "recommended",
           words > 0 && words <= 150
         ),
-        benefits,
         image,
       ];
 
