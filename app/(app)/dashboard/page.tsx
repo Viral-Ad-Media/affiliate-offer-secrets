@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { currentWorkspaceId } from "@/lib/workspace";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import SetupChecklist, { type SetupStep } from "@/components/SetupChecklist";
 import {
   Megaphone,
   Link2,
@@ -83,6 +84,9 @@ export default async function Overview() {
     { count: campaignsReadyCount },
     { count: contactsCount },
     { count: activeSequencesCount },
+    { count: networkCount },
+    { count: publishedFunnelCount },
+    { data: workspace },
   ] = await Promise.all([
     supabase.from("products").select("id", { count: "exact", head: true }).eq("workspace_id", ws),
     supabase
@@ -96,7 +100,55 @@ export default async function Overview() {
       .select("id", { count: "exact", head: true })
       .eq("workspace_id", ws)
       .eq("status", "active"),
+    // The two extra counts the checklist needs. Both are head-only, so they cost a count and no rows.
+    supabase
+      .from("network_connections")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", ws),
+    supabase
+      .from("campaigns")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", ws)
+      .eq("bridge_published", true),
+    supabase.from("workspaces").select("setup_dismissed_at").eq("id", ws).maybeSingle(),
   ]);
+
+  // Derived from the counts above, never stored — so a step un-ticks itself if the thing it
+  // describes goes away, and nothing has to remember to mark a step done.
+  const setupSteps: SetupStep[] = [
+    {
+      key: "network",
+      label: "Connect an affiliate network",
+      hint: "Your ClickBank nickname or Digistore24 ID goes into every hoplink the app generates. Without it, nothing you publish can pay you.",
+      href: "/settings/integrations",
+      cta: "Connect",
+      done: (networkCount ?? 0) > 0,
+    },
+    {
+      key: "products",
+      label: "Find products to promote",
+      hint: "Browse the marketplace and track a few offers worth testing.",
+      href: "/marketplace",
+      cta: "Browse",
+      done: (productsCount ?? 0) > 0,
+    },
+    {
+      key: "kit",
+      label: "Build your first campaign kit",
+      hint: "Promote a tracked product and the app writes the ads, funnel pages, article and email swipes for it.",
+      href: "/marketplace",
+      cta: "Promote one",
+      done: (campaignsReadyCount ?? 0) > 0,
+    },
+    {
+      key: "publish",
+      label: "Publish a funnel",
+      hint: "A kit's opt-in page only starts collecting leads once it's published and reachable.",
+      href: "/funnels",
+      cta: "Publish",
+      done: (publishedFunnelCount ?? 0) > 0,
+    },
+  ];
 
   return (
     <main className="space-y-6">
@@ -104,6 +156,8 @@ export default async function Overview() {
         <h1 className="text-2xl font-bold text-zinc-100">Overview</h1>
         <p className="text-sm text-zinc-400">A summary of your account and where to go next.</p>
       </header>
+
+      {!workspace?.setup_dismissed_at && <SetupChecklist steps={setupSteps} workspaceId={ws!} />}
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatTile icon={<Package className="h-5 w-5" />} label="Products tracked" value={productsCount ?? 0} />

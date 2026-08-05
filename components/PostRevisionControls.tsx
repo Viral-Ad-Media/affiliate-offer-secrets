@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, Redo2, Sparkles, Undo2 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { Hint } from "@/components/ui/tooltip";
 
 /**
  * Regenerate / Undo / Redo, in the editor's top bar beside Save and Publish.
@@ -85,45 +86,67 @@ export default function PostRevisionControls({
 
   return (
     <div ref={wrapRef} className="relative flex items-center gap-1">
-      <Button
-        type="button"
-        onClick={() => run("revert")}
-        disabled={off || !hasSnapshot || direction !== "undo"}
-        title={
+      {/* Wrapped in a span because a disabled button fires no pointer events — and the disabled
+          state is exactly where the explanation matters ("nothing to undo YET, and here's why"). */}
+      <Hint
+        content={
           !hasSnapshot
-            ? "Nothing to undo yet — regenerating saves the current version first"
+            ? "Nothing to undo yet — regenerating saves the current version first, so this lights up after your first rewrite."
             : direction === "undo"
               ? `Undo the rewrite${when ? ` — back to ${when}` : ""}`
               : "Already undone — use Redo"
         }
-        
-        aria-label="Undo rewrite" variant="outline" className="px-2 text-xs disabled:opacity-40">
-        {busy === "revert" && direction === "undo" ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Undo2 className="h-3.5 w-3.5" />
-        )}
-      </Button>
+      >
+        <span className="inline-flex">
+          <Button
+            type="button"
+            onClick={() => run("revert")}
+            disabled={off || !hasSnapshot || direction !== "undo"}
+            aria-label="Undo rewrite"
+            variant="outline"
+            className="px-2 text-xs disabled:opacity-40"
+          >
+            {busy === "revert" && direction === "undo" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Undo2 className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </span>
+      </Hint>
 
-      <Button
-        type="button"
-        onClick={() => run("revert")}
-        disabled={off || !hasSnapshot || direction !== "redo"}
-        title={direction === "redo" ? "Redo — put the rewritten version back" : "Nothing to redo"}
-        
-        aria-label="Redo rewrite" variant="outline" className="px-2 text-xs disabled:opacity-40">
-        {busy === "revert" && direction === "redo" ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Redo2 className="h-3.5 w-3.5" />
-        )}
-      </Button>
+      <Hint
+        content={
+          direction === "redo"
+            ? "Redo — put the rewritten version back"
+            : "Nothing to redo — undo a rewrite first"
+        }
+      >
+        <span className="inline-flex">
+          <Button
+            type="button"
+            onClick={() => run("revert")}
+            disabled={off || !hasSnapshot || direction !== "redo"}
+            aria-label="Redo rewrite"
+            variant="outline"
+            className="px-2 text-xs disabled:opacity-40"
+          >
+            {busy === "revert" && direction === "redo" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Redo2 className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </span>
+      </Hint>
 
       <Button
         type="button"
         onClick={() => setAskOpen((v) => !v)}
         disabled={off}
-        title="Rewrite this post with AI" variant="outline" className="flex items-center gap-1.5 text-xs">
+        variant="outline"
+        className="flex items-center gap-1.5 text-xs"
+      >
         {busy === "regenerate" ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : (
