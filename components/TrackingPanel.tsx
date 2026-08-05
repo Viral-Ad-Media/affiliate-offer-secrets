@@ -31,9 +31,17 @@ export default function TrackingPanel({
     clarity_id: initialTracking?.clarity_id ?? "",
     meta_pixel_id: initialTracking?.meta_pixel_id ?? "",
   });
+  const [consent, setConsent] = useState({
+    enabled: initialTracking?.consent_enabled === true,
+    text: initialTracking?.consent_text ?? "",
+    accept: initialTracking?.consent_accept ?? "",
+    decline: initialTracking?.consent_decline ?? "",
+    policy: initialTracking?.consent_policy_url ?? "",
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const hasTags = Object.values(fields).some((v) => v.trim() !== "");
 
   async function save() {
     setBusy(true);
@@ -41,7 +49,14 @@ export default function TrackingPanel({
     const res = await fetch(`/api/campaigns/${campaignId}/tracking`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(fields),
+      body: JSON.stringify({
+        ...fields,
+        consent_enabled: consent.enabled,
+        consent_text: consent.text,
+        consent_accept: consent.accept,
+        consent_decline: consent.decline,
+        consent_policy_url: consent.policy,
+      }),
     });
     const data = await res.json();
     setBusy(false);
@@ -90,6 +105,66 @@ export default function TrackingPanel({
       {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
 
       <div className="mt-3 flex items-center gap-3">
+        <div className="mb-4 space-y-3 rounded-lg border border-ink-700 bg-ink-800/40 p-3">
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={consent.enabled}
+              onChange={(e) => setConsent((c) => ({ ...c, enabled: e.target.checked }))}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium text-zinc-100">Ask for cookie consent</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
+                Nothing above runs until the visitor accepts — the tags sit inert until then, and
+                Decline loads none of them. This is the part that makes a banner mean something:
+                a prompt shown over an already-fired pixel isn&apos;t consent.
+              </span>
+            </span>
+          </label>
+
+          {consent.enabled && !hasTags && (
+            <p className="text-[11px] text-amber-300">
+              No tracking IDs above yet, so no banner will show — there&apos;d be nothing to ask about.
+            </p>
+          )}
+
+          {consent.enabled && (
+            <div className="space-y-2">
+              <input
+                value={consent.text}
+                onChange={(e) => setConsent((c) => ({ ...c, text: e.target.value }))}
+                maxLength={400}
+                placeholder="We use cookies to measure how this page performs. You choose whether we do."
+                className="w-full rounded-lg border border-ink-600 bg-ink-900 px-2.5 py-1.5 text-xs outline-none focus:border-emerald-500"
+              />
+              <div className="flex gap-2">
+                <input
+                  value={consent.accept}
+                  onChange={(e) => setConsent((c) => ({ ...c, accept: e.target.value }))}
+                  maxLength={40}
+                  placeholder="Accept"
+                  className="w-1/2 rounded-lg border border-ink-600 bg-ink-900 px-2.5 py-1.5 text-xs outline-none focus:border-emerald-500"
+                />
+                <input
+                  value={consent.decline}
+                  onChange={(e) => setConsent((c) => ({ ...c, decline: e.target.value }))}
+                  maxLength={40}
+                  placeholder="Decline"
+                  className="w-1/2 rounded-lg border border-ink-600 bg-ink-900 px-2.5 py-1.5 text-xs outline-none focus:border-emerald-500"
+                />
+              </div>
+              <input
+                value={consent.policy}
+                onChange={(e) => setConsent((c) => ({ ...c, policy: e.target.value }))}
+                maxLength={2000}
+                placeholder="https://… link to your privacy policy (optional)"
+                className="w-full rounded-lg border border-ink-600 bg-ink-900 px-2.5 py-1.5 text-xs outline-none focus:border-emerald-500"
+              />
+            </div>
+          )}
+        </div>
+
         <button onClick={save} disabled={busy} className="btn-primary">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Save tracking

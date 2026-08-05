@@ -1,3 +1,5 @@
+import { escapeHtml } from "./blockTree";
+
 // Per-funnel analytics/tracking snippets (GA4, Google Tag Manager, Microsoft Clarity, Meta
 // Pixel), injected into every publicly-served funnel page. Isomorphic, no I/O.
 //
@@ -13,6 +15,23 @@ export type TrackingSettings = {
   gtm_id?: string | null;
   clarity_id?: string | null;
   meta_pixel_id?: string | null;
+  /**
+   * Cookie/GDPR consent gate.
+   *
+   * When on, NONE of the tracking above runs until the visitor accepts — the snippets sit inert in
+   * a <template> and are only injected on Accept. That is the whole point: a banner shown over an
+   * already-fired Meta Pixel is not consent, it is a notice about something that already happened,
+   * and under GDPR/ePrivacy it is arguably worse than no banner because it documents the breach.
+   *
+   * Decline stores the choice and injects nothing. There is no "consent by continuing to browse" —
+   * that has not been valid in the EU since the 2019 Planet49 ruling.
+   */
+  consent_enabled?: boolean | null;
+  consent_text?: string | null;
+  consent_accept?: string | null;
+  consent_decline?: string | null;
+  /** Optional "read more" link, shown only if it's a real http(s) URL. */
+  consent_policy_url?: string | null;
 };
 
 export const TRACKING_FIELDS = ["ga4_id", "gtm_id", "clarity_id", "meta_pixel_id"] as const;
@@ -84,6 +103,24 @@ export function validateTracking(
     tracking[field] = id;
     any = true;
   }
+  // Consent settings are text/booleans, not IDs — clamped, never pattern-matched, and they don't
+  // count toward `any`: a consent block with no tags to gate renders nothing anyway.
+  const clamp = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  if (body.consent_enabled === true) {
+    tracking.consent_enabled = true;
+    const url = clamp(body.consent_policy_url, 2000);
+    if (url && !/^https?:\/\//i.test(url)) {
+      return { ok: false, error: "The privacy policy link must start with http:// or https://" };
+    }
+    if (url) tracking.consent_policy_url = url;
+    const text = clamp(body.consent_text, 400);
+    const yes = clamp(body.consent_accept, 40);
+    const no = clamp(body.consent_decline, 40);
+    if (text) tracking.consent_text = text;
+    if (yes) tracking.consent_accept = yes;
+    if (no) tracking.consent_decline = no;
+    any = true;
+  }
   return { ok: true, tracking: any ? tracking : null };
 }
 
@@ -133,5 +170,65 @@ export function renderTrackingHtml(tracking: TrackingSettings | null | undefined
     );
   }
 
-  return { head: head.join("\n"), bodyStart: bodyStart.join("\n") };
+  const gated = tracking.consent_enabled === true;
+  if (!gated) return { head: head.join("\n"), bodyStart: bodyStart.join("\n") };
+
+  // Nothing to gate → no banner. A consent prompt on a page that sets no cookies is a dark
+  // pattern in reverse: it trains people to dismiss prompts that did not need asking.
+  if (head.length === 0) return { head: "", bodyStart: "" };
+
+  const text = escapeHtml(
+    (tracking.consent_text || "").trim() ||
+      "We use cookies to measure how this page performs. You choose whether we do."
+  );
+  const yes = escapeHtml((tracking.consent_accept || "").trim() || "Accept");
+  const no = escapeHtml((tracking.consent_decline || "").trim() || "Decline");
+  const policy =
+    typeof tracking.consent_policy_url === "string" && /^https?:\/\//i.test(tracking.consent_policy_url)
+      ? `<a href="${escapeHtml(tracking.consent_policy_url)}" target="_blank" rel="noopener noreferrer">Privacy policy</a>`
+      : "";
+
+  // The snippets live in a <template>: inert until cloned, so nothing runs on load. The noscript
+  // pixels are deliberately DROPPED when gating — a <noscript> image fires unconditionally and
+  // cannot ask anyone anything, so keeping it would leak exactly what consent is meant to hold
+  // back.
+  return {
+    head: `<template id="aos-consent-tags">${head.join("\n")}</template>`,
+    bodyStart: `<div id="aos-consent" class="aos-consent" role="dialog" aria-live="polite" aria-label="Cookie choices" hidden>
+  <p>${text} ${policy}</p>
+  <div class="aos-consent-actions">
+    <button type="button" data-consent="no">${no}</button>
+    <button type="button" data-consent="yes" class="aos-consent-yes">${yes}</button>
+  </div>
+</div>
+${CONSENT_SCRIPT}`,
+  };
 }
+
+// Code-owned and constant — it reads no tenant text and builds no markup from data. Cloning a
+// <template>'s scripts does not execute them, so each one is recreated; that is the whole trick
+// that lets the snippets stay code-owned strings rather than something assembled in JS.
+const CONSENT_SCRIPT = `<script>(function(){
+var KEY="aos_consent", box=document.getElementById("aos-consent"), tpl=document.getElementById("aos-consent-tags");
+if(!box||!tpl) return;
+function run(){
+  var frag=tpl.content.cloneNode(true), old=frag.querySelectorAll("script");
+  for(var i=0;i<old.length;i++){
+    var o=old[i], s=document.createElement("script");
+    for(var j=0;j<o.attributes.length;j++){ s.setAttribute(o.attributes[j].name,o.attributes[j].value); }
+    s.text=o.text; o.parentNode.replaceChild(s,o);
+  }
+  document.head.appendChild(frag);
+}
+var saved=null; try{ saved=localStorage.getItem(KEY); }catch(e){}
+if(saved==="yes"){ run(); return; }
+if(saved==="no"){ return; }
+box.hidden=false;
+box.addEventListener("click",function(e){
+  var choice=e.target&&e.target.getAttribute&&e.target.getAttribute("data-consent");
+  if(!choice) return;
+  try{ localStorage.setItem(KEY,choice); }catch(err){}
+  box.hidden=true;
+  if(choice==="yes") run();
+});
+})();</script>`;

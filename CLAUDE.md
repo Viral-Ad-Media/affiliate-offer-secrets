@@ -1907,6 +1907,32 @@ this reason, and their templates seed an empty video block above the copy (`VIDE
 since a VSL template without one is just a squeeze page with a different headline. Survey
 (`needs_branching`) and Book (`needs_payment`) are still correctly blocked.
 
+## Cookie / GDPR consent
+
+`tracking.consent_enabled` turns on a consent gate for a funnel's tracking snippets, configured in
+the same Tracking panel as the IDs (no migration — it rides in the existing `tracking` jsonb, so it
+goes through the same validate + re-render path).
+
+**Consent actually GATES the tags, which is the whole point.** With it on, `renderTrackingHtml`
+emits the snippets inside an inert `<template>` and nothing runs until Accept, at which point a
+code-owned script recreates the script elements into `<head>`. Decline stores the choice and loads
+nothing. A banner shown over an already-fired Meta Pixel is not consent — it's a notice about
+something that already happened, and under GDPR/ePrivacy that's arguably worse than no banner
+because it documents the breach.
+
+Three consequences worth keeping:
+- **The `<noscript>` pixels are DROPPED when gating.** A `<noscript>` image fires unconditionally
+  and can't ask anyone anything, so leaving it in would leak exactly what consent holds back.
+- **No banner when there are no tags.** A consent prompt on a page that sets no cookies trains
+  people to dismiss prompts that never needed asking; the panel says so rather than rendering one.
+- **No "consent by continuing to browse"** — invalid in the EU since Planet49 (2019). Decline is a
+  real, equally-reachable button, not greyed out or hidden, which is the dark pattern regulators
+  single out.
+
+Verified directly: gating off behaves exactly as before (tags in `<head>`, noscript present); gating
+on puts them in a template with no noscript and shows the banner; a `javascript:` policy URL is
+rejected at save; banner text is escaped.
+
 ## Carousel and countdown blocks
 
 **Carousel is CSS scroll-snap, not a JS carousel.** It swipes natively on touch, scrolls with a

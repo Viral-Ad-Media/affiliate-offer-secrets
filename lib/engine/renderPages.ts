@@ -264,6 +264,14 @@ const PAGE_STYLE = `
   .countdown .cd-label { font-size:14px; color:#666; margin-bottom:4px; }
   .countdown .cd-clock { font-size:34px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:1px; }
   .countdown .cd-expired { font-size:16px; font-weight:600; }
+  .aos-consent { position:fixed; left:0; right:0; bottom:0; z-index:2147483000; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:12px 20px; padding:14px 20px; background:#1a1a1a; color:#f5f5f5; font-size:14px; line-height:1.5; box-shadow:0 -2px 12px rgba(0,0,0,.2); }
+  .aos-consent p { margin:0; max-width:60ch; }
+  .aos-consent a { color:#9ae6b4; }
+  .aos-consent-actions { display:flex; gap:8px; flex-shrink:0; }
+  .aos-consent button { cursor:pointer; border:1px solid #555; background:transparent; color:#f5f5f5; padding:8px 16px; border-radius:6px; font-size:14px; font-family:inherit; }
+  /* Accept is emphasised but Decline is a real, equally-reachable button — a greyed-out or
+     hidden reject is the dark pattern regulators single out. */
+  .aos-consent .aos-consent-yes { background:var(--t-primary,#16a34a); border-color:var(--t-primary,#16a34a); font-weight:600; }
   .faq-item { margin-bottom: 16px; }
   .faq-item h3 { font-size:16px; margin-bottom:4px; }
   .row { display:flex; gap:24px; flex-wrap:wrap; }
