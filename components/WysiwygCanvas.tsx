@@ -694,6 +694,9 @@ function SectionBody({
   );
 }
 
+// Not a block id — must never collide with one findBlockLocation could resolve.
+const PAGE_SETTINGS_ID = "__page_settings__";
+
 export type WysiwygCanvasProps = {
   tree: PageBlockTree;
   onChange: (tree: PageBlockTree) => void;
@@ -712,6 +715,14 @@ export type WysiwygCanvasProps = {
    * should open in the same panel as everything else rather than in a separate form below the
    * sheet. Not draggable and not deletable, because its position on the real page is fixed.
    */
+  /**
+   * Page-level settings, reached by a ⚙ in the canvas toolbar.
+   *
+   * The canvas already gives every BLOCK a settings affordance; without this the PAGE itself was
+   * the only thing on screen you couldn't open settings for. It matters more in the fullscreen
+   * editor, where the fields that used to sit around the canvas aren't visible at all.
+   */
+  settings?: { title: string; panel: React.ReactNode };
   appendix?: {
     /** Selection key. Must not collide with a real block id — prefix it. */
     id: string;
@@ -745,6 +756,7 @@ export default function WysiwygCanvas({
   onImageError,
   productTitle,
   ctaClassName,
+  settings,
   appendix,
 }: WysiwygCanvasProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -758,6 +770,9 @@ export default function WysiwygCanvas({
   const selectedBlock: Block | null = selectedBlockId ? findBlockLocation(tree, selectedBlockId)?.block ?? null : null;
   // The appendix isn't in the tree, so findBlockLocation can't resolve it — check by id instead.
   const appendixSelected = !!appendix && selectedBlockId === appendix.id;
+  // Page settings aren't a block either, so they get their own sentinel rather than an id
+  // findBlockLocation could ever resolve.
+  const settingsSelected = !!settings && selectedBlockId === PAGE_SETTINGS_ID;
 
   function updateStyle(blockId: string, patch: Record<string, unknown>) {
     onChange(updateBlockStyle(tree, blockId, patch));
@@ -1382,6 +1397,23 @@ export default function WysiwygCanvas({
               <Icon className="h-4 w-4" />
             </button>
           ))}
+          {settings && (
+            <>
+              <span className="mx-1 h-4 w-px bg-ink-700" />
+              <button
+                type="button"
+                onClick={() => setSelectedBlockId(settingsSelected ? null : PAGE_SETTINGS_ID)}
+                title="Page settings"
+                className={`rounded-md p-1.5 ${
+                  settingsSelected
+                    ? "bg-emerald-500/15 text-emerald-400"
+                    : "text-zinc-500 hover:bg-ink-800 hover:text-zinc-300"
+                }`}
+              >
+                <Settings2 className="h-4 w-4" />
+              </button>
+            </>
+          )}
         </div>
         <div
           // bg-white/#1a1a1a are hardcoded ON PURPOSE and never themed — this is a preview of the
@@ -1423,9 +1455,13 @@ export default function WysiwygCanvas({
         </div>
       </div>
 
-      {(selectedBlock || appendixSelected) && (
+      {(selectedBlock || appendixSelected || settingsSelected) && (
         <div className="lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:w-80 lg:shrink-0 lg:overflow-y-auto">
-          {appendixSelected && appendix ? (
+          {settingsSelected && settings ? (
+            <EditorSidePanel title={settings.title} onClose={() => setSelectedBlockId(null)}>
+              {settings.panel}
+            </EditorSidePanel>
+          ) : appendixSelected && appendix ? (
             <EditorSidePanel title={appendix.title} onClose={() => setSelectedBlockId(null)}>
               {appendix.panel}
             </EditorSidePanel>

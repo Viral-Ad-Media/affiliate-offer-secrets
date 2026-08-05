@@ -218,6 +218,21 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
         </select>
       </div>
 
+      <p className="text-xs text-zinc-500">
+        Click any text below to edit it in place, drag <span className="text-zinc-400">⠿</span> to
+        reorder a block. Links inside text use markdown syntax: [link text](https://…). The
+        affiliate disclosure is locked — it can&apos;t be edited or removed. Everything about the
+        post itself — image, excerpt, URL, SEO, score — is behind the ⚙ above the canvas.
+      </p>
+
+      <WysiwygCanvas
+        settings={{
+          title: "Post settings",
+          // The same sections that used to stack above the canvas, moved behind the ⚙ so the
+          // editor is actually an editor rather than a form with a canvas at the bottom. They are
+          // the same components with the same state — nothing here is a second copy.
+          panel: (
+            <div className="space-y-4">
       <section className="card space-y-4 p-4">
         <FeaturedImageField
           postId={post.id}
@@ -288,8 +303,9 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
         reorder a block. Links inside text use markdown syntax: [link text](https://…). The
         affiliate disclosure is locked — it can&apos;t be edited or removed.
       </p>
-
-      <WysiwygCanvas
+            </div>
+          ),
+        }}
         tree={tree}
         onChange={setTree}
         resizeImageFile={resizeImageFile}

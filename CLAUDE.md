@@ -1824,6 +1824,20 @@ The blog is a real published site, not just per-post links.
   well-formed XML with the entities escaped.
 - **Still deferred**: no paginated sitemap index (irrelevant under 1000 posts).
 
+## Page settings (the canvas ⚙)
+
+`WysiwygCanvas` takes an optional `settings={{ title, panel }}` and renders a ⚙ in its device
+toolbar. Every BLOCK already had a settings affordance; the PAGE itself was the only thing on
+screen you couldn't open settings for. It shares the side rail with `BlockStylePanel` and the
+appendix panel — one panel at a time, selecting a block takes the rail back — via a
+`__page_settings__` sentinel that `findBlockLocation` can never resolve.
+
+The blog post editor is what this exists for. It was already a fullscreen overlay (same
+`fixed inset-0` treatment as the funnel editor's edit views) but the canvas sat under a stack of
+form sections — featured image, excerpt, slug, SEO fields, SEO panel — so it read as a form with a
+canvas at the bottom rather than an editor. Those sections moved behind the ⚙ unchanged: same
+components, same state, not a second copy.
+
 ## Video block
 
 `video` is an element block like any other (palette, drag, style panel), but its content is not a
