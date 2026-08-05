@@ -79,13 +79,17 @@ const NAV: NavItem[] = [
     // Shown indented under the parent whenever any /blog route is active (expanded rail + mobile
     // drawer only — the icon-only collapsed rail keeps just the parent icon).
     children: [
+      { href: "/blog/home", label: "Home page", match: (p: string) => p === "/blog/home" },
       {
         href: "/blog",
         label: "Posts",
+        // Deliberately a negative match, not p === "/blog": the post editor lives at /blog/{id},
+        // and Posts should stay highlighted while you're editing one. Listing the siblings is what
+        // keeps that from also lighting up on Home page/Categories/Settings — so any NEW /blog/*
+        // sibling must be added here too, or it will highlight Posts as well as itself.
         match: (p: string) =>
           p.startsWith("/blog") && !["/blog/home", "/blog/categories", "/blog/settings"].includes(p),
       },
-      { href: "/blog/home", label: "Home page", match: (p: string) => p === "/blog/home" },
       { href: "/blog/categories", label: "Categories", match: (p: string) => p === "/blog/categories" },
       { href: "/blog/settings", label: "Settings", match: (p: string) => p === "/blog/settings" },
     ],

@@ -16,7 +16,7 @@ const HEADERS = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
 };
 
-export async function GET() {
+export async function GET(req: Request) {
   const supabase = createClient();
   const {
     data: { user },
@@ -52,14 +52,36 @@ export async function GET() {
     category_slug: r.blog_categories?.slug ?? null,
   }));
 
-  const html = renderBlogIndexHtml(settings ?? {}, posts, {
-    categories: (cats ?? []).map((c: any) => ({
-      name: c.name,
-      slug: c.slug,
-      description: c.description,
-    })),
-    page: 1,
-    totalPages: 1,
+  const categories = (cats ?? []).map((c: any) => ({
+    name: c.name,
+    slug: c.slug,
+    description: c.description,
+  }));
+
+  // The category chips and pager the renderer emits point back here, so honour their params —
+  // otherwise every one of them would reload an identical page and read as broken. Filtering is
+  // done in memory over the already-fetched rows rather than re-querying: this is an owner-only
+  // preview capped at 50 posts, not the public index.
+  const url = new URL(req.url);
+  const categoryParam = url.searchParams.get("category");
+  const activeCategory = categoryParam ? (categories.find((c) => c.slug === categoryParam) ?? null) : null;
+  const filtered = activeCategory ? posts.filter((p) => p.category_slug === activeCategory.slug) : posts;
+
+  const perPage = 12;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  // Clamped rather than 404'd on an out-of-range page — a preview should always render something,
+  // and the only way to land here is by clicking the app's own pager.
+  const page = Math.min(Math.max(1, Number(url.searchParams.get("page")) || 1), totalPages);
+  const pagePosts = filtered.slice((page - 1) * perPage, page * perPage);
+
+  const html = renderBlogIndexHtml(settings ?? {}, pagePosts, {
+    categories,
+    activeCategory,
+    page,
+    totalPages,
+    // Every internal link stays inside the preview — see lib/blog.ts. Previously they pointed at
+    // the real public paths, which 404 for drafts and for a blog with no slug set yet.
+    previewBase: "/api/blog/preview",
   });
   return new Response(html, { status: 200, headers: HEADERS });
 }

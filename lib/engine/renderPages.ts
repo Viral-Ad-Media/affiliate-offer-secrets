@@ -83,7 +83,29 @@ export const LEAD_CONSENT_TEXT = "By submitting, you agree to be contacted about
 // affiliateId is self-service, free-text user input, not admin-set data. Callers must still route
 // the returned hoplink through escapeHtml() before interpolating it into an href attribute —
 // encodeURIComponent() alone doesn't escape HTML-significant characters like `"`.
-export function buildHoplink(network: Network, affiliateId: string, vendorId: string, tid: string): string {
+/**
+ * The affiliate link for one channel.
+ *
+ * `override` is a tenant-supplied link (products.hoplink_override) that replaces the derived one
+ * wholesale — used when the constructed link is wrong for a given offer. It is returned VERBATIM,
+ * including for per-channel calls, which means the per-channel `tid` is deliberately lost while an
+ * override is set. That is the honest behaviour: the tid convention is specific to each network's
+ * own URL shape (ClickBank's `tid` query param, Digistore24's campaignkey path segment), and an
+ * arbitrary pasted URL gives no reliable way to know where — or whether — a tracking token belongs.
+ * Guessing would produce links that look tracked and silently aren't. The UI says so at the point
+ * of entry.
+ *
+ * The value is scheme-constrained at the database (0064) and escapeHtml'd at every interpolation
+ * point, same three-layer treatment as the derived link.
+ */
+export function buildHoplink(
+  network: Network,
+  affiliateId: string,
+  vendorId: string,
+  tid: string,
+  override?: string | null
+): string {
+  if (typeof override === "string" && override.trim()) return override.trim();
   const aff = encodeURIComponent(affiliateId);
   const vid = encodeURIComponent(vendorId);
   const channel = encodeURIComponent(tid);

@@ -55,6 +55,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     seo_title: post.seo_title as string | null,
     seo_description: post.seo_description as string | null,
     seo_index: post.seo_index as boolean,
+    // Keeps the site-title link (and anything else derived from the blog root) inside the preview.
+    // Without it the header linked to the real /b/{slug} index, which 404s while the blog slug is
+    // unset and shows only published posts once it is.
+    previewBase: "/api/blog/preview",
   });
   return new Response(html, { status: 200, headers: HEADERS });
 }

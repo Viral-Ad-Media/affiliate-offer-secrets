@@ -362,12 +362,20 @@ export function renderPublicPostHtml(post: {
   seo_index?: boolean;
   // Set on custom-domain requests so links/canonical point at that domain instead of the app.
   siteOrigin?: string | null;
+  // Set by the owner-only preview routes. When present, internal links target the preview instead
+  // of the real public paths — see the comment where `base` is computed.
+  previewBase?: string | null;
 }): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.affiliateoffersecrets.com";
   const origin = post.siteOrigin || appUrl;
   // On a custom domain the blog lives at the root, so paths drop the /b/{blogSlug} prefix.
   const onDomain = !!post.siteOrigin;
-  const base = onDomain ? "" : blogIndexPath(post.settings?.slug) ?? "";
+  // In preview, every internal link has to stay inside the preview. Pointing them at the real
+  // public paths (which is what happened before) 404s on contact with reality: the public route
+  // serves PUBLISHED posts only, so any draft link dead-ends, and a blog whose slug isn't set yet
+  // has no public path at all — blogIndexPath returns null and the base collapses to "".
+  const previewBase = post.previewBase || null;
+  const base = previewBase ?? (onDomain ? "" : blogIndexPath(post.settings?.slug) ?? "");
   const style = post.settings?.permalink_style ?? "post";
   const postPath = onDomain
     ? blogPostPathOnDomain(post, style)
@@ -446,6 +454,8 @@ export function renderBlogIndexHtml(
   posts: BlogIndexPost[],
   opts?: {
     siteOrigin?: string | null;
+    /** Owner-only preview: rewrite every internal link to stay inside the preview. */
+    previewBase?: string | null;
     categories?: BlogIndexCategory[];
     activeCategory?: BlogIndexCategory | null;
     page?: number;
@@ -455,7 +465,8 @@ export function renderBlogIndexHtml(
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.affiliateoffersecrets.com";
   const onDomain = !!opts?.siteOrigin;
   const origin = opts?.siteOrigin || appUrl;
-  const base = onDomain ? "" : blogIndexPath(settings.slug) ?? "";
+  const previewBase = opts?.previewBase || null;
+  const base = previewBase ?? (onDomain ? "" : blogIndexPath(settings.slug) ?? "");
   const page = Math.max(1, opts?.page ?? 1);
   const totalPages = Math.max(1, opts?.totalPages ?? 1);
   const activeCategory = opts?.activeCategory ?? null;
@@ -481,9 +492,13 @@ export function renderBlogIndexHtml(
 
   const cards = posts
     .map((p) => {
-      const href = onDomain
-        ? blogPostPathOnDomain(p, settings.permalink_style)
-        : blogPostPath(settings.slug, p.slug, p.id, p, settings.permalink_style);
+      // In preview a card must open the PREVIEW of that post: it may be a draft, which the public
+      // route refuses to serve, and it may have no public path at all if the blog slug is unset.
+      const href = previewBase
+        ? `${previewBase}/post/${p.id}`
+        : onDomain
+          ? blogPostPathOnDomain(p, settings.permalink_style)
+          : blogPostPath(settings.slug, p.slug, p.id, p, settings.permalink_style);
       const excerpt = (p.excerpt || "").trim() || postExcerpt(p);
       const date = p.published_at
         ? new Date(p.published_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
