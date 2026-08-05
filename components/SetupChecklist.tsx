@@ -63,7 +63,7 @@ export default function SetupChecklist({
         <button
           onClick={dismiss}
           title="Hide this checklist"
-          className="rounded-lg p-1.5 text-zinc-500 hover:bg-ink-800 hover:text-zinc-200"
+          className="shrink-0 rounded-lg p-1.5 text-zinc-500 hover:bg-ink-800 hover:text-zinc-200"
         >
           <X className="h-4 w-4" />
         </button>

@@ -12,6 +12,7 @@ import CreditsProvider from "@/components/CreditsProvider";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import TrialChip from "@/components/TrialChip";
 import TopBarAccount from "@/components/TopBarAccount";
+import ProductTour from "@/components/ProductTour";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
@@ -45,7 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("access_granted, nickname, trial_ends_at, first_name, last_name, avatar_url, is_superadmin")
+    .select("access_granted, nickname, trial_ends_at, first_name, last_name, avatar_url, is_superadmin, tour_completed_at")
     .eq("id", user.id)
     .single();
 
@@ -123,6 +124,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </div>
+      {/* Auto-starts once per person, never per workspace — a teammate joining an established
+          workspace has seen none of this even though every setup step is already done. */}
+      <ProductTour autoStart={!profile?.tour_completed_at} />
     </div>
     </CreditsProvider>
   );

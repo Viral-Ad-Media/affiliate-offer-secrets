@@ -13,6 +13,7 @@ export default function CreditsChip({
   return (
     <Link
       href="/settings/billing"
+      data-tour="credits-chip"
       title={`${creditBalance} credits — top up`}
       className={`flex items-center gap-1.5 rounded-full border border-ink-600 px-2.5 py-1 text-xs text-emerald-300 hover:border-emerald-500 ${className}`}
     >

@@ -281,6 +281,9 @@ export default function Sidebar({
         >
           <Link
             href={item.href}
+            // Tour anchor. An attribute rather than a class or position, so restyling or
+            // reordering the nav can't silently break the tour — only deleting this can.
+            data-tour={`nav-${item.href.replace(/^\//, "").split("/")[0]}`}
             title={iconOnly ? item.label : undefined}
             onClick={() => setMobileOpen(false)}
             className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${

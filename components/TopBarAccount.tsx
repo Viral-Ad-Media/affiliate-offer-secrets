@@ -11,6 +11,7 @@ import {
   Link2,
   Loader2,
   LogOut,
+  Compass,
   ShieldCheck,
   User,
   Users,
@@ -75,6 +76,12 @@ export default function TopBarAccount({
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  async function replayTour() {
+    setOpen(false);
+    await createClient().rpc("restart_product_tour");
+    window.location.reload();
+  }
 
   async function logout() {
     setBusy(true);
@@ -159,6 +166,19 @@ export default function TopBarAccount({
                   {m.label}
                 </Link>
               ))}
+            </div>
+
+            {/* Lives here rather than in the setup checklist: that panel disappears once setup is
+                complete, which is exactly when someone is most likely to want a refresher. */}
+            <div className="border-t border-ink-700 py-1">
+              <button
+                role="menuitem"
+                onClick={replayTour}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-zinc-300 hover:bg-ink-800 hover:text-zinc-100"
+              >
+                <Compass className="h-4 w-4 shrink-0 text-zinc-500" />
+                Replay product tour
+              </button>
             </div>
 
             <div className="border-t border-ink-700 py-1">
