@@ -25,6 +25,7 @@ import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
 
 /**
  * The tracked-products table, with its filter, bulk bar, status editing and Promote flow.
@@ -261,10 +262,10 @@ export default function ProductsPanel({
         )}
 
         <div className="overflow-x-auto">
-          <table className="data-table w-full text-sm">
-            <thead>
+          <Table className="w-full text-sm">
+            <TableHeader>
               <tr>
-                <th className="w-8 px-3">
+                <TableHead edge className="w-8 px-3">
                   <input
                     type="checkbox"
                     checked={products.length > 0 && products.every((p) => selected.has(p.id))}
@@ -278,20 +279,20 @@ export default function ProductsPanel({
                     aria-label="Select all on this page"
                     className="accent-emerald-500"
                   />
-                </th>
-                <th>Product</th>
-                <th>Niche</th>
-                <th className="text-right">Gravity</th>
-                <th className="text-right">Avg $/sale</th>
-                <th className="text-right">Rebill</th>
-                <th className="text-center">Score</th>
-                <th>Status</th>
-                <th className="text-right">Actions</th>
+                </TableHead>
+                <TableHead>Product</TableHead>
+                <TableHead>Niche</TableHead>
+                <TableHead className="text-right">Gravity</TableHead>
+                <TableHead className="text-right">Avg $/sale</TableHead>
+                <TableHead className="text-right">Rebill</TableHead>
+                <TableHead className="text-center">Score</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead edge className="text-right">Actions</TableHead>
               </tr>
-            </thead>
-            <tbody>
+            </TableHeader>
+            <TableBody>
               {products.map((p) => (
-                <tr key={p.id}>
+                <TableRow key={p.id}>
                   <td className="px-3 py-2.5">
                     <input
                       type="checkbox"
@@ -387,10 +388,10 @@ export default function ProductsPanel({
                       )}
                     </div>
                   </td>
-                </tr>
+                </TableRow>
               ))}
               {products.length === 0 && (
-                <tr>
+                <TableRow>
                   <td colSpan={9} className="px-4 py-14 text-center">
                     <Inbox className="mx-auto mb-2.5 h-7 w-7 text-zinc-600" />
                     <p className="text-sm text-zinc-400">
@@ -402,10 +403,10 @@ export default function ProductsPanel({
                       {statusFilters.length === 0 ? emptyHint : "Try a different status filter."}
                     </p>
                   </td>
-                </tr>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
         {total > 0 && (
           <div className="border-t border-ink-700 px-4 py-2.5">

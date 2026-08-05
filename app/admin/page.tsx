@@ -13,6 +13,7 @@ import AdminAccountsTable from "@/components/AdminAccountsTable";
 import AdminProblemJobs from "@/components/AdminProblemJobs";
 import type { AdminAccountRow, AdminProblemJob, AdminActionRow } from "@/lib/shared";
 import { Card } from "@/components/ui/card";
+import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Superadmin" };
@@ -170,19 +171,19 @@ export default async function AdminPage() {
           <p className="text-sm text-zinc-500">Nothing yet.</p>
         ) : (
           <Card className="overflow-x-auto">
-            <table className="data-table w-full">
-              <thead>
+            <Table className="w-full">
+              <TableHeader>
                 <tr>
-                  <th>When</th>
-                  <th>Actor</th>
-                  <th>Action</th>
-                  <th>Target</th>
-                  <th>Detail</th>
+                  <TableHead edge>When</TableHead>
+                  <TableHead>Actor</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Target</TableHead>
+                  <TableHead edge>Detail</TableHead>
                 </tr>
-              </thead>
-              <tbody>
+              </TableHeader>
+              <TableBody>
                 {actions.map((a) => (
-                  <tr key={a.id}>
+                  <TableRow key={a.id}>
                     <td className="whitespace-nowrap text-zinc-500">
                       {new Date(a.created_at).toLocaleString()}
                     </td>
@@ -192,10 +193,10 @@ export default async function AdminPage() {
                     <td className="max-w-xs truncate text-xs text-zinc-500" title={JSON.stringify(a.detail)}>
                       {JSON.stringify(a.detail)}
                     </td>
-                  </tr>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </Card>
         )}
       </section>

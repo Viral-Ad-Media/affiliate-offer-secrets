@@ -7,6 +7,7 @@ import NewFunnelButton from "@/components/NewFunnelButton";
 import { Radio, ExternalLink, Inbox, Beaker, Layers } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
 
 // A "funnel" isn't its own entity — it's a derived view over campaigns that already have a bridge
 // (lead-capture) page generated. A funnel appears here automatically the moment stagePages
@@ -111,20 +112,20 @@ export default async function FunnelsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="data-table w-full text-sm">
-              <thead>
+            <Table className="w-full text-sm">
+              <TableHeader>
                 <tr>
-                  <th>Funnel</th>
-                  <th>Status</th>
-                  <th>Link</th>
-                  <th className="text-right">Steps</th>
-                  <th className="text-right">Leads</th>
-                  <th className="text-right">Actions</th>
+                  <TableHead edge>Funnel</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Link</TableHead>
+                  <TableHead className="text-right">Steps</TableHead>
+                  <TableHead className="text-right">Leads</TableHead>
+                  <TableHead edge className="text-right">Actions</TableHead>
                 </tr>
-              </thead>
-              <tbody>
+              </TableHeader>
+              <TableBody>
                 {funnels.map((f) => (
-                  <tr key={f.id}>
+                  <TableRow key={f.id}>
                     <td className="px-4 py-2.5 font-medium text-zinc-100">{f.title}</td>
                     <td className="px-2 py-2.5">
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -167,10 +168,10 @@ export default async function FunnelsPage() {
                         <Layers className="h-3.5 w-3.5" /> Manage
                       </Link>
                     </td>
-                  </tr>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </Card>

@@ -8,6 +8,7 @@ import type { AdminProblemJob } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
 
 // Jobs that need a human: terminally failed, or sitting pending/running far longer than the
 // 1-minute backstop should ever allow. Both actions go straight to the self-gating RPCs — no
@@ -57,22 +58,22 @@ export default function AdminProblemJobs({ jobs }: { jobs: AdminProblemJob[] }) 
         </p>
       ) : (
         <Card className="overflow-x-auto">
-          <table className="data-table w-full">
-            <thead>
+          <Table className="w-full">
+            <TableHeader>
               <tr>
-                <th>Account</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Stage</th>
-                <th>Tries</th>
-                <th>Last message</th>
-                <th>Updated</th>
-                <th className="text-right">Actions</th>
+                <TableHead edge>Account</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Stage</TableHead>
+                <TableHead>Tries</TableHead>
+                <TableHead>Last message</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead edge className="text-right">Actions</TableHead>
               </tr>
-            </thead>
-            <tbody>
+            </TableHeader>
+            <TableBody>
               {jobs.map((j) => (
-                <tr key={j.id}>
+                <TableRow key={j.id}>
                   <td className="whitespace-nowrap text-zinc-300">{j.email}</td>
                   <td className="whitespace-nowrap text-zinc-400">{j.type}</td>
                   <td>
@@ -118,10 +119,10 @@ export default function AdminProblemJobs({ jobs }: { jobs: AdminProblemJob[] }) 
                       )}
                     </div>
                   </td>
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </Card>
       )}
     </section>

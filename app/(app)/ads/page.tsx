@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
 
 export const dynamic = "force-dynamic";
 
@@ -178,23 +179,23 @@ export default async function AdsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="data-table w-full text-sm">
-              <thead>
+            <Table className="w-full text-sm">
+              <TableHeader>
                 <tr>
-                  <th>Campaign</th>
-                  <th>Angle</th>
-                  <th>Creative</th>
-                  <th>Status</th>
-                  <th className="text-right">Daily budget</th>
-                  <th className="text-right">Actions</th>
+                  <TableHead edge>Campaign</TableHead>
+                  <TableHead>Angle</TableHead>
+                  <TableHead>Creative</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Daily budget</TableHead>
+                  <TableHead edge className="text-right">Actions</TableHead>
                 </tr>
-              </thead>
-              <tbody>
+              </TableHeader>
+              <TableBody>
                 {rows.map((r) => {
                   const meta = STATUS_META[r.status] ?? STATUS_META.building;
                   const StatusIcon = meta.Icon;
                   return (
-                    <tr key={r.id}>
+                    <TableRow key={r.id}>
                       <td className="px-4 py-2.5">
                         <div className="font-medium text-zinc-100">{r.title}</div>
                         {r.headline && (
@@ -235,11 +236,11 @@ export default async function AdsPage() {
                           <span className="text-xs text-zinc-600">Campaign removed</span>
                         )}
                       </td>
-                    </tr>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </Card>

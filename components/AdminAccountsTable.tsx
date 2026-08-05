@@ -9,6 +9,7 @@ import { hasAppAccess } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
 
 // One row per account with the numbers a support question starts from, plus the three actions
 // worth doing by hand. Every action is a self-gating RPC that writes its own audit row — see
@@ -118,27 +119,27 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
       )}
 
       <Card className="overflow-x-auto">
-        <table className="data-table w-full">
-          <thead>
+        <Table className="w-full">
+          <TableHeader>
             <tr>
-              <th>Account</th>
-              <th>Access</th>
-              <th className="text-right">Credits</th>
-              <th className="text-right">Products</th>
-              <th className="text-right">Kits</th>
-              <th className="text-right">Leads</th>
-              <th className="text-right">Failed jobs</th>
-              <th className="text-right">Spend</th>
-              <th>Last seen</th>
-              <th className="text-right">Manage</th>
+              <TableHead edge>Account</TableHead>
+              <TableHead>Access</TableHead>
+              <TableHead className="text-right">Credits</TableHead>
+              <TableHead className="text-right">Products</TableHead>
+              <TableHead className="text-right">Kits</TableHead>
+              <TableHead className="text-right">Leads</TableHead>
+              <TableHead className="text-right">Failed jobs</TableHead>
+              <TableHead className="text-right">Spend</TableHead>
+              <TableHead>Last seen</TableHead>
+              <TableHead edge className="text-right">Manage</TableHead>
             </tr>
-          </thead>
-          <tbody>
+          </TableHeader>
+          <TableBody>
             {accounts.map((a) => {
               const badge = accessLabel(a);
               return (
                 <Fragment key={a.user_id}>
-                  <tr>
+                  <TableRow>
                     <td>
                       <div className="flex items-center gap-2">
                         <span className="text-zinc-100">{a.full_name ?? a.email}</span>
@@ -168,10 +169,10 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
                         {open === a.user_id ? "Close" : "Manage"}
                       </Button>
                     </td>
-                  </tr>
+                  </TableRow>
 
                   {open === a.user_id && (
-                    <tr>
+                    <TableRow>
                       <td colSpan={10} className="bg-ink-900/60">
                         <div className="flex flex-wrap items-end gap-6 p-4">
                           <div>
@@ -237,13 +238,13 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
                           </div>
                         </div>
                       </td>
-                    </tr>
+                    </TableRow>
                   )}
                 </Fragment>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </Card>
     </section>
   );
