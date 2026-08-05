@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { AdminProblemJob } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 // Jobs that need a human: terminally failed, or sitting pending/running far longer than the
 // 1-minute backstop should ever allow. Both actions go straight to the self-gating RPCs — no
@@ -75,15 +76,14 @@ export default function AdminProblemJobs({ jobs }: { jobs: AdminProblemJob[] }) 
                   <td className="whitespace-nowrap text-zinc-300">{j.email}</td>
                   <td className="whitespace-nowrap text-zinc-400">{j.type}</td>
                   <td>
-                    <span
-                      className={`chip ${
+                    <Badge
+                      className={
                         j.status === "error"
                           ? "border-red-500/30 bg-red-500/10 text-red-300"
                           : "border-amber-500/30 bg-amber-500/10 text-amber-300"
-                      }`}
-                    >
+                      }>
                       {j.status}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="text-zinc-500">{j.stage ?? "—"}</td>
                   <td className="text-zinc-500">{j.attempts}</td>

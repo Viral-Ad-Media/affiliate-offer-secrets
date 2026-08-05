@@ -4,6 +4,7 @@ import { marked } from "marked";
 import type { FbAdAngle } from "@/lib/shared";
 import CreativeItemCard from "./CreativeItemCard";
 import LaunchAd from "./LaunchAd";
+import { Badge } from "@/components/ui/badge";
 
 // Structured card-per-angle view, replacing the old single marked.parse() blob for fb_ads_md.
 // Falls back to that exact old render for campaigns built before fb_ad_angles existed — same
@@ -49,7 +50,7 @@ export default function AdAnglesPanel({
           <div className="text-sm font-semibold text-zinc-100">{angle.headline}</div>
           <p className="mt-1 text-sm text-zinc-300">{angle.primary_text}</p>
           <p className="mt-1 text-xs text-zinc-500">{angle.description}</p>
-          <span className="chip mt-2 inline-block !py-0.5 text-[12px]">{angle.cta}</span>
+          <Badge className="mt-2 inline-block !py-0.5 text-[12px]">{angle.cta}</Badge>
           <CreativeItemCard campaignId={campaignId} source="fb_ad_angle" itemIndex={i} />
           <LaunchAd
             campaignId={campaignId}

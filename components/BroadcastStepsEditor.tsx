@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { BroadcastStep } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 type DraftStep = Partial<BroadcastStep> & { key: string; step_index: number; delay_days: number; subject: string; body_md: string };
 
@@ -99,7 +100,7 @@ export default function BroadcastStepsEditor({
           {drafts.map((d, i) => (
             <div key={d.key} className="rounded-lg border border-ink-700 p-3">
               <div className="mb-2 flex items-center gap-2">
-                <span className="chip !py-0.5 text-[12px]">Step {i + 1}</span>
+                <Badge className="!py-0.5 text-[12px]">Step {i + 1}</Badge>
                 <label className="text-xs text-zinc-400">Send</label>
                 <input
                   type="number"

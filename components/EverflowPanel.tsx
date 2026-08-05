@@ -6,6 +6,7 @@ import { Network, Loader2, CheckCircle2, Trash2, ExternalLink } from "lucide-rea
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 export type EverflowStatus = {
   connected: boolean;
@@ -78,9 +79,9 @@ export default function EverflowPanel({ initial }: { initial: EverflowStatus }) 
           </p>
         </div>
         {initial?.connected && (
-          <span className="chip border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
+          <Badge className="border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
             <CheckCircle2 className="h-3 w-3" /> Connected
-          </span>
+          </Badge>
         )}
       </div>
 

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import StatusDropdownButton from "@/components/StatusDropdownButton";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 type Domain = { id: string; domain: string };
 type Route = { id: string; domain_id: string; domain: string; path: string };
@@ -121,15 +122,14 @@ export default function PublishBridge({
     <div className="mb-3 rounded-lg border border-ink-700 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span
-            className={`chip ${
+          <Badge
+            className={
               published
                 ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
                 : "border-ink-600 bg-ink-800 text-zinc-400"
-            }`}
-          >
+            }>
             <Radio className="h-3 w-3" /> {published ? "Published" : "Draft"}
-          </span>
+          </Badge>
           {!published && (
             <span className="text-xs text-zinc-500">Not publicly reachable until published.</span>
           )}

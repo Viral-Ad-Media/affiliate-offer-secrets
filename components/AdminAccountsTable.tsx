@@ -8,6 +8,7 @@ import type { AdminAccountRow } from "@/lib/shared";
 import { hasAppAccess } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 // One row per account with the numbers a support question starts from, plus the three actions
 // worth doing by hand. Every action is a self-gating RPC that writes its own audit row — see
@@ -148,7 +149,7 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
                       {a.full_name && <div className="text-xs text-zinc-500">{a.email}</div>}
                     </td>
                     <td>
-                      <span className={`chip ${badge.cls}`}>{badge.text}</span>
+                      <Badge className={badge.cls}>{badge.text}</Badge>
                     </td>
                     <td className="text-right text-zinc-300">{a.credits}</td>
                     <td className="text-right text-zinc-400">{a.products}</td>

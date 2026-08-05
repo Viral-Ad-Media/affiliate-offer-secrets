@@ -5,6 +5,7 @@ import { Beaker, Loader2, Pause, Play, Plus, Trash2, Pencil, X, Eye } from "luci
 import { useSplitTest } from "@/lib/useSplitTest";
 import PageEditor from "@/components/PageEditor";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export default function SplitTestPanel({
   campaignId,
@@ -82,15 +83,14 @@ export default function SplitTestPanel({
                       {v.label}
                       {v.is_control && <span className="ml-1 text-xs text-zinc-500">(control)</span>}
                     </span>
-                    <span
-                      className={`chip ${
+                    <Badge
+                      className={
                         v.status === "active"
                           ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
                           : "border-ink-600 bg-ink-800 text-zinc-400"
-                      }`}
-                    >
+                      }>
                       {v.status}
-                    </span>
+                    </Badge>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <label className="flex items-center gap-1 text-xs text-zinc-500">

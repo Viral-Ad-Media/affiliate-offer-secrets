@@ -15,6 +15,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
 
@@ -204,19 +205,19 @@ export default async function AdsPage() {
                       </td>
                       <td className="px-2 py-2.5 tabular-nums text-zinc-400">#{r.angleIndex + 1}</td>
                       <td className="px-2 py-2.5">
-                        <span className="chip border-ink-600 bg-ink-800 text-zinc-400">
+                        <Badge className="border-ink-600 bg-ink-800 text-zinc-400">
                           {r.creativeKind === "video" ? (
                             <Video className="h-3 w-3" />
                           ) : (
                             <ImageIcon className="h-3 w-3" />
                           )}
                           {r.creativeKind === "video" ? "Video" : "Image"}
-                        </span>
+                        </Badge>
                       </td>
                       <td className="px-2 py-2.5">
-                        <span className={`chip ${meta.className}`} title={r.notes ?? undefined}>
+                        <Badge className={meta.className} title={r.notes ?? undefined}>
                           <StatusIcon className="h-3 w-3" /> {meta.label}
-                        </span>
+                        </Badge>
                         {r.country && <span className="ml-2 text-xs text-zinc-600">{r.country}</span>}
                       </td>
                       <td className="px-2 py-2.5 text-right tabular-nums text-zinc-300">

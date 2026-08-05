@@ -16,6 +16,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 // Everything claimed on this page has actually shipped. Two things deliberately NOT claimed,
 // because they haven't: automated marketplace discovery for anything but ClickBank (Digistore24 is
@@ -122,9 +123,9 @@ export default function HomePage() {
     <div>
       <section className="border-b border-ink-700 bg-gradient-to-b from-ink-900/60 to-ink-950">
         <div className="mx-auto max-w-4xl px-4 py-20 text-center sm:py-28">
-          <span className="chip border-ink-600 bg-ink-800 text-zinc-300">
+          <Badge className="border-ink-600 bg-ink-800 text-zinc-300">
             Built for affiliate marketers
-          </span>
+          </Badge>
           <h1 className="mt-5 text-4xl font-bold text-zinc-100 sm:text-5xl">
             Find winning affiliate products.
             <br className="hidden sm:block" /> Ship the whole funnel in minutes.

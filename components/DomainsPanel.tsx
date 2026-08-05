@@ -19,6 +19,7 @@ import {
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 type DomainRoute = {
   id: string;
@@ -338,21 +339,21 @@ function DomainRow({
           {domain.domain}
         </button>
         <div className="flex items-center gap-2">
-          <span className={`chip ${STATUS_STYLE[domain.status]}`}>
+          <Badge className={STATUS_STYLE[domain.status]}>
             {domain.status === "verified" && <CheckCircle2 className="h-3 w-3" />}
             {domain.status === "pending" && <Clock className="h-3 w-3" />}
             {domain.status === "error" && <XCircle className="h-3 w-3" />}
             {domain.status}
-          </span>
+          </Badge>
           {domain.is_primary && (
-            <span className="chip border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
+            <Badge className="border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
               <Star className="h-3 w-3" /> Primary
-            </span>
+            </Badge>
           )}
           {domain.serves_blog && (
-            <span className="chip border-sky-500/30 bg-sky-500/15 text-sky-300">
+            <Badge className="border-sky-500/30 bg-sky-500/15 text-sky-300">
               <BookOpen className="h-3 w-3" /> Blog
-            </span>
+            </Badge>
           )}
           <Button onClick={verify} disabled={verifying} variant="outline" className="!py-1 text-xs">
             {verifying ? (

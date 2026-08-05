@@ -5,6 +5,7 @@ import { Flame, TrendingUp, Sparkles, Plus, Check, ExternalLink, Loader2 } from 
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 type Highlight = {
   network: string;
@@ -153,21 +154,21 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
               </div>
 
               {tab === "fresh" && h.days_known != null && (
-                <span className="chip border-sky-500/30 bg-sky-500/15 text-sky-300">
+                <Badge className="border-sky-500/30 bg-sky-500/15 text-sky-300">
                   <Sparkles className="h-3 w-3" />
                   {h.days_known === 0 ? "New today" : `${h.days_known}d ago`}
-                </span>
+                </Badge>
               )}
 
               {tab === "trending" && h.gravity_change != null && (
-                <span className="chip border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
+                <Badge className="border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
                   {/* Sign comes from the number, not a hardcoded "+" — a negative would
                       otherwise render as "+-20.0". */}
                   <TrendingUp className="h-3 w-3" />
                   {h.gravity_change > 0 ? "+" : ""}
                   {h.gravity_change.toFixed(1)}
                   {h.gravity_change_pct != null ? ` (${h.gravity_change_pct}%)` : ""}
-                </span>
+                </Badge>
               )}
 
               <div className="flex items-center gap-1.5">
@@ -183,9 +184,9 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
                   </a>
                 )}
                 {h.owned ? (
-                  <span className="chip border-ink-600 bg-ink-800 text-zinc-400">
+                  <Badge className="border-ink-600 bg-ink-800 text-zinc-400">
                     <Check className="h-3 w-3" /> Added
-                  </span>
+                  </Badge>
                 ) : (
                   <Button
                     onClick={() => add(h)}

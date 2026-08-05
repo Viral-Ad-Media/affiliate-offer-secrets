@@ -24,6 +24,7 @@ import { PRODUCT_STATUSES, type Job, type Product } from "@/lib/shared";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 /**
  * The tracked-products table, with its filter, bulk bar, status editing and Promote flow.
@@ -308,9 +309,9 @@ export default function ProductsPanel({
                       {p.product_title}
                     </Link>
                     <div className="flex items-center gap-2 text-xs text-zinc-500">
-                      <span className="chip !py-0 !px-1.5 text-[11px] uppercase tracking-wide">
+                      <Badge className="!py-0 !px-1.5 text-[11px] uppercase tracking-wide">
                         {NETWORK_LABELS[p.network] ?? p.network}
-                      </span>
+                      </Badge>
                       <span>{p.vendor_id}</span>
                       {p.page_verified ? (
                         <span className="text-emerald-500" title="Sales page verified live">

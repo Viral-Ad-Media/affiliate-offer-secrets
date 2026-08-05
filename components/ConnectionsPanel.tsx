@@ -6,6 +6,7 @@ import { CheckCircle2, Facebook, Instagram, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 type Page = { page_id: string; page_name: string; is_active: boolean; status: string };
 type AdAccount = { ad_account_id: string; ad_account_name: string; currency: string; is_active: boolean };
@@ -104,9 +105,9 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
                 )}
               </div>
               {p.is_active ? (
-                <span className="chip border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
+                <Badge className="border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
                   <CheckCircle2 className="h-3.5 w-3.5" /> Active
-                </span>
+                </Badge>
               ) : (
                 <Button
                   onClick={() => setActivePage(p.page_id)}
@@ -138,9 +139,9 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
                 <Instagram className="h-3.5 w-3.5 text-zinc-500" /> @{a.ig_username}
               </div>
               {a.is_active && (
-                <span className="chip border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
+                <Badge className="border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
                   <CheckCircle2 className="h-3.5 w-3.5" /> Active
-                </span>
+                </Badge>
               )}
             </li>
           ))}
@@ -166,9 +167,9 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
                   <div className="text-xs text-zinc-500">{a.currency}</div>
                 </div>
                 {a.is_active ? (
-                  <span className="chip border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
+                  <Badge className="border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
                     <CheckCircle2 className="h-3.5 w-3.5" /> Active
-                  </span>
+                  </Badge>
                 ) : (
                   <Button
                     onClick={() => setActiveAdAccount(a.ad_account_id)}

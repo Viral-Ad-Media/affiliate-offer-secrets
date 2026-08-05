@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import NewFunnelButton from "@/components/NewFunnelButton";
 import { Radio, ExternalLink, Inbox, Beaker, Layers } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 // A "funnel" isn't its own entity — it's a derived view over campaigns that already have a bridge
 // (lead-capture) page generated. A funnel appears here automatically the moment stagePages
@@ -127,19 +128,18 @@ export default async function FunnelsPage() {
                     <td className="px-4 py-2.5 font-medium text-zinc-100">{f.title}</td>
                     <td className="px-2 py-2.5">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span
-                          className={`chip ${
+                        <Badge
+                          className={
                             f.published
                               ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
                               : "border-ink-600 bg-ink-800 text-zinc-400"
-                          }`}
-                        >
+                          }>
                           <Radio className="h-3 w-3" /> {f.published ? "Published" : "Draft"}
-                        </span>
+                        </Badge>
                         {f.variantCount > 0 && (
-                          <span className="chip border-sky-500/30 bg-sky-500/15 text-sky-300">
+                          <Badge className="border-sky-500/30 bg-sky-500/15 text-sky-300">
                             <Beaker className="h-3 w-3" /> Testing ({f.variantCount})
-                          </span>
+                          </Badge>
                         )}
                       </div>
                     </td>

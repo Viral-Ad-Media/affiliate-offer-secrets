@@ -4,6 +4,8 @@ import { useState } from "react";
 import { ChevronDown, Check, Loader2 } from "lucide-react";
 import { PRODUCT_STATUSES, STATUS_COLORS, type ProductStatus } from "@/lib/shared";
 import { toast } from "@/lib/toast";
+import { badgeVariants } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 // The status chip itself is the control. Until now Selected/Paused/Dead appeared in the filter but
 // nothing could ever set them — the engine only writes "New" on discovery and "Promoting" when a
@@ -62,7 +64,11 @@ export default function ProductStatusSelect({
         title="Change status"
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`chip ${STATUS_COLORS[current] ?? STATUS_COLORS.New} cursor-pointer hover:brightness-110`}
+        className={cn(
+          badgeVariants(),
+          STATUS_COLORS[current] ?? STATUS_COLORS.New,
+          "cursor-pointer hover:brightness-110"
+        )}
       >
         {busy && <Loader2 className="h-3 w-3 animate-spin" />}
         {current}

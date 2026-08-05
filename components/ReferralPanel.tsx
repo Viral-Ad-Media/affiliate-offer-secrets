@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, Copy, Gift } from "lucide-react";
 import { referralLink, REFERRAL_REWARD_POINTS } from "@/lib/referrals";
+import { Badge } from "@/components/ui/badge";
 
 export type ReferralRow = {
   id: string;
@@ -83,13 +84,13 @@ export default function ReferralPanel({ code, appUrl, referrals }: Props) {
                 </td>
                 <td className="px-4 py-2.5">
                   {r.status === "rewarded" ? (
-                    <span className="chip border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                    <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
                       Rewarded
-                    </span>
+                    </Badge>
                   ) : (
-                    <span className="chip border-ink-600 bg-ink-800 text-zinc-400">
+                    <Badge className="border-ink-600 bg-ink-800 text-zinc-400">
                       Awaiting payment
-                    </span>
+                    </Badge>
                   )}
                 </td>
                 <td className="px-4 py-2.5 text-zinc-300">

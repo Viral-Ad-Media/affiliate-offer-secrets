@@ -5,6 +5,7 @@ import { Users, Loader2, Copy, Check, Trash2, Crown, Link2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 type Role = "owner" | "admin" | "member";
 
@@ -135,9 +136,9 @@ export default function TeamSettings({
                 </div>
 
                 {m.role === "owner" ? (
-                  <span className="chip border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                  <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
                     <Crown className="mr-1 h-3 w-3" /> Owner
-                  </span>
+                  </Badge>
                 ) : canManage ? (
                   <select
                     value={m.role}
@@ -157,7 +158,7 @@ export default function TeamSettings({
                     <option value="member">Member</option>
                   </select>
                 ) : (
-                  <span className="chip border-ink-600 bg-ink-800 text-zinc-400">{m.role}</span>
+                  <Badge className="border-ink-600 bg-ink-800 text-zinc-400">{m.role}</Badge>
                 )}
 
                 {isOwner && m.role !== "owner" && (

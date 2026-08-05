@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 import { ACCESS_FEE_CENTS, CREDIT_PACKS } from "@/lib/pricing";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 export const metadata = {
   title: "Pricing",
@@ -35,9 +36,9 @@ export default function PricingPage() {
 
       <div className="mt-12 grid gap-6 lg:grid-cols-2">
         <Card className="flex flex-col p-7">
-          <span className="chip w-fit border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+          <Badge className="w-fit border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
             Software access
-          </span>
+          </Badge>
           <div className="mt-4 flex items-baseline gap-1">
             <span className="font-heading text-4xl font-bold text-zinc-100">
               ${(ACCESS_FEE_CENTS / 100).toFixed(0)}
@@ -61,9 +62,9 @@ export default function PricingPage() {
         </Card>
 
         <Card className="flex flex-col p-7">
-          <span className="chip w-fit border-ink-600 bg-ink-800 text-zinc-300">
+          <Badge className="w-fit border-ink-600 bg-ink-800 text-zinc-300">
             Ad credits (optional)
-          </span>
+          </Badge>
           <div className="mt-4">
             <span className="font-heading text-4xl font-bold text-zinc-100">1 credit</span>
             <span className="ml-1 text-sm text-zinc-500">≈ $1 of ad budget</span>

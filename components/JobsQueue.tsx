@@ -6,6 +6,7 @@ import type { Job } from "@/lib/shared";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 const STATUS_CHIP: Record<string, string> = {
   done: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
@@ -62,9 +63,9 @@ export default function JobsQueue({ limit = 50 }: { limit?: number }) {
           return (
             <li key={j.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
               <div className="flex items-center gap-3">
-                <span className={`chip ${STATUS_CHIP[j.status] ?? STATUS_CHIP.pending}`}>
+                <Badge className={STATUS_CHIP[j.status] ?? STATUS_CHIP.pending}>
                   {j.status}
-                </span>
+                </Badge>
                 <span className="text-zinc-300">
                   {j.type === "discover_products"
                     ? `Discover: ${payload.niche}`

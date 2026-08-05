@@ -15,6 +15,7 @@ import SocialPostsPanel from "@/components/SocialPostsPanel";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 const TABS = [
   { key: "fb_ads_md", label: "FB/IG Ads" },
@@ -101,9 +102,9 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           <div>
             <h1 className="text-xl font-bold text-zinc-100">{product.product_title}</h1>
             <p className="mt-1 flex items-center gap-2 text-sm text-zinc-400">
-              <span className="chip !py-0 !px-1.5 text-[11px] uppercase tracking-wide">
+              <Badge className="!py-0 !px-1.5 text-[11px] uppercase tracking-wide">
                 {product.network === "digistore24" ? "Digistore24" : "ClickBank"}
-              </span>
+              </Badge>
               {product.vendor_id} · {product.niche}
             </p>
           </div>
@@ -173,8 +174,8 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           <h2 className="text-sm font-semibold text-zinc-100">
             Campaign kit{" "}
             {campaign ? (
-              <span
-                className={`ml-2 chip ${
+              <Badge
+                className={`ml-2 ${
                   campaign.status === "ready"
                     ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
                     : campaign.status === "error"
@@ -183,7 +184,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                 }`}
               >
                 {campaign.status}
-              </span>
+              </Badge>
             ) : null}
           </h2>
           {tab === "bridge_html" && campaign?.bridge_html && (

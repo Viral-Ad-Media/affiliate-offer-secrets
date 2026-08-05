@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Beaker, Eye, Pencil, Pause, Play, Plus, Trash2, LogIn, Loader2 } from "lucide-react";
 import { useSplitTest } from "@/lib/useSplitTest";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 // Renders the opt-in page's position in the funnel map (components/FunnelMap.tsx) — either as a
 // single plain node (no test running, the ~100% common case) or, once a split test is started, as
@@ -85,13 +86,12 @@ export default function SplitTestBranch({
                   {v.label}
                   {v.is_control && <span className="ml-1 text-xs text-zinc-500">(control)</span>}
                 </span>
-                <span
-                  className={`chip !px-1.5 !py-0.5 ${
+                <Badge
+                  className={`!px-1.5 !py-0.5 ${
                     v.status === "active" ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" : "border-ink-600 bg-ink-800 text-zinc-400"
-                  }`}
-                >
+                  }`}>
                   {v.status}
-                </span>
+                </Badge>
               </div>
               <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
                 <label className="flex items-center gap-1">
