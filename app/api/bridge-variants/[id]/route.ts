@@ -74,36 +74,48 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: campaign, error: campaignErr } = await admin
     .from("campaigns")
-    .select("product_id, tracking")
+    .select("product_id, name, cta_url, tracking")
     .eq("id", variant.campaign_id)
     .single();
   if (campaignErr || !campaign) {
     return NextResponse.json({ error: "campaign not found" }, { status: 404 });
   }
 
-  const { data: product, error: productErr } = await admin
-    .from("products")
-    .select("product_title, network, vendor_id, hoplink, hoplink_override")
-    .eq("id", campaign.product_id)
-    .single();
-  if (productErr || !product) {
-    return NextResponse.json({ error: "product not found" }, { status: 404 });
-  }
+  // Same standalone-funnel case as the page-copy route: no product means no hoplink, not an error.
+  const { data: productRow } = campaign.product_id
+    ? await admin
+        .from("products")
+        .select("product_title, network, vendor_id, hoplink, hoplink_override")
+        .eq("id", campaign.product_id)
+        .maybeSingle()
+    : { data: null };
+  const product = productRow ?? {
+    product_title: (campaign.name as string | null) ?? "Funnel",
+    network: null as string | null,
+    vendor_id: "",
+    hoplink: null as string | null,
+    hoplink_override: null as string | null,
+  };
 
-  const { data: connection } = await admin
-    .from("network_connections")
-    .select("affiliate_id")
-    .eq("workspace_id", ws)
-    .eq("network", product.network)
-    .maybeSingle();
-  if (!connection?.affiliate_id) {
+  const { data: connection } = product.network
+    ? await admin
+        .from("network_connections")
+        .select("affiliate_id")
+        .eq("workspace_id", ws)
+        .eq("network", product.network)
+        .maybeSingle()
+    : { data: null };
+  if (product.network && !connection?.affiliate_id) {
     return NextResponse.json(
       { error: `Connect your ${product.network} affiliate ID first` },
       { status: 400 }
     );
   }
 
-  const hoplink = buildHoplink(product.network, connection.affiliate_id, product.vendor_id, "page", product.hoplink_override);
+  const hoplink =
+    product.network && connection?.affiliate_id
+      ? buildHoplink(product.network as any, connection.affiliate_id, product.vendor_id, "page", product.hoplink_override)
+      : ((campaign.cta_url as string | null) ?? "#");
 
   // Variants serve at the same URL as the control, so they carry the same post-submit
   // redirect (multi-step funnels) and the same tracking snippets — part of the same gap fix as

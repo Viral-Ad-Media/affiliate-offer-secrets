@@ -68,36 +68,54 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: campaign, error: campaignErr } = await admin
     .from("campaigns")
-    .select("product_id, tracking")
+    .select("product_id, name, cta_url, tracking")
     .eq("id", campaignId)
     .single();
   if (campaignErr || !campaign) {
     return NextResponse.json({ error: "campaign not found" }, { status: 404 });
   }
 
-  const { data: product, error: productErr } = await admin
-    .from("products")
-    .select("product_title, network, vendor_id, hoplink, hoplink_override")
-    .eq("id", campaign.product_id)
-    .single();
-  if (productErr || !product) {
-    return NextResponse.json({ error: "product not found" }, { status: 404 });
-  }
+  // A hand-built funnel has no product (0068) — the same case lib/funnelSteps.ts already handles.
+  // This route missed it and hard-404'd "product not found", which meant a standalone funnel's
+  // opt-in page could be created and then never saved again: every edit was silently rejected.
+  const { data: productRow } = campaign.product_id
+    ? await admin
+        .from("products")
+        .select("product_title, network, vendor_id, hoplink, hoplink_override")
+        .eq("id", campaign.product_id)
+        .maybeSingle()
+    : { data: null };
+  const product = productRow ?? {
+    product_title: (campaign.name as string | null) ?? "Funnel",
+    network: null as string | null,
+    vendor_id: "",
+    hoplink: null as string | null,
+    hoplink_override: null as string | null,
+  };
 
-  const { data: connection } = await admin
-    .from("network_connections")
-    .select("affiliate_id")
-    .eq("workspace_id", ws)
-    .eq("network", product.network)
-    .maybeSingle();
-  if (!connection?.affiliate_id) {
+  const { data: connection } = product.network
+    ? await admin
+        .from("network_connections")
+        .select("affiliate_id")
+        .eq("workspace_id", ws)
+        .eq("network", product.network)
+        .maybeSingle()
+    : { data: null };
+
+  // Only a funnel that HAS a product needs an affiliate id — that's what its hoplink is built
+  // from. A standalone funnel points at campaigns.cta_url instead, so demanding a network
+  // connection would block saving a page that never wanted a hoplink.
+  if (product.network && !connection?.affiliate_id) {
     return NextResponse.json(
       { error: `Connect your ${product.network} affiliate ID first` },
       { status: 400 }
     );
   }
 
-  const hoplink = buildHoplink(product.network, connection.affiliate_id, product.vendor_id, "page", product.hoplink_override);
+  const hoplink =
+    product.network && connection?.affiliate_id
+      ? buildHoplink(product.network as any, connection.affiliate_id, product.vendor_id, "page", product.hoplink_override)
+      : ((campaign.cta_url as string | null) ?? "#");
 
   // If this campaign's funnel has added steps after opt-in (0023_funnel_steps.sql), the
   // post-submit CTA redirects to step 1 instead of revealing in place — resolved here, not
