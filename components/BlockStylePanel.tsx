@@ -19,6 +19,7 @@ const BLOCK_TYPE_LABELS: Record<string, string> = {
   divider: "Divider",
   image_list: "Image list",
   button: "Button",
+  video: "Video",
   faq_item: "FAQ item",
   column: "Column",
   row: "Row",

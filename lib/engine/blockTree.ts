@@ -1,3 +1,5 @@
+import { embedUrl, type VideoSource } from "./videoEmbed";
+
 // The freeform block-tree page model (Phase O) — sections/rows/columns/elements, each stylable.
 // Isomorphic, no server-only imports (same discipline as renderPages.ts, which re-exports this
 // module's public surface so it stays the one stable import path every existing caller already
@@ -150,6 +152,12 @@ export type ImageListBlock = Base & {
   content: { items: { imageDataUrl: string | null; caption: string }[] };
 };
 export type ButtonBlock = Base & { type: "button"; content: { text: string; href: string } };
+// The source is a parsed provider + id, never the raw pasted URL — see lib/engine/videoEmbed.ts
+// for why the renderer must rebuild the embed URL rather than interpolate what someone typed.
+export type VideoBlock = Base & {
+  type: "video";
+  content: { source: VideoSource | null; title: string };
+};
 export type FaqItemBlock = Base & { type: "faq_item"; content: { question: string; answer: string } };
 
 export type ElementBlock =
@@ -162,6 +170,7 @@ export type ElementBlock =
   | DividerBlock
   | ImageListBlock
   | ButtonBlock
+  | VideoBlock
   | FaqItemBlock;
 
 export const ELEMENT_BLOCK_TYPES = [
@@ -174,6 +183,7 @@ export const ELEMENT_BLOCK_TYPES = [
   "divider",
   "image_list",
   "button",
+  "video",
   "faq_item",
 ] as const;
 
@@ -383,6 +393,7 @@ export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readon
   divider: DIVIDER_STYLE_KEYS,
   image_list: TEXT_STYLE_KEYS,
   button: BUTTON_STYLE_KEYS,
+  video: BOX_STYLE_KEYS,
   faq_item: TEXT_STYLE_KEYS,
   column: BOX_STYLE_KEYS,
   row: BOX_STYLE_KEYS,
@@ -435,6 +446,21 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
         block.style,
         BUTTON_STYLE_KEYS
       )}>${escapeHtml(block.content.text)}</a>`;
+    case "video": {
+      const src = block.content.source;
+      if (!src) return "";
+      const label = escapeHtml(block.content.title || `${ctx.productTitle} video`);
+      if (src.provider === "file") {
+        return `<div class="video-wrap"${styleAttr(block.style, BOX_STYLE_KEYS)}><video controls playsinline preload="metadata" src="${escapeHtml(
+          src.url
+        )}" title="${label}"></video></div>`;
+      }
+      // allow: only what a player legitimately needs. No `allow-same-origin`-style escape hatch,
+      // and referrerpolicy keeps the tenant's page URL out of the provider's logs by default.
+      return `<div class="video-wrap"${styleAttr(block.style, BOX_STYLE_KEYS)}><iframe src="${escapeHtml(
+        embedUrl(src)
+      )}" title="${label}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+    }
     case "faq_item":
       return `<div class="faq-item"${styleAttr(block.style, TEXT_STYLE_KEYS)}><h3>${escapeHtml(
         block.content.question
@@ -776,6 +802,10 @@ function defaultElementContent(type: (typeof ELEMENT_BLOCK_TYPES)[number]): Elem
       return { items: [{ imageDataUrl: null, caption: "New item" }] };
     case "button":
       return { text: "Click here", href: "https://example.com" };
+    case "video":
+      // No source: an empty block renders nothing rather than a placeholder, so a half-finished
+      // page never ships a broken player to real traffic.
+      return { source: null, title: "" };
     case "faq_item":
       return { question: "New question", answer: "Answer" };
   }

@@ -19,6 +19,7 @@ import {
   Minus,
   Images,
   MousePointerClick,
+  Video,
   HelpCircle,
   Settings2,
   PanelLeftClose,
@@ -57,6 +58,7 @@ import {
   type Block,
   type BlockStyle,
 } from "@/lib/engine/renderPages";
+import { parseVideoUrl, sourceToDisplayUrl, embedUrl } from "@/lib/engine/videoEmbed";
 import BlockStylePanel from "@/components/BlockStylePanel";
 import EditorSidePanel from "@/components/EditorSidePanel";
 
@@ -164,6 +166,7 @@ const ELEMENT_PALETTE: { type: ElementBlockTypeLocal; label: string; icon: any }
   { type: "divider", label: "Divider", icon: Minus },
   { type: "image_list", label: "Image list", icon: Images },
   { type: "button", label: "Button", icon: MousePointerClick },
+  { type: "video", label: "Video", icon: Video },
   { type: "faq_item", label: "FAQ item", icon: HelpCircle },
 ];
 
@@ -1096,6 +1099,61 @@ export default function WysiwygCanvas({
             />
           </div>
         );
+      case "video": {
+        const src = el.content.source;
+        return (
+          <div className="my-3" style={blockInlineStyle(el)}>
+            {src ? (
+              // The real player, not a placeholder — a VSL's whole page is the video, so "does it
+              // actually load" is the one thing the canvas has to answer.
+              <div className="relative w-full overflow-hidden rounded-xl bg-black" style={{ paddingTop: "56.25%" }}>
+                {src.provider === "file" ? (
+                  <video
+                    controls
+                    playsInline
+                    preload="metadata"
+                    src={src.url}
+                    className="absolute inset-0 h-full w-full"
+                  />
+                ) : (
+                  <iframe
+                    src={embedUrl(src)}
+                    title={el.content.title || "Video"}
+                    loading="lazy"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="absolute inset-0 h-full w-full border-0"
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="flex aspect-video w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-gray-300 bg-gray-50 text-center">
+                <Video className="h-6 w-6 text-gray-400" />
+                <span className="text-[13px] text-gray-500">Paste a video link below</span>
+                <span className="text-[11px] text-gray-400">YouTube, Vimeo, or a direct .mp4 URL</span>
+              </div>
+            )}
+            <input
+              type="url"
+              defaultValue={sourceToDisplayUrl(src)}
+              onBlur={(e) => {
+                const parsed = parseVideoUrl(e.target.value);
+                // Rejected input stays in the box so it can be corrected rather than vanishing,
+                // but the block keeps its previous source until something valid replaces it.
+                if (!parsed && e.target.value.trim()) {
+                  onImageError("That video link isn't supported — use YouTube, Vimeo, or a direct .mp4 URL.");
+                  return;
+                }
+                onImageError("");
+                commit(el.id, { source: parsed });
+              }}
+              placeholder="https://www.youtube.com/watch?v=..."
+              className="mt-1.5 block w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
+            />
+          </div>
+        );
+      }
       case "faq_item":
         return (
           <div className="mb-1 pr-2" style={blockInlineStyle(el)}>

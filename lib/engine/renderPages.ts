@@ -234,6 +234,10 @@ const PAGE_STYLE = `
   ul { padding-left: 20px; }
   hr { border: none; border-top: 1px solid #e5e5e5; margin: 24px 0; }
   .block-img { max-width:100%; border-radius:12px; margin:24px 0; display:block; }
+  /* 16:9 responsive frame — the wrapper owns the ratio so an iframe (which has no intrinsic
+     size) and a <video> (which does) lay out identically. */
+  .video-wrap { position:relative; width:100%; margin:24px 0; padding-top:56.25%; border-radius:12px; overflow:hidden; background:#000; }
+  .video-wrap iframe, .video-wrap video { position:absolute; inset:0; width:100%; height:100%; border:0; display:block; }
   .faq-item { margin-bottom: 16px; }
   .faq-item h3 { font-size:16px; margin-bottom:4px; }
   .row { display:flex; gap:24px; flex-wrap:wrap; }

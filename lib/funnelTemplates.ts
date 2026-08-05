@@ -68,6 +68,30 @@ const TEMPLATES: Record<string, Template> = {
     ],
     cta: "Save my seat",
   },
+  vsl: {
+    headline: "Watch this before you decide on {PRODUCT}",
+    lead: "One line telling them what the video covers and roughly how long it runs.",
+    mechanism: "Say what they'll understand by the end that they don't now.",
+    benefits: ["What the video shows", "Who it's for", "What to do after watching"],
+    proof: "Why you're the one presenting this, if that's relevant.",
+    faq: [
+      { q: "How long is it?", a: "Give the real running time — a surprise 90 minutes loses people." },
+      { q: "Do I need to watch it all?", a: "Say where the important part starts if it isn't the beginning." },
+    ],
+    cta: "Get access now",
+  },
+  webinar: {
+    headline: "Free training: {PRODUCT}",
+    lead: "What the session covers, when it runs, and how long it takes.",
+    mechanism: "Outline what you'll walk through, so registering feels like a known quantity.",
+    benefits: ["What you'll cover first", "What they'll be able to do afterwards", "Whether there's a replay"],
+    proof: "Who's presenting and why they're worth the time.",
+    faq: [
+      { q: "Is it live or recorded?", a: "Say which, plainly — this is the question people actually ask." },
+      { q: "Is there a pitch at the end?", a: "If there is, say so. They'll find out anyway." },
+    ],
+    cta: "Save my spot",
+  },
   application: {
     headline: "Apply to work through {PRODUCT}",
     lead: "Say who this is for and be specific about who it isn't for — that's what makes an application work.",
@@ -114,6 +138,9 @@ const STEP_TEMPLATES: Record<FunnelStepType, Template> = {
     cta: "Go to checkout",
   },
 };
+
+// Types where the video IS the page, so the template seeds a video block rather than an image.
+const VIDEO_FIRST_TYPES = new Set(["vsl", "webinar"]);
 
 function fill(t: Template, productTitle: string): PageCopy {
   const sub = (s: string) => s.replaceAll("{PRODUCT}", productTitle);
@@ -182,6 +209,31 @@ function blankTree(stepType?: FunnelStepType): PageBlockTree {
   return { version: 2, blocks };
 }
 
+
+/**
+ * Seeds an empty video block above the copy for the types whose whole point is the video.
+ *
+ * A VSL template without somewhere for the video would be the same scaffolding as a squeeze page
+ * with a different headline — the block is the reason these two types became buildable at all.
+ * It ships with no source: an empty video renders nothing, so an unfinished page never shows a
+ * broken player to real traffic.
+ */
+function withVideoBlock(tree: PageBlockTree, headline: string): PageBlockTree {
+  const first = tree.blocks[0];
+  if (!first || first.type !== "section") return tree;
+  const video = {
+    id: `video-${headline.length}`,
+    type: "video" as const,
+    style: {},
+    content: { source: null, title: headline },
+  };
+  // After the heading, before the body copy — where a viewer expects it on a video page.
+  const children = [...first.children];
+  const insertAt = children[0]?.type === "heading" ? 1 : 0;
+  children.splice(insertAt, 0, video as (typeof children)[number]);
+  return { ...tree, blocks: [{ ...first, children }, ...tree.blocks.slice(1)] };
+}
+
 export type FunnelStart = "template" | "scratch";
 
 /** The opt-in (bridge) page's starting content for a given funnel type. */
@@ -196,7 +248,9 @@ export function optInPageCopy(
   // An unknown/unsupported type falls back to blank rather than to another type's copy — a squeeze
   // page's words on a funnel someone asked to be something else is worse than an empty page.
   if (!t) return blankTree();
-  return normalizePageCopy(fill(t, productTitle), imageDataUrl);
+  const filled = fill(t, productTitle);
+  const tree = normalizePageCopy(filled, imageDataUrl);
+  return VIDEO_FIRST_TYPES.has(typeKey) ? withVideoBlock(tree, filled.headline) : tree;
 }
 
 /** A step page's starting content. */

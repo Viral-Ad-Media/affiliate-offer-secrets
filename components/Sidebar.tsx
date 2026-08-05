@@ -40,6 +40,14 @@ type NavItem = {
   match: (p: string) => boolean;
   children?: NavChild[];
   soon?: boolean;
+  /**
+   * The section's own URL prefix, when `href` points at a child instead of it.
+   *
+   * Blog's parent link goes to /blog/home (its first child) but the SECTION is still /blog, and
+   * breadcrumbs need that to render "Blog / Categories" rather than "Posts / Categories" — /blog
+   * is also the Posts child's href, so the flattened label map resolves it to "Posts".
+   */
+  sectionHref?: string;
 };
 
 const NAV: NavItem[] = [
@@ -77,7 +85,12 @@ const NAV: NavItem[] = [
   },
   { href: "/sms", label: "SMS", icon: MessageSquare, match: () => false, soon: true },
   {
-    href: "/blog",
+    // The section's own first child, not /blog — /blog IS the Posts page, so clicking the parent
+    // used to land on the second item in its own submenu. Every other section here points at the
+    // top of its list; this one was the exception because its list grew a Home above the original
+    // page rather than beside it.
+    href: "/blog/home",
+    sectionHref: "/blog",
     label: "Blog",
     icon: Newspaper,
     match: (p: string) => p.startsWith("/blog"),
@@ -159,7 +172,7 @@ export const NAV_LABELS: Record<string, string> = (() => {
 // for any non-final segment and NAV_LABELS for the page it actually landed on.
 export const NAV_SECTION_LABELS: Record<string, string> = (() => {
   const out: Record<string, string> = {};
-  for (const item of [...NAV, SUPERADMIN_NAV]) out[item.href] = item.label;
+  for (const item of [...NAV, SUPERADMIN_NAV]) out[item.sectionHref ?? item.href] = item.label;
   return out;
 })();
 

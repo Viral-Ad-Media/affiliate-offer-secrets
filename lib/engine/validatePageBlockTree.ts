@@ -25,6 +25,7 @@ import {
   type FunnelStepType,
 } from "./blockTree";
 import { isValidImageDataUrl } from "@/lib/images/validate";
+import { parseVideoUrl, sourceToDisplayUrl } from "@/lib/engine/videoEmbed";
 import { isValidRedirectUrl } from "@/lib/validate";
 
 export type PageKind = "bridge" | "funnel_step" | "blog";
@@ -169,6 +170,27 @@ function validateElement(raw: unknown, count: { n: number }): ElementBlock {
       const href = clampStr(content.href, 2000);
       if (!isValidRedirectUrl(href)) throw new Error("invalid button href");
       return { id, type: "button", style, content: { text: clampStr(content.text, MAX_CTA), href } };
+    }
+    case "video": {
+      // The stored shape is re-parsed, never trusted. A row could carry a hand-edited source (or
+      // one written before a rule tightened), so the server decides again from the display URL
+      // exactly as it did on first save — and an unparseable one becomes null, which renders
+      // nothing, rather than an error that would block saving the rest of the page.
+      const raw = (content.source ?? null) as { provider?: unknown; videoId?: unknown; url?: unknown } | null;
+      const candidate =
+        raw && typeof raw === "object"
+          ? sourceToDisplayUrl({
+              provider: raw.provider,
+              videoId: typeof raw.videoId === "string" ? raw.videoId : "",
+              url: typeof raw.url === "string" ? raw.url : "",
+            } as any)
+          : "";
+      return {
+        id,
+        type: "video",
+        style,
+        content: { source: parseVideoUrl(candidate), title: clampStr(content.title, MAX_TEXT_SHORT) },
+      };
     }
     case "faq_item":
       return {

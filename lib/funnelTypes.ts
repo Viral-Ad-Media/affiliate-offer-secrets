@@ -75,7 +75,7 @@ export const FUNNEL_TYPES: FunnelTypeDef[] = [
     label: "Video sales letter",
     group: "Presentation",
     blurb: "A video does the selling instead of long copy.",
-    support: "needs_video",
+    support: "ready",
     steps: ["thank_you", "order"],
   },
   {
@@ -83,7 +83,7 @@ export const FUNNEL_TYPES: FunnelTypeDef[] = [
     label: "Webinar",
     group: "Presentation",
     blurb: "Registration, then a 45-90 minute workshop that pitches at the end.",
-    support: "needs_video",
+    support: "ready",
     steps: ["thank_you", "order"],
   },
   {

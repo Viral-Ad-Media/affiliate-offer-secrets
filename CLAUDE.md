@@ -1807,6 +1807,38 @@ The blog is a real published site, not just per-post links.
   well-formed XML with the entities escaped.
 - **Still deferred**: no paginated sitemap index (irrelevant under 1000 posts).
 
+## Video block
+
+`video` is an element block like any other (palette, drag, style panel), but its content is not a
+URL — it's a PARSED `{provider, videoId}` (or `{provider:'file', url}`), and the renderer rebuilds
+the embed URL from a fixed template in `lib/engine/videoEmbed.ts`. **There is no code path from a
+tenant-typed string to an `<iframe src>.** That matters more here than for a link: an `<a href>`
+needs a click, an iframe loads whatever it points at unprompted, on a page served to paid traffic.
+Same "closed by construction" reasoning as `styleToInlineCss`'s fixed key table.
+
+`parseVideoUrl` accepts the forms people actually paste (watch/share/embed/shorts/youtu.be, vimeo
+and player.vimeo, plus a direct https `.mp4`-style URL) and rejects everything else — non-http(s)
+schemes are refused before host matching runs, ids are matched anchored (`[A-Za-z0-9_-]{11}` for
+YouTube, digits for Vimeo), and unknown hosts get nothing. `http:` direct files are refused too:
+mixed content silently fails to load on an https page, which reads as a broken block rather than a
+blocked one. YouTube renders through `youtube-nocookie.com`, matching how consent is treated
+elsewhere in this codebase.
+
+The validator **re-parses on every save** rather than trusting the stored shape, so a hand-edited
+row can't smuggle a source past it; an unparseable one becomes `null`, which renders nothing,
+rather than an error that would block saving the rest of the page. Verified directly: forged
+`videoId` and `provider:'file'` + `javascript:` both normalize to null and only the legitimate
+iframe reaches the HTML.
+
+`.video-wrap` (in BOTH `renderPages.ts` and `lib/blog.ts` — the two stylesheets must not drift)
+owns a 16:9 padding-top ratio so an iframe (no intrinsic size) and a `<video>` (which has one) lay
+out identically.
+
+**This unblocked VSL and Webinar** in `lib/funnelTypes.ts` — they were `needs_video` for exactly
+this reason, and their templates seed an empty video block above the copy (`VIDEO_FIRST_TYPES`),
+since a VSL template without one is just a squeeze page with a different headline. Survey
+(`needs_branching`) and Book (`needs_payment`) are still correctly blocked.
+
 ## Freeform block-based page builder (Phase O — complete, all 5 sub-phases landed)
 
 Replaces the fixed-field bridge/funnel-step content model (headline/lead/mechanism/benefits/
