@@ -1574,8 +1574,11 @@ export default function WysiwygCanvas({
             style={blockInlineStyle(block)}
           >
             <div className="mb-3 space-y-2">
-              <div className="rounded-lg border border-gray-300 bg-white px-3.5 py-3 text-[13px] text-gray-400">First name (required, locked)</div>
-              <div className="rounded-lg border border-gray-300 bg-white px-3.5 py-3 text-[13px] text-gray-400">Email address (required, locked)</div>
+              {/* These two are rendered by the form itself. Email is what a contact row is keyed
+                  on (contacts.email is NOT NULL), so a form without it would accept submissions
+                  and store none — the form as a whole is removable instead. */}
+              <div className="rounded-lg border border-gray-300 bg-white px-3.5 py-3 text-[13px] text-gray-400">First name</div>
+              <div className="rounded-lg border border-gray-300 bg-white px-3.5 py-3 text-[13px] text-gray-400">Email address (required)</div>
               {block.children.map((f) => renderFormField(f, block.id))}
             </div>
             <div className="mb-3 flex flex-wrap gap-1">
@@ -1728,7 +1731,28 @@ export default function WysiwygCanvas({
                       onSelectBlock={setSelectedBlockId}
                     />
                   ) : (
-                    renderLockedBlock(b)
+                    <div className="group/lock relative">
+                      {/* The lead form is the ONE locked kind that can be removed. An opt-in page
+                          with no form is a real page — traffic straight to the offer, or the form
+                          in a later step — and the CTA stops hiding behind the submit reveal when
+                          it's gone (see renderBlockTree's hasLeadForm). Disclosure and CTA stay
+                          undeletable: one is a compliance requirement, the other is the page's
+                          only way out. */}
+                      {b.locked === "lead_capture_form" && (
+                        <button
+                          type="button"
+                          title="Remove the opt-in form from this page"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onChange({ ...tree, blocks: tree.blocks.filter((x) => x.id !== b.id) });
+                          }}
+                          className="absolute -top-2 right-0 z-10 rounded bg-white/90 p-1 text-gray-400 opacity-0 shadow-sm transition-opacity hover:text-red-600 group-hover/lock:opacity-100"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {renderLockedBlock(b)}
+                    </div>
                   )}
                 </RootBlockWrapper>
               ))}

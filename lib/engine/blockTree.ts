@@ -402,6 +402,8 @@ export type RenderCtx = {
   declineHref?: string | null;
   nextStepUrl?: string | null;
   productTitle: string;
+  /** Set by renderBlockTree from the tree itself — never passed in. See the CTA's reveal. */
+  hasLeadForm?: boolean;
 };
 
 // Inline markdown for paragraph/bullet text: [text](https://url) links and **bold** only.
@@ -760,7 +762,13 @@ function renderLockedBlock(block: LockedBlock, ctx: RenderCtx): string {
         block.style,
         BUTTON_STYLE_KEYS
       )}>${escapeHtml(block.content.text)}</a>`;
-      return ctx.pageKind === "bridge" ? `<div id="step2" class="hidden reveal">${inner}</div>` : inner;
+      // Hidden-until-submit ONLY when there's a form to do the submitting. The reveal is driven
+      // by the lead form's own handler, so on a page whose form was deleted this wrapper would
+      // hide the CTA forever — the page's only way out, invisible. Unlocking the form is what
+      // made that reachable.
+      return ctx.pageKind === "bridge" && ctx.hasLeadForm
+        ? `<div id="step2" class="hidden reveal">${inner}</div>`
+        : inner;
     }
     case "decline_link":
       if (!(ctx.pageKind === "funnel_step" && ctx.stepType === "upsell" && ctx.declineHref)) return "";
@@ -783,8 +791,14 @@ export function renderBlockTree(tree: PageBlockTree, ctx: RenderCtx): string {
   // this decides where.
   const disclosure = tree.blocks.filter((b) => b.type === "disclosure");
   const rest = tree.blocks.filter((b) => b.type !== "disclosure");
+  // Derived here rather than asked of the caller: the tree is the only thing that knows, and a
+  // caller passing it separately could disagree with what actually rendered.
+  const ctxWithForm: RenderCtx = {
+    ...ctx,
+    hasLeadForm: tree.blocks.some((b) => b.type === "lead_capture_form"),
+  };
   return [...rest, ...disclosure]
-    .map((b) => (b.type === "section" ? renderSection(b, ctx) : renderLockedBlock(b, ctx)))
+    .map((b) => (b.type === "section" ? renderSection(b, ctxWithForm) : renderLockedBlock(b, ctxWithForm)))
     .join("\n");
 }
 

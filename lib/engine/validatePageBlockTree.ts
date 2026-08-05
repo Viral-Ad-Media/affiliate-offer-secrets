@@ -430,7 +430,12 @@ function validateLockedBlock(raw: unknown, count: { n: number }): LockedBlock {
 type LockedKind = LockedBlock["locked"];
 
 function requiredLockedKinds(opts: ValidatePageBlockTreeOptions): Set<LockedKind> {
-  if (opts.pageKind === "bridge") return new Set<LockedKind>(["disclosure", "lead_capture_form", "primary_cta"]);
+  // lead_capture_form is deliberately NOT required. An opt-in page without a form is a real
+  // thing — a funnel that sends ad traffic straight to the offer, or a page whose form lives in a
+  // later step — and forcing one meant the editor could never express it. The disclosure stays
+  // mandatory (content rule 3) and so does the CTA, because a page with neither a form nor a CTA
+  // has no way out at all.
+  if (opts.pageKind === "bridge") return new Set<LockedKind>(["disclosure", "primary_cta"]);
   // Blog posts carry affiliate links, so the disclosure stays locked-and-mandatory (content rule
   // 3) — but none of the campaign-shaped blocks (lead form, CTA, decline) exist on this page kind.
   if (opts.pageKind === "blog") return new Set<LockedKind>(["disclosure"]);
