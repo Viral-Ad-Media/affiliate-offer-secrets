@@ -1907,6 +1907,32 @@ this reason, and their templates seed an empty video block above the copy (`VIDE
 since a VSL template without one is just a squeeze page with a different headline. Survey
 (`needs_branching`) and Book (`needs_payment`) are still correctly blocked.
 
+## Standalone forms and button actions
+
+**A `form` block can be dropped anywhere** — as many per page as you like, or none. Distinct from
+the locked `lead_capture_form` on a funnel opt-in page, which stays for pages that use it. It posts
+to the SAME `/api/public/leads` with the same field-key validation rather than growing a second
+write path for anonymous visitors, which is the one thing that must not happen here.
+
+`extractLeadFormFields` now walks the WHOLE tree (sections, rows, columns), not just root: a
+standalone form can be nested and a page can have several. Every legitimate key on the page has to
+be in that union or the leads route silently drops it. `popup: true` renders the form hidden, shown
+only by a button.
+
+**A button's action is a closed union, not a URL string with special values smuggled in**:
+`link` (the only one that produces an href, still through `isValidRedirectUrl`), `scroll`
+(a block id, scrolled to by the page's own script), `popup` (a form block id), `submit`. Ids are
+`ID_RE`-checked, so `x" onclick="…` is rejected at save rather than escaped into an attribute and
+hoped about. A `scroll`/`popup` target that names nothing on the page does nothing — deleting a
+block a button pointed at must not block saving the page.
+
+Pages saved before actions existed carry a bare `href`; both the validator and the renderer promote
+that to `{kind:"link"}` rather than a migration — the same permanent-adapter habit as `PageCopy`.
+
+Verified: link/legacy-href/scroll/popup all render the right element, `javascript:` and a
+quote-injecting scroll target are both rejected, and a standalone popup form renders its email +
+extra field with its key reaching `extractLeadFormFields`.
+
 ## Cookie / GDPR consent
 
 `tracking.consent_enabled` turns on a consent gate for a funnel's tracking snippets, configured in

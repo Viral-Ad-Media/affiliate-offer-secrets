@@ -272,6 +272,17 @@ const PAGE_STYLE = `
   /* Accept is emphasised but Decline is a real, equally-reachable button — a greyed-out or
      hidden reject is the dark pattern regulators single out. */
   .aos-consent .aos-consent-yes { background:var(--t-primary,#16a34a); border-color:var(--t-primary,#16a34a); font-weight:600; }
+  .aos-form-wrap { margin:24px 0; }
+  .aos-form { background:var(--t-surface,#fff); border:1px solid var(--t-border,#e5e5e5); border-radius:12px; padding:20px; max-width:460px; margin:0 auto; }
+  .aos-form h3 { margin:0 0 10px; font-size:18px; }
+  .aos-form input, .aos-form textarea, .aos-form select { width:100%; box-sizing:border-box; padding:var(--t-field-pad,12px); margin:6px 0; border:1px solid var(--t-field-border,#ccc); border-radius:var(--t-field-radius,8px); background:var(--t-field-bg,#fff); font-size:16px; font-family:inherit; }
+  .aos-form .consent-note { font-size:11px; color:var(--t-muted,#888); margin:8px 0; }
+  .aos-form-done { font-weight:600; text-align:center; }
+  /* A popup form is hidden until a button's popup action shows it. */
+  .aos-form-popup { position:fixed; inset:0; z-index:2147482000; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); padding:20px; }
+  .aos-form-popup.is-open { display:flex; }
+  .aos-form-popup .aos-form { position:relative; width:100%; }
+  .aos-form-close { position:absolute; top:8px; right:10px; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; color:var(--t-muted,#888); }
   .faq-item { margin-bottom: 16px; }
   .faq-item h3 { font-size:16px; margin-bottom:4px; }
   .row { display:flex; gap:24px; flex-wrap:wrap; }

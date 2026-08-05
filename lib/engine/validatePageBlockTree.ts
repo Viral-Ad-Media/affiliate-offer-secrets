@@ -25,6 +25,7 @@ import {
   type FunnelStepType,
   TESTIMONIAL_MEDIA_KINDS,
   contentWidthOf,
+  type ButtonAction,
   type TestimonialMedia,
 } from "./blockTree";
 import { isValidImageDataUrl } from "@/lib/images/validate";
@@ -171,9 +172,45 @@ function validateElement(raw: unknown, count: { n: number }): ElementBlock {
       };
     }
     case "button": {
-      const href = clampStr(content.href, 2000);
-      if (!isValidRedirectUrl(href)) throw new Error("invalid button href");
-      return { id, type: "button", style, content: { text: clampStr(content.text, MAX_CTA), href } };
+      const text = clampStr(content.text, MAX_CTA);
+      const raw = (content.action ?? null) as { kind?: unknown; href?: unknown; targetId?: unknown; formId?: unknown } | null;
+      // Pages saved before actions existed carry a bare href — promoted to {kind:"link"} here
+      // rather than migrated, same permanent-adapter habit as PageCopy.
+      const kind = raw && typeof raw === "object" && typeof raw.kind === "string" ? raw.kind : "link";
+
+      let action: ButtonAction;
+      if (kind === "scroll" || kind === "popup") {
+        // Ids only — never a URL. An id that names nothing on the page is harmless (the script
+        // looks it up and finds nothing), so this clamps rather than rejecting: a block can be
+        // deleted after a button was pointed at it, and that shouldn't block saving the page.
+        const target = clampStr(kind === "scroll" ? raw?.targetId : raw?.formId, 100);
+        if (!ID_RE.test(target)) throw new Error(`invalid button ${kind} target`);
+        action = kind === "scroll" ? { kind: "scroll", targetId: target } : { kind: "popup", formId: target };
+      } else if (kind === "submit") {
+        action = { kind: "submit" };
+      } else {
+        const href = clampStr(raw?.href ?? content.href, 2000);
+        if (!isValidRedirectUrl(href)) throw new Error("invalid button href");
+        action = { kind: "link", href };
+      }
+      return { id, type: "button", style, content: { text, action } };
+    }
+    case "form": {
+      const kids = Array.isArray((b as Record<string, unknown>).children) ? ((b as any).children as unknown[]) : [];
+      return {
+        id,
+        type: "form",
+        style,
+        content: {
+          title: clampStr(content.title, MAX_TEXT_SHORT),
+          submitText: clampStr(content.submitText, MAX_CTA) || "Send",
+          successText: clampStr(content.successText, MAX_TEXT_SHORT) || "Thanks.",
+          popup: content.popup === true,
+        },
+        // Same cap and same per-field validation as the locked opt-in form — one definition of
+        // what a form field may be, so a standalone form can't accept anything the other can't.
+        children: kids.slice(0, MAX_FORM_CHILDREN).map((f) => validateFormInput(f, count)),
+      };
     }
     case "video": {
       // The stored shape is re-parsed, never trusted. A row could carry a hand-edited source (or
@@ -509,10 +546,25 @@ export function validatePageBlockTree(raw: unknown, opts: ValidatePageBlockTreeO
 // fieldKey not returned here must never be trusted, even if it was valid at some point in the
 // past (a field can be removed from the form after being live).
 export function extractLeadFormFields(tree: PageBlockTree): { fieldKey: string; fieldType: string; required: boolean }[] {
-  for (const b of tree.blocks) {
-    if ("locked" in b && b.locked === "lead_capture_form") {
-      return b.children.map((f) => ({ fieldKey: f.content.fieldKey, fieldType: f.content.fieldType, required: f.content.required }));
+  // Walks the WHOLE tree now, not just root: a standalone form block can sit inside a section or
+  // a column, and a page can have several. Every legitimate field key on the page has to be in
+  // this list or /api/public/leads silently drops it — the union is the point, and duplicates
+  // across two forms are harmless because the route only checks membership.
+  const out: { fieldKey: string; fieldType: string; required: boolean }[] = [];
+  const take = (fields: FormInputBlock[]) => {
+    for (const f of fields) {
+      out.push({ fieldKey: f.content.fieldKey, fieldType: f.content.fieldType, required: f.content.required });
     }
-  }
-  return [];
+  };
+  const walk = (blocks: unknown[]) => {
+    for (const raw of blocks) {
+      const b = raw as Record<string, any>;
+      if (!b || typeof b !== "object") continue;
+      if (b.locked === "lead_capture_form" || b.type === "form") take((b.children ?? []) as FormInputBlock[]);
+      if (Array.isArray(b.children)) walk(b.children);
+      if (Array.isArray(b.columns)) walk(b.columns);
+    }
+  };
+  walk(tree.blocks);
+  return out;
 }

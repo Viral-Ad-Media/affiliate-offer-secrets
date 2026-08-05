@@ -152,7 +152,42 @@ export type ImageListBlock = Base & {
   type: "image_list";
   content: { items: { imageDataUrl: string | null; caption: string }[] };
 };
-export type ButtonBlock = Base & { type: "button"; content: { text: string; href: string } };
+// What a button DOES, as a closed union rather than a URL string with special values smuggled
+// into it. Only `link` produces an href; the rest are data attributes a code-owned script reads,
+// so there is still no path from tenant input to a navigable URL except the validated one.
+export type ButtonAction =
+  | { kind: "link"; href: string }
+  /** Smooth-scroll to a section on the same page. targetId is matched against real block ids. */
+  | { kind: "scroll"; targetId: string }
+  /** Open a form block on this page as a modal. formId is matched against real form block ids. */
+  | { kind: "popup"; formId: string }
+  /** Submit the form this button sits inside. */
+  | { kind: "submit" };
+
+export const BUTTON_ACTION_KINDS = ["link", "scroll", "popup", "submit"] as const;
+
+export type ButtonBlock = Base & {
+  type: "button";
+  // `href` is kept for pages saved before actions existed — normalizePageCopy/validate promote it
+  // into {kind:"link"} rather than a migration, same permanent-adapter habit as PageCopy.
+  content: { text: string; action?: ButtonAction; href?: string };
+};
+
+// A real, droppable form — as many per page as you like, or none. Distinct from the locked
+// lead_capture_form on a funnel opt-in page, which stays as it is for pages that use it; this is
+// the general one, and it posts to the same /api/public/leads with the same field-key checks
+// rather than growing a second write path for anonymous visitors.
+export type FormBlock = Base & {
+  type: "form";
+  content: {
+    title: string;
+    submitText: string;
+    successText: string;
+    /** Rendered hidden, shown only by a button's popup action. */
+    popup: boolean;
+  };
+  children: FormInputBlock[];
+};
 // The source is a parsed provider + id, never the raw pasted URL — see lib/engine/videoEmbed.ts
 // for why the renderer must rebuild the embed URL rather than interpolate what someone typed.
 export type VideoBlock = Base & {
@@ -229,7 +264,8 @@ export type ElementBlock =
   | FaqItemBlock
   | TestimonialBlock
   | CarouselBlock
-  | CountdownBlock;
+  | CountdownBlock
+  | FormBlock;
 
 export const ELEMENT_BLOCK_TYPES = [
   "heading",
@@ -246,6 +282,7 @@ export const ELEMENT_BLOCK_TYPES = [
   "testimonial",
   "carousel",
   "countdown",
+  "form",
 ] as const;
 
 // Only ever a child of a lead_capture_form block — never part of ElementBlock, so a Column's
@@ -481,6 +518,7 @@ export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readon
   testimonial: TEXT_STYLE_KEYS,
   carousel: BOX_STYLE_KEYS,
   countdown: TEXT_STYLE_KEYS,
+  form: BOX_STYLE_KEYS,
   button: BUTTON_STYLE_KEYS,
   video: BOX_STYLE_KEYS,
   faq_item: TEXT_STYLE_KEYS,
@@ -530,11 +568,25 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
             }<span>${escapeHtml(i.caption)}</span></div>`
         )
         .join("")}</div>`;
-    case "button":
-      return `<a class="block-btn" href="${escapeHtml(block.content.href)}"${styleAttr(
-        block.style,
-        BUTTON_STYLE_KEYS
-      )}>${escapeHtml(block.content.text)}</a>`;
+    case "button": {
+      const style = styleAttr(block.style, BUTTON_STYLE_KEYS);
+      const label = escapeHtml(block.content.text);
+      // Legacy rows stored a bare href; treat that as {kind:"link"} rather than migrating.
+      const action: ButtonAction =
+        block.content.action ?? { kind: "link", href: block.content.href ?? "#" };
+      switch (action.kind) {
+        case "link":
+          return `<a class="block-btn" href="${escapeHtml(action.href)}"${style}>${label}</a>`;
+        case "scroll":
+          // A button, not an anchor: the target is a block id resolved by the page's own script,
+          // never a URL, so this can't be pointed off-site by editing the stored value.
+          return `<button type="button" class="block-btn" data-scroll-to="${escapeHtml(action.targetId)}"${style}>${label}</button>`;
+        case "popup":
+          return `<button type="button" class="block-btn" data-open-form="${escapeHtml(action.formId)}"${style}>${label}</button>`;
+        case "submit":
+          return `<button type="submit" class="block-btn"${style}>${label}</button>`;
+      }
+    }
     case "video": {
       const src = block.content.source;
       if (!src) return "";
@@ -608,6 +660,28 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
         )
         .join("")}</div>`;
     }
+    case "form": {
+      const { title, submitText, successText, popup } = block.content;
+      const fields = block.children
+        .map((f) => renderFormField(f))
+        .join("");
+      // Posts to the same endpoint as the locked opt-in form, with the same field-key validation
+      // server-side — a second write path for anonymous visitors is exactly what shouldn't exist.
+      return `<div class="aos-form-wrap${popup ? " aos-form-popup" : ""}" id="${escapeHtml(block.id)}"${
+        popup ? " hidden" : ""
+      }${styleAttr(block.style, BOX_STYLE_KEYS)}>
+  <form class="aos-form" data-aos-form="1" data-campaign="${escapeHtml(ctx.campaignId)}">
+    ${popup ? '<button type="button" class="aos-form-close" data-close-form="1" aria-label="Close">&times;</button>' : ""}
+    ${title.trim() ? `<h3>${escapeHtml(title)}</h3>` : ""}
+    <input type="text" name="first_name" placeholder="First name" autocomplete="given-name" />
+    <input type="email" name="email" placeholder="Email address" required autocomplete="email" />
+    ${fields}
+    <p class="consent-note">${escapeHtml(ctx.leadConsentText)}</p>
+    <button type="submit" class="cta">${escapeHtml(submitText || "Send")}</button>
+    <p class="aos-form-done" hidden>${escapeHtml(successText || "Thanks.")}</p>
+  </form>
+</div>${FORM_ACTION_SCRIPT}`;
+    }
     case "countdown": {
       const { mode, deadline, minutes, label, expiredText } = block.content;
       const target = mode === "date" ? Date.parse(deadline ?? "") : NaN;
@@ -638,6 +712,42 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
 // refresh tells each visitor the offer is expiring and then proves it isn't, which is the
 // deceptive-urgency pattern content rule 2 already rules out. It does not loop; at zero it swaps
 // in the expired message.
+// Drives every button action that isn't a plain link, plus standalone form submission. Inlined
+// once (guarded) alongside the first form/action button, so a page using none of this still ships
+// no script. Reads only data attributes and matches them against elements that actually exist —
+// a stored id that names nothing simply does nothing.
+const FORM_ACTION_SCRIPT = `<script>(function(){
+if (window.__aosForms) return; window.__aosForms = 1;
+document.addEventListener("click", function(e){
+  var t = e.target && e.target.closest ? e.target.closest("[data-scroll-to],[data-open-form],[data-close-form]") : null;
+  if (!t) return;
+  var scroll = t.getAttribute("data-scroll-to");
+  if (scroll) { var el = document.getElementById(scroll); if (el) el.scrollIntoView({behavior:"smooth",block:"start"}); return; }
+  var open = t.getAttribute("data-open-form");
+  if (open) { var f = document.getElementById(open); if (f) { f.hidden = false; f.classList.add("is-open"); } return; }
+  if (t.getAttribute("data-close-form")) {
+    var w = t.closest(".aos-form-popup"); if (w) { w.hidden = true; w.classList.remove("is-open"); }
+  }
+});
+document.addEventListener("submit", function(e){
+  var form = e.target;
+  if (!form || !form.getAttribute || form.getAttribute("data-aos-form") !== "1") return;
+  e.preventDefault();
+  var extra = {}, first = "", email = "";
+  form.querySelectorAll("[name]").forEach(function(el){
+    var v = (el.type === "checkbox" || el.type === "radio") ? (el.checked ? (el.value || "yes") : "") : el.value;
+    if (!v) return;
+    if (el.name === "first_name") first = v; else if (el.name === "email") email = v; else extra[el.name] = v;
+  });
+  var done = form.querySelector(".aos-form-done");
+  function finish(){ form.querySelectorAll("input,select,textarea,button").forEach(function(el){ el.style.display="none"; }); if (done) done.hidden = false; }
+  fetch("/api/public/leads", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ campaign_id: form.getAttribute("data-campaign"), first_name: first, email: email, extra_fields: extra })
+  }).catch(function(){}).then(finish);
+});
+})();</script>`;
+
 const COUNTDOWN_SCRIPT = `<script>(function(){
 if (window.__aosCountdown) return; window.__aosCountdown = 1;
 function pad(n){return (n<10?"0":"")+n;}
@@ -1020,7 +1130,7 @@ function defaultElementContent(type: (typeof ELEMENT_BLOCK_TYPES)[number]): Elem
     case "image_list":
       return { items: [{ imageDataUrl: null, caption: "New item" }] };
     case "button":
-      return { text: "Click here", href: "https://example.com" };
+      return { text: "Click here", action: { kind: "link", href: "https://example.com" } };
     case "video":
       // No source: an empty block renders nothing rather than a placeholder, so a half-finished
       // page never ships a broken player to real traffic.
@@ -1029,6 +1139,8 @@ function defaultElementContent(type: (typeof ELEMENT_BLOCK_TYPES)[number]): Elem
       return { question: "New question", answer: "Answer" };
     case "carousel":
       return { slides: [{ imageDataUrl: null, caption: "" }, { imageDataUrl: null, caption: "" }] };
+    case "form":
+      return { title: "", submitText: "Send", successText: "Thanks — we'll be in touch.", popup: false };
     case "countdown":
       // Evergreen by default: a date-mode block with no deadline yet would render nothing, and a
       // block that vanishes the moment you insert it reads as broken.

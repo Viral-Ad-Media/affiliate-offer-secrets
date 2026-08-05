@@ -24,6 +24,7 @@ import {
   Quote,
   GalleryHorizontal,
   Timer,
+  TextCursorInput,
   Settings2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -176,6 +177,7 @@ const ELEMENT_PALETTE: { type: ElementBlockTypeLocal; label: string; icon: any }
   { type: "testimonial", label: "Testimonial", icon: Quote },
   { type: "carousel", label: "Carousel", icon: GalleryHorizontal },
   { type: "countdown", label: "Countdown", icon: Timer },
+  { type: "form", label: "Form", icon: TextCursorInput },
 ];
 
 // Sets the DOM node's text exactly once, at mount, then never touches it again on re-render (no
