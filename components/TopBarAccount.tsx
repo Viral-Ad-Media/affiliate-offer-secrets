@@ -93,7 +93,7 @@ export default function TopBarAccount({
         title={fullName ? `${fullName} · ${email}` : email}
         className="flex items-center gap-1.5 rounded-lg py-1 pl-1 pr-1.5 text-sm text-zinc-300 hover:bg-ink-800"
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-ink-600 bg-ink-800 text-[11px] font-semibold text-zinc-400">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-ink-600 bg-ink-800 text-[12px] font-semibold text-zinc-400">
           {avatarUrl ? (
             /* eslint-disable-next-line @next/next/no-img-element -- data: URL, nothing to optimise */
             <img src={avatarUrl} alt="" className="h-full w-full object-cover" />

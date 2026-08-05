@@ -97,7 +97,7 @@ export default function AvatarPicker({
             </button>
           )}
         </div>
-        <p className="mt-1 text-[11px] text-zinc-500">
+        <p className="mt-1 text-[12px] text-zinc-500">
           Square crop, resized to {MAX_DIM}px. Saved when you save the profile.
         </p>
         {error && <p className="mt-1 text-xs text-red-300">{error}</p>}

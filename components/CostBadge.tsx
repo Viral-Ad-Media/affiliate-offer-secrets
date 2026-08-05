@@ -30,7 +30,7 @@ export default function CostBadge({
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium ${
+      className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[12px] font-medium ${
         affordable ? "bg-ink-700 text-zinc-300" : "bg-amber-500/15 text-amber-300"
       } ${className}`}
       title={

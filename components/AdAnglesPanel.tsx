@@ -49,7 +49,7 @@ export default function AdAnglesPanel({
           <div className="text-sm font-semibold text-zinc-100">{angle.headline}</div>
           <p className="mt-1 text-sm text-zinc-300">{angle.primary_text}</p>
           <p className="mt-1 text-xs text-zinc-500">{angle.description}</p>
-          <span className="chip mt-2 inline-block !py-0.5 text-[11px]">{angle.cta}</span>
+          <span className="chip mt-2 inline-block !py-0.5 text-[12px]">{angle.cta}</span>
           <CreativeItemCard campaignId={campaignId} source="fb_ad_angle" itemIndex={i} />
           <LaunchAd
             campaignId={campaignId}

@@ -133,7 +133,7 @@ export default function EverflowPanel({ initial }: { initial: EverflowStatus }) 
             autoComplete="off"
             className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 font-mono text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
           />
-          <span className="mt-1 block text-[11px] text-zinc-500">
+          <span className="mt-1 block text-[12px] text-zinc-500">
             Checked against Everflow before it&apos;s saved, then encrypted — it&apos;s never shown
             again or sent back to your browser.
           </span>

@@ -348,7 +348,7 @@ export default function Marketplace() {
                       {p.product_title}
                     </Link>
                     <div className="flex items-center gap-2 text-xs text-zinc-500">
-                      <span className="chip !py-0 !px-1.5 text-[10px] uppercase tracking-wide">
+                      <span className="chip !py-0 !px-1.5 text-[11px] uppercase tracking-wide">
                         {NETWORK_LABELS[p.network] ?? p.network}
                       </span>
                       <span>{p.vendor_id}</span>

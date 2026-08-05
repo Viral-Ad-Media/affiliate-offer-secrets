@@ -215,7 +215,7 @@ export default function BroadcastComposer({
                   {drafting ? "Drafting…" : "Draft email"}
                 </button>
               </div>
-              <p className="mt-1.5 text-[11px] text-zinc-500">
+              <p className="mt-1.5 text-[12px] text-zinc-500">
                 {audience === "campaign" && campaignId
                   ? "Uses the chosen campaign's product and existing email copy for context."
                   : "Pick a campaign audience above to give the draft product context."}{" "}
@@ -242,7 +242,7 @@ export default function BroadcastComposer({
                 placeholder="Write your email…"
                 className="w-full resize-y rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 font-mono text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
               />
-              <span className="mt-1 block text-[11px] text-zinc-500">
+              <span className="mt-1 block text-[12px] text-zinc-500">
                 An unsubscribe link is appended automatically — it can&apos;t be removed.
               </span>
             </label>
@@ -294,14 +294,14 @@ export default function BroadcastComposer({
               <div key={h.id} className="flex items-center gap-3 py-2.5 text-sm">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-zinc-100">{h.name}</div>
-                  <div className="mt-0.5 text-[11px] text-zinc-500">
+                  <div className="mt-0.5 text-[12px] text-zinc-500">
                     {h.audience_type === "campaign" ? "One campaign" : "All contacts"} ·{" "}
                     {new Date(h.created_at).toLocaleString()}
                   </div>
                 </div>
                 <span className="shrink-0 text-xs text-zinc-400">{h.sent_count} sent</span>
                 <span
-                  className={`shrink-0 rounded-full px-2 py-px text-[11px] ${
+                  className={`shrink-0 rounded-full px-2 py-px text-[12px] ${
                     h.status === "active" ? "bg-emerald-500/15 text-emerald-300" : "bg-ink-800 text-zinc-400"
                   }`}
                 >

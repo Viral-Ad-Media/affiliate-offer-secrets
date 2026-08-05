@@ -138,7 +138,7 @@ export default function NotificationsBell({ iconOnly = false }: { iconOnly?: boo
       >
         <Bell className="h-4 w-4 shrink-0" />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-semibold leading-none text-white">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[11px] font-semibold leading-none text-white">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
@@ -189,7 +189,7 @@ export default function NotificationsBell({ iconOnly = false }: { iconOnly?: boo
                       {n.body && (
                         <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">{n.body}</p>
                       )}
-                      <span className="mt-0.5 block text-[11px] text-zinc-600">
+                      <span className="mt-0.5 block text-[12px] text-zinc-600">
                         {relativeTime(n.created_at)}
                       </span>
                     </div>

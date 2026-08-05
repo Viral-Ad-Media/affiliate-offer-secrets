@@ -232,7 +232,7 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
               placeholder="auto-from-title"
               className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 font-mono text-xs outline-none placeholder:text-zinc-600 focus:border-emerald-500"
             />
-            <span className="mt-1 block text-[11px] text-zinc-500">
+            <span className="mt-1 block text-[12px] text-zinc-500">
               The address of this post. Leave empty to follow the title.
             </span>
           </label>
@@ -245,7 +245,7 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
               placeholder="Short summary shown on the blog index card."
               className="w-full resize-y rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-xs outline-none placeholder:text-zinc-600 focus:border-emerald-500"
             />
-            <span className="mt-1 block text-[11px] text-zinc-500">
+            <span className="mt-1 block text-[12px] text-zinc-500">
               Falls back to the first lines of the post if left empty.
             </span>
           </label>

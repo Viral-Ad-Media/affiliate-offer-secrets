@@ -76,7 +76,7 @@ export default function ThemeToggle({ iconOnly = false }: { iconOnly?: boolean }
             title={o.label}
             aria-pressed={isActive}
             onClick={() => choose(o.value)}
-            className={`flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-[11px] transition-colors ${
+            className={`flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-[12px] transition-colors ${
               isActive ? "bg-emerald-500/15 text-emerald-300" : "text-zinc-500 hover:text-zinc-300"
             }`}
           >

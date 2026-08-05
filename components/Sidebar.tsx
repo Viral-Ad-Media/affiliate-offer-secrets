@@ -223,7 +223,7 @@ export default function Sidebar({
             {!iconOnly && (
               <>
                 <span className="flex-1">{item.label}</span>
-                <span className="rounded border border-ink-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-600">
+                <span className="rounded border border-ink-700 px-1.5 py-0.5 text-[11px] uppercase tracking-wide text-zinc-600">
                   Soon
                 </span>
               </>
@@ -254,7 +254,7 @@ export default function Sidebar({
                     key={c.href}
                     href={c.href}
                     onClick={() => setMobileOpen(false)}
-                    className={`block rounded-md px-2 py-1.5 text-[13px] transition-colors ${
+                    className={`block rounded-md px-2 py-1.5 text-[14px] transition-colors ${
                       childActive ? "text-emerald-300" : "text-zinc-500 hover:text-zinc-200"
                     }`}
                   >

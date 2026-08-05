@@ -83,7 +83,7 @@ export default function SeoFields({
               Allow search engines to index this page
             </label>
           )}
-          {noteWhenNoindex && <p className="text-[11px] text-zinc-500">{noteWhenNoindex}</p>}
+          {noteWhenNoindex && <p className="text-[12px] text-zinc-500">{noteWhenNoindex}</p>}
         </div>
       )}
     </section>

@@ -273,7 +273,7 @@ export default function BlogManager({
           </p>
         ) : (
           <div className="divide-y divide-ink-800">
-            <label className="flex items-center gap-2 py-1.5 text-[11px] text-zinc-500">
+            <label className="flex items-center gap-2 py-1.5 text-[12px] text-zinc-500">
               <input
                 type="checkbox"
                 checked={visiblePosts.every((p) => selected.has(p.id))}
@@ -301,7 +301,7 @@ export default function BlogManager({
                   <Link href={`/blog/${p.id}`} className="block truncate text-sm font-medium text-zinc-100 hover:text-emerald-300">
                     {p.title}
                   </Link>
-                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-zinc-500">
+                  <div className="mt-0.5 flex items-center gap-2 text-[12px] text-zinc-500">
                     <span
                       className={`rounded-full px-2 py-px ${
                         p.status === "published" ? "bg-emerald-500/15 text-emerald-300" : "bg-ink-800 text-zinc-400"
@@ -427,7 +427,7 @@ function QuickEditPost({
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-400">Title</label>
             <input value={title} onChange={(e) => setTitle(e.target.value)} className={field} />
-            <p className="mt-1 text-[11px] text-zinc-500">
+            <p className="mt-1 text-[12px] text-zinc-500">
               The post&apos;s URL slug follows the title, and old links to the previous slug stop
               resolving.
             </p>

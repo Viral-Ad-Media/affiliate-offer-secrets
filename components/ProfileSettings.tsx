@@ -147,7 +147,7 @@ export default function ProfileSettings({
           >
             {email}
           </div>
-          <span className="mt-1 block text-[11px] text-zinc-600">
+          <span className="mt-1 block text-[12px] text-zinc-600">
             Email changes aren&apos;t supported yet.
           </span>
         </div>

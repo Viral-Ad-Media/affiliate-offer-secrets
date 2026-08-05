@@ -214,7 +214,7 @@ function DnsSetup({
                       )}
                     </button>
                   ) : (
-                    <span className="text-[11px]">for a {r.note}</span>
+                    <span className="text-[12px]">for a {r.note}</span>
                   )}
                 </td>
               </tr>

@@ -38,7 +38,7 @@ function TagChip({ tag, onRemove }: { tag: ContactTag; onRemove?: () => void }) 
   const bg = tag.color ?? "#334155";
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium"
       style={{ backgroundColor: bg, color: readableTextOn(bg) }}
       title={tag.description ?? tag.name}
     >
@@ -152,7 +152,7 @@ export default function ContactsTable({
             <TagsIcon className="h-3.5 w-3.5 text-zinc-500" />
             <Link
               href="/contacts"
-              className={`rounded-full px-2 py-0.5 text-[11px] ${
+              className={`rounded-full px-2 py-0.5 text-[12px] ${
                 activeTag ? "text-zinc-400 hover:text-zinc-200" : "bg-ink-700 text-zinc-100"
               }`}
             >
@@ -167,7 +167,7 @@ export default function ContactsTable({
                   href={`/contacts?tag=${t.id}`}
                   aria-current={on ? "true" : undefined}
                   title={t.description ?? undefined}
-                  className="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  className="rounded-full px-2 py-0.5 text-[12px] font-medium"
                   style={
                     on
                       ? { backgroundColor: bg, color: readableTextOn(bg) }
@@ -298,7 +298,7 @@ export default function ContactsTable({
                       {c.email}
                       {c.unsubscribed_at && (
                         <span
-                          className="ml-1.5 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] text-amber-300"
+                          className="ml-1.5 rounded bg-amber-500/15 px-1 py-0.5 text-[11px] text-amber-300"
                           title={`Unsubscribed ${new Date(c.unsubscribed_at).toLocaleDateString()}`}
                         >
                           unsubscribed
@@ -460,7 +460,7 @@ function EditContactDialog({
               <p className="text-xs font-medium text-zinc-400">Form fields</p>
               {Object.entries(extra).map(([k, v]) => (
                 <div key={k}>
-                  <label className="mb-1 block text-[11px] text-zinc-500">{k}</label>
+                  <label className="mb-1 block text-[12px] text-zinc-500">{k}</label>
                   <input
                     value={v}
                     onChange={(e) => setExtra((p) => ({ ...p, [k]: e.target.value }))}
@@ -485,7 +485,7 @@ function EditContactDialog({
                     e.target.value = "";
                     if (t) applyTag("tag", t);
                   }}
-                  className="rounded border border-ink-600 bg-ink-900 px-2 py-0.5 text-[11px] text-zinc-300"
+                  className="rounded border border-ink-600 bg-ink-900 px-2 py-0.5 text-[12px] text-zinc-300"
                 >
                   <option value="">+ Add tag…</option>
                   {untagged.map((t) => (

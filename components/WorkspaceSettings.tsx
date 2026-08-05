@@ -87,7 +87,7 @@ export default function WorkspaceSettings({
           maxLength={40}
           className={`${field} font-mono`}
         />
-        <span className="mt-1 block text-[11px] text-zinc-500">
+        <span className="mt-1 block text-[12px] text-zinc-500">
           This is your workspace&apos;s subdomain — where your team works and where funnel and blog
           links you share point.{" "}
           <strong className="text-amber-300/80">

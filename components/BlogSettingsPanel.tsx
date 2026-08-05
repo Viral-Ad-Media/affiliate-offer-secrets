@@ -130,7 +130,7 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
               className="min-w-0 flex-1 rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 font-mono text-xs outline-none placeholder:text-zinc-600 focus:border-emerald-500"
             />
           </div>
-          <span className="mt-1 block text-[11px] text-zinc-500">
+          <span className="mt-1 block text-[12px] text-zinc-500">
             Needed before your blog index is reachable. Letters, numbers and dashes.
           </span>
         </label>
@@ -155,7 +155,7 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
               </label>
             ))}
           </div>
-          <span className="mt-1 block text-[11px] text-zinc-500">
+          <span className="mt-1 block text-[12px] text-zinc-500">
             Applies to post URLs. Changing it doesn&apos;t break links you&apos;ve already shared —
             old addresses redirect to the new structure. A post with no publish date or no category
             falls back to just its name.
@@ -179,7 +179,7 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
             placeholder="Honest reviews and build guides for hobby woodworkers."
             className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
           />
-          <span className="mt-1 block text-[11px] text-zinc-500">
+          <span className="mt-1 block text-[12px] text-zinc-500">
             Shown under the blog name and used as the index page&apos;s meta description.
           </span>
         </label>
@@ -194,15 +194,15 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={avatar} alt="" className="h-full w-full object-cover" />
               ) : (
-                <div className="flex h-full items-center justify-center text-[10px] text-zinc-600">No photo</div>
+                <div className="flex h-full items-center justify-center text-[11px] text-zinc-600">No photo</div>
               )}
             </div>
             <div className="mt-2 flex gap-1">
-              <button type="button" onClick={() => fileRef.current?.click()} className="btn-ghost text-[11px]">
+              <button type="button" onClick={() => fileRef.current?.click()} className="btn-ghost text-[12px]">
                 <ImagePlus className="h-3 w-3" /> Photo
               </button>
               {avatar && (
-                <button type="button" onClick={() => setAvatar(null)} className="btn-ghost text-[11px]">
+                <button type="button" onClick={() => setAvatar(null)} className="btn-ghost text-[12px]">
                   <Trash2 className="h-3 w-3" />
                 </button>
               )}

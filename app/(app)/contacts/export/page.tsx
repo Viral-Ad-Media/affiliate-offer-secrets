@@ -28,7 +28,7 @@ export default function ContactExportPage() {
         <a href="/api/contacts/export" className="btn-primary inline-flex w-fit items-center gap-1.5 text-xs">
           <Download className="h-3.5 w-3.5" /> Download CSV
         </a>
-        <p className="text-[11px] text-zinc-500">
+        <p className="text-[12px] text-zinc-500">
           Unsubscribed contacts are included — your sending tools decide who to mail, and dropping
           them here would quietly lose data you may still need for suppression lists.
         </p>

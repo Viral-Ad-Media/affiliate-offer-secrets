@@ -5,6 +5,30 @@ const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      // Whole-app type scale, nudged up roughly one pixel per step. Overriding the SCALE rather
+      // than the root font size is deliberate: Tailwind's spacing units are rem too, so bumping
+      // html{font-size} would inflate every padding, gap and width alongside the text and reflow
+      // the dense tables this app is mostly made of. This grows text only.
+      //
+      // Line heights are raised with the sizes — leaving Tailwind's defaults would tighten every
+      // paragraph as the text grew, which reads as cramped rather than bigger.
+      //
+      // Does NOT touch the published funnel or blog pages: those carry their own <style> blocks in
+      // lib/engine/renderPages.ts and lib/blog.ts and are served to real ad traffic, so their
+      // typography is a separate, deliberate decision from the operator's own UI.
+      fontSize: {
+        xs: ["0.8125rem", { lineHeight: "1.125rem" }], // 13px, was 12
+        sm: ["0.9375rem", { lineHeight: "1.375rem" }], // 15px, was 14
+        base: ["1.0625rem", { lineHeight: "1.625rem" }], // 17px, was 16
+        lg: ["1.1875rem", { lineHeight: "1.8125rem" }], // 19px, was 18
+        xl: ["1.3125rem", { lineHeight: "1.875rem" }], // 21px, was 20
+        "2xl": ["1.5625rem", { lineHeight: "2.0625rem" }], // 25px, was 24
+        "3xl": ["1.9375rem", { lineHeight: "2.3125rem" }], // 31px, was 30
+        "4xl": ["2.375rem", { lineHeight: "2.625rem" }], // 38px, was 36
+        "5xl": ["3.125rem", { lineHeight: "1" }], // 50px, was 48
+        "6xl": ["3.875rem", { lineHeight: "1" }], // 62px, was 60
+        "7xl": ["4.625rem", { lineHeight: "1" }], // 74px, was 72
+      },
       colors: {
         // Dark-terminal / data-dense dashboard scale — deeper and more neutral than the old
         // navy-tinted ink scale, closer to true slate so status accent colors (emerald/amber/

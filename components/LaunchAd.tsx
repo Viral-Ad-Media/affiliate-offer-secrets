@@ -196,7 +196,7 @@ export default function LaunchAd({
           {launch.creative_kind === "video" ? "Video" : "Image"} ad draft ready — paused, review
           before going live
         </div>
-        <div className="mb-2 space-y-0.5 text-[11px] text-zinc-400">
+        <div className="mb-2 space-y-0.5 text-[12px] text-zinc-400">
           <div>Budget: {launch.budget_credits} credits/day (≈ ${launch.budget_credits}/day)</div>
           <div>
             Links to:{" "}
@@ -217,7 +217,7 @@ export default function LaunchAd({
     return (
       <div className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
         <p className="mb-1.5 text-xs text-red-300">Launch failed: {launch.notes ?? "Unknown error"}</p>
-        <p className="mb-2 text-[11px] text-zinc-500">Any reserved credits were refunded automatically.</p>
+        <p className="mb-2 text-[12px] text-zinc-500">Any reserved credits were refunded automatically.</p>
         <button onClick={() => setLaunch(null)} className="btn-ghost !py-1 text-xs">
           Try again
         </button>
@@ -235,17 +235,17 @@ export default function LaunchAd({
 
   return (
     <div className="mt-2 rounded-lg border border-ink-700 p-3">
-      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] text-zinc-500">
+      <div className="mb-1.5 flex items-center gap-1.5 text-[12px] text-zinc-500">
         <Megaphone className="h-3.5 w-3.5" /> Launch on {adAccount.ad_account_name} → {page.page_name} —
         paused until you confirm
       </div>
-      <label className="mb-1 block text-[11px] font-medium text-zinc-400">Headline</label>
+      <label className="mb-1 block text-[12px] font-medium text-zinc-400">Headline</label>
       <input
         value={headline}
         onChange={(e) => setHeadline(e.target.value)}
         className="mb-1.5 w-full rounded-lg border border-ink-600 bg-ink-900 px-2.5 py-1.5 text-xs outline-none focus:border-emerald-500"
       />
-      <label className="mb-1 block text-[11px] font-medium text-zinc-400">Primary text</label>
+      <label className="mb-1 block text-[12px] font-medium text-zinc-400">Primary text</label>
       <textarea
         value={primaryText}
         onChange={(e) => setPrimaryText(e.target.value)}
@@ -254,7 +254,7 @@ export default function LaunchAd({
       />
       <div className="mb-2 flex items-center gap-2">
         <div>
-          <label className="mb-1 block text-[11px] font-medium text-zinc-400">Daily budget (credits)</label>
+          <label className="mb-1 block text-[12px] font-medium text-zinc-400">Daily budget (credits)</label>
           <input
             type="number"
             min={1}
@@ -264,7 +264,7 @@ export default function LaunchAd({
           />
         </div>
         <div>
-          <label className="mb-1 block text-[11px] font-medium text-zinc-400">Country</label>
+          <label className="mb-1 block text-[12px] font-medium text-zinc-400">Country</label>
           <input
             value={country}
             onChange={(e) => setCountry(e.target.value.toUpperCase())}

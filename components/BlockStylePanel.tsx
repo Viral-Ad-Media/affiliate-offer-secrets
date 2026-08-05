@@ -42,7 +42,7 @@ const TEXT_ALIGN_OPTIONS: { value: NonNullable<BlockStyle["textAlign"]>; label: 
 ];
 
 function fieldLabelClass() {
-  return "mb-1 block text-[11px] font-medium text-zinc-400";
+  return "mb-1 block text-[12px] font-medium text-zinc-400";
 }
 function fieldInputClass() {
   return "w-full rounded border border-ink-600 bg-ink-800 px-2 py-1 text-xs text-zinc-100";
@@ -101,11 +101,11 @@ function ColorField({ label, value, onChange }: { label: string; value: string |
           className="h-7 w-9 cursor-pointer rounded border border-ink-600 bg-ink-800 p-0.5"
         />
         {value ? (
-          <button type="button" onClick={() => onChange(undefined)} className="text-[11px] text-zinc-500 hover:text-zinc-300">
+          <button type="button" onClick={() => onChange(undefined)} className="text-[12px] text-zinc-500 hover:text-zinc-300">
             Clear
           </button>
         ) : (
-          <span className="text-[11px] text-zinc-600">Default</span>
+          <span className="text-[12px] text-zinc-600">Default</span>
         )}
       </div>
     </label>
@@ -159,7 +159,7 @@ export default function BlockStylePanel({ block, onChange, onClose }: BlockStyle
       <div className="grid gap-4">
         {showTypography && (
           <div className="space-y-2 sm:col-span-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Typography</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Typography</div>
             <div className="grid grid-cols-2 gap-2">
               {has("fontFamily") && (
                 <label className="col-span-2 block">
@@ -229,14 +229,14 @@ export default function BlockStylePanel({ block, onChange, onClose }: BlockStyle
 
         {showBackground && (
           <div className="space-y-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Background</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Background</div>
             <ColorField label="Background color" value={style.backgroundColor} onChange={(v) => set({ backgroundColor: v })} />
           </div>
         )}
 
         {showSpacing && (
           <div className="space-y-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Spacing (px)</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Spacing (px)</div>
             <div className="grid grid-cols-2 gap-2">
               {has("paddingTop") && <NumberField label="Padding top" value={style.paddingTop} min={0} max={200} onChange={(v) => set({ paddingTop: v })} />}
               {has("paddingRight") && (
@@ -258,7 +258,7 @@ export default function BlockStylePanel({ block, onChange, onClose }: BlockStyle
 
         {showBorder && (
           <div className="space-y-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Border</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Border</div>
             <div className="grid grid-cols-2 gap-2">
               {has("borderWidth") && <NumberField label="Width (px)" value={style.borderWidth} min={0} max={16} onChange={(v) => set({ borderWidth: v })} />}
               {has("borderRadius") && (
@@ -275,7 +275,7 @@ export default function BlockStylePanel({ block, onChange, onClose }: BlockStyle
 
         {showLayout && (
           <div className="space-y-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Layout</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Layout</div>
             <NumberField label="Max width (px)" value={style.maxWidth} min={100} max={1200} onChange={(v) => set({ maxWidth: v })} />
           </div>
         )}

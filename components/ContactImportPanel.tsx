@@ -99,7 +99,7 @@ export default function ContactImportPanel({
                 </option>
               ))}
             </select>
-            <span className="mt-1 block text-[11px] text-zinc-500">
+            <span className="mt-1 block text-[12px] text-zinc-500">
               Applied to matching contacts you already have too, so you can tag an existing segment
               by re-importing its list.
             </span>

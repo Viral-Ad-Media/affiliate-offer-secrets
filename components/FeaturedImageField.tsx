@@ -98,7 +98,7 @@ export default function FeaturedImageField({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={liveUrl} alt="" className="h-full w-full object-cover" />
           ) : (
-            <div className="flex h-full items-center justify-center text-[11px] text-zinc-600">No image</div>
+            <div className="flex h-full items-center justify-center text-[12px] text-zinc-600">No image</div>
           )}
           {generating && (
             <div className="absolute inset-0 flex items-center justify-center bg-ink-950/70 text-emerald-300">
@@ -135,7 +135,7 @@ export default function FeaturedImageField({
               </button>
             )}
           </div>
-          <p className="text-[11px] text-zinc-500">
+          <p className="text-[12px] text-zinc-500">
             Shown as the hero on the post and the thumbnail on your blog index. Wide (16:9) works best.
           </p>
         </div>
