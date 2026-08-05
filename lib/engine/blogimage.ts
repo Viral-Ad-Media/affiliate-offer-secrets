@@ -1,7 +1,7 @@
 import { db } from "./core";
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { createKieTask, getKieTaskStatus, downloadKieResult } from "@/lib/kieai/client";
-import { isValidImageDataUrl } from "@/lib/images/validate";
+import { isValidImageDataUrl, ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/images/validate";
 import { MAX_FEATURED_IMAGE_CHARS } from "@/lib/blog";
 
 // Featured-image generation for a blog post — same stage shape as creativeimage.ts, but seeded
@@ -59,10 +59,23 @@ async function stagePrompt(stageData: Record<string, unknown>, usage: UsageConte
 }
 
 async function stageSubmit(stageData: Record<string, unknown>): Promise<BlogImageStageOutput> {
+  // JPEG, not PNG — and this is the actual bug fix, not a preference.
+  //
+  // A 16:9 PNG straight out of nano-banana-2 was observed at 7.9 MB, against a 900 KB cap, so this
+  // job failed EVERY time rather than occasionally: PNG is lossless and a full-resolution
+  // photographic hero simply cannot fit. The cap itself is correct and shouldn't just be raised —
+  // featured_image_url is stored as a data URL and inlined into the public blog HTML, both as the
+  // post's hero and as the thumbnail on every index card, so a multi-megabyte image would be
+  // re-sent inside the page on every load, twelve times over on a full index page.
+  //
+  // NOT LIVE-VERIFIED: kie.ai's docs 404'd from this environment, so "jpeg" as an output_format
+  // value is inferred from "png" being accepted, not confirmed. If the first real run fails at the
+  // submit stage with a kie.ai parameter error, that is why — try "jpg", or drop the parameter and
+  // instead serve the image from Storage rather than inlining it (see the note below).
   const taskId = await createKieTask("nano-banana-2", {
     prompt: stageData.image_prompt,
     aspect_ratio: "16:9",
-    output_format: "png",
+    output_format: "jpeg",
   });
   return { stageData: { ...stageData, task_id: taskId } };
 }
@@ -80,8 +93,19 @@ async function stageFinalize(stageData: Record<string, unknown>): Promise<BlogIm
   const dataUrl = `data:${contentType};base64,${bytes.toString("base64")}`;
 
   // Never trust the generator's claimed content-type — same allowlist every other image path uses.
+  // The two failure reasons are separated because they mean completely different things to whoever
+  // reads the error on the post: a disallowed type is a security stop, an oversized image is a
+  // tuning problem. The old combined message ("failed validation, 7957747 bytes") read like a bug
+  // in the validator rather than "the model returned something too big to inline".
   if (!isValidImageDataUrl(dataUrl, MAX_FEATURED_IMAGE_CHARS)) {
-    throw new Error(`Generated image failed validation (content-type: ${contentType}, size: ${bytes.length} bytes)`);
+    const allowed = ALLOWED_IMAGE_CONTENT_TYPES.includes(contentType.toLowerCase());
+    throw new Error(
+      allowed
+        ? `Generated image is too large to embed (${Math.round(bytes.length / 1024)}KB, limit ${Math.round(
+            MAX_FEATURED_IMAGE_CHARS / 1024
+          )}KB of encoded data). Try generating again — the model's output size varies.`
+        : `Generated image had an unsupported content-type (${contentType})`
+    );
   }
 
   return {

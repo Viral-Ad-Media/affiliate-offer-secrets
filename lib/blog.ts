@@ -208,7 +208,7 @@ export const MAX_CATEGORY_DESCRIPTION = 300;
 export const MAX_POST_EXCERPT = 300;
 // Featured images are full-width hero art, so they get a larger cap than the inline
 // MAX_AD_IMAGE/page-block images; still a data URL, same validated-format convention.
-export const MAX_FEATURED_IMAGE_CHARS = 900_000;
+export const MAX_FEATURED_IMAGE_CHARS = 2_000_000; // ~1.5MB decoded — a 16:9 JPEG hero fits well under this; PNG never did
 
 // URL-safe slug from arbitrary title text. Deliberately ASCII-only and lossy — a slug is an
 // identifier, not content; anything unmappable collapses to a dash. Empty input (a title of only

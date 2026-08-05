@@ -290,6 +290,21 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
     .maybeSingle();
   if (!campaignRow) throw new Error(`No campaign row for product ${productId}`);
 
+  // RECOVERY PATH — a job reclaimed at stage == BUILD_CAMPAIGN_STAGES.length has already finished
+  // every stage; only finalization is outstanding. Without this it fell into
+  // runBuildCampaignStage's `default:` branch, threw "Unknown build_campaign stage index 6", and
+  // retried into a terminal error — for a kit that was fully built. Seven jobs died this way.
+  //
+  // How it happens: the stage counter is advanced and COMMITTED before finalization runs, so any
+  // failure between that write and markDone (a transient DB error on the campaigns/products
+  // update, or the serverless invocation being killed mid-finalize) leaves the row at
+  // status='running', stage=6. claim_job() then reclaims it after the 90s staleness window and it
+  // can never make progress. Finalizing here instead makes the reclaim self-healing.
+  if (job.stage >= BUILD_CAMPAIGN_STAGES.length) {
+    await finalizeBuildCampaign(job, productId);
+    return { done: true };
+  }
+
   const affiliateId = await getAffiliateId(job.user_id, product.network);
   const { stageData, campaignPatch } = await runBuildCampaignStage(
     job.stage,
@@ -320,57 +335,73 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
   if (!advanced) return { done: false, raced: true };
 
   if (nextStage >= BUILD_CAMPAIGN_STAGES.length) {
-    await db
-      .from("campaigns")
-      .update({ status: "ready", updated_at: new Date().toISOString() })
-      .eq("workspace_id", job.workspace_id)
-      .eq("product_id", productId);
-    await db
-      .from("products")
-      .update({ status: "Promoting", updated_at: new Date().toISOString() })
-      .eq("id", productId);
-    // Fire-and-forget by design: notify() never throws, so a notification problem can't turn a
-    // successfully built kit into a failed job.
-    const { data: readyCampaign } = await db
-      .from("campaigns")
-      .select("products(product_title)")
-      .eq("workspace_id", job.workspace_id)
-      .eq("product_id", productId)
-      .maybeSingle();
-    await notify(db, job.user_id, {
-      kind: "campaign_ready",
-      title: "Campaign kit ready",
-      body: (readyCampaign as any)?.products?.product_title ?? null,
-      href: `/product/${productId}`,
-    });
-
-    // The kit already contains a finished article (blog_md), so turn it into a DRAFT blog post
-    // here rather than making the tenant press "Import from campaign" for every build. Draft, not
-    // published: this is machine-written copy about someone else's product and it should be read
-    // before it goes public. Idempotent on campaign_id, so a rebuild updates the kit without
-    // stacking up posts.
-    //
-    // Best-effort, exactly like notify() above: a blog-post problem must not turn a successfully
-    // built kit into a failed job.
-    const { data: builtCampaign } = await db
-      .from("campaigns")
-      .select("id")
-      .eq("workspace_id", job.workspace_id)
-      .eq("product_id", productId)
-      .maybeSingle();
-    if (builtCampaign?.id) {
-      try {
-        await createPostFromCampaign(db, job.workspace_id, builtCampaign.id as string);
-      } catch (err) {
-        console.error("auto blog post failed", err);
-      }
-    }
-
-    await markDone(job.id, "campaign ready");
+    await finalizeBuildCampaign(job, productId);
     return { done: true };
   }
 
   return { done: false };
+}
+
+/**
+ * Everything that happens once all six stages are done: flip the campaign to ready, the product to
+ * Promoting, notify, auto-create the draft blog post, mark the job done.
+ *
+ * Extracted so the RECOVERY PATH above can run the identical sequence — a job reclaimed at
+ * stage === BUILD_CAMPAIGN_STAGES.length has finished the work and only needs this. Every step is
+ * idempotent (the two updates are absolute, createPostFromCampaign upserts on campaign_id), so
+ * running it twice is safe; the one non-idempotent thing is notify(), which can produce a
+ * duplicate "Campaign kit ready" on the rare recovery. That is the right trade: a duplicate
+ * notification is a smaller harm than a tenant never being told their kit is ready, which is what
+ * the previous behaviour produced.
+ */
+async function finalizeBuildCampaign(job: JobRow, productId: string): Promise<void> {
+  await db
+    .from("campaigns")
+    .update({ status: "ready", updated_at: new Date().toISOString() })
+    .eq("workspace_id", job.workspace_id)
+    .eq("product_id", productId);
+  await db
+    .from("products")
+    .update({ status: "Promoting", updated_at: new Date().toISOString() })
+    .eq("id", productId);
+  // Fire-and-forget by design: notify() never throws, so a notification problem can't turn a
+  // successfully built kit into a failed job.
+  const { data: readyCampaign } = await db
+    .from("campaigns")
+    .select("products(product_title)")
+    .eq("workspace_id", job.workspace_id)
+    .eq("product_id", productId)
+    .maybeSingle();
+  await notify(db, job.user_id, {
+    kind: "campaign_ready",
+    title: "Campaign kit ready",
+    body: (readyCampaign as any)?.products?.product_title ?? null,
+    href: `/product/${productId}`,
+  });
+
+  // The kit already contains a finished article (blog_md), so turn it into a DRAFT blog post
+  // here rather than making the tenant press "Import from campaign" for every build. Draft, not
+  // published: this is machine-written copy about someone else's product and it should be read
+  // before it goes public. Idempotent on campaign_id, so a rebuild updates the kit without
+  // stacking up posts.
+  //
+  // Best-effort, exactly like notify() above: a blog-post problem must not turn a successfully
+  // built kit into a failed job.
+  const { data: builtCampaign } = await db
+    .from("campaigns")
+    .select("id")
+    .eq("workspace_id", job.workspace_id)
+    .eq("product_id", productId)
+    .maybeSingle();
+  if (builtCampaign?.id) {
+    try {
+      await createPostFromCampaign(db, job.workspace_id, builtCampaign.id as string);
+    } catch (err) {
+      console.error("auto blog post failed", err);
+    }
+  }
+
+  await markDone(job.id, "campaign ready");
 }
 
 // Same optimistic-concurrency stage-advance shape as processBuildCampaignStage. The "verify"
