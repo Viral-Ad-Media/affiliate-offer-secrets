@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import PromoteKitDialog from "@/components/PromoteKitDialog";
 import { PRODUCT_STATUSES } from "@/lib/shared";
 import { creditCostFor } from "@/lib/credits";
 import { toast } from "@/lib/toast";
@@ -108,11 +109,12 @@ export default function Marketplace() {
   const [keyword, setKeyword] = useState("");
   const [count, setCount] = useState(10);
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
-  const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
+  // Which products the promote dialog is about: one row, or the whole bulk selection.
+  const [promoteIds, setPromoteIds] = useState<string[] | null>(null);
 
   const statusKey = statusFilters.join(",");
 
@@ -176,14 +178,23 @@ export default function Marketplace() {
   // second server-side copy of that loop would be a second billing path to keep in step. Stops on
   // the first 402 instead of hammering: once credits run out every remaining call would fail the
   // same way, and the person needs to know how far it got.
-  async function bulkPromote() {
-    const ids = Array.from(selected).filter(
-      (id) => !products.find((p) => p.id === id)?.campaign_status
-    );
-    if (ids.length === 0) return toast.error("Those products already have a kit or one in progress");
-    const cost = ids.length * creditCostFor("build_campaign");
-    if (!window.confirm(`Build ${ids.length} campaign kit(s) for ${cost} credits?`)) return;
+  // Both entry points — the row button and the bulk bar — open the same dialog. It's the only
+  // place the asset choice is made, so the two can't offer different options.
+  function openPromote(ids: string[]) {
+    const buildable = ids.filter((id) => !products.find((p) => p.id === id)?.campaign_status);
+    if (buildable.length === 0) {
+      toast.error("Those products already have a kit or one in progress");
+      return;
+    }
+    setPromoteIds(buildable);
+  }
 
+  // Calls the SAME /api/promote the single button always used, once per product, rather than a
+  // bulk endpoint — that route owns the entitlement check, the credit charge and the rollback, and
+  // a second server-side copy of that loop would be a second billing path to keep in step. Stops on
+  // the first failure instead of hammering: once credits run out every remaining call fails the
+  // same way, and the person needs to know how far it got.
+  async function runPromote(ids: string[], assets: string[]) {
     setBulkBusy(true);
     let queued = 0;
     let stopped: string | null = null;
@@ -191,7 +202,7 @@ export default function Marketplace() {
       const res = await fetch("/api/promote", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ product_id: id }),
+        body: JSON.stringify({ product_id: id, assets }),
       });
       if (res.ok) {
         queued++;
@@ -202,23 +213,12 @@ export default function Marketplace() {
       break;
     }
     setBulkBusy(false);
+    setPromoteIds(null);
     setSelected(new Set());
     await load();
     refreshCredits();
     if (stopped) toast.error(`Queued ${queued}, then stopped: ${stopped}`);
-    else toast.success(`Queued ${queued} campaign build(s)`);
-  }
-
-  async function promote(id: string) {
-    setBusy(id);
-    await fetch("/api/promote", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ product_id: id }),
-    });
-    await load();
-    refreshCredits();
-    setBusy(null);
+    else toast.success(queued === 1 ? "Kit queued" : `Queued ${queued} campaign build(s)`);
   }
 
   async function discover(e: React.FormEvent) {
@@ -419,7 +419,7 @@ export default function Marketplace() {
                 </option>
               ))}
             </select>
-            <button onClick={bulkPromote} disabled={bulkBusy} className="btn-ghost text-xs">
+            <button onClick={() => openPromote(Array.from(selected))} disabled={bulkBusy} className="btn-ghost text-xs">
               <Rocket className="h-3.5 w-3.5" /> Promote selected
               <CostBadge jobType="build_campaign" />
             </button>
@@ -554,8 +554,8 @@ export default function Marketplace() {
                         </span>
                       ) : (
                         <button
-                          onClick={() => promote(p.id)}
-                          disabled={busy === p.id}
+                          onClick={() => openPromote([p.id])}
+                          disabled={bulkBusy}
                           className="btn-primary"
                         >
                           <Rocket className="h-4 w-4" /> Promote
@@ -592,6 +592,14 @@ export default function Marketplace() {
           </div>
         )}
       </section>
+      <PromoteKitDialog
+        open={promoteIds !== null}
+        onOpenChange={(o) => !o && setPromoteIds(null)}
+        count={promoteIds?.length ?? 0}
+        busy={bulkBusy}
+        onConfirm={(assets) => promoteIds && runPromote(promoteIds, assets)}
+      />
+
       <Dialog open={jobsOpen} onOpenChange={setJobsOpen}>
         <DialogContent className="max-h-[85vh] max-w-[min(56rem,calc(100vw-2rem))] overflow-y-auto">
           <DialogHeader>

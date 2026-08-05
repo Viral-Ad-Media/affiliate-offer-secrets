@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { chargeForQueuedJob, insufficientCreditsResponse } from "@/lib/credits";
+import { normalizeKitAssets } from "@/lib/kitAssets";
 import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,6 +17,9 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   const productId = body.product_id as string;
+  // Which kit pieces to generate. Absent means everything, so an older client or a direct API call
+  // keeps the previous behaviour rather than silently queueing a build that produces nothing.
+  const assets = normalizeKitAssets(body.assets);
 
   const { data: product, error: productError } = await supabase
     .from("products")
@@ -63,7 +67,7 @@ export async function POST(req: Request) {
     .insert({
       user_id: user.id,
       type: "build_campaign",
-      payload: { product_id: productId, vendor_id: product.vendor_id },
+      payload: { product_id: productId, vendor_id: product.vendor_id, assets },
     })
     .select("id")
     .single();

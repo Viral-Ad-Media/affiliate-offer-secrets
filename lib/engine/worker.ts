@@ -2,6 +2,7 @@ import { db } from "./core";
 import { notify, jobLabel } from "@/lib/notifications";
 import { createPostFromCampaign } from "@/lib/blog/fromCampaign";
 import { runBuildCampaignStage, BUILD_CAMPAIGN_STAGES } from "./build";
+import { normalizeKitAssets } from "@/lib/kitAssets";
 import { runDiscoverProducts, type DiscoverJobPayload } from "./discover";
 import { runLaunchAdStage, LAUNCH_AD_STAGES, type LaunchAdPayload } from "./adlaunch";
 import { runGenerateAdImageStage, GENERATE_AD_IMAGE_STAGES, type GenerateAdImagePayload } from "./adimage";
@@ -306,13 +307,17 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
   }
 
   const affiliateId = await getAffiliateId(job.user_id, product.network);
+  // Absent means everything — see normalizeKitAssets. That keeps jobs queued before this shipped,
+  // and any direct API caller, behaving exactly as they did.
+  const assets = normalizeKitAssets(job.payload?.assets);
   const { stageData, campaignPatch } = await runBuildCampaignStage(
     job.stage,
     product as any,
     affiliateId,
     job.stage_data ?? {},
     { userId: job.user_id, jobId: job.id },
-    campaignRow.id
+    campaignRow.id,
+    assets
   );
 
   if (campaignPatch && Object.keys(campaignPatch).length > 0) {

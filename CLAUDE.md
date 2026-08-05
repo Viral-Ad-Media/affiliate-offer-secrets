@@ -164,6 +164,23 @@ design rationale. Mechanics:
 - **Content generation** (`lib/engine/anthropic.ts`, `COMPLIANCE_SYSTEM`) calls the Anthropic
   Messages API directly (`claude-sonnet-5`) with the content rules below as a cached system
   prompt, using forced tool-use for structured JSON output (`completeJSON()`).
+- **A build generates only what was ASKED for** (`lib/kitAssets.ts`, `jobs.payload.assets`). Every
+  build used to produce all nine assets whether or not the operator ran TikTok, or wanted anything
+  beyond a funnel page. The selection is on the ASSET axis, not the stage axis, and that distinction
+  is the whole difficulty: `stageAds` was a single Anthropic call producing Facebook angles AND
+  TikTok scripts, and `stageSocial` likewise produced organic captions AND the email sequence — so
+  dropping TikTok while keeping Facebook means building those two stages' **schema and prompt** from
+  the selection, not skipping whole stages. Asking for less is also what makes the saving real: a
+  combined call that generated TikTok scripts and then discarded them would cost exactly the same.
+  `context` always runs (no AI call, and everything downstream reads its sales-page text and
+  hoplinks); `image` is skipped without a funnel, since the picked image is only ever embedded in
+  the bridge page and choosing it costs an AI call.
+  **An absent or empty selection means EVERYTHING** — `normalizeKitAssets` — so jobs queued before
+  this shipped, and any direct API caller, behave exactly as before. Verified by simulation:
+  absent/empty/garbage all run 5 AI calls (unchanged), funnel-only runs 2, TikTok-only runs 1.
+  **The credit price is still flat per build**, not per asset — generating less is faster and costs
+  less real API spend but the same credits, and the dialog says so rather than letting someone
+  discover it from the ledger.
 - `scripts/engine.ts` (the old `/run-engine` CLI) still exists as a **manual/debug fallback** —
   useful for inspecting a job's context or manually driving/failing something stuck — but it is
   no longer the primary path.

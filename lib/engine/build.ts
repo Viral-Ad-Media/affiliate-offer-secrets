@@ -4,6 +4,7 @@ import { pickProductImage, fetchImageAsDataUrl } from "./images";
 import { renderBridgeHtml, buildHoplink, normalizePageCopy, type PageCopy, type Network, type TrackingSettings } from "./renderPages";
 import { db } from "./core";
 import type { FbAdAngle, SocialPost } from "@/lib/shared";
+import { wants, type KitAssetKey } from "@/lib/kitAssets";
 
 export const BUILD_CAMPAIGN_STAGES = ["context", "image", "ads", "pages", "content", "social"] as const;
 export type BuildStage = (typeof BUILD_CAMPAIGN_STAGES)[number];
@@ -95,41 +96,62 @@ async function stageImage(
 async function stageAds(
   product: ProductRow,
   prior: Record<string, unknown>,
-  usage: UsageContext
+  usage: UsageContext,
+  assets: KitAssetKey[]
 ): Promise<StageOutput> {
+  // One Anthropic call produced BOTH Facebook angles and TikTok scripts, which is why dropping one
+  // of them needs the schema and prompt built from the selection rather than the whole stage
+  // skipped. Asking for only what was chosen is also what makes the saving real — a combined call
+  // that generated TikTok scripts and then discarded them would cost exactly the same.
+  const wantFb = wants(assets, "fb_ads");
+  const wantTiktok = wants(assets, "tiktok");
+  if (!wantFb && !wantTiktok) return { stageData: prior };
+
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
-  const result = await completeJSON<{ fb_ad_angles: FbAdAngle[]; tiktok_md: string }>({
-    system: COMPLIANCE_SYSTEM,
-    prompt: `${ctx}\n\nWrite:\n1. fb_ad_angles — exactly 3 distinct Meta-compliant ad angles for this product, each as a structured object with a headline, primary_text, description, and cta.\n2. tiktok_md — 3 short one-line hooks plus 3 full 30-45s UGC-style video scripts (spoken lines + shot notes) for the same product, as a Markdown string.`,
-    schema: {
-      type: "object",
-      properties: {
-        fb_ad_angles: {
-          type: "array",
-          minItems: 3,
-          maxItems: 3,
-          items: {
-            type: "object",
-            properties: {
-              headline: { type: "string" },
-              primary_text: { type: "string" },
-              description: { type: "string" },
-              cta: { type: "string" },
-            },
-            required: ["headline", "primary_text", "description", "cta"],
-          },
+
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+  const asks: string[] = [];
+  if (wantFb) {
+    properties.fb_ad_angles = {
+      type: "array",
+      minItems: 3,
+      maxItems: 3,
+      items: {
+        type: "object",
+        properties: {
+          headline: { type: "string" },
+          primary_text: { type: "string" },
+          description: { type: "string" },
+          cta: { type: "string" },
         },
-        tiktok_md: { type: "string" },
+        required: ["headline", "primary_text", "description", "cta"],
       },
-      required: ["fb_ad_angles", "tiktok_md"],
-    },
+    };
+    required.push("fb_ad_angles");
+    asks.push(
+      "fb_ad_angles — exactly 3 distinct Meta-compliant ad angles for this product, each as a structured object with a headline, primary_text, description, and cta."
+    );
+  }
+  if (wantTiktok) {
+    properties.tiktok_md = { type: "string" };
+    required.push("tiktok_md");
+    asks.push(
+      "tiktok_md — 3 short one-line hooks plus 3 full 30-45s UGC-style video scripts (spoken lines + shot notes) for the same product, as a Markdown string."
+    );
+  }
+
+  const result = await completeJSON<{ fb_ad_angles?: FbAdAngle[]; tiktok_md?: string }>({
+    system: COMPLIANCE_SYSTEM,
+    prompt: `${ctx}\n\nWrite:\n${asks.map((a, i) => `${i + 1}. ${a}`).join("\n")}`,
+    schema: { type: "object", properties, required },
     maxTokens: 3000,
     usage,
   });
   // Defensive validation — the JSON Schema's minItems/maxItems is the primary enforcement, but a
   // wire hiccup shouldn't be able to write a malformed array; fail the stage (existing
   // retry/attempts-cap machinery handles it) rather than persist bad data.
-  if (!Array.isArray(result.fb_ad_angles) || result.fb_ad_angles.length !== 3) {
+  if (wantFb && (!Array.isArray(result.fb_ad_angles) || result.fb_ad_angles.length !== 3)) {
     throw new Error("Model did not return exactly 3 ad angles");
   }
   return { stageData: prior, campaignPatch: result };
@@ -216,33 +238,48 @@ async function stageContent(
 async function stageSocial(
   product: ProductRow,
   prior: Record<string, unknown>,
-  usage: UsageContext
+  usage: UsageContext,
+  assets: KitAssetKey[]
 ): Promise<StageOutput> {
+  // Same combined-call shape as stageAds — organic captions and the email sequence came from one
+  // request, so choosing one of them means narrowing the schema, not skipping the stage.
+  const wantSocial = wants(assets, "social");
+  const wantEmail = wants(assets, "email");
+  if (!wantSocial && !wantEmail) return { stageData: prior };
+
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
-  const result = await completeJSON<{ social_posts: SocialPost[]; email_md: string }>({
+
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+  const asks: string[] = [];
+  if (wantSocial) {
+    properties.social_posts = {
+      type: "array",
+      minItems: 5,
+      maxItems: 5,
+      items: { type: "object", properties: { caption: { type: "string" } }, required: ["caption"] },
+    };
+    required.push("social_posts");
+    asks.push(
+      "social_posts — exactly 5 short organic social captions for this product/niche, each as a structured object with a caption field."
+    );
+  }
+  if (wantEmail) {
+    properties.email_md = { type: "string" };
+    required.push("email_md");
+    asks.push(
+      'email_md — a 3-email swipe sequence (subject + body each) for the "tid=email" channel, as a Markdown string.'
+    );
+  }
+
+  const result = await completeJSON<{ social_posts?: SocialPost[]; email_md?: string }>({
     system: COMPLIANCE_SYSTEM,
-    prompt: `${ctx}\n\nWrite:\n1. social_posts — exactly 5 short organic social captions for this product/niche, each as a structured object with a caption field.\n2. email_md — a 3-email swipe sequence (subject + body each) for the "tid=email" channel, as a Markdown string.`,
-    schema: {
-      type: "object",
-      properties: {
-        social_posts: {
-          type: "array",
-          minItems: 5,
-          maxItems: 5,
-          items: {
-            type: "object",
-            properties: { caption: { type: "string" } },
-            required: ["caption"],
-          },
-        },
-        email_md: { type: "string" },
-      },
-      required: ["social_posts", "email_md"],
-    },
+    prompt: `${ctx}\n\nWrite:\n${asks.map((a, i) => `${i + 1}. ${a}`).join("\n")}`,
+    schema: { type: "object", properties, required },
     maxTokens: 3000,
     usage,
   });
-  if (!Array.isArray(result.social_posts) || result.social_posts.length !== 5) {
+  if (wantSocial && (!Array.isArray(result.social_posts) || result.social_posts.length !== 5)) {
     throw new Error("Model did not return exactly 5 social posts");
   }
   return { stageData: prior, campaignPatch: result };
@@ -254,23 +291,36 @@ export async function runBuildCampaignStage(
   affiliateId: string,
   priorStageData: Record<string, unknown>,
   usageCtx: { userId: string; jobId: string },
-  campaignId: string
+  campaignId: string,
+  assets: KitAssetKey[]
 ): Promise<StageOutput> {
   const stage = BUILD_CAMPAIGN_STAGES[stageIndex];
   const usage: UsageContext = { ...usageCtx, jobType: "build_campaign", stage };
   switch (stage) {
     case "context":
+      // Always runs. It fetches the sales page and builds the hoplinks — every other stage reads
+      // its output, and the hoplinks are the product's tracking links regardless of what else was
+      // asked for. It also makes no Anthropic call, so there is nothing to save by skipping it.
       return stageContext(product, affiliateId);
     case "image":
-      return stageImage(product, priorStageData, usage);
+      // The picked product image is only ever embedded into the bridge page, so with no funnel
+      // there is nothing to embed it in — and this stage DOES make an Anthropic call to choose
+      // between candidates, so skipping is a real saving rather than bookkeeping.
+      return wants(assets, "funnel")
+        ? stageImage(product, priorStageData, usage)
+        : { stageData: priorStageData };
     case "ads":
-      return stageAds(product, priorStageData, usage);
+      return stageAds(product, priorStageData, usage, assets);
     case "pages":
-      return stagePages(product, priorStageData, usage, campaignId);
+      return wants(assets, "funnel")
+        ? stagePages(product, priorStageData, usage, campaignId)
+        : { stageData: priorStageData };
     case "content":
-      return stageContent(product, priorStageData, usage);
+      return wants(assets, "blog")
+        ? stageContent(product, priorStageData, usage)
+        : { stageData: priorStageData };
     case "social":
-      return stageSocial(product, priorStageData, usage);
+      return stageSocial(product, priorStageData, usage, assets);
     default:
       throw new Error(`Unknown build_campaign stage index ${stageIndex}`);
   }
