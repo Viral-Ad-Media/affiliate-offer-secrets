@@ -2,6 +2,7 @@ import { marked } from "marked";
 import { db } from "./core";
 import { sendViaActiveSender, isSendFailure } from "@/lib/mail/send";
 import { renderUnsubscribeFooterHtml } from "./broadcastEmail";
+import { EMAIL_SETTINGS_COLUMNS } from "@/lib/emailSettings";
 
 export const SEND_BROADCAST_EMAIL_STAGES = ["verify", "send"] as const;
 export type SendBroadcastEmailStage = (typeof SEND_BROADCAST_EMAIL_STAGES)[number];
@@ -106,9 +107,18 @@ async function stageVerify(payload: SendBroadcastEmailPayload, workspaceId: stri
 }
 
 async function stageSend(stageData: Record<string, unknown>, userId: string, workspaceId: string): Promise<BroadcastEmailStageOutput> {
+  // Sender identity for the footer (business name + postal address). Read per send rather than
+  // baked into the step at enrollment time: an address correction should apply to mail going out
+  // now, not only to sequences enrolled after the edit.
+  const { data: emailSettings } = await db
+    .from("email_settings")
+    .select(EMAIL_SETTINGS_COLUMNS)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+
   const html =
     (marked.parse(stageData.body_md as string) as string) +
-    renderUnsubscribeFooterHtml(stageData.unsub_token as string);
+    renderUnsubscribeFooterHtml(stageData.unsub_token as string, emailSettings);
 
   // Dispatches via the account's active sender — a connected
   // Resend/SendGrid/Mailgun/SMTP provider (lib/mail/send.ts). A not-connected/needs-reconnect

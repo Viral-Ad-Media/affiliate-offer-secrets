@@ -7,7 +7,7 @@
 
 import nodemailer from "nodemailer";
 
-export type SendArgs = { from: string; to: string; subject: string; html: string };
+export type SendArgs = { from: string; to: string; subject: string; html: string; replyTo?: string | null };
 
 export type SmtpConfig = {
   host: string;
@@ -52,7 +52,13 @@ export async function sendResendEmail(apiKey: string, args: SendArgs): Promise<s
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: args.from, to: [args.to], subject: args.subject, html: args.html }),
+    body: JSON.stringify({
+      from: args.from,
+      to: [args.to],
+      subject: args.subject,
+      html: args.html,
+      ...(args.replyTo ? { reply_to: args.replyTo } : {}),
+    }),
   });
   if (res.status === 401 || res.status === 403) throw new MailProviderError("Resend rejected this API key", true);
   if (!res.ok) throw new MailProviderError(`Resend send failed: ${await readError(res)}`, false);
@@ -80,6 +86,7 @@ export async function sendSendgridEmail(apiKey: string, args: SendArgs, fromName
     body: JSON.stringify({
       personalizations: [{ to: [{ email: args.to }] }],
       from: fromName ? { email: args.from, name: fromName } : { email: args.from },
+      ...(args.replyTo ? { reply_to: { email: args.replyTo } } : {}),
       subject: args.subject,
       content: [{ type: "text/html", value: args.html }],
     }),
@@ -118,6 +125,8 @@ export async function sendMailgunEmail(
   args: SendArgs
 ): Promise<string | null> {
   const form = new URLSearchParams({ from: args.from, to: args.to, subject: args.subject, html: args.html });
+  // Mailgun takes reply-to as a pass-through custom header rather than a first-class field.
+  if (args.replyTo) form.set("h:Reply-To", args.replyTo);
   const res = await fetch(`${mailgunBase(region)}/v3/${encodeURIComponent(domain)}/messages`, {
     method: "POST",
     headers: { Authorization: mailgunAuth(apiKey), "Content-Type": "application/x-www-form-urlencoded" },
@@ -169,6 +178,7 @@ export async function sendSmtpEmail(config: SmtpConfig, args: SendArgs): Promise
       to: args.to,
       subject: args.subject,
       html: args.html,
+      ...(args.replyTo ? { replyTo: args.replyTo } : {}),
     });
     return info.messageId ?? null;
   } catch (err: any) {

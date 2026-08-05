@@ -57,7 +57,17 @@ export async function sendViaActiveSender(
   if (!secret) return { ok: false, reason: "needs_reconnect" };
 
   const from = conn.from_name ? `${conn.from_name} <${conn.from_address}>` : conn.from_address;
-  const sendArgs = { from, to: args.to, subject: args.subject, html: args.html };
+
+  // Reply-to is resolved here rather than passed in by callers, so every send path picks it up
+  // without each one having to remember — the same reason the active provider is resolved here.
+  // The from-address is often a verified sending domain nobody reads; replies belong elsewhere.
+  const { data: emailSettings } = await admin
+    .from("email_settings")
+    .select("reply_to")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  const replyTo = (emailSettings?.reply_to as string | null) ?? null;
+  const sendArgs = { from, to: args.to, subject: args.subject, html: args.html, replyTo };
 
   try {
     let messageId: string | null = null;

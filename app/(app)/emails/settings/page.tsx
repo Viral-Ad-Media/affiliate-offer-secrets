@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
-import MailProvidersPanel, { type MailProvidersStatus } from "@/components/MailProvidersPanel";
+import EmailSettingsPanel from "@/components/EmailSettingsPanel";
+import { EMAIL_SETTINGS_COLUMNS, type EmailSettings } from "@/lib/emailSettings";
 
-// Who your email comes from. This used to live buried on Settings → Integrations between Facebook
-// and TikTok, which is where you'd connect an account — not where you'd look when a broadcast
-// won't send. It's one page, moved, not copied: two places editing the active sender would
-// eventually disagree about which one is authoritative.
+// Sender IDENTITY — who replies go to, and who the sender legally is. Transport (the provider API
+// key, the SMTP host, the verified from-address) stays on Settings → Integrations with the other
+// connections: it's the same kind of thing as a Facebook token, and it changes for different
+// reasons than this does.
 export default async function EmailSettingsPage() {
   const supabase = createClient();
   const {
@@ -14,30 +16,26 @@ export default async function EmailSettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const mailProviders = await supabase
-    .rpc("get_mail_provider_connections")
-    .then((r) => (r.data ?? { active_provider: null, providers: [] }) as MailProvidersStatus);
+  const ws = await currentWorkspaceId();
+  const { data } = ws
+    ? await supabase.from("email_settings").select(EMAIL_SETTINGS_COLUMNS).eq("workspace_id", ws).maybeSingle()
+    : { data: null };
 
   return (
     <main className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold text-zinc-100">Email settings</h1>
         <p className="text-sm text-zinc-400">
-          The address your broadcasts and sequences send from. Exactly one provider is active at a
-          time — everything that sends email goes through it.
+          Who your email comes from and where replies go. The sending provider itself — API key,
+          SMTP host, from-address — is on{" "}
+          <Link href="/settings/integrations" className="underline hover:text-zinc-200">
+            Integrations
+          </Link>
+          .
         </p>
       </header>
 
-      <MailProvidersPanel status={mailProviders} />
-
-      <p className="text-xs text-zinc-500">
-        Connecting a Gmail account instead? That&apos;s an OAuth connection, so it lives with the
-        rest of them on{" "}
-        <Link href="/settings/integrations" className="underline hover:text-zinc-300">
-          Integrations
-        </Link>
-        .
-      </p>
+      <EmailSettingsPanel initial={(data ?? {}) as EmailSettings} />
     </main>
   );
 }

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import MailProvidersPanel, { type MailProvidersStatus } from "@/components/MailProvidersPanel";
 import ConnectionsPanel from "@/components/ConnectionsPanel";
 import TikTokPanel from "@/components/TikTokPanel";
 import NetworkConnectionsPanel from "@/components/NetworkConnectionsPanel";
@@ -23,9 +24,12 @@ export default async function ConnectionsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [metaStatus, tiktokStatus, networkRows, everflowRow] = await Promise.all([
+  const [metaStatus, tiktokStatus, mailProviders, networkRows, everflowRow] = await Promise.all([
     supabase.rpc("get_meta_connection_status").then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_tiktok_connection_status").then((r) => r.data ?? { connected: false }),
+    supabase
+      .rpc("get_mail_provider_connections")
+      .then((r) => (r.data ?? { active_provider: null, providers: [] }) as MailProvidersStatus),
     supabase
       .from("network_connections")
       .select("network, affiliate_id")
@@ -110,14 +114,16 @@ export default async function ConnectionsPage({
         <TikTokPanel status={tiktokStatus} />
       </div>
 
-      {/* The sending provider moved to Emails → Settings, next to the things that actually send.
-          A pointer rather than a second copy of the panel: two places setting the active sender
-          would eventually disagree about which one is authoritative. */}
-      <div className="space-y-1">
+      {/* Transport lives here with the other connections — an API key or an SMTP host is the same
+          kind of thing as a Facebook token. Sender IDENTITY (reply-to, business name, the postal
+          address the footer needs) is a marketing decision that outlives any one provider, so it
+          lives on Emails → Settings instead. */}
+      <div className="space-y-3">
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Email</h2>
-        <p className="text-sm text-zinc-400">
-          Your sending provider and from-address live on{" "}
-          <Link href="/emails/settings" className="underline hover:text-zinc-200">
+        <MailProvidersPanel status={mailProviders} />
+        <p className="text-xs text-zinc-500">
+          Reply-to address and the business details shown in your email footer are on{" "}
+          <Link href="/emails/settings" className="underline hover:text-zinc-300">
             Emails → Settings
           </Link>
           .

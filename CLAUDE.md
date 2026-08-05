@@ -2522,14 +2522,36 @@ Full name / Phone / Second email / Message / Checkbox / Choose one / Dropdown, e
   last_name/phone/message/budget plus the SELECTED radio option, an unticked checkbox stored
   nothing and a ticked one stored "yes".
 
-## Where email sending is configured
+## Email: transport vs identity
 
-The transactional provider (Resend / SendGrid / Mailgun / SMTP) and the from-address live on
-**Emails → Settings** (`/emails/settings`), not on Settings → Integrations where they started.
-Integrations is where you connect an *account*; it is not where anyone looks when a broadcast
-won't send. Moved, not copied — a second page setting the active sender would eventually disagree
-with the first about which is authoritative — and Integrations now carries a one-line pointer.
-Gmail stays on Integrations because it is an OAuth connection like Facebook and TikTok.
+Two different things in two different places, deliberately.
+
+**Transport** — the provider API key, SMTP host, and verified from-address (`mail_provider_connections`)
+— stays on **Settings → Integrations** with the other connections. An API key is the same kind of
+thing as a Facebook token.
+
+**Identity** — reply-to, business name, postal address, footer note (`email_settings`, 0067) — is on
+**Emails → Settings** (`/emails/settings`). It's a marketing decision, it changes independently of
+the provider, and it survives switching from SendGrid to Mailgun. Each page points at the other.
+
+`email_settings` is workspace-keyed (matching `mail_provider_connections`, not `blog_settings`'s
+legacy user key), owner-select with admin-client writes. Every field is nullable and everything
+degrades to "" — an account that fills nothing in sends exactly what it sent before, so this could
+not retroactively change existing accounts' mail.
+
+The postal address is why this page is more than a preferences bag: CAN-SPAM (US) and CASL (CA)
+both require a physical mailing address in commercial email, and the unsubscribe link this codebase
+already treats as non-negotiable is only half of that obligation. `renderSenderIdentityHtml`
+(`lib/emailSettings.ts`, isomorphic) renders the block, `renderUnsubscribeFooterHtml` splices it in
+above the unsubscribe line, and the settings page previews it by calling **the same function** — so
+the preview is the real footer, not a mock-up of it.
+
+Reply-to is resolved inside `sendViaActiveSender` rather than passed by callers, for the same
+reason the active provider is: one place decides, and every send path gets it without remembering.
+It reaches each provider differently — Resend `reply_to`, SendGrid `reply_to.email`, Mailgun as the
+`h:Reply-To` pass-through header, SMTP `replyTo`. The Broadcast worker reads identity per send, not
+at enrollment, so an address correction applies to mail going out now rather than only to sequences
+enrolled after the edit.
 
 ## My Products vs Marketplace
 

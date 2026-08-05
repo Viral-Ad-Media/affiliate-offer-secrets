@@ -1,15 +1,21 @@
 import { marked } from "marked";
 import { escapeHtml } from "./renderPages";
+import { renderSenderIdentityHtml, type EmailSettings } from "@/lib/emailSettings";
 
 // Code-owned, non-negotiable — same shape as renderPages.ts's DISCLOSURE/LEAD_CONSENT_TEXT.
 // Appended to every Broadcast send (lib/engine/broadcast.ts's "send" stage) and never exposed as
 // an editable field in the step editor UI. The unsubscribe link is a real compliance requirement
 // for automated/recurring marketing email, not optional decoration.
-export function renderUnsubscribeFooterHtml(unsubToken: string): string {
+export function renderUnsubscribeFooterHtml(
+  unsubToken: string,
+  // Sender identity (business name + postal address) from Emails -> Settings. Optional, and ""
+  // when unset, so an account that has configured none of it sends exactly what it sent before.
+  settings?: EmailSettings | null
+): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   if (!appUrl) throw new Error("NEXT_PUBLIC_APP_URL is not set");
   const unsubUrl = `${appUrl}/api/public/unsubscribe?token=${encodeURIComponent(unsubToken)}`;
-  return `<hr style="margin:32px 0 12px;border:none;border-top:1px solid #ddd;" /><p style="font-size:12px;color:#888;">You're receiving this because you opted in on one of our pages. <a href="${escapeHtml(unsubUrl)}">Unsubscribe</a>.</p>`;
+  return `<hr style="margin:32px 0 12px;border:none;border-top:1px solid #ddd;" />${renderSenderIdentityHtml(settings ?? null)}<p style="font-size:12px;color:#888;">You're receiving this because you opted in on one of our pages. <a href="${escapeHtml(unsubUrl)}">Unsubscribe</a>.</p>`;
 }
 
 // Preview of one sequence step exactly as it will be sent: the send path is
@@ -19,9 +25,12 @@ export function renderUnsubscribeFooterHtml(unsubToken: string): string {
 // The footer carries a placeholder token, never a real contact's: a preview must not be able to
 // unsubscribe anybody. The preview surface renders this inside a sandboxed frame, so the link
 // can't be followed from there either.
-export function renderEmailPreviewHtml(step: { subject: string; body_md: string }): string {
+export function renderEmailPreviewHtml(
+  step: { subject: string; body_md: string },
+  settings?: EmailSettings | null
+): string {
   const body = marked.parse(step.body_md ?? "", { async: false }) as string;
-  const footer = renderUnsubscribeFooterHtml("preview-token-not-a-real-subscriber");
+  const footer = renderUnsubscribeFooterHtml("preview-token-not-a-real-subscriber", settings);
   return `<!doctype html>
 <html lang="en">
 <head>
