@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Settings, Loader2, CheckCircle2, ExternalLink, ImagePlus, Trash2, Eye } from "lucide-react";
 import { PERMALINK_STYLES, type PermalinkStyle } from "@/lib/blog";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 export type Settings = {
   blog_title: string | null;
@@ -258,13 +259,13 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
               )}
             </div>
             <div className="mt-2 flex gap-1">
-              <button type="button" onClick={() => fileRef.current?.click()} className="btn-ghost text-[12px]">
+              <Button type="button" onClick={() => fileRef.current?.click()} variant="outline" className="text-[12px]">
                 <ImagePlus className="h-3 w-3" /> Photo
-              </button>
+              </Button>
               {avatar && (
-                <button type="button" onClick={() => setAvatar(null)} className="btn-ghost text-[12px]">
+                <Button type="button" onClick={() => setAvatar(null)} variant="outline" className="text-[12px]">
                   <Trash2 className="h-3 w-3" />
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -306,10 +307,10 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
       {error && <p className="text-sm text-red-300">{error}</p>}
 
       <div className="flex items-center gap-3">
-        <button type="submit" disabled={busy} className="btn-primary">
+        <Button type="submit" disabled={busy}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Save settings
-        </button>
+        </Button>
         {savedAt && Date.now() - savedAt < 4000 && (
           <span className="flex items-center gap-1 text-xs text-emerald-300">
             <CheckCircle2 className="h-3.5 w-3.5" /> Saved

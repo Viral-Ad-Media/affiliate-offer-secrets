@@ -22,6 +22,7 @@ import { DataTableFilter, type FilterOption } from "@/components/ui/data-table-f
 import Pager, { pageFromParam } from "@/components/Pager";
 import { PRODUCT_STATUSES, type Job, type Product } from "@/lib/shared";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 /**
  * The tracked-products table, with its filter, bulk bar, status editing and Promote flow.
@@ -241,14 +242,12 @@ export default function ProductsPanel({
                 </option>
               ))}
             </select>
-            <button
+            <Button
               onClick={() => openPromote(Array.from(selected))}
-              disabled={bulkBusy}
-              className="btn-ghost text-xs"
-            >
+              disabled={bulkBusy} variant="outline" className="text-xs">
               <Rocket className="h-3.5 w-3.5" /> Promote selected
               <CostBadge jobType="build_campaign" />
-            </button>
+            </Button>
             {bulkBusy && <RefreshCw className="h-3.5 w-3.5 animate-spin text-zinc-400" />}
             <button
               onClick={() => setSelected(new Set())}
@@ -345,17 +344,15 @@ export default function ProductsPanel({
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button
+                      <Button
                         onClick={() => copyHoplink(p)}
-                        title="Copy hoplink"
-                        className="btn-ghost !px-2"
-                      >
+                        title="Copy hoplink" variant="outline" className="!px-2">
                         {copied === p.id ? (
                           <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                         ) : (
                           <Copy className="h-4 w-4" />
                         )}
-                      </button>
+                      </Button>
                       {p.sales_page_url && (
                         <a
                           href={p.sales_page_url}
@@ -379,14 +376,12 @@ export default function ProductsPanel({
                           <RefreshCw className="h-4 w-4 animate-spin" /> Queued
                         </span>
                       ) : (
-                        <button
+                        <Button
                           onClick={() => openPromote([p.id])}
-                          disabled={bulkBusy}
-                          className="btn-primary"
-                        >
+                          disabled={bulkBusy}>
                           <Rocket className="h-4 w-4" /> Promote
                           <CostBadge jobType="build_campaign" />
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </td>

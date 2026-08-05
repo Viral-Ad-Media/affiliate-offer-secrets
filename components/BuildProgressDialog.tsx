@@ -5,6 +5,7 @@ import { AlertTriangle, Bell, Check, Loader2, Minus } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { buildSteps, buildPercent, type BuildStep } from "@/lib/buildProgress";
 import type { Job } from "@/lib/shared";
+import { Button } from "@/components/ui/button";
 
 /**
  * Live checklist for queued campaign builds.
@@ -123,9 +124,9 @@ export default function BuildProgressDialog({
           </div>
 
           <div className="flex justify-end">
-            <button onClick={() => onOpenChange(false)} className="btn-ghost text-sm">
+            <Button onClick={() => onOpenChange(false)} variant="outline" className="text-sm">
               {settled ? "Close" : "Close and let it run"}
-            </button>
+            </Button>
           </div>
         </div>
       </DialogContent>

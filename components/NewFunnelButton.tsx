@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { toast } from "@/lib/toast";
 import NewFunnelDialog from "@/components/NewFunnelDialog";
 import type { FunnelStart } from "@/lib/funnelTypes";
+import { Button } from "@/components/ui/button";
 
 /**
  * "New funnel" on the Funnels list. Builds the pages by hand — no AI, no credits — as the
@@ -42,9 +43,9 @@ export default function NewFunnelButton() {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="btn-primary text-sm">
+      <Button onClick={() => setOpen(true)} className="text-sm">
         <Plus className="h-4 w-4" /> New funnel
-      </button>
+      </Button>
       <NewFunnelDialog open={open} onOpenChange={setOpen} busy={busy} onConfirm={create} />
     </>
   );

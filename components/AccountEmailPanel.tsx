@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AtSign, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isValidEmail } from "@/lib/validate";
+import { Button } from "@/components/ui/button";
 
 // Changing the address you sign in with. Supabase handles the confirmation round trip itself —
 // updateUser({email}) doesn't change anything until the link is clicked, and with the project's
@@ -83,14 +84,12 @@ export default function AccountEmailPanel({ email }: { email: string }) {
         className={field}
       />
       <div className="flex flex-wrap items-center gap-3">
-        <button
+        <Button
           onClick={changeEmail}
-          disabled={busy || !nextEmail.trim() || !password}
-          className="btn-primary disabled:opacity-50"
-        >
+          disabled={busy || !nextEmail.trim() || !password} className="disabled:opacity-50">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <AtSign className="h-4 w-4" />}
           Send confirmation
-        </button>
+        </Button>
         {msg && (
           <span className={`text-sm ${msg.ok ? "text-emerald-300" : "text-red-300"}`}>{msg.text}</span>
         )}

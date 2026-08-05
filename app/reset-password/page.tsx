@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 // Where the "forgot password" email link lands. Necessarily a real page, not a modal — it is the
 // target of a link in an email opened in whatever browser the person happens to be using.
@@ -132,15 +133,13 @@ export default function ResetPasswordPage() {
           {ready === "ok" && done && (
             <div className="space-y-3 text-center text-sm text-zinc-300">
               <p>Password updated. You&apos;re signed in.</p>
-              <button
+              <Button
                 onClick={() => {
                   router.push("/dashboard");
                   router.refresh();
-                }}
-                className="btn-primary w-full justify-center"
-              >
+                }} className="w-full justify-center">
                 Go to dashboard
-              </button>
+              </Button>
             </div>
           )}
 
@@ -184,9 +183,9 @@ export default function ResetPasswordPage() {
                 />
               </div>
               {error && <p className="text-sm text-red-400">{error}</p>}
-              <button type="submit" disabled={busy} className="btn-primary w-full justify-center">
+              <Button type="submit" disabled={busy} className="w-full justify-center">
                 {busy ? "Saving…" : "Update password"}
-              </button>
+              </Button>
             </form>
           )}
         </div>

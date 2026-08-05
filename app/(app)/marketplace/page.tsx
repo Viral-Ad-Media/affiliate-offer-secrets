@@ -12,6 +12,7 @@ import { Rocket, Search, CheckCircle2, Package, Flame, Hourglass } from "lucide-
 import type { Job } from "@/lib/shared";
 import MarketplaceHighlights from "@/components/MarketplaceHighlights";
 import ProductsPanel, { type ProductStats } from "@/components/ProductsPanel";
+import { Button } from "@/components/ui/button";
 
 function StatTile({
   icon,
@@ -191,10 +192,10 @@ export default function Marketplace() {
               title="How many products to pull"
               className="w-20 rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none focus:border-emerald-500"
             />
-            <button type="submit" className="btn-primary">
+            <Button type="submit">
               <Rocket className="h-4 w-4" /> Queue discovery
               <CostBadge jobType="discover_products" />
-            </button>
+            </Button>
           </div>
         </form>
       </section>

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Redo2, Sparkles, Undo2 } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 /**
  * Regenerate / Undo / Redo, in the editor's top bar beside Save and Publish.
@@ -84,7 +85,7 @@ export default function PostRevisionControls({
 
   return (
     <div ref={wrapRef} className="relative flex items-center gap-1">
-      <button
+      <Button
         type="button"
         onClick={() => run("revert")}
         disabled={off || !hasSnapshot || direction !== "undo"}
@@ -95,45 +96,41 @@ export default function PostRevisionControls({
               ? `Undo the rewrite${when ? ` — back to ${when}` : ""}`
               : "Already undone — use Redo"
         }
-        className="btn-ghost px-2 text-xs disabled:opacity-40"
-        aria-label="Undo rewrite"
-      >
+        
+        aria-label="Undo rewrite" variant="outline" className="px-2 text-xs disabled:opacity-40">
         {busy === "revert" && direction === "undo" ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : (
           <Undo2 className="h-3.5 w-3.5" />
         )}
-      </button>
+      </Button>
 
-      <button
+      <Button
         type="button"
         onClick={() => run("revert")}
         disabled={off || !hasSnapshot || direction !== "redo"}
         title={direction === "redo" ? "Redo — put the rewritten version back" : "Nothing to redo"}
-        className="btn-ghost px-2 text-xs disabled:opacity-40"
-        aria-label="Redo rewrite"
-      >
+        
+        aria-label="Redo rewrite" variant="outline" className="px-2 text-xs disabled:opacity-40">
         {busy === "revert" && direction === "redo" ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : (
           <Redo2 className="h-3.5 w-3.5" />
         )}
-      </button>
+      </Button>
 
-      <button
+      <Button
         type="button"
         onClick={() => setAskOpen((v) => !v)}
         disabled={off}
-        title="Rewrite this post with AI"
-        className="btn-ghost flex items-center gap-1.5 text-xs"
-      >
+        title="Rewrite this post with AI" variant="outline" className="flex items-center gap-1.5 text-xs">
         {busy === "regenerate" ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : (
           <Sparkles className="h-3.5 w-3.5" />
         )}
         Regenerate
-      </button>
+      </Button>
 
       {askOpen && (
         <div className="absolute right-0 top-full z-20 mt-1.5 w-72 rounded-lg border border-ink-700 bg-ink-900 p-3 shadow-lg">
@@ -153,17 +150,15 @@ export default function PostRevisionControls({
             but only the last one is kept.
           </p>
           <div className="mt-2 flex justify-end gap-2">
-            <button type="button" onClick={() => setAskOpen(false)} className="btn-ghost text-xs">
+            <Button type="button" onClick={() => setAskOpen(false)} variant="outline" className="text-xs">
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => run("regenerate")}
-              disabled={off}
-              className="btn-primary text-xs"
-            >
+              disabled={off} className="text-xs">
               Rewrite
-            </button>
+            </Button>
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CREDIT_PACKS } from "@/lib/pricing";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 async function startCheckout(body: object) {
   const res = await fetch("/api/billing/checkout", {
@@ -18,16 +19,15 @@ async function startCheckout(body: object) {
 export function BuyAccessButton() {
   const [busy, setBusy] = useState(false);
   return (
-    <button
-      className="btn-primary w-full justify-center"
+    <Button
+      
       disabled={busy}
       onClick={async () => {
         setBusy(true);
         await startCheckout({ type: "access" });
-      }}
-    >
+      }} className="w-full justify-center">
       {busy ? "Redirecting…" : "Unlock Affiliate Offer Secrets — $97 one-time"}
-    </button>
+    </Button>
   );
 }
 
@@ -38,8 +38,8 @@ export function StartTrialButton() {
 
   return (
     <div>
-      <button
-        className="btn-primary w-full justify-center"
+      <Button
+        
         disabled={busy}
         onClick={async () => {
           setBusy(true);
@@ -49,10 +49,9 @@ export function StartTrialButton() {
           if (error) return setError(error.message);
           router.push("/dashboard");
           router.refresh();
-        }}
-      >
+        }} className="w-full justify-center">
         {busy ? "Starting…" : "Start free 30-day trial"}
-      </button>
+      </Button>
       {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
     </div>
   );

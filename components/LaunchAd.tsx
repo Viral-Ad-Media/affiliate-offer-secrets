@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, Megaphone } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { AdLaunch, CreativeKind } from "@/lib/shared";
+import { Button } from "@/components/ui/button";
 
 type AdAccount = { ad_account_id: string; ad_account_name: string; currency: string; is_active: boolean };
 type PageInfo = { page_id: string; page_name: string; is_active: boolean; status: string };
@@ -205,10 +206,10 @@ export default function LaunchAd({
             </a>
           </div>
         </div>
-        <button onClick={activate} disabled={busy} className="btn-primary !py-1.5 text-xs">
+        <Button onClick={activate} disabled={busy} className="text-xs">
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Megaphone className="h-3.5 w-3.5" />}
           Activate — spend {launch.budget_credits} credits
-        </button>
+        </Button>
         {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
       </div>
     );
@@ -218,9 +219,9 @@ export default function LaunchAd({
       <div className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
         <p className="mb-1.5 text-xs text-red-300">Launch failed: {launch.notes ?? "Unknown error"}</p>
         <p className="mb-2 text-[12px] text-zinc-500">Any reserved credits were refunded automatically.</p>
-        <button onClick={() => setLaunch(null)} className="btn-ghost !py-1 text-xs">
+        <Button onClick={() => setLaunch(null)} variant="outline" className="!py-1 text-xs">
           Try again
-        </button>
+        </Button>
       </div>
     );
   }
@@ -275,24 +276,20 @@ export default function LaunchAd({
       </div>
       <div className="flex flex-wrap gap-2">
         {readyKinds.image && (
-          <button
+          <Button
             onClick={() => createDraft("image")}
-            disabled={busy || !headline.trim() || !primaryText.trim()}
-            className="btn-primary !py-1.5 text-xs"
-          >
+            disabled={busy || !headline.trim() || !primaryText.trim()} className="text-xs">
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Megaphone className="h-3.5 w-3.5" />}
             Launch as image ad
-          </button>
+          </Button>
         )}
         {readyKinds.video && (
-          <button
+          <Button
             onClick={() => createDraft("video")}
-            disabled={busy || !headline.trim() || !primaryText.trim()}
-            className="btn-primary !py-1.5 text-xs"
-          >
+            disabled={busy || !headline.trim() || !primaryText.trim()} className="text-xs">
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Megaphone className="h-3.5 w-3.5" />}
             Launch as video ad
-          </button>
+          </Button>
         )}
       </div>
       {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}

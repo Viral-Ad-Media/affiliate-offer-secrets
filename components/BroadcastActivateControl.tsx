@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, Play, Pause, PlayCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { BroadcastSequence } from "@/lib/shared";
+import { Button } from "@/components/ui/button";
 
 type Stats = { enrolled: number; pending: number; queued: number; sent: number; failed: number; skipped: number };
 
@@ -107,22 +108,22 @@ export default function BroadcastActivateControl({
 
       <div className="flex items-center gap-2">
         {sequence.status === "draft" && (
-          <button onClick={activate} disabled={busy || !canActivate || !mailConnected} className="btn-primary">
+          <Button onClick={activate} disabled={busy || !canActivate || !mailConnected}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             Activate
-          </button>
+          </Button>
         )}
         {sequence.status === "active" && (
-          <button onClick={pause} disabled={busy} className="btn-ghost">
+          <Button onClick={pause} disabled={busy} variant="outline">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />}
             Pause
-          </button>
+          </Button>
         )}
         {sequence.status === "paused" && (
-          <button onClick={resume} disabled={busy || !mailConnected} className="btn-primary">
+          <Button onClick={resume} disabled={busy || !mailConnected}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
             Resume
-          </button>
+          </Button>
         )}
         {!canActivate && sequence.status === "draft" && (
           <p className="text-xs text-zinc-500">

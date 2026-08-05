@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { User, Loader2, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AvatarPicker, { initialsOf } from "@/components/AvatarPicker";
+import { Button } from "@/components/ui/button";
 
 // Intl.supportedValuesOf exists in every browser this app targets; the fallback keeps the form
 // usable rather than empty if it doesn't. The server re-validates against pg_timezone_names, so
@@ -160,10 +161,10 @@ export default function ProfileSettings({
       </div>
 
       <div className="flex items-center gap-3">
-        <button onClick={save} disabled={busy} className="btn-primary disabled:opacity-50">
+        <Button onClick={save} disabled={busy} className="disabled:opacity-50">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           Save profile
-        </button>
+        </Button>
         {msg && (
           <span className={`text-sm ${msg.ok ? "text-emerald-300" : "text-red-300"}`}>
             {msg.text}

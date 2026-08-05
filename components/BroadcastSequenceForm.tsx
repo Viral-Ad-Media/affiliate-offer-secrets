@@ -5,6 +5,7 @@ import { Loader2, Save, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { BroadcastSequence } from "@/lib/shared";
+import { Button } from "@/components/ui/button";
 
 export default function BroadcastSequenceForm({
   sequence,
@@ -53,9 +54,9 @@ export default function BroadcastSequenceForm({
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-zinc-100">Sequence details</h2>
         {editable && (
-          <button onClick={remove} disabled={busy} className="btn-ghost !py-1 text-xs hover:!border-red-500 hover:!text-red-300">
+          <Button onClick={remove} disabled={busy} variant="outline" className="!py-1 text-xs hover:!border-red-500 hover:!text-red-300">
             <Trash2 className="h-3.5 w-3.5" /> Delete
-          </button>
+          </Button>
         )}
       </div>
       {!editable && (
@@ -104,10 +105,10 @@ export default function BroadcastSequenceForm({
           </div>
         )}
         {editable && (
-          <button onClick={save} disabled={busy || !name.trim()} className="btn-primary">
+          <Button onClick={save} disabled={busy || !name.trim()}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save
-          </button>
+          </Button>
         )}
       </div>
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}

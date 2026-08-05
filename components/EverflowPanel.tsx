@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Network, Loader2, CheckCircle2, Trash2, ExternalLink } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 export type EverflowStatus = {
   connected: boolean;
@@ -93,10 +94,10 @@ export default function EverflowPanel({ initial }: { initial: EverflowStatus }) 
               <span className="ml-2 text-xs text-red-300">key rejected — reconnect</span>
             )}
           </div>
-          <button onClick={disconnect} disabled={busy} className="btn-ghost text-xs">
+          <Button onClick={disconnect} disabled={busy} variant="outline" className="text-xs">
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
             Disconnect
-          </button>
+          </Button>
         </div>
       ) : null}
 
@@ -142,10 +143,10 @@ export default function EverflowPanel({ initial }: { initial: EverflowStatus }) 
         {error && <p className="text-sm text-red-300">{error}</p>}
 
         <div className="flex flex-wrap items-center gap-3">
-          <button type="submit" disabled={busy || !apiKey.trim()} className="btn-primary text-xs">
+          <Button type="submit" disabled={busy || !apiKey.trim()} className="text-xs">
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             {initial?.connected ? "Update connection" : "Connect"}
-          </button>
+          </Button>
           <a
             href="https://developers.everflow.io/docs/partner/api_keys/"
             target="_blank"

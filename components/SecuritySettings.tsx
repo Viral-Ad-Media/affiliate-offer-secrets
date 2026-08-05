@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, Loader2, LogOut, KeyRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 const MIN_PASSWORD = 8;
 
@@ -114,14 +115,12 @@ export default function SecuritySettings({ email }: { email: string }) {
           className={field}
         />
         <div className="flex items-center gap-3">
-          <button
+          <Button
             onClick={changePassword}
-            disabled={busy || !current || !next || !confirm}
-            className="btn-primary disabled:opacity-50"
-          >
+            disabled={busy || !current || !next || !confirm} className="disabled:opacity-50">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
             Update password
-          </button>
+          </Button>
           {msg && (
             <span className={`text-sm ${msg.ok ? "text-emerald-300" : "text-red-300"}`}>
               {msg.text}

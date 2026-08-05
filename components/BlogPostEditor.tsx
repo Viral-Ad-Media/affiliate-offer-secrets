@@ -17,6 +17,7 @@ import ContentWidthField from "@/components/ContentWidthField";
 import PageThemePanel from "@/components/PageThemePanel";
 import FeaturedImageField from "@/components/FeaturedImageField";
 import { resizeImageFile } from "@/lib/images/resizeClient";
+import { Button } from "@/components/ui/button";
 
 type Post = {
   id: string;
@@ -198,10 +199,10 @@ export default function BlogPostEditor({
             onApplied={() => router.refresh()}
             disabled={busy !== null}
           />
-          <button type="button" onClick={save} disabled={busy !== null} className="btn-ghost text-xs">
+          <Button type="button" onClick={save} disabled={busy !== null} variant="outline" className="text-xs">
             {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Save
-          </button>
+          </Button>
           <StatusDropdownButton
             status={status === "published" ? "published" : "draft"}
             busy={busy !== null}

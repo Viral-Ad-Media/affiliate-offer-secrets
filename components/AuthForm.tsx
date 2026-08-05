@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { REMEMBER_COOKIE } from "@/lib/supabase/cookieOptions";
+import { Button } from "@/components/ui/button";
 
 // One implementation of sign-in / sign-up / forgot-password, rendered both as the /login page and
 // inside the marketing site's popup. /login has to keep existing as a real page whatever the popup
@@ -244,9 +245,9 @@ export default function AuthForm({
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <button type="submit" disabled={busy} className="btn-primary w-full justify-center">
+      <Button type="submit" disabled={busy} className="w-full justify-center">
         {busy ? "Please wait…" : forgot ? "Send reset link" : signup ? "Sign up" : "Sign in"}
-      </button>
+      </Button>
 
       <button
         type="button"

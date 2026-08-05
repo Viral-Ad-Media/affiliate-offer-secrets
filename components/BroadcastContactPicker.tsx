@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Save } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Contact } from "@/lib/shared";
+import { Button } from "@/components/ui/button";
 
 export default function BroadcastContactPicker({
   sequenceId,
@@ -55,10 +56,10 @@ export default function BroadcastContactPicker({
           <p className="text-xs text-zinc-500">{selected.size} selected</p>
         </div>
         {editable && (
-          <button onClick={save} disabled={busy} className="btn-primary !py-1.5 text-xs">
+          <Button onClick={save} disabled={busy} className="text-xs">
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             Save selection
-          </button>
+          </Button>
         )}
       </div>
       {!editable && (

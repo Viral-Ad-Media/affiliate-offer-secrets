@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 // Flattens a lead's user-added form fields (Phase O.5) into one "key: value; key: value" string —
 // deliberate v1 scope cut, matching the plan's own call: no dynamic per-field columns, since the
@@ -224,16 +225,14 @@ export default function ContactsTable({
               ))}
             </select>
 
-            <button onClick={() => bulk("unsubscribe")} disabled={busy} className="btn-ghost text-xs">
+            <Button onClick={() => bulk("unsubscribe")} disabled={busy} variant="outline" className="text-xs">
               <MailX className="h-3.5 w-3.5" /> Unsubscribe
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => bulk("delete")}
-              disabled={busy}
-              className="btn-ghost text-xs text-red-300 hover:text-red-200"
-            >
+              disabled={busy} variant="outline" className="text-xs text-red-300 hover:text-red-200">
               <Trash2 className="h-3.5 w-3.5" /> Delete
-            </button>
+            </Button>
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400" />}
             <button
               onClick={() => setSelected(new Set())}
@@ -501,12 +500,12 @@ function EditContactDialog({
           {error && <p className="text-sm text-red-400">{error}</p>}
 
           <div className="flex justify-end gap-2 pt-1">
-            <button onClick={onClose} className="btn-ghost text-sm">
+            <Button onClick={onClose} variant="outline" className="text-sm">
               Cancel
-            </button>
-            <button onClick={save} disabled={saving} className="btn-primary text-sm">
+            </Button>
+            <Button onClick={save} disabled={saving} className="text-sm">
               {saving ? "Saving…" : "Save changes"}
-            </button>
+            </Button>
           </div>
         </div>
       </DialogContent>

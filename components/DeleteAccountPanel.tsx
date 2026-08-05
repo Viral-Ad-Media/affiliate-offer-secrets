@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { TriangleAlert, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // The one irreversible action in the app. Three gates, deliberately: expand the panel, type your
 // own email address, and enter your password — the password alone is muscle memory, and this
@@ -93,18 +94,16 @@ export default function DeleteAccountPanel({ email }: { email: string }) {
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <TriangleAlert className="h-4 w-4" />}
               Delete my account permanently
             </button>
-            <button
+            <Button
               onClick={() => {
                 setOpen(false);
                 setConfirmEmail("");
                 setPassword("");
                 setError(null);
               }}
-              disabled={busy}
-              className="btn-ghost text-sm"
-            >
+              disabled={busy} variant="outline" className="text-sm">
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}

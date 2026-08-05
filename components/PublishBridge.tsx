@@ -5,6 +5,7 @@ import { Globe, Copy, CheckCircle2, Loader2, Plus, Trash2, Radio } from "lucide-
 import { createClient } from "@/lib/supabase/client";
 import StatusDropdownButton from "@/components/StatusDropdownButton";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 type Domain = { id: string; domain: string };
 type Route = { id: string; domain_id: string; domain: string; path: string };
@@ -204,10 +205,10 @@ export default function PublishBridge({
                   placeholder="path (blank = root)"
                   className="w-40 rounded-lg border border-ink-600 bg-ink-800 px-2 py-1.5 text-xs text-zinc-100"
                 />
-                <button onClick={addRoute} disabled={addingRoute} className="btn-ghost !py-1 text-xs">
+                <Button onClick={addRoute} disabled={addingRoute} variant="outline" className="!py-1 text-xs">
                   {addingRoute ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                   Add link
-                </button>
+                </Button>
                 {routeError && <span className="text-xs text-red-300">{routeError}</span>}
               </div>
             )}

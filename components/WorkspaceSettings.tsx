@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Building2, Check, Copy, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { workspaceOrigin } from "@/lib/host";
+import { Button } from "@/components/ui/button";
 
 // Mirrors slugify_workspace() in 0041 closely enough for a live preview. The server re-slugifies
 // and re-validates whatever is submitted, so this is guidance, not the boundary — but showing the
@@ -118,10 +119,10 @@ export default function WorkspaceSettings({
 
       {canEdit && (
         <div className="flex items-center gap-3">
-          <button onClick={save} disabled={busy} className="btn-primary disabled:opacity-50">
+          <Button onClick={save} disabled={busy} className="disabled:opacity-50">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             Save workspace
-          </button>
+          </Button>
           {msg && (
             <span className={`text-sm ${msg.ok ? "text-emerald-300" : "text-red-300"}`}>
               {msg.text}

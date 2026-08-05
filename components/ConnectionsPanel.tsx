@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Facebook, Instagram, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 type Page = { page_id: string; page_name: string; is_active: boolean; status: string };
 type AdAccount = { ad_account_id: string; ad_account_name: string; currency: string; is_active: boolean };
@@ -83,13 +84,11 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
       <div className="card p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-zinc-100">Connected Pages</h2>
-          <button
+          <Button
             onClick={disconnect}
-            disabled={busy === "disconnect"}
-            className="btn-ghost !py-1 text-xs"
-          >
+            disabled={busy === "disconnect"} variant="outline" className="!py-1 text-xs">
             Disconnect
-          </button>
+          </Button>
         </div>
         <ul className="space-y-2">
           {pages.map((p) => (
@@ -108,17 +107,15 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
                   <CheckCircle2 className="h-3.5 w-3.5" /> Active
                 </span>
               ) : (
-                <button
+                <Button
                   onClick={() => setActivePage(p.page_id)}
-                  disabled={busy === p.page_id}
-                  className="btn-ghost !py-1 text-xs"
-                >
+                  disabled={busy === p.page_id} variant="outline" className="!py-1 text-xs">
                   {busy === p.page_id ? (
                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     "Set active"
                   )}
-                </button>
+                </Button>
               )}
             </li>
           ))}
@@ -172,17 +169,15 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
                     <CheckCircle2 className="h-3.5 w-3.5" /> Active
                   </span>
                 ) : (
-                  <button
+                  <Button
                     onClick={() => setActiveAdAccount(a.ad_account_id)}
-                    disabled={busy === a.ad_account_id}
-                    className="btn-ghost !py-1 text-xs"
-                  >
+                    disabled={busy === a.ad_account_id} variant="outline" className="!py-1 text-xs">
                     {busy === a.ad_account_id ? (
                       <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                     ) : (
                       "Set active"
                     )}
-                  </button>
+                  </Button>
                 )}
               </li>
             ))}

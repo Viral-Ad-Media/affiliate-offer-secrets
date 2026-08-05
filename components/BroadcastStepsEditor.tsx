@@ -6,6 +6,7 @@ import EditorPreviewButton from "@/components/EditorPreview";
 import { renderEmailPreviewHtml } from "@/lib/engine/broadcastEmail";
 import { createClient } from "@/lib/supabase/client";
 import type { BroadcastStep } from "@/lib/shared";
+import { Button } from "@/components/ui/button";
 
 type DraftStep = Partial<BroadcastStep> & { key: string; step_index: number; delay_days: number; subject: string; body_md: string };
 
@@ -84,9 +85,9 @@ export default function BroadcastStepsEditor({
           <p className="text-xs text-zinc-500">Each fires this many days after a contact's own enrollment.</p>
         </div>
         {editable && (
-          <button onClick={addStep} className="btn-ghost !py-1 text-xs">
+          <Button onClick={addStep} variant="outline" className="!py-1 text-xs">
             <Plus className="h-3.5 w-3.5" /> Add step
-          </button>
+          </Button>
         )}
       </div>
 
@@ -132,21 +133,17 @@ export default function BroadcastStepsEditor({
                     title={`Preview — ${d.subject || "email"}`}
                     render={() => renderEmailPreviewHtml({ subject: d.subject, body_md: d.body_md })}
                   />
-                  <button
+                  <Button
                     onClick={() => saveStep(d)}
-                    disabled={busyKey === d.key || !d.subject.trim()}
-                    className="btn-ghost !py-1 text-xs"
-                  >
+                    disabled={busyKey === d.key || !d.subject.trim()} variant="outline" className="!py-1 text-xs">
                     {busyKey === d.key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                     Save
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => deleteStep(d)}
-                    disabled={busyKey === d.key}
-                    className="btn-ghost !py-1 text-xs hover:!border-red-500 hover:!text-red-300"
-                  >
+                    disabled={busyKey === d.key} variant="outline" className="!py-1 text-xs hover:!border-red-500 hover:!text-red-300">
                     <Trash2 className="h-3.5 w-3.5" /> Remove
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Tags, Plus, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { TAG_COLOR_PRESETS, MAX_TAG_DESCRIPTION, readableTextOn } from "@/lib/contactTags";
+import { Button } from "@/components/ui/button";
 
 type Tag = {
   id: string;
@@ -158,18 +159,16 @@ export default function ContactTagsPanel({ tags }: { tags: Tag[] }) {
               className={`w-56 ${inputCls}`}
             />
             <ColorPicker value={color} onChange={setColor} />
-            <button
+            <Button
               type="submit"
-              disabled={busy === "add" || !name.trim()}
-              className="btn-primary text-xs"
-            >
+              disabled={busy === "add" || !name.trim()} className="text-xs">
               {busy === "add" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Plus className="h-3.5 w-3.5" />
               )}
               Add tag
-            </button>
+            </Button>
           </div>
           <input
             value={description}

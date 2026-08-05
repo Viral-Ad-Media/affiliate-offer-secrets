@@ -17,6 +17,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 type DomainRoute = {
   id: string;
@@ -110,10 +111,10 @@ function AddRouteForm({
           className="w-40 rounded-lg border border-ink-600 bg-ink-800 px-2 py-1.5 text-xs text-zinc-100"
         />
       </div>
-      <button onClick={submit} disabled={busy} className="btn-ghost !py-1 text-xs">
+      <Button onClick={submit} disabled={busy} variant="outline" className="!py-1 text-xs">
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
         Add path
-      </button>
+      </Button>
       {error && <span className="text-xs text-red-300">{error}</span>}
     </div>
   );
@@ -168,14 +169,14 @@ function DnsSetup({
     <div className="space-y-2 rounded-lg border border-ink-700 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-medium text-zinc-300">DNS records</p>
-        <button onClick={onVerify} disabled={verifying} className="btn-ghost !py-1 text-xs">
+        <Button onClick={onVerify} disabled={verifying} variant="outline" className="!py-1 text-xs">
           {verifying ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
             <RefreshCw className="h-3.5 w-3.5" />
           )}
           {domain.status === "verified" ? "Re-check DNS" : "Verify DNS"}
-        </button>
+        </Button>
       </div>
 
       <p className="text-xs text-zinc-500">
@@ -352,14 +353,14 @@ function DomainRow({
               <BookOpen className="h-3 w-3" /> Blog
             </span>
           )}
-          <button onClick={verify} disabled={verifying} className="btn-ghost !py-1 text-xs">
+          <Button onClick={verify} disabled={verifying} variant="outline" className="!py-1 text-xs">
             {verifying ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <RefreshCw className="h-3.5 w-3.5" />
             )}
             {domain.status === "verified" ? "Re-check" : "Verify"}
-          </button>
+          </Button>
           <button
             onClick={remove}
             disabled={removing}
@@ -522,10 +523,10 @@ export default function DomainsPanel({
             placeholder="yourdomain.com"
             className="min-w-[220px] flex-1 rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100"
           />
-          <button onClick={addDomain} disabled={adding} className="btn-primary">
+          <Button onClick={addDomain} disabled={adding}>
             {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Add domain
-          </button>
+          </Button>
         </div>
         {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
       </div>

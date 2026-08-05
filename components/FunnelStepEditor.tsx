@@ -19,6 +19,7 @@ import PageThemePanel from "@/components/PageThemePanel";
 import PostSeoPanel from "@/components/PostSeoPanel";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
 import { resizeImageFile } from "@/lib/images/resizeClient";
+import { Button } from "@/components/ui/button";
 
 
 // Same client-side downscale as PageEditor.tsx's resizeImageFile — the server's own validation
@@ -262,10 +263,10 @@ export default function FunnelStepEditor({
             )
           }
         />
-        <button onClick={save} disabled={saving || !!imageBusyBlockId} className="btn-primary">
+        <Button onClick={save} disabled={saving || !!imageBusyBlockId}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Save &amp; Republish
-        </button>
+        </Button>
         {savedAt && Date.now() - savedAt < 4000 && (
           <span className="flex items-center gap-1 text-xs text-emerald-300">
             <CheckCircle2 className="h-3.5 w-3.5" /> Saved

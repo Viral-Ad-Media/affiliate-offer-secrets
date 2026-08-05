@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useCredits } from "@/components/CreditsProvider";
 import CostBadge from "@/components/CostBadge";
 import { ImagePlus, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // Featured image control for the post editor: upload your own, or generate one from the post's
 // title/content via the kie.ai pipeline (generate_blog_image job). Polls while a generation is
@@ -108,31 +109,27 @@ export default function FeaturedImageField({
         </div>
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap gap-2">
-            <button
+            <Button
               type="button"
               onClick={() => fileRef.current?.click()}
-              disabled={busy || generating}
-              className="btn-ghost text-xs"
-            >
+              disabled={busy || generating} variant="outline" className="text-xs">
               <ImagePlus className="h-3.5 w-3.5" /> Upload
-            </button>
-            <button type="button" onClick={generate} disabled={busy || generating} className="btn-ghost text-xs">
+            </Button>
+            <Button type="button" onClick={generate} disabled={busy || generating} variant="outline" className="text-xs">
               {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               {generating ? "Generating…" : "Generate with AI"}
               <CostBadge jobType="generate_blog_image" />
-            </button>
+            </Button>
             {liveUrl && !generating && (
-              <button
+              <Button
                 type="button"
                 onClick={() => {
                   setLiveUrl(null);
                   setLiveStatus("none");
                   onChange(null);
-                }}
-                className="btn-ghost text-xs"
-              >
+                }} variant="outline" className="text-xs">
                 <Trash2 className="h-3.5 w-3.5" /> Remove
-              </button>
+              </Button>
             )}
           </div>
           <p className="text-[12px] text-zinc-500">

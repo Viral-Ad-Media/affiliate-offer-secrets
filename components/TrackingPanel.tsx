@@ -4,6 +4,7 @@ import { useState } from "react";
 import { BarChart3, Loader2, CheckCircle2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import type { TrackingSettings } from "@/lib/engine/renderPages";
+import { Button } from "@/components/ui/button";
 
 const FIELDS: { key: keyof TrackingSettings; label: string; placeholder: string }[] = [
   { key: "ga4_id", label: "Google Analytics (GA4)", placeholder: "G-XXXXXXXXXX — or paste the full gtag.js snippet" },
@@ -165,10 +166,10 @@ export default function TrackingPanel({
           )}
         </div>
 
-        <button onClick={save} disabled={busy} className="btn-primary">
+        <Button onClick={save} disabled={busy}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Save tracking
-        </button>
+        </Button>
         {savedAt && Date.now() - savedAt < 4000 && (
           <span className="flex items-center gap-1 text-xs text-emerald-300">
             <CheckCircle2 className="h-3.5 w-3.5" /> Saved — all pages re-published

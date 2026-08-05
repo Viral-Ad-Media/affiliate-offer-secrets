@@ -10,6 +10,7 @@ import PostSeoPanel from "@/components/PostSeoPanel";
 import EditorPreviewButton from "@/components/EditorPreview";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
 import { resizeImageFile } from "@/lib/images/resizeClient";
+import { Button } from "@/components/ui/button";
 
 
 // Downscale/re-encode client-side so most real photos land under the server's size cap without
@@ -159,10 +160,10 @@ export default function PageEditor({
             )
           }
         />
-        <button onClick={save} disabled={saving || !!imageBusyBlockId} className="btn-primary">
+        <Button onClick={save} disabled={saving || !!imageBusyBlockId}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Save &amp; Republish
-        </button>
+        </Button>
         {savedAt && Date.now() - savedAt < 4000 && (
           <span className="flex items-center gap-1 text-xs text-emerald-300">
             <CheckCircle2 className="h-3.5 w-3.5" /> Saved

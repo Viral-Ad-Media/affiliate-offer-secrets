@@ -25,6 +25,7 @@ import {
 } from "@/lib/blog";
 import { toast } from "@/lib/toast";
 import { resizeImageFile } from "@/lib/images/resizeClient";
+import { Button } from "@/components/ui/button";
 
 function isTree(v: unknown): v is PageBlockTree {
   return !!v && typeof v === "object" && (v as { version?: number }).version === 2;
@@ -328,10 +329,10 @@ export default function BlogHomeEditor({
               )
             }
           />
-          <button onClick={save} disabled={busy || !!imageBusyBlockId} className="btn-primary text-xs">
+          <Button onClick={save} disabled={busy || !!imageBusyBlockId} className="text-xs">
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Save
-          </button>
+          </Button>
           {savedAt && Date.now() - savedAt < 4000 && (
             <span className="flex items-center gap-1 text-xs text-emerald-300">
               <CheckCircle2 className="h-3.5 w-3.5" /> Saved

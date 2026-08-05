@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2, Rocket } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { KIT_ASSETS, ALL_KIT_ASSETS, adsWithoutFunnel, type KitAssetKey } from "@/lib/kitAssets";
 import { creditCostFor, formatCost } from "@/lib/credits";
+import { Button } from "@/components/ui/button";
 
 /**
  * Pick which pieces of the kit to generate before promoting.
@@ -95,18 +96,16 @@ export default function PromoteKitDialog({
             {" · price is per kit, not per item"}
           </span>
           <div className="flex items-center gap-2">
-            <button onClick={() => onOpenChange(false)} className="btn-ghost text-sm">
+            <Button onClick={() => onOpenChange(false)} variant="outline" className="text-sm">
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => onConfirm(selected)}
               disabled={busy || none}
-              title={none ? "Pick at least one thing to generate" : undefined}
-              className="btn-primary text-sm"
-            >
+              title={none ? "Pick at least one thing to generate" : undefined} className="text-sm">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
               {count > 1 ? `Build ${count} kits` : "Build kit"}
-            </button>
+            </Button>
           </div>
         </div>
       </DialogContent>

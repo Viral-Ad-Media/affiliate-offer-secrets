@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { marked } from "marked";
 import { Mail, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 export default function SendEmail({
   campaignId,
@@ -90,10 +91,10 @@ export default function SendEmail({
         className="w-full rounded-lg border border-ink-600 bg-ink-900 p-3 text-sm outline-none focus:border-emerald-500"
       />
       <div className="mt-2 flex items-center gap-2">
-        <button onClick={send} disabled={busy || !to.trim() || !subject.trim() || !body.trim()} className="btn-primary">
+        <Button onClick={send} disabled={busy || !to.trim() || !subject.trim() || !body.trim()}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
           Send Email
-        </button>
+        </Button>
         {result && (
           <span className={`text-sm ${result.ok ? "text-emerald-400" : "text-red-400"}`}>
             {result.text}

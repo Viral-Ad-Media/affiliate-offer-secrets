@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Beaker, Eye, Pencil, Pause, Play, Plus, Trash2, LogIn, Loader2 } from "lucide-react";
 import { useSplitTest } from "@/lib/useSplitTest";
+import { Button } from "@/components/ui/button";
 
 // Renders the opt-in page's position in the funnel map (components/FunnelMap.tsx) — either as a
 // single plain node (no test running, the ~100% common case) or, once a split test is started, as
@@ -48,16 +49,16 @@ export default function SplitTestBranch({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <button onClick={() => onPreview(bridgeHtml, "Opt-in page")} className="btn-ghost !px-2 !py-1" title="Preview">
+          <Button onClick={() => onPreview(bridgeHtml, "Opt-in page")}  title="Preview" variant="outline" className="!px-2 !py-1">
             <Eye className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={onEditControl} className="btn-ghost !px-2 !py-1" title="Edit">
+          </Button>
+          <Button onClick={onEditControl}  title="Edit" variant="outline" className="!px-2 !py-1">
             <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={startTest} disabled={busy === "start"} className="btn-ghost !px-2 !py-1 text-xs" title="Start a split test">
+          </Button>
+          <Button onClick={startTest} disabled={busy === "start"}  title="Start a split test" variant="outline" className="!px-2 !py-1 text-xs">
             {busy === "start" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Beaker className="h-3.5 w-3.5" />}
             Split test
-          </button>
+          </Button>
         </div>
         {error && <p className="w-full text-xs text-red-300">{error}</p>}
       </div>
@@ -110,37 +111,32 @@ export default function SplitTestBranch({
                 <span>{rate === "—" ? rate : `${rate}%`}</span>
               </div>
               <div className="mt-1.5 flex items-center gap-1">
-                <button
+                <Button
                   onClick={() => onPreview(v.is_control ? bridgeHtml : v.bridge_html, v.label)}
-                  className="btn-ghost !px-1.5 !py-1"
-                  title="Preview"
-                >
+                  
+                  title="Preview" variant="outline" className="!px-1.5 !py-1">
                   <Eye className="h-3 w-3" />
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => (v.is_control ? onEditControl() : onEditVariant(v.id))}
-                  className="btn-ghost !px-1.5 !py-1"
-                  title="Edit copy"
-                >
+                  
+                  title="Edit copy" variant="outline" className="!px-1.5 !py-1">
                   <Pencil className="h-3 w-3" />
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => toggleStatus(v)}
                   disabled={busy === v.id}
-                  title={v.status === "active" ? "Pause" : "Resume"}
-                  className="btn-ghost !px-1.5 !py-1"
-                >
+                  title={v.status === "active" ? "Pause" : "Resume"} variant="outline" className="!px-1.5 !py-1">
                   {v.status === "active" ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                </button>
+                </Button>
                 {!v.is_control && (
-                  <button
+                  <Button
                     onClick={() => deleteVariant(v.id)}
                     disabled={busy === v.id}
-                    className="btn-ghost !px-1.5 !py-1 hover:text-red-300"
-                    title="Delete variant"
-                  >
+                    
+                    title="Delete variant" variant="outline" className="!px-1.5 !py-1 hover:text-red-300">
                     <Trash2 className="h-3 w-3" />
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -149,10 +145,10 @@ export default function SplitTestBranch({
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button onClick={addVariant} disabled={busy === "add" || variants.length >= 5} className="btn-ghost !py-1 text-xs">
+        <Button onClick={addVariant} disabled={busy === "add" || variants.length >= 5} variant="outline" className="!py-1 text-xs">
           {busy === "add" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
           Add variant
-        </button>
+        </Button>
         <div className="ml-auto flex items-center gap-2">
           <select
             value={promoteId}
@@ -166,10 +162,10 @@ export default function SplitTestBranch({
               </option>
             ))}
           </select>
-          <button onClick={() => endTest(promoteId || null)} disabled={busy === "end"} className="btn-ghost !py-1 text-xs">
+          <Button onClick={() => endTest(promoteId || null)} disabled={busy === "end"} variant="outline" className="!py-1 text-xs">
             {busy === "end" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             End test
-          </button>
+          </Button>
         </div>
       </div>
     </div>

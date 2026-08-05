@@ -6,6 +6,7 @@ import CostBadge from "@/components/CostBadge";
 import { Image as ImageIcon, Video, Loader2, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { CreativeKind, CreativeSource, CreativeStatus } from "@/lib/shared";
+import { Button } from "@/components/ui/button";
 
 type CreativeState = {
   status: CreativeStatus;
@@ -117,21 +118,21 @@ export default function CreativeItemCard({
         ) : image.status === "ready" && image.image_data_url ? (
           <div className="space-y-1.5">
             <img src={image.image_data_url} alt="" className="h-24 w-24 rounded-lg border border-ink-700 object-cover" />
-            <button onClick={() => generate("image")} disabled={busy === "image"} className="btn-ghost !py-1 text-xs">
+            <Button onClick={() => generate("image")} disabled={busy === "image"} variant="outline" className="!py-1 text-xs">
               {busy === "image" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Regenerate
-            </button>
+            </Button>
           </div>
         ) : (
           <>
             {image.status === "failed" && image.error && (
               <p className="mb-1.5 text-xs text-red-300">{image.error}</p>
             )}
-            <button onClick={() => generate("image")} disabled={busy === "image"} className="btn-ghost !py-1 text-xs">
+            <Button onClick={() => generate("image")} disabled={busy === "image"} variant="outline" className="!py-1 text-xs">
               {busy === "image" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Generate image
               <CostBadge jobType="generate_creative_image" />
-            </button>
+            </Button>
           </>
         )}
       </div>
@@ -149,21 +150,21 @@ export default function CreativeItemCard({
             {videoPreviewUrl && (
               <video src={videoPreviewUrl} controls className="h-24 w-24 rounded-lg border border-ink-700 object-cover" />
             )}
-            <button onClick={() => generate("video")} disabled={busy === "video"} className="btn-ghost !py-1 text-xs">
+            <Button onClick={() => generate("video")} disabled={busy === "video"} variant="outline" className="!py-1 text-xs">
               {busy === "video" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Regenerate
-            </button>
+            </Button>
           </div>
         ) : (
           <>
             {video.status === "failed" && video.error && (
               <p className="mb-1.5 text-xs text-red-300">{video.error}</p>
             )}
-            <button onClick={() => generate("video")} disabled={busy === "video"} className="btn-ghost !py-1 text-xs">
+            <Button onClick={() => generate("video")} disabled={busy === "video"} variant="outline" className="!py-1 text-xs">
               {busy === "video" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Generate video
               <CostBadge jobType="generate_creative_video" />
-            </button>
+            </Button>
           </>
         )}
       </div>

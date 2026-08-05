@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Trash2, Hourglass } from "lucide-react";
 import type { Job } from "@/lib/shared";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 const STATUS_CHIP: Record<string, string> = {
   done: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
@@ -50,9 +51,9 @@ export default function JobsQueue({ limit = 50 }: { limit?: number }) {
     <section className="card">
       {/* No title here — the page above already has one; this row exists for the Refresh button. */}
       <div className="flex items-center justify-end border-b border-ink-700 px-4 py-2">
-        <button onClick={load} className="btn-ghost !py-1 text-xs">
+        <Button onClick={load} variant="outline" className="!py-1 text-xs">
           <RefreshCw className="h-3.5 w-3.5" /> Refresh
-        </button>
+        </Button>
       </div>
       <ul className="divide-y divide-ink-800">
         {jobs.slice(0, limit).map((j) => {

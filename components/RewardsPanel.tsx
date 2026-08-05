@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Award, Coins } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 export type RewardEntry = {
   id: string;
@@ -78,13 +79,11 @@ export default function RewardsPanel({ balance, entries }: Props) {
               disabled={balance === 0 || busy}
               className="w-32 rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 disabled:opacity-50"
             />
-            <button
+            <Button
               onClick={redeem}
-              disabled={balance === 0 || busy}
-              className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
-            >
+              disabled={balance === 0 || busy} className="px-4 py-2 text-sm disabled:opacity-50">
               {busy ? "Redeeming…" : "Redeem"}
-            </button>
+            </Button>
           </div>
           {message && (
             <p

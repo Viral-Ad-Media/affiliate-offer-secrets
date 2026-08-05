@@ -6,6 +6,7 @@ import ManualSendPanel, { type ManualContact } from "@/components/ManualSendPane
 import { Send, Loader2, CheckCircle2, AlertTriangle, Users, Plus, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 type HistoryRow = {
   id: string;
@@ -123,9 +124,9 @@ export default function BroadcastComposer({
             contact&apos;s own signup date, use Sequences instead.
           </p>
         </div>
-        <button type="button" onClick={() => setComposing(true)} className="btn-primary shrink-0">
+        <Button type="button" onClick={() => setComposing(true)} className="shrink-0">
           <Plus className="h-4 w-4" /> New broadcast
-        </button>
+        </Button>
       </div>
 
       {sentAt && Date.now() - sentAt < 8000 && (
@@ -201,19 +202,17 @@ export default function BroadcastComposer({
                     className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
                   />
                 </label>
-                <button
+                <Button
                   type="button"
                   onClick={draftWithAi}
-                  disabled={drafting}
-                  className="btn-ghost text-xs"
-                >
+                  disabled={drafting} variant="outline" className="text-xs">
                   {drafting ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <Sparkles className="h-3.5 w-3.5" />
                   )}
                   {drafting ? "Drafting…" : "Draft email"}
-                </button>
+                </Button>
               </div>
               <p className="mt-1.5 text-[12px] text-zinc-500">
                 {audience === "campaign" && campaignId
@@ -260,10 +259,10 @@ export default function BroadcastComposer({
             {error && <p className="text-sm text-red-300">{error}</p>}
 
             <div className="flex flex-wrap items-center gap-3">
-              <button type="button" onClick={send} disabled={!canSend} className="btn-primary">
+              <Button type="button" onClick={send} disabled={!canSend}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Send now
-              </button>
+              </Button>
               {/* No "Queued" chip here — a successful send closes this dialog, so the
                   confirmation lives under the page header where it can actually be read. */}
               {activeProvider && (

@@ -8,6 +8,7 @@ import { RadioGroup, RadioCard } from "@/components/ui/radio-group-card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 type ProviderRow = {
   provider: "resend" | "sendgrid" | "mailgun" | "smtp";
@@ -127,9 +128,9 @@ export default function MailProvidersPanel({
                 </span>
               )}
             </div>
-            <button onClick={() => disconnect(provider)} disabled={busy === provider} className="btn-ghost !py-1 text-xs">
+            <Button onClick={() => disconnect(provider)} disabled={busy === provider} variant="outline" className="!py-1 text-xs">
               Disconnect
-            </button>
+            </Button>
           </div>
         )}
         <div className="grid gap-3 sm:grid-cols-2">
@@ -168,10 +169,10 @@ export default function MailProvidersPanel({
         <p className="text-xs text-zinc-500">
           The from address must be verified with the provider (a verified domain/sender) or sends will be rejected.
         </p>
-        <button onClick={() => connect(provider)} disabled={busy === provider} className="btn-primary">
+        <Button onClick={() => connect(provider)} disabled={busy === provider}>
           {busy === provider ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {existing ? "Update connection" : "Verify & connect"}
-        </button>
+        </Button>
       </div>
     );
   }

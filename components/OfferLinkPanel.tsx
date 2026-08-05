@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, ExternalLink, Link2, Loader2 } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 /**
  * Where a standalone funnel's call to action sends people.
@@ -71,9 +72,9 @@ export default function OfferLinkPanel({
           placeholder="https://example.com/offer"
           className="min-w-0 flex-1 rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-emerald-500"
         />
-        <button onClick={save} disabled={busy} className="btn-primary text-sm">
+        <Button onClick={save} disabled={busy} className="text-sm">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save
-        </button>
+        </Button>
         {url && (
           <a
             href={url}

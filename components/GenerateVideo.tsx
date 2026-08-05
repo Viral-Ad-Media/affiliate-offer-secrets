@@ -5,6 +5,7 @@ import { useCredits } from "@/components/CreditsProvider";
 import CostBadge from "@/components/CostBadge";
 import { Video, Loader2, Instagram, Music2, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 type VideoStatus = "none" | "generating" | "ready" | "failed";
 
@@ -139,11 +140,11 @@ export default function GenerateVideo({
           {status === "failed" && videoError && (
             <p className="mb-2 text-sm text-red-300">Generation failed: {videoError}</p>
           )}
-          <button onClick={generate} disabled={busy === "generate"} className="btn-primary">
+          <Button onClick={generate} disabled={busy === "generate"}>
             {busy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             Generate video
             <CostBadge jobType="generate_video" />
-          </button>
+          </Button>
         </>
       ) : status === "generating" ? (
         <div className="flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-300">
@@ -164,19 +165,18 @@ export default function GenerateVideo({
           <div className="flex flex-wrap gap-2">
             {targets.map((t) => (
               <div key={t.key} className="flex items-center gap-2">
-                <button
+                <Button
                   onClick={() =>
                     t.key === "instagram"
                       ? post("instagram", "/api/instagram/post-reel", { ig_user_id: igUserId, caption })
                       : post("tiktok", "/api/tiktok/post-video", { caption })
                   }
                   disabled={!t.available || busy === t.key || !caption.trim()}
-                  className="btn-ghost text-xs"
-                  title={t.available ? undefined : `Connect ${t.label} in Integrations first`}
-                >
+                  
+                  title={t.available ? undefined : `Connect ${t.label} in Integrations first`} variant="outline" className="text-xs">
                   {busy === t.key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <t.icon className="h-3.5 w-3.5" />}
                   Post to {t.label}
-                </button>
+                </Button>
                 {results[t.key] && (
                   <span className={`text-xs ${results[t.key].ok ? "text-emerald-400" : "text-red-400"}`}>
                     {results[t.key].text}
@@ -185,10 +185,10 @@ export default function GenerateVideo({
               </div>
             ))}
           </div>
-          <button onClick={generate} disabled={busy === "generate"} className="btn-ghost text-xs">
+          <Button onClick={generate} disabled={busy === "generate"} variant="outline" className="text-xs">
             {busy === "generate" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
             Regenerate
-          </button>
+          </Button>
         </div>
       )}
     </div>

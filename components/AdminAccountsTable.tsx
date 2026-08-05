@@ -6,6 +6,7 @@ import { Loader2, ShieldCheck, Clock, Coins, Check, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { AdminAccountRow } from "@/lib/shared";
 import { hasAppAccess } from "@/lib/shared";
+import { Button } from "@/components/ui/button";
 
 // One row per account with the numbers a support question starts from, plus the three actions
 // worth doing by hand. Every action is a self-gating RPC that writes its own audit row — see
@@ -160,12 +161,10 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
                       {a.last_sign_in_at ? new Date(a.last_sign_in_at).toLocaleDateString() : "never"}
                     </td>
                     <td className="whitespace-nowrap text-right">
-                      <button
-                        onClick={() => setOpen(open === a.user_id ? null : a.user_id)}
-                        className="btn-ghost text-xs"
-                      >
+                      <Button
+                        onClick={() => setOpen(open === a.user_id ? null : a.user_id)} variant="outline" className="text-xs">
                         {open === a.user_id ? "Close" : "Manage"}
-                      </button>
+                      </Button>
                     </td>
                   </tr>
 
@@ -177,11 +176,9 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
                             <div className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">
                               Access
                             </div>
-                            <button
+                            <Button
                               onClick={() => toggleAccess(a)}
-                              disabled={busy === a.user_id}
-                              className="btn-ghost text-xs"
-                            >
+                              disabled={busy === a.user_id} variant="outline" className="text-xs">
                               {busy === a.user_id ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                               ) : a.access_granted ? (
@@ -190,7 +187,7 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
                                 <Check className="h-3.5 w-3.5" />
                               )}
                               {a.access_granted ? "Revoke paid access" : "Grant paid access"}
-                            </button>
+                            </Button>
                           </div>
 
                           <div>
@@ -210,13 +207,11 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
                                 placeholder="Reason (required)"
                                 className="w-56 rounded-lg border border-ink-600 bg-ink-900 px-2 py-1.5 text-sm outline-none focus:border-emerald-500"
                               />
-                              <button
+                              <Button
                                 onClick={() => adjustCredits(a)}
-                                disabled={busy === a.user_id}
-                                className="btn-ghost text-xs"
-                              >
+                                disabled={busy === a.user_id} variant="outline" className="text-xs">
                                 <Coins className="h-3.5 w-3.5" /> Apply
-                              </button>
+                              </Button>
                             </div>
                           </div>
 
@@ -231,13 +226,11 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
                                 placeholder="14"
                                 className="w-20 rounded-lg border border-ink-600 bg-ink-900 px-2 py-1.5 text-sm outline-none focus:border-emerald-500"
                               />
-                              <button
+                              <Button
                                 onClick={() => extendTrial(a)}
-                                disabled={busy === a.user_id}
-                                className="btn-ghost text-xs"
-                              >
+                                disabled={busy === a.user_id} variant="outline" className="text-xs">
                                 <Clock className="h-3.5 w-3.5" /> Add days
-                              </button>
+                              </Button>
                             </div>
                           </div>
                         </div>

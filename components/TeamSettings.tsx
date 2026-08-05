@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Users, Loader2, Copy, Check, Trash2, Crown, Link2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 type Role = "owner" | "admin" | "member";
 
@@ -229,13 +230,11 @@ export default function TeamSettings({
               <option value="member">Member</option>
               <option value="admin">Admin</option>
             </select>
-            <button
+            <Button
               onClick={invite}
-              disabled={busy === "invite" || !inviteEmail.trim()}
-              className="btn-primary disabled:opacity-50"
-            >
+              disabled={busy === "invite" || !inviteEmail.trim()} className="disabled:opacity-50">
               {busy === "invite" ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Invite
-            </button>
+            </Button>
           </div>
 
           {inviteLink && (

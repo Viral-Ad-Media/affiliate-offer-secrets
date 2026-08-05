@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { RotateCcw, XCircle, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { AdminProblemJob } from "@/lib/shared";
+import { Button } from "@/components/ui/button";
 
 // Jobs that need a human: terminally failed, or sitting pending/running far longer than the
 // 1-minute backstop should ever allow. Both actions go straight to the self-gating RPCs — no
@@ -93,28 +94,26 @@ export default function AdminProblemJobs({ jobs }: { jobs: AdminProblemJob[] }) 
                   </td>
                   <td className="whitespace-nowrap text-right">
                     <div className="inline-flex gap-2">
-                      <button
+                      <Button
                         onClick={() => act(j.id, "requeue")}
                         disabled={busy === j.id}
-                        className="btn-ghost text-xs"
-                        title="Put back in the queue — resumes from the stage it died on"
-                      >
+                        
+                        title="Put back in the queue — resumes from the stage it died on" variant="outline" className="text-xs">
                         {busy === j.id ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                           <RotateCcw className="h-3.5 w-3.5" />
                         )}
                         Requeue
-                      </button>
+                      </Button>
                       {j.status !== "error" && (
-                        <button
+                        <Button
                           onClick={() => act(j.id, "fail")}
                           disabled={busy === j.id}
-                          className="btn-ghost text-xs text-red-300"
-                          title="Stop retrying this job"
-                        >
+                          
+                          title="Stop retrying this job" variant="outline" className="text-xs text-red-300">
                           <XCircle className="h-3.5 w-3.5" /> Fail
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </td>

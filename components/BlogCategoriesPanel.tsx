@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Tag, Plus, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 type Category = { id: string; name: string; description: string | null; postCount: number };
 
@@ -98,10 +99,10 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
             placeholder="Description (optional)"
             className="min-w-[200px] flex-1 rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
           />
-          <button type="submit" disabled={busy === "add" || !name.trim()} className="btn-primary text-xs">
+          <Button type="submit" disabled={busy === "add" || !name.trim()} className="text-xs">
             {busy === "add" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
             Add category
-          </button>
+          </Button>
         </form>
 
         {error && <p className="mb-2 text-sm text-red-300">{error}</p>}

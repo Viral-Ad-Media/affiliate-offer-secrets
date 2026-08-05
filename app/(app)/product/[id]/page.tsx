@@ -13,6 +13,7 @@ import GenerateVideo from "@/components/GenerateVideo";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
 import SocialPostsPanel from "@/components/SocialPostsPanel";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 
 const TABS = [
   { key: "fb_ads_md", label: "FB/IG Ads" },
@@ -144,10 +145,10 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           initialOverride={product.hoplink_override}
         />
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button onClick={copyHoplink} className="btn-primary">
+          <Button onClick={copyHoplink}>
             {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             Copy hoplink
-          </button>
+          </Button>
           {product.sales_page_url && (
             <a href={product.sales_page_url} target="_blank" rel="noreferrer" className="btn-ghost">
               <ExternalLink className="h-4 w-4" /> Sales page
@@ -189,9 +190,9 @@ export default function ProductPage({ params }: { params: { id: string } }) {
               <Link href={`/funnels/${campaign.id}`} className="btn-primary !py-1 text-xs">
                 <Layers className="h-3.5 w-3.5" /> Manage &amp; publish this funnel
               </Link>
-              <button onClick={downloadHtml} className="btn-ghost !py-1 text-xs">
+              <Button onClick={downloadHtml} variant="outline" className="!py-1 text-xs">
                 <Download className="h-3.5 w-3.5" /> Download HTML
-              </button>
+              </Button>
             </div>
           )}
         </div>

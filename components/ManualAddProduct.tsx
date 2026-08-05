@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Loader2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const NETWORK_OPTIONS = [
   { value: "clickbank", label: "ClickBank" },
@@ -57,9 +58,9 @@ export default function ManualAddProduct({ onAdded }: { onAdded: () => void }) {
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="btn-ghost text-xs">
+      <Button onClick={() => setOpen(true)} variant="outline" className="text-xs">
         <Plus className="h-3.5 w-3.5" /> Add product manually
-      </button>
+      </Button>
     );
   }
 
@@ -137,10 +138,10 @@ export default function ManualAddProduct({ onAdded }: { onAdded: () => void }) {
           />
         </div>
         {error && <p className="text-xs text-red-400">{error}</p>}
-        <button type="submit" disabled={busy} className="btn-primary">
+        <Button type="submit" disabled={busy}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           Add product
-        </button>
+        </Button>
       </form>
     </div>
   );

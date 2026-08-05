@@ -10,6 +10,7 @@ import {
   MAX_FOOTER_NOTE,
   type EmailSettings,
 } from "@/lib/emailSettings";
+import { Button } from "@/components/ui/button";
 
 const FIELDS: { key: keyof EmailSettings; label: string; hint?: string; wide?: boolean }[] = [
   { key: "business_name", label: "Business name", hint: "Shown above the address in the footer", wide: true },
@@ -147,9 +148,9 @@ export default function EmailSettingsPanel({ initial }: { initial: EmailSettings
       </section>
 
       <div className="flex items-center gap-2">
-        <button onClick={save} disabled={busy} className="btn-primary text-sm">
+        <Button onClick={save} disabled={busy} className="text-sm">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save
-        </button>
+        </Button>
         {savedAt && Date.now() - savedAt < 4000 && (
           <span className="flex items-center gap-1 text-xs text-emerald-300">
             <CheckCircle2 className="h-3.5 w-3.5" /> Saved

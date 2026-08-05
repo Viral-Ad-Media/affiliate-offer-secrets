@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, Loader2 } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 // Contacts → Import. For a list the tenant already owns; the bridge-page opt-in form remains the
 // path for leads captured from traffic.
@@ -129,10 +130,10 @@ export default function ContactImportPanel({
           </p>
         )}
 
-        <button type="submit" disabled={busy || !csv.trim()} className="btn-primary text-xs">
+        <Button type="submit" disabled={busy || !csv.trim()} className="text-xs">
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
           Import
-        </button>
+        </Button>
       </form>
     </div>
   );

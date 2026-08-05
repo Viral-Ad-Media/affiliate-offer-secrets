@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "@/lib/toast";
 import { blogPostPath, type PermalinkStyle } from "@/lib/blog";
 import { scoreTone } from "@/lib/blogSeo";
+import { Button } from "@/components/ui/button";
 
 type PostRow = {
   id: string;
@@ -175,10 +176,10 @@ export default function BlogManager({
             >
               <Eye className="h-3.5 w-3.5" /> Preview blog
             </a>
-            <button type="button" disabled={busy === "new"} onClick={() => createPost()} className="btn-primary text-xs">
+            <Button type="button" disabled={busy === "new"} onClick={() => createPost()} className="text-xs">
               {busy === "new" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               New post
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -188,12 +189,12 @@ export default function BlogManager({
           <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-ink-700 bg-ink-800/40 px-3 py-2">
             <span className="text-xs text-zinc-300">{selected.size} selected</span>
             <div className="h-4 w-px bg-ink-600" />
-            <button onClick={() => bulk("publish")} disabled={bulkBusy} className="btn-ghost text-xs">
+            <Button onClick={() => bulk("publish")} disabled={bulkBusy} variant="outline" className="text-xs">
               Publish
-            </button>
-            <button onClick={() => bulk("unpublish")} disabled={bulkBusy} className="btn-ghost text-xs">
+            </Button>
+            <Button onClick={() => bulk("unpublish")} disabled={bulkBusy} variant="outline" className="text-xs">
               Unpublish
-            </button>
+            </Button>
             <select
               disabled={bulkBusy}
               defaultValue=""
@@ -212,13 +213,11 @@ export default function BlogManager({
                 </option>
               ))}
             </select>
-            <button
+            <Button
               onClick={() => bulk("delete")}
-              disabled={bulkBusy}
-              className="btn-ghost text-xs text-red-300 hover:text-red-200"
-            >
+              disabled={bulkBusy} variant="outline" className="text-xs text-red-300 hover:text-red-200">
               <Trash2 className="h-3.5 w-3.5" /> Delete
-            </button>
+            </Button>
             {bulkBusy && <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400" />}
             <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-zinc-500 hover:text-zinc-300">
               Clear
@@ -428,12 +427,12 @@ function QuickEditPost({
           </div>
           {err && <p className="text-sm text-red-400">{err}</p>}
           <div className="flex justify-end gap-2 pt-1">
-            <button onClick={onClose} className="btn-ghost text-sm">
+            <Button onClick={onClose} variant="outline" className="text-sm">
               Cancel
-            </button>
-            <button onClick={save} disabled={saving} className="btn-primary text-sm">
+            </Button>
+            <Button onClick={save} disabled={saving} className="text-sm">
               {saving ? "Saving…" : "Save"}
-            </button>
+            </Button>
           </div>
         </div>
       </DialogContent>

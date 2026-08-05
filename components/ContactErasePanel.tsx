@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ShieldX, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 type EraseResult = {
   contacts_deleted: number;
@@ -79,10 +80,10 @@ export default function ContactErasePanel() {
           placeholder="person@example.com"
           className="w-72 max-w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
         />
-        <button type="submit" disabled={busy || !email.trim()} className="btn-ghost text-xs">
+        <Button type="submit" disabled={busy || !email.trim()} variant="outline" className="text-xs">
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldX className="h-3.5 w-3.5" />}
           Erase
-        </button>
+        </Button>
       </form>
 
       {result && (

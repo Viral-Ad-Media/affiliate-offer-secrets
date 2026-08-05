@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Link2, Loader2, Check, X } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 /**
  * Replace the affiliate link this app derives with one pasted from the network account.
@@ -101,18 +102,16 @@ export default function HoplinkOverride({
           </p>
           {error && <p className="text-xs text-red-400">{error}</p>}
           <div className="flex items-center gap-2">
-            <button
+            <Button
               onClick={() => save(value.trim() || null)}
-              disabled={busy}
-              className="btn-primary text-xs"
-            >
+              disabled={busy} className="text-xs">
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
               Save
-            </button>
+            </Button>
             {saved && (
-              <button onClick={() => save(null)} disabled={busy} className="btn-ghost text-xs">
+              <Button onClick={() => save(null)} disabled={busy} variant="outline" className="text-xs">
                 <X className="h-3.5 w-3.5" /> Use the generated link
-              </button>
+              </Button>
             )}
             <button
               onClick={() => {

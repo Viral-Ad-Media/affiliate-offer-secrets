@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Flame, TrendingUp, Sparkles, Plus, Check, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { Button } from "@/components/ui/button";
 
 type Highlight = {
   network: string;
@@ -185,18 +186,16 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
                     <Check className="h-3 w-3" /> Added
                   </span>
                 ) : (
-                  <button
+                  <Button
                     onClick={() => add(h)}
-                    disabled={adding === h.vendor_id}
-                    className="btn-ghost text-xs"
-                  >
+                    disabled={adding === h.vendor_id} variant="outline" className="text-xs">
                     {adding === h.vendor_id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
                       <Plus className="h-3.5 w-3.5" />
                     )}
                     Add
-                  </button>
+                  </Button>
                 )}
               </div>
             </li>

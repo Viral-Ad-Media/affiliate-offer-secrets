@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Instagram, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 type ActiveIg = { ig_user_id: string; ig_username: string } | null;
 
@@ -97,10 +98,10 @@ export default function PostToInstagram({
         className="w-full rounded-lg border border-ink-600 bg-ink-900 p-3 text-sm outline-none focus:border-emerald-500"
       />
       <div className="mt-2 flex items-center gap-2">
-        <button onClick={publish} disabled={busy || !caption.trim()} className="btn-primary">
+        <Button onClick={publish} disabled={busy || !caption.trim()}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Instagram className="h-4 w-4" />}
           Post to Instagram
-        </button>
+        </Button>
         {result && (
           <span className={`text-sm ${result.ok ? "text-emerald-400" : "text-red-400"}`}>
             {result.text}

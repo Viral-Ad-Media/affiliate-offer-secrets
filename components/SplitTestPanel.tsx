@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Beaker, Loader2, Pause, Play, Plus, Trash2, Pencil, X, Eye } from "lucide-react";
 import { useSplitTest } from "@/lib/useSplitTest";
 import PageEditor from "@/components/PageEditor";
+import { Button } from "@/components/ui/button";
 
 export default function SplitTestPanel({
   campaignId,
@@ -55,10 +56,10 @@ export default function SplitTestPanel({
           <Beaker className="h-4 w-4 text-emerald-400" /> Split test
         </div>
         {variants.length === 0 && (
-          <button onClick={startTest} disabled={busy === "start"} className="btn-primary">
+          <Button onClick={startTest} disabled={busy === "start"}>
             {busy === "start" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Start split test
-          </button>
+          </Button>
         )}
       </div>
       {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
@@ -106,39 +107,35 @@ export default function SplitTestPanel({
                         className="w-16 rounded-lg border border-ink-600 bg-ink-800 px-2 py-1 text-xs text-zinc-100"
                       />
                     </label>
-                    <button
+                    <Button
                       onClick={() => toggleStatus(v)}
                       disabled={busy === v.id}
-                      title={v.status === "active" ? "Pause" : "Resume"}
-                      className="btn-ghost !px-2 !py-1"
-                    >
+                      title={v.status === "active" ? "Pause" : "Resume"} variant="outline" className="!px-2 !py-1">
                       {v.status === "active" ? (
                         <Pause className="h-3.5 w-3.5" />
                       ) : (
                         <Play className="h-3.5 w-3.5" />
                       )}
-                    </button>
+                    </Button>
                     {!v.is_control && (
                       <>
-                        <button
+                        <Button
                           onClick={() => setEditingId(editingId === v.id ? null : v.id)}
-                          className="btn-ghost !px-2 !py-1"
-                          title="Edit copy"
-                        >
+                          
+                          title="Edit copy" variant="outline" className="!px-2 !py-1">
                           {editingId === v.id ? (
                             <X className="h-3.5 w-3.5" />
                           ) : (
                             <Pencil className="h-3.5 w-3.5" />
                           )}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           onClick={() => deleteVariant(v.id)}
                           disabled={busy === v.id}
-                          className="btn-ghost !px-2 !py-1 hover:text-red-300"
-                          title="Delete variant"
-                        >
+                          
+                          title="Delete variant" variant="outline" className="!px-2 !py-1 hover:text-red-300">
                           <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        </Button>
                       </>
                     )}
                   </div>
@@ -174,14 +171,12 @@ export default function SplitTestPanel({
           )}
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <button
+            <Button
               onClick={addVariant}
-              disabled={busy === "add" || variants.length >= 5}
-              className="btn-ghost !py-1 text-xs"
-            >
+              disabled={busy === "add" || variants.length >= 5} variant="outline" className="!py-1 text-xs">
               {busy === "add" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               Add variant
-            </button>
+            </Button>
             <div className="ml-auto flex items-center gap-2">
               <select
                 value={promoteId}
@@ -195,10 +190,10 @@ export default function SplitTestPanel({
                   </option>
                 ))}
               </select>
-              <button onClick={endTest} disabled={busy === "end"} className="btn-ghost !py-1 text-xs">
+              <Button onClick={endTest} disabled={busy === "end"} variant="outline" className="!py-1 text-xs">
                 {busy === "end" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 End test
-              </button>
+              </Button>
             </div>
           </div>
         </div>

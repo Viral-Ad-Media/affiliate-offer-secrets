@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Music2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type Status = { connected: boolean; status?: string; tiktok_username?: string; avatar_url?: string };
 
@@ -47,9 +48,9 @@ export default function TikTokPanel({ status }: { status: Status }) {
             )}
           </div>
         </div>
-        <button onClick={disconnect} disabled={busy} className="btn-ghost !py-1 text-xs">
+        <Button onClick={disconnect} disabled={busy} variant="outline" className="!py-1 text-xs">
           Disconnect
-        </button>
+        </Button>
       </div>
     </div>
   );

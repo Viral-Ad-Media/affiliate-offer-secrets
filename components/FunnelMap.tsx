@@ -16,6 +16,7 @@ import {
 import type { FunnelStep, FunnelStepType } from "@/lib/shared";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import SplitTestBranch from "@/components/SplitTestBranch";
+import { Button } from "@/components/ui/button";
 
 const STEP_LABELS: Record<FunnelStepType, string> = {
   thank_you: "Thank-you",
@@ -126,30 +127,27 @@ export default function FunnelMap({
                 onEdit={() => onSelectStep(step.id)}
                 extra={
                   <>
-                    <button
+                    <Button
                       onClick={() => move(step.id, "up")}
                       disabled={busy === step.id || i === 0}
-                      className="btn-ghost !px-2 !py-1"
-                      title="Move up"
-                    >
+                      
+                      title="Move up" variant="outline" className="!px-2 !py-1">
                       <ChevronUp className="h-3.5 w-3.5" />
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       onClick={() => move(step.id, "down")}
                       disabled={busy === step.id || i === steps.length - 1}
-                      className="btn-ghost !px-2 !py-1"
-                      title="Move down"
-                    >
+                      
+                      title="Move down" variant="outline" className="!px-2 !py-1">
                       <ChevronDown className="h-3.5 w-3.5" />
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       onClick={() => remove(step.id)}
                       disabled={busy === step.id}
-                      className="btn-ghost !px-2 !py-1 hover:text-red-300"
-                      title="Delete step"
-                    >
+                      
+                      title="Delete step" variant="outline" className="!px-2 !py-1 hover:text-red-300">
                       <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    </Button>
                   </>
                 }
               />
@@ -170,9 +168,9 @@ export default function FunnelMap({
             <option value="upsell">Upsell</option>
             <option value="order">Order</option>
           </select>
-          <button onClick={addStep} disabled={busy === "add"} className="btn-ghost !py-1 text-xs">
+          <Button onClick={addStep} disabled={busy === "add"} variant="outline" className="!py-1 text-xs">
             <Plus className="h-3.5 w-3.5" /> Add step
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -220,12 +218,12 @@ function MapNode({
         </div>
       </div>
       <div className="flex items-center gap-1.5">
-        <button onClick={onPreview} className="btn-ghost !px-2 !py-1" title="Preview">
+        <Button onClick={onPreview}  title="Preview" variant="outline" className="!px-2 !py-1">
           <Eye className="h-3.5 w-3.5" />
-        </button>
-        <button onClick={onEdit} className="btn-ghost !px-2 !py-1" title="Edit">
+        </Button>
+        <Button onClick={onEdit}  title="Edit" variant="outline" className="!px-2 !py-1">
           <Pencil className="h-3.5 w-3.5" />
-        </button>
+        </Button>
         {extra}
       </div>
     </div>
