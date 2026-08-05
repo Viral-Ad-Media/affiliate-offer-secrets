@@ -68,14 +68,15 @@ async function stageSubmit(stageData: Record<string, unknown>): Promise<BlogImag
   // post's hero and as the thumbnail on every index card, so a multi-megabyte image would be
   // re-sent inside the page on every load, twelve times over on a full index page.
   //
-  // NOT LIVE-VERIFIED: kie.ai's docs 404'd from this environment, so "jpeg" as an output_format
-  // value is inferred from "png" being accepted, not confirmed. If the first real run fails at the
-  // submit stage with a kie.ai parameter error, that is why — try "jpg", or drop the parameter and
-  // instead serve the image from Storage rather than inlining it (see the note below).
+  // "jpg", not "jpeg" — VERIFIED against kie.ai's own parameter schema, whose output_format enum
+  // is exactly ["png", "jpg"]. It shipped as "jpeg" (inferred, since the docs 404'd from here) and
+  // failed every real run with "output_format is not within the range of allowed options". The
+  // lesson is the one this codebase already applies to every other external API: check the real
+  // shape before writing against it, and treat an inferred value as a known defect until you have.
   const taskId = await createKieTask("nano-banana-2", {
     prompt: stageData.image_prompt,
     aspect_ratio: "16:9",
-    output_format: "jpeg",
+    output_format: "jpg",
   });
   return { stageData: { ...stageData, task_id: taskId } };
 }
