@@ -66,6 +66,11 @@ export default async function ContactsPage({
     if (title) titleByCampaign.set(c.id, title);
   }
 
+  // Same rows the title map above is built from — the picker doesn't need its own query.
+  const campaignOptions = Array.from(titleByCampaign, ([id, title]) => ({ id, title })).sort((a, b) =>
+    a.title.localeCompare(b.title)
+  );
+
   const tags: ContactTag[] = (allTags ?? []) as ContactTag[];
   const tagById = new Map(tags.map((t) => [t.id, t]));
 
@@ -109,7 +114,13 @@ export default async function ContactsPage({
           Leads captured from your bridge pages' opt-in forms.
         </p>
       </header>
-      <ContactsTable contacts={contacts} allTags={tags} activeTag={tagFilter} total={total} />
+      <ContactsTable
+        contacts={contacts}
+        allTags={tags}
+        activeTag={tagFilter}
+        total={total}
+        campaigns={campaignOptions}
+      />
       <Pager
         page={page}
         total={total}

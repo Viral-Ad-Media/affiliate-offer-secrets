@@ -61,11 +61,13 @@ export default function ContactsTable({
   allTags,
   activeTag,
   total,
+  campaigns,
 }: {
   contacts: Contact[];
   allTags: ContactTag[];
   activeTag: string | null;
   total: number;
+  campaigns: { id: string; title: string }[];
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
@@ -374,6 +376,7 @@ export default function ContactsTable({
       {adding && (
         <AddContactDialog
           allTags={allTags}
+          campaigns={campaigns}
           onClose={() => setAdding(false)}
           onSaved={() => {
             setAdding(false);
@@ -408,16 +411,19 @@ export default function ContactsTable({
  */
 function AddContactDialog({
   allTags,
+  campaigns,
   onClose,
   onSaved,
 }: {
   allTags: ContactTag[];
+  campaigns: { id: string; title: string }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [tagId, setTagId] = useState("");
+  const [campaignId, setCampaignId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -430,7 +436,12 @@ function AddContactDialog({
     const res = await fetch("/api/contacts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, first_name: firstName, tag_id: tagId || null }),
+      body: JSON.stringify({
+        email,
+        first_name: firstName,
+        tag_id: tagId || null,
+        campaign_id: campaignId || null,
+      }),
     });
     const json = await res.json().catch(() => ({}));
     setSaving(false);
@@ -475,6 +486,27 @@ function AddContactDialog({
               className={field}
             />
           </div>
+
+          {campaigns.length > 0 && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-zinc-400">Campaign</label>
+              <select
+                value={campaignId}
+                onChange={(e) => setCampaignId(e.target.value)}
+                className={field}
+              >
+                <option value="">No campaign</option>
+                {campaigns.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-zinc-500">
+                Which offer this lead belongs to, the same way a bridge-page opt-in is attributed.
+              </p>
+            </div>
+          )}
 
           {allTags.length > 0 && (
             <div>

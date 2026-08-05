@@ -29,6 +29,7 @@ export async function POST(req: Request) {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const firstName = typeof body.first_name === "string" ? body.first_name.trim().slice(0, MAX_NAME) : "";
   const tagId = typeof body.tag_id === "string" && body.tag_id ? body.tag_id : null;
+  const campaignId = typeof body.campaign_id === "string" && body.campaign_id ? body.campaign_id : null;
 
   if (!isValidEmail(email)) {
     return NextResponse.json({ error: "Enter a valid email address" }, { status: 400 });
@@ -47,9 +48,21 @@ export async function POST(req: Request) {
       .maybeSingle();
     if (!tag) return NextResponse.json({ error: "tag not found" }, { status: 404 });
   }
+  if (campaignId) {
+    const { data: campaign } = await admin
+      .from("campaigns")
+      .select("id")
+      .eq("id", campaignId)
+      .eq("workspace_id", ws)
+      .maybeSingle();
+    if (!campaign) return NextResponse.json({ error: "campaign not found" }, { status: 404 });
+  }
 
-  // The partial unique index on (campaign_id, lower(email)) only covers rows that HAVE a campaign,
-  // and a manual add has none — so the duplicate check is explicit rather than delegated to the DB.
+  // Workspace-wide on email, deliberately wider than the DB's own guard. The partial unique index
+  // is on (campaign_id, lower(email)) and skips rows with no campaign, so it can't be relied on
+  // for an unattributed add — and where it does apply it would still let the same person be added
+  // twice under two campaigns. One human, one row: attribution is a property of the lead, not a
+  // reason to duplicate them. Matches what the CSV import does.
   const { data: existing } = await admin
     .from("contacts")
     .select("id")
@@ -67,6 +80,7 @@ export async function POST(req: Request) {
       // Explicit: this is the admin client, where auth.uid() is NULL, so stamp_workspace_id would
       // otherwise fall back to this user's OWN workspace rather than the one they're looking at.
       workspace_id: ws,
+      campaign_id: campaignId,
       first_name: firstName || null,
       email,
     })
