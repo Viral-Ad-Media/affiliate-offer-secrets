@@ -2861,6 +2861,61 @@ Full name / Phone / Second email / Message / Checkbox / Choose one / Dropdown, e
   last_name/phone/message/budget plus the SELECTED radio option, an unticked checkbox stored
   nothing and a ticked one stored "yes".
 
+## The palette offers Input, not Form; a button's action lives in its settings
+
+Two changes to the same idea — the canvas shows the PAGE, and what a block *does* belongs behind
+its ⚙ rather than printed underneath it.
+
+**"Input" replaced "Form" in the element palette.** Something still has to POST, but which
+container that is isn't a decision worth making every time you want to collect a phone number.
+`insertFormInput` (`lib/engine/blockTree.ts`) walks the tree for the LAST `form` or
+`lead_capture_form` and appends there — so on a funnel opt-in page an input lands where the leads
+already go — and only wraps a new form around the field when the page has none. `fieldKey` is
+de-duplicated against the fields already on that form, because it is the CSV column header and the
+key in `contacts.extra_fields`; two fields sharing one would silently overwrite.
+
+`FORM_FIELD_PRESETS` is the "what does this collect" dropdown (last name, full name, phone, second
+email, company, website, budget, message, consent, choice, dropdown, custom). Picking one sets
+`fieldKey`, `fieldType`, label and placeholder **together** — they are one decision, and letting
+them drift is how a field ends up labelled Phone and stored under `budget`. **first_name and email
+are deliberately absent**: the form renders those itself and they can't be removed, so a preset for
+either would create a duplicate that silently overwrites the real one.
+
+**`form_input` needed its own selection lookup.** `findBlockLocation` deliberately doesn't walk a
+form's children — a field is never a drop target and has no style keys — so `findFormInputBlock`
+(`WysiwygCanvas.tsx`) is a second, narrower resolver rather than widening the shared locator and
+changing what every drag/move call site sees. `STYLE_KEYS_BY_TYPE` still has no `form_input` entry,
+so a field's panel is content settings only.
+
+**The button's action moved into `components/BlockSettingsPanel.tsx`.** It was a row of selects on
+the canvas under every button — chrome the published page doesn't have, making a button look twice
+its real height. The canvas now edits only the label and shows the destination as a hover line.
+`BlockSettingsPanel` renders content settings and `BlockStylePanel` renders look-and-feel; keeping
+them separate is deliberate — style keys are a uniform table driving generic controls, content
+settings are a per-type union editor.
+
+A kind with nothing to point at is never offered (scroll needs another block, popup needs a form),
+because an unresolvable target is a **hard reject in the validator — it fails the whole page save,
+not just that block**. Verified directly: a valid scroll target round-trips, a `javascript:` href
+and a quote-injecting scroll target are both refused at save, and a pre-actions bare `href` still
+works through the same promote-to-`{kind:"link"}` adapter.
+
+## A failed poll must not be stored where an array belongs
+
+`/api/products` and `/api/jobs` answer `{error}` on 401/500, and `ProductsPanel` polls both every
+5s for as long as the tab is open — so a session expiring mid-session WILL hit it. Storing that
+object in `useState<Job[]>` crashed the next render with `A.filter is not a function`, which
+presents as "products never load" rather than "you were signed out". The panel now checks
+`res.ok`/`Array.isArray`, keeps the last good data on screen, and shows a reload banner.
+
+The server half is worth knowing because it affects ~40 other routes:
+**`currentWorkspaceId()` returning `null` is not a filter value.** Both backing RPCs key off
+`auth.uid()` and answer NULL rather than erroring when it's missing, so a null flows into
+`.eq("workspace_id", null)` → PostgREST `eq.null` → Postgres refuses to cast `"null"` to uuid →
+the route answers a **500** where a 401 was meant. Confirmed against the live database. The two
+polled routes now guard with `workspaceRequiredResponse()`; every other route that builds a query
+around `ws` has the same latent 500.
+
 ## Email: transport vs identity
 
 Two different things in two different places, deliberately.

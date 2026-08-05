@@ -321,6 +321,38 @@ export type ElementBlock =
   | CountdownBlock
   | FormBlock;
 
+/**
+ * What a form field COLLECTS, as a named list rather than an input type.
+ *
+ * The dropdown people want says "Phone", not "tel" — the input type and the field key are
+ * consequences of that choice, not separate decisions. Keeping them together here is also what
+ * stops a "Phone" field from being stored under a random key: `fieldKey` becomes the CSV column
+ * header and the JSON key in contacts.extra_fields, so it has to stay readable.
+ *
+ * `first_name`/`email` are deliberately absent: the form renders those itself and they can't be
+ * removed, so offering them would create a duplicate that silently overwrites the real one.
+ */
+export const FORM_FIELD_PRESETS: {
+  id: string;
+  label: string;
+  fieldKey: string;
+  fieldType: FormFieldType;
+  placeholder?: string;
+}[] = [
+  { id: "last_name", label: "Last name", fieldKey: "last_name", fieldType: "text", placeholder: "Last name" },
+  { id: "full_name", label: "Full name", fieldKey: "full_name", fieldType: "text", placeholder: "Full name" },
+  { id: "phone", label: "Phone", fieldKey: "phone", fieldType: "tel", placeholder: "Phone number" },
+  { id: "alt_email", label: "Second email", fieldKey: "alt_email", fieldType: "email", placeholder: "Email address" },
+  { id: "company", label: "Company", fieldKey: "company", fieldType: "text", placeholder: "Company name" },
+  { id: "website", label: "Website", fieldKey: "website", fieldType: "url", placeholder: "https://" },
+  { id: "budget", label: "Budget", fieldKey: "budget", fieldType: "number", placeholder: "Budget" },
+  { id: "message", label: "Message", fieldKey: "message", fieldType: "textarea", placeholder: "Your message" },
+  { id: "consent", label: "Checkbox", fieldKey: "consent", fieldType: "checkbox" },
+  { id: "choice", label: "Choose one", fieldKey: "choice", fieldType: "radio" },
+  { id: "dropdown", label: "Dropdown", fieldKey: "dropdown", fieldType: "select", placeholder: "Select one…" },
+  { id: "custom", label: "Something else", fieldKey: "custom", fieldType: "text", placeholder: "" },
+];
+
 export const ELEMENT_BLOCK_TYPES = [
   "heading",
   "subheading",
@@ -1256,6 +1288,81 @@ export function insertElement(tree: PageBlockTree, ref: ContainerRef, index: num
   } as ElementBlock;
   const clamped = Math.max(0, Math.min(index, items.length));
   return withContainer(tree, ref, [...items.slice(0, clamped), block, ...items.slice(clamped)]);
+}
+
+/**
+ * Adds an Input, creating the form it needs if the page hasn't got one.
+ *
+ * The palette offers Input, not Form: something still has to POST, but which container that is
+ * isn't a decision worth making every time you want to collect a phone number. So — append to the
+ * LAST form already on the page (the locked opt-in form counts, so a funnel page's inputs land
+ * where the leads already go), else wrap a new form around the first one.
+ *
+ * "Last" rather than "nearest to the selection" on purpose: a page reads top to bottom, the form
+ * is normally at the end of it, and a rule you can state in one sentence beats one that's
+ * marginally smarter and unpredictable.
+ */
+export function insertFormInput(tree: PageBlockTree, ref: ContainerRef, index: number): PageBlockTree {
+  const field: FormInputBlock = {
+    id: newBlockId(),
+    type: "form_input",
+    style: {},
+    content: { label: "Last name", fieldKey: "last_name", fieldType: "text", placeholder: "Last name", required: false },
+  };
+
+  let target: string | null = null;
+  const visit = (b: any) => {
+    if (b?.type === "form" || b?.locked === "lead_capture_form") target = b.id as string;
+    for (const k of ["children", "columns"]) {
+      const kids = b?.[k];
+      if (Array.isArray(kids)) kids.forEach(visit);
+    }
+  };
+  tree.blocks.forEach(visit);
+
+  if (target) {
+    // Field keys are the CSV headers, so a second "Last name" must not silently overwrite the
+    // first — uniqueFieldKey is the editor's job for presets, and this is the same guarantee for
+    // the default one.
+    const used = new Set<string>();
+    const collect = (b: any) => {
+      if (b?.type === "form_input") used.add(b.content?.fieldKey);
+      for (const k of ["children", "columns"]) {
+        const kids = b?.[k];
+        if (Array.isArray(kids)) kids.forEach(collect);
+      }
+    };
+    tree.blocks.forEach(collect);
+    if (used.has(field.content.fieldKey)) {
+      let n = 2;
+      while (used.has(`${field.content.fieldKey}_${n}`)) n++;
+      field.content.fieldKey = `${field.content.fieldKey}_${n}`;
+    }
+    return { ...tree, blocks: tree.blocks.map((b) => addChildTo(b, target!, field)) };
+  }
+
+  if (ref.kind === "root") return tree;
+  const items = getContainer(tree, ref);
+  if (!items) return tree;
+  const form: ElementBlock = {
+    id: newBlockId(),
+    type: "form",
+    style: {},
+    content: { title: "", submitText: "Send", successText: "Thanks — we'll be in touch.", popup: false },
+    children: [field],
+  } as ElementBlock;
+  const clamped = Math.max(0, Math.min(index, items.length));
+  return withContainer(tree, ref, [...items.slice(0, clamped), form, ...items.slice(clamped)]);
+}
+
+/** Appends `child` to whichever descendant of `node` has id === parentId. */
+function addChildTo(node: any, parentId: string, child: any): any {
+  if (node?.id === parentId) return { ...node, children: [...(node.children ?? []), child] };
+  const out = { ...node };
+  for (const k of ["children", "columns"] as const) {
+    if (Array.isArray(node?.[k])) out[k] = node[k].map((c: any) => addChildTo(c, parentId, child));
+  }
+  return out;
 }
 
 // Inserts a brand-new Row (with `layout`'s fixed number of empty Columns — 1/2/3, no drag-to-

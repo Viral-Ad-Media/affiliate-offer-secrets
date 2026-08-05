@@ -79,6 +79,9 @@ export default function ProductsPanel({
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [jobs, setJobs] = useState<Job[]>([]);
+  // The last poll failed. Almost always an expired session; the banner links to a reload rather
+  // than guessing, since a transient 500 recovers on the next tick without anyone doing anything.
+  const [stale, setStale] = useState(false);
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -95,16 +98,27 @@ export default function ProductsPanel({
   const load = useCallback(async () => {
     const params = new URLSearchParams({ page: String(page) });
     for (const s of statusKey ? statusKey.split(",") : []) params.append("status", s);
+    // Both endpoints answer `{error}` on 401/500, and this poll runs every 5s for as long as the
+    // tab is open — so a session that expires mid-session WILL hit it. Storing that object where an
+    // array belongs used to crash the whole page on the next render ("A.filter is not a function"),
+    // which reads as "products never load" rather than as "you were signed out". Keep the last good
+    // data on screen and say what happened instead.
     const [p, j] = await Promise.all([
-      fetch(`/api/products?${params}`).then((r) => r.json()),
-      fetch("/api/jobs").then((r) => r.json()),
+      fetch(`/api/products?${params}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch("/api/jobs").then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
-    setProducts(p.rows ?? []);
-    setTotal(p.total ?? 0);
-    setJobs(j);
+    setStale(!p || !j);
+    if (!p && !j) return;
+
+    const jobRows: Job[] = Array.isArray(j) ? j : [];
+    if (p) {
+      setProducts(Array.isArray(p.rows) ? p.rows : []);
+      setTotal(p.total ?? 0);
+    }
+    if (Array.isArray(j)) setJobs(jobRows);
     onData?.({
-      stats: p.stats ?? { total: 0, promoting: 0, selected: 0, avg_gravity: 0 },
-      openJobs: (j as Job[]).filter((x) => x.status === "pending" || x.status === "running"),
+      stats: p?.stats ?? { total: 0, promoting: 0, selected: 0, avg_gravity: 0 },
+      openJobs: jobRows.filter((x) => x.status === "pending" || x.status === "running"),
     });
     // onData is deliberately not a dependency — a host passing an inline arrow would otherwise
     // rebuild `load` every render and restart the poll interval on every tick.
@@ -222,6 +236,14 @@ export default function ProductsPanel({
             isMultiSelect
           />
         </div>
+        {stale && (
+          <div className="border-b border-ink-700 bg-amber-500/10 px-4 py-2 text-xs text-amber-300">
+            Couldn&apos;t refresh this list — your session may have expired.{" "}
+            <button onClick={() => window.location.reload()} className="underline">
+              Reload
+            </button>
+          </div>
+        )}
         <div className="border-b border-ink-700 px-4 py-2.5">
           <ManualAddProduct onAdded={load} />
         </div>

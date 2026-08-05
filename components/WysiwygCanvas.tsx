@@ -44,6 +44,8 @@ import {
   moveBlockToContainer,
   insertElement,
   insertRow,
+  insertFormInput,
+  FORM_FIELD_PRESETS,
   containerKey,
   parseContainerKey,
   ALLOWED_ICON_NAMES,
@@ -68,6 +70,7 @@ import {
 } from "@/lib/engine/renderPages";
 import { parseVideoUrl, sourceToDisplayUrl, embedUrl } from "@/lib/engine/videoEmbed";
 import BlockStylePanel from "@/components/BlockStylePanel";
+import BlockSettingsPanel, { hasContentSettings } from "@/components/BlockSettingsPanel";
 import EditorSidePanel from "@/components/EditorSidePanel";
 
 // What the per-field dropdown offers. Labelled for humans ("Phone", not "tel") but valued with
@@ -142,6 +145,9 @@ function blockInlineStyle(block: { type: string; style: BlockStyle }): React.CSS
 }
 
 type ElementBlockTypeLocal = (typeof ELEMENT_BLOCK_TYPES)[number];
+// The palette offers Input, which is NOT an ElementBlockType — a form_input only ever exists as a
+// child of a form, so it is inserted through insertFormInput rather than insertElement.
+type PaletteType = ElementBlockTypeLocal | "form_input";
 
 // Matches the real page's <style> block in lib/engine/renderPages.ts — this canvas IS the editor
 // (no separate form-panel-plus-iframe split), so drift here means the editor stops looking like
@@ -164,7 +170,7 @@ const DEVICE_WIDTHS: Record<"desktop" | "tablet" | "mobile", number | string> = 
   mobile: 360,
 };
 
-const ELEMENT_PALETTE: { type: ElementBlockTypeLocal; label: string; icon: any }[] = [
+const ELEMENT_PALETTE: { type: PaletteType; label: string; icon: any }[] = [
   { type: "heading", label: "Heading", icon: Heading1 },
   { type: "subheading", label: "Subheading", icon: Heading2 },
   { type: "paragraph", label: "Paragraph", icon: AlignLeft },
@@ -179,7 +185,7 @@ const ELEMENT_PALETTE: { type: ElementBlockTypeLocal; label: string; icon: any }
   { type: "testimonial", label: "Testimonial", icon: Quote },
   { type: "carousel", label: "Carousel", icon: GalleryHorizontal },
   { type: "countdown", label: "Countdown", icon: Timer },
-  { type: "form", label: "Form", icon: TextCursorInput },
+  { type: "form_input", label: "Input", icon: TextCursorInput },
 ];
 
 /**
@@ -196,6 +202,37 @@ const LOCKED_REASONS: Record<string, string> = {
 
 // A human-readable name for one block, for the button-action target dropdowns. Prefers the block's
 // own text so a page with four headings doesn't offer four entries called "Heading".
+/**
+ * A form's fields are the one part of the tree `findBlockLocation` deliberately doesn't walk — a
+ * form_input is never a drop target and never independently stylable, so nothing else needed to
+ * resolve one. Its settings panel does, hence a second, narrower lookup rather than widening the
+ * shared locator and changing what every drag/move call site sees.
+ */
+function findFormInputBlock(tree: PageBlockTree, id: string): FormInputBlock | null {
+  const inForm = (b: Block): FormInputBlock | null => {
+    const kids = (b as { children?: FormInputBlock[] }).children;
+    if (!Array.isArray(kids)) return null;
+    return kids.find((f) => f.id === id) ?? null;
+  };
+  const scan = (blocks: Block[]): FormInputBlock | null => {
+    for (const b of blocks) {
+      const hit = inForm(b);
+      if (hit) return hit;
+      if (b.type === "section") {
+        const s = scan(b.children as Block[]);
+        if (s) return s;
+      } else if (b.type === "row") {
+        for (const col of b.columns) {
+          const c = scan(col.children as Block[]);
+          if (c) return c;
+        }
+      }
+    }
+    return null;
+  };
+  return scan(tree.blocks as Block[]);
+}
+
 function blockLabel(b: Block): string {
   if (b.type === "section") return "Section";
   if (b.type === "row") return "Row";
@@ -483,7 +520,7 @@ function NestedItemWrapper({
 // `onPickRow` is only passed for Section-level menus (columns can't contain rows — no code path
 // exists for it, matching the schema's ColumnBlock.children: ElementBlock[] shape) — its presence
 // is what toggles the extra "Row" section of the menu on/off.
-function AddBlockMenu({ onPick, onPickRow }: { onPick: (type: ElementBlockTypeLocal) => void; onPickRow?: (layout: RowBlock["layout"]) => void }) {
+function AddBlockMenu({ onPick, onPickRow }: { onPick: (type: PaletteType) => void; onPickRow?: (layout: RowBlock["layout"]) => void }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative inline-block">
@@ -550,7 +587,7 @@ function EditorPalette({
   onPick,
   onPickRow,
 }: {
-  onPick: (type: ElementBlockTypeLocal) => void;
+  onPick: (type: PaletteType) => void;
   onPickRow: (layout: RowBlock["layout"]) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -643,7 +680,7 @@ function ColumnEditor({
   colIndex: number;
   renderElement: RenderElementFn;
   onDeleteElement: (containerId: string, elementId: string) => void;
-  onAddElement: (ref: ContainerRef, type: ElementBlockTypeLocal) => void;
+  onAddElement: (ref: ContainerRef, type: PaletteType) => void;
   selectedBlockId: string | null;
   onSelectBlock: (id: string) => void;
 }) {
@@ -686,7 +723,7 @@ function RowEditor({
   row: RowBlock;
   renderElement: RenderElementFn;
   onDeleteElement: (containerId: string, elementId: string) => void;
-  onAddElement: (ref: ContainerRef, type: ElementBlockTypeLocal) => void;
+  onAddElement: (ref: ContainerRef, type: PaletteType) => void;
   selectedBlockId: string | null;
   onSelectBlock: (id: string) => void;
 }) {
@@ -723,7 +760,7 @@ function SectionBody({
   section: SectionBlock;
   renderElement: RenderElementFn;
   onDeleteChild: (containerId: string, childId: string) => void;
-  onAddElement: (ref: ContainerRef, type: ElementBlockTypeLocal) => void;
+  onAddElement: (ref: ContainerRef, type: PaletteType) => void;
   onAddRow: (sectionId: string, layout: RowBlock["layout"]) => void;
   selectedBlockId: string | null;
   onSelectBlock: (id: string) => void;
@@ -843,7 +880,9 @@ export default function WysiwygCanvas({
   // object via findBlockLocation on every render (never stored stale) so it survives edits to
   // OTHER blocks (a sibling's commit re-renders the tree, but the selected id still resolves).
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
-  const selectedBlock: Block | null = selectedBlockId ? findBlockLocation(tree, selectedBlockId)?.block ?? null : null;
+  const selectedBlock: Block | null = selectedBlockId
+    ? findBlockLocation(tree, selectedBlockId)?.block ?? findFormInputBlock(tree, selectedBlockId)
+    : null;
   // The appendix isn't in the tree, so findBlockLocation can't resolve it — check by id instead.
   const appendixSelected = !!appendix && selectedBlockId === appendix.id;
   // Page settings aren't a block either, so they get their own sentinel rather than an id
@@ -926,7 +965,13 @@ export default function WysiwygCanvas({
     onChange({ ...tree, blocks: tree.blocks.filter((b) => b.id !== blockId) });
   }
 
-  function addElement(ref: ContainerRef, type: ElementBlockTypeLocal) {
+  function addElement(ref: ContainerRef, type: PaletteType) {
+    // Input is the palette item; the form is implied — insertFormInput appends to the page's
+    // existing form (the locked opt-in one counts) or wraps a new one around the first field.
+    if (type === "form_input") {
+      onChange(insertFormInput(tree, ref, Number.MAX_SAFE_INTEGER));
+      return;
+    }
     onChange(insertElement(tree, ref, Number.MAX_SAFE_INTEGER, type));
   }
 
@@ -949,7 +994,7 @@ export default function WysiwygCanvas({
     return lastSection ? { kind: "section", sectionId: lastSection.id } : null;
   }
 
-  function paletteAddElement(type: ElementBlockTypeLocal) {
+  function paletteAddElement(type: PaletteType) {
     const ref = paletteTargetRef();
     if (ref) addElement(ref, type);
   }
@@ -1206,40 +1251,27 @@ export default function WysiwygCanvas({
           </div>
         );
       case "button": {
-        // Read through `action`, falling back to a pre-actions bare `href` exactly the way the
-        // validator and renderer already do. This editor used to read and write `content.href`
-        // directly, which stopped doing anything the moment actions landed: the validator resolves
-        // `action.href ?? content.href`, so a newly-inserted button (which always has an `action`)
-        // silently discarded every URL typed here.
+        // The action lives in the ⚙ settings panel now (BlockSettingsPanel) — it was a row of
+        // selects sitting under the button on the canvas, which is chrome the published page
+        // doesn't have and which made a button look twice its real height while editing. Only the
+        // label is edited in place; a short summary of where it goes stays visible on hover so you
+        // don't have to open the panel to answer "where does this go".
         const action: ButtonAction = el.content.action ?? { kind: "link", href: el.content.href ?? "" };
-        const targets = actionTargets().filter((t) => t.id !== el.id);
-        const forms = targets.filter((t) => t.isForm);
-        // A scroll/popup target that isn't a real id is a hard reject in the validator — it would
-        // fail the whole page save, not just this block — so a kind with nothing to point at is
-        // never offered, and switching to one always seeds a real id.
-        const kinds: { value: ButtonAction["kind"]; label: string; enabled: boolean }[] = [
-          { value: "link", label: "Go to URL", enabled: true },
-          { value: "scroll", label: "Scroll to…", enabled: targets.length > 0 },
-          { value: "popup", label: "Open form…", enabled: forms.length > 0 },
-          { value: "submit", label: "Submit this form", enabled: true },
-        ];
-        const actionForKind = (kind: ButtonAction["kind"]): ButtonAction => {
-          switch (kind) {
+        const targets = actionTargets();
+        const label = (() => {
+          switch (action.kind) {
             case "scroll":
-              return { kind: "scroll", targetId: targets[0]?.id ?? "" };
+              return `Scrolls to ${targets.find((t) => t.id === action.targetId)?.label ?? "a deleted block"}`;
             case "popup":
-              return { kind: "popup", formId: forms[0]?.id ?? "" };
+              return `Opens ${targets.find((t) => t.id === action.formId)?.label ?? "a deleted form"}`;
             case "submit":
-              return { kind: "submit" };
+              return "Submits the form it's in";
             default:
-              // Keep whatever URL was already there; "" would fail isValidRedirectUrl on save.
-              return { kind: "link", href: action.kind === "link" ? action.href : "https://example.com" };
+              return action.href ? `Goes to ${action.href}` : "No destination set yet";
           }
-        };
-        const selectCls =
-          "rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600";
+        })();
         return (
-          <div className="my-2">
+          <div className="group/btn my-2">
             <EditableText
               as="span"
               value={el.content.text}
@@ -1248,56 +1280,8 @@ export default function WysiwygCanvas({
               className="inline-block rounded-lg bg-[#16a34a] px-6 py-3 text-[15px] font-semibold text-white"
               style={blockInlineStyle(el)}
             />
-            <div className="mt-1 flex max-w-md flex-wrap items-center gap-1.5">
-              <select
-                value={action.kind}
-                onChange={(e) => commit(el.id, { action: actionForKind(e.target.value as ButtonAction["kind"]) })}
-                className={selectCls}
-              >
-                {kinds.map((k) => (
-                  <option key={k.value} value={k.value} disabled={!k.enabled}>
-                    {k.label}
-                  </option>
-                ))}
-              </select>
-
-              {action.kind === "link" && (
-                <input
-                  type="url"
-                  defaultValue={action.href}
-                  onBlur={(e) => commit(el.id, { action: { kind: "link", href: e.target.value } })}
-                  placeholder="https://example.com"
-                  className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
-                />
-              )}
-
-              {action.kind === "scroll" && (
-                <select
-                  value={action.targetId}
-                  onChange={(e) => commit(el.id, { action: { kind: "scroll", targetId: e.target.value } })}
-                  className={`${selectCls} min-w-0 flex-1`}
-                >
-                  {targets.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {action.kind === "popup" && (
-                <select
-                  value={action.formId}
-                  onChange={(e) => commit(el.id, { action: { kind: "popup", formId: e.target.value } })}
-                  className={`${selectCls} min-w-0 flex-1`}
-                >
-                  {forms.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              )}
+            <div className="mt-1 truncate text-[11px] text-gray-400 opacity-0 transition-opacity group-hover/btn:opacity-100">
+              {label}
             </div>
           </div>
         );
@@ -1774,6 +1758,14 @@ export default function WysiwygCanvas({
           </label>
           <button
             type="button"
+            title="Input settings"
+            onClick={() => setSelectedBlockId(field.id)}
+            className="hidden text-gray-400 hover:text-gray-700 group-hover/item:block"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
             onClick={() => onChange(removeChildBlock(tree, formId, field.id))}
             className="hidden text-gray-400 hover:text-red-500 group-hover/item:block"
           >
@@ -2047,7 +2039,31 @@ export default function WysiwygCanvas({
             </EditorSidePanel>
           ) : (
             selectedBlock && (
-              <BlockStylePanel block={selectedBlock} onChange={updateStyle} onClose={() => setSelectedBlockId(null)} />
+              <>
+                {/* Content settings first — what the block DOES is the reason you opened the panel;
+                    how it looks is the follow-up. A form_input has no style keys at all, so for a
+                    field this is the whole panel. */}
+                {hasContentSettings(selectedBlock) && (
+                  <EditorSidePanel
+                    title={selectedBlock.type === "button" ? "Button" : "Input"}
+                    onClose={() => setSelectedBlockId(null)}
+                  >
+                    <BlockSettingsPanel
+                      block={selectedBlock}
+                      onChange={commit}
+                      targets={actionTargets()}
+                      forms={actionTargets().filter((t) => t.isForm)}
+                    />
+                  </EditorSidePanel>
+                )}
+                {selectedBlock.type !== "form_input" && (
+                  <BlockStylePanel
+                    block={selectedBlock}
+                    onChange={updateStyle}
+                    onClose={() => setSelectedBlockId(null)}
+                  />
+                )}
+              </>
             )
           )}
         </div>

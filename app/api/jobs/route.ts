@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { chargeForQueuedJob, insufficientCreditsResponse } from "@/lib/credits";
-import { currentWorkspaceId } from "@/lib/workspace";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { CLICKBANK_CATEGORIES } from "@/lib/categories";
 import { getCachedMarketplaceHits } from "@/lib/engine/marketplaceCache";
@@ -18,6 +18,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const { data: jobs, error } = await supabase
     .from("jobs")

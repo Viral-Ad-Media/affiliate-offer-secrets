@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { currentWorkspaceId } from "@/lib/workspace";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { PAGE_SIZE, pageRange } from "@/components/Pager";
 import { PRODUCT_STATUSES } from "@/lib/shared";
@@ -18,6 +18,7 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const url = new URL(req.url);
   const rawPage = Number.parseInt(url.searchParams.get("page") ?? "1", 10);

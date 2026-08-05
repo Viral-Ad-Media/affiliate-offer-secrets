@@ -46,6 +46,17 @@ export const currentWorkspaceId = cache(async (): Promise<string | null> => {
   return (data as string | null) ?? null;
 });
 
+// `currentWorkspaceId()` returning null is not a filter value — it is "I could not resolve a
+// workspace", which in practice means the session behind this request is no longer valid (both
+// backing RPCs key off auth.uid() and answer NULL rather than erroring when it is missing).
+// Passing it on as `.eq("workspace_id", null)` sends PostgREST `eq.null`, which Postgres rejects
+// casting to uuid — so the route answers a 500 whose body is `{error}` instead of a 401. A client
+// that stored that object where an array belonged then crashed on the next render. Routes that
+// poll should call this and return its response rather than building a query around a null.
+export function workspaceRequiredResponse(): Response {
+  return Response.json({ error: "not signed in" }, { status: 401 });
+}
+
 // Null unless this request arrived on a workspace subdomain. Exported because the `(app)` layout
 // needs to know "am I already on a subdomain?" to decide whether to redirect there, which is a
 // different question from "which workspace is this" — a subdomain you aren't a member of has a
