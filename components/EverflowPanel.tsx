@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Network, Loader2, CheckCircle2, Trash2, ExternalLink } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 export type EverflowStatus = {
   connected: boolean;
@@ -64,7 +65,7 @@ export default function EverflowPanel({ initial }: { initial: EverflowStatus }) 
   }
 
   return (
-    <section className="card space-y-4 p-4">
+    <Card as="section" className="space-y-4 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
@@ -157,6 +158,6 @@ export default function EverflowPanel({ initial }: { initial: EverflowStatus }) 
           </a>
         </div>
       </form>
-    </section>
+    </Card>
   );
 }

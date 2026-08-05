@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Tag, Plus, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type Category = { id: string; name: string; description: string | null; postCount: number };
 
@@ -85,7 +86,7 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
         </p>
       </div>
 
-      <section className="card p-4">
+      <Card as="section" className="p-4">
         <form onSubmit={add} className="mb-4 flex flex-wrap items-center gap-2">
           <input
             value={name}
@@ -196,7 +197,7 @@ export default function BlogCategoriesPanel({ categories }: { categories: Catego
             ))}
           </div>
         )}
-      </section>
+      </Card>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Search, ChevronDown, ChevronRight } from "lucide-react";
 import { MAX_SEO_TITLE, MAX_SEO_DESCRIPTION } from "@/lib/seo";
+import { Card } from "@/components/ui/card";
 
 export type SeoValues = { seo_title: string; seo_description: string; seo_index?: boolean };
 
@@ -26,7 +27,7 @@ export default function SeoFields({
   const set = (patch: Partial<SeoValues>) => onChange({ ...values, ...patch });
 
   return (
-    <section className="card overflow-hidden">
+    <Card as="section" className="overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -86,6 +87,6 @@ export default function SeoFields({
           {noteWhenNoindex && <p className="text-[12px] text-zinc-500">{noteWhenNoindex}</p>}
         </div>
       )}
-    </section>
+    </Card>
   );
 }

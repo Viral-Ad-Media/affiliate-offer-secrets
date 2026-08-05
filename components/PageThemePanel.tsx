@@ -9,6 +9,7 @@ import {
   type ThemeFont,
 } from "@/lib/engine/pageTheme";
 import type { PageBlockTree } from "@/lib/engine/renderPages";
+import { Card } from "@/components/ui/card";
 
 /**
  * Per-page theme editor: palette, typography, buttons, form fields.
@@ -57,7 +58,7 @@ export default function PageThemePanel({
   ];
 
   return (
-    <section className="card space-y-3 p-4">
+    <Card as="section" className="space-y-3 p-4">
       <div>
         <h2 className="text-sm font-semibold text-zinc-100">Theme</h2>
         <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">
@@ -160,7 +161,7 @@ export default function PageThemePanel({
       >
         Reset to default theme
       </button>
-    </section>
+    </Card>
   );
 }
 

@@ -6,6 +6,7 @@ import { User, Loader2, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import AvatarPicker, { initialsOf } from "@/components/AvatarPicker";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 // Intl.supportedValuesOf exists in every browser this app targets; the fallback keeps the form
 // usable rather than empty if it doesn't. The server re-validates against pg_timezone_names, so
@@ -70,7 +71,7 @@ export default function ProfileSettings({
     "w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500";
 
   return (
-    <section className="card space-y-4 p-5">
+    <Card as="section" className="space-y-4 p-5">
       <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
         <User className="h-4 w-4 text-emerald-400" /> Profile
       </div>
@@ -171,6 +172,6 @@ export default function ProfileSettings({
           </span>
         )}
       </div>
-    </section>
+    </Card>
   );
 }

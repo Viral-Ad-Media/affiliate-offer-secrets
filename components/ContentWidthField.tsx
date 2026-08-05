@@ -7,6 +7,7 @@ import {
   contentWidthOf,
   type PageBlockTree,
 } from "@/lib/engine/renderPages";
+import { Card } from "@/components/ui/card";
 
 /**
  * How wide the page's content column is allowed to get.
@@ -32,7 +33,7 @@ export default function ContentWidthField({
     onChange({ ...tree, contentWidth: Math.min(MAX_CONTENT_WIDTH, Math.max(MIN_CONTENT_WIDTH, Math.round(n))) });
 
   return (
-    <section className="card space-y-3 p-4">
+    <Card as="section" className="space-y-3 p-4">
       <div>
         <h2 className="text-sm font-semibold text-zinc-100">Content width</h2>
         <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">
@@ -86,6 +87,6 @@ export default function ContentWidthField({
           </button>
         ))}
       </div>
-    </section>
+    </Card>
   );
 }

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, Check, Link2, X } from "lucide-react";
 import { analyzePostSeo, scoreTone, type SeoInput } from "@/lib/blogSeo";
+import { Card } from "@/components/ui/card";
 
 /**
  * SEO score, link counts and on-page checks for one post. Analysis only — Regenerate/Undo/Redo
@@ -29,7 +30,7 @@ export default function PostSeoPanel({ input }: { input: SeoInput }) {
     tone === "good" ? "border-emerald-500/40" : tone === "ok" ? "border-amber-500/40" : "border-red-500/40";
 
   return (
-    <section className="card space-y-4 p-4">
+    <Card as="section" className="space-y-4 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-zinc-100">{funnel ? "Page check" : "SEO"}</h2>
@@ -103,7 +104,7 @@ export default function PostSeoPanel({ input }: { input: SeoInput }) {
         ))}
       </ul>
 
-    </section>
+    </Card>
   );
 }
 

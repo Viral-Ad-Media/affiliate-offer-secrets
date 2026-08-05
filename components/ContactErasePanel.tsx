@@ -6,6 +6,7 @@ import { ShieldX, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type EraseResult = {
   contacts_deleted: number;
@@ -60,7 +61,7 @@ export default function ContactErasePanel() {
   }
 
   return (
-    <section className="card space-y-3 p-4">
+    <Card as="section" className="space-y-3 p-4">
       <div>
         <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
           <ShieldX className="h-4 w-4 text-red-300" /> Erase a person&apos;s data
@@ -93,6 +94,6 @@ export default function ContactErasePanel() {
           {result.mail_sends_redacted + result.broadcast_sends_redacted === 1 ? "" : "s"} redacted
         </p>
       )}
-    </section>
+    </Card>
   );
 }

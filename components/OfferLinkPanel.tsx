@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckCircle2, ExternalLink, Link2, Loader2 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 /**
  * Where a standalone funnel's call to action sends people.
@@ -53,7 +54,7 @@ export default function OfferLinkPanel({
   }
 
   return (
-    <section className="card space-y-3 p-4">
+    <Card as="section" className="space-y-3 p-4">
       <div>
         <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
           <Link2 className="h-4 w-4 text-emerald-400" /> Where the button goes
@@ -102,6 +103,6 @@ export default function OfferLinkPanel({
         Saving re-renders every page in this funnel, since links are baked into the published HTML
         rather than looked up when someone visits.
       </p>
-    </section>
+    </Card>
   );
 }

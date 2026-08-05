@@ -5,6 +5,7 @@ import { originFromHost } from "@/lib/host";
 import { createClient } from "@/lib/supabase/server";
 import NewFunnelButton from "@/components/NewFunnelButton";
 import { Radio, ExternalLink, Inbox, Beaker, Layers } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 // A "funnel" isn't its own entity — it's a derived view over campaigns that already have a bridge
 // (lead-capture) page generated. A funnel appears here automatically the moment stagePages
@@ -93,7 +94,7 @@ export default async function FunnelsPage() {
         <NewFunnelButton />
       </header>
 
-      <section className="card overflow-hidden">
+      <Card as="section" className="overflow-hidden">
         {funnels.length === 0 ? (
           <div className="px-4 py-14 text-center">
             <Inbox className="mx-auto mb-2.5 h-7 w-7 text-zinc-600" />
@@ -172,7 +173,7 @@ export default async function FunnelsPage() {
             </table>
           </div>
         )}
-      </section>
+      </Card>
     </main>
   );
 }

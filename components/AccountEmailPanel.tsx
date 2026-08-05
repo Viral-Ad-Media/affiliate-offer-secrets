@@ -5,6 +5,7 @@ import { AtSign, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isValidEmail } from "@/lib/validate";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 // Changing the address you sign in with. Supabase handles the confirmation round trip itself —
 // updateUser({email}) doesn't change anything until the link is clicked, and with the project's
@@ -58,7 +59,7 @@ export default function AccountEmailPanel({ email }: { email: string }) {
     "w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500";
 
   return (
-    <section className="card space-y-3 p-5">
+    <Card as="section" className="space-y-3 p-5">
       <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
         <AtSign className="h-4 w-4 text-emerald-400" /> Sign-in email
       </div>
@@ -94,6 +95,6 @@ export default function AccountEmailPanel({ email }: { email: string }) {
           <span className={`text-sm ${msg.ok ? "text-emerald-300" : "text-red-300"}`}>{msg.text}</span>
         )}
       </div>
-    </section>
+    </Card>
   );
 }

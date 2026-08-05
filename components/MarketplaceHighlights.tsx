@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Flame, TrendingUp, Sparkles, Plus, Check, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type Highlight = {
   network: string;
@@ -94,7 +95,7 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
   const rows = tab === "top" ? top : tab === "trending" ? trending : fresh;
 
   return (
-    <section className="card overflow-hidden">
+    <Card as="section" className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-700 px-4 py-3">
         <div className="flex flex-wrap items-center gap-1">
           {TABS.map((t) => (
@@ -202,6 +203,6 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
           ))}
         </ul>
       )}
-    </section>
+    </Card>
   );
 }

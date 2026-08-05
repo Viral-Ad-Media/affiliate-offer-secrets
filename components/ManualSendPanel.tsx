@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Check, Copy, Mail, Users } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 export type ManualContact = {
   id: string;
@@ -102,7 +103,7 @@ export default function ManualSendPanel({
   const ready = subject.trim().length > 0 && body.trim().length > 0;
 
   return (
-    <section className="card space-y-3 p-4">
+    <Card as="section" className="space-y-3 p-4">
       <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
         <Mail className="h-4 w-4 text-emerald-400" /> Send manually
       </div>
@@ -182,6 +183,6 @@ export default function ManualSendPanel({
           </div>
         </>
       )}
-    </section>
+    </Card>
   );
 }

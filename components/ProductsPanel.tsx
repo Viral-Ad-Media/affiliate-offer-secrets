@@ -23,6 +23,7 @@ import Pager, { pageFromParam } from "@/components/Pager";
 import { PRODUCT_STATUSES, type Job, type Product } from "@/lib/shared";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 /**
  * The tracked-products table, with its filter, bulk bar, status editing and Promote flow.
@@ -205,7 +206,7 @@ export default function ProductsPanel({
 
   return (
     <>
-      <section className="card overflow-hidden">
+      <Card as="section" className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
             <ListChecks className="h-4 w-4 text-emerald-400" /> Products
@@ -410,7 +411,7 @@ export default function ProductsPanel({
             <Pager page={page} total={total} basePath={basePath} label="products" />
           </div>
         )}
-      </section>
+      </Card>
 
       <BuildProgressDialog
         open={progress !== null}

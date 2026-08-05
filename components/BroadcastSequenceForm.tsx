@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { BroadcastSequence } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 export default function BroadcastSequenceForm({
   sequence,
@@ -50,7 +51,7 @@ export default function BroadcastSequenceForm({
   }
 
   return (
-    <section className="card p-4">
+    <Card as="section" className="p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-zinc-100">Sequence details</h2>
         {editable && (
@@ -112,6 +113,6 @@ export default function BroadcastSequenceForm({
         )}
       </div>
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-    </section>
+    </Card>
   );
 }

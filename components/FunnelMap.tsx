@@ -17,6 +17,7 @@ import type { FunnelStep, FunnelStepType } from "@/lib/shared";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import SplitTestBranch from "@/components/SplitTestBranch";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 const STEP_LABELS: Record<FunnelStepType, string> = {
   thank_you: "Thank-you",
@@ -94,7 +95,7 @@ export default function FunnelMap({
   }
 
   return (
-    <section className="card p-4">
+    <Card as="section" className="p-4">
       <h2 className="mb-1 text-sm font-semibold text-zinc-100">Funnel map</h2>
       <p className="mb-4 text-xs text-zinc-500">
         Click a page to preview it or edit its copy. Pages run top to bottom in the order shown.
@@ -187,7 +188,7 @@ export default function FunnelMap({
           />
         </DialogContent>
       </Dialog>
-    </section>
+    </Card>
   );
 }
 

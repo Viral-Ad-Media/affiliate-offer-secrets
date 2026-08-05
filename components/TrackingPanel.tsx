@@ -5,6 +5,7 @@ import { BarChart3, Loader2, CheckCircle2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import type { TrackingSettings } from "@/lib/engine/renderPages";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 const FIELDS: { key: keyof TrackingSettings; label: string; placeholder: string }[] = [
   { key: "ga4_id", label: "Google Analytics (GA4)", placeholder: "G-XXXXXXXXXX — or paste the full gtag.js snippet" },
@@ -76,7 +77,7 @@ export default function TrackingPanel({
   }
 
   return (
-    <section className="card p-4">
+    <Card as="section" className="p-4">
       <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-zinc-100">
         <BarChart3 className="h-4 w-4 text-emerald-400" /> Tracking
       </div>
@@ -176,6 +177,6 @@ export default function TrackingPanel({
           </span>
         )}
       </div>
-    </section>
+    </Card>
   );
 }

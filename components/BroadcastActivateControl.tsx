@@ -5,6 +5,7 @@ import { Loader2, Play, Pause, PlayCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { BroadcastSequence } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type Stats = { enrolled: number; pending: number; queued: number; sent: number; failed: number; skipped: number };
 
@@ -66,7 +67,7 @@ export default function BroadcastActivateControl({
   const canActivate = stepCount > 0 && (sequence.audience_type !== "manual" || selectedContactCount > 0);
 
   return (
-    <section className="card p-4">
+    <Card as="section" className="p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="grid grid-cols-3 gap-4 text-sm sm:grid-cols-6">
           <div>
@@ -134,6 +135,6 @@ export default function BroadcastActivateControl({
         )}
       </div>
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-    </section>
+    </Card>
   );
 }

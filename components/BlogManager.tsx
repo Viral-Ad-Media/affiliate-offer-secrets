@@ -9,6 +9,7 @@ import { toast } from "@/lib/toast";
 import { blogPostPath, type PermalinkStyle } from "@/lib/blog";
 import { scoreTone } from "@/lib/blogSeo";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type PostRow = {
   id: string;
@@ -161,7 +162,7 @@ export default function BlogManager({
         </div>
       )}
 
-      <section className="card p-4">
+      <Card as="section" className="p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm font-semibold text-zinc-100">
             Posts {filterCategory ? `— ${categoryName.get(filterCategory)}` : ""}
@@ -332,7 +333,7 @@ export default function BlogManager({
             ))}
           </div>
         )}
-      </section>
+      </Card>
 
       {editing && (
         <QuickEditPost

@@ -161,7 +161,7 @@ export default async function AdsPage() {
         </Card>
       </div>
 
-      <section className="card overflow-hidden">
+      <Card as="section" className="overflow-hidden">
         {rows.length === 0 ? (
           <div className="px-4 py-14 text-center">
             <Inbox className="mx-auto mb-2.5 h-7 w-7 text-zinc-600" />
@@ -241,7 +241,7 @@ export default async function AdsPage() {
             </table>
           </div>
         )}
-      </section>
+      </Card>
     </main>
   );
 }

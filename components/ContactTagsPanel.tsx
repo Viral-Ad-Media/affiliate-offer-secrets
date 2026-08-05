@@ -6,6 +6,7 @@ import { Tags, Plus, Loader2, Trash2, Pencil, Check, X } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { TAG_COLOR_PRESETS, MAX_TAG_DESCRIPTION, readableTextOn } from "@/lib/contactTags";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type Tag = {
   id: string;
@@ -149,7 +150,7 @@ export default function ContactTagsPanel({ tags }: { tags: Tag[] }) {
         </p>
       </div>
 
-      <section className="card p-4">
+      <Card as="section" className="p-4">
         <form onSubmit={add} className="mb-4 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -275,7 +276,7 @@ export default function ContactTagsPanel({ tags }: { tags: Tag[] }) {
             ))}
           </div>
         )}
-      </section>
+      </Card>
     </div>
   );
 }

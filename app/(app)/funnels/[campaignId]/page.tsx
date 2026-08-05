@@ -13,6 +13,7 @@ import FunnelMap from "@/components/FunnelMap";
 import FunnelStepEditor from "@/components/FunnelStepEditor";
 import TrackingPanel from "@/components/TrackingPanel";
 import type { TrackingSettings } from "@/lib/engine/renderPages";
+import { Card } from "@/components/ui/card";
 
 const STEP_LABELS: Record<FunnelStep["step_type"], string> = {
   thank_you: "Thank-you",
@@ -145,7 +146,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
             <>
               <SplitTestPanel campaignId={campaign.id} productTitle={productTitle} />
 
-              <section className="card p-4">
+              <Card as="section" className="p-4">
                 <PageEditor
                   campaignId={campaign.id}
                   productTitle={productTitle}
@@ -158,11 +159,11 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
                     setCampaign((c) => (c ? { ...c, bridge_html, page_copy } : c))
                   }
                 />
-              </section>
+              </Card>
             </>
           ) : view.kind === "variant" ? (
             variantInView ? (
-              <section className="card p-4">
+              <Card as="section" className="p-4">
                 <PageEditor
                   campaignId={campaign.id}
                   productTitle={productTitle}
@@ -173,12 +174,12 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
                     setVariantInView((v) => (v ? { ...v, bridge_html, page_copy } : v))
                   }
                 />
-              </section>
+              </Card>
             ) : (
               <p className="text-sm text-zinc-500">Loading…</p>
             )
           ) : stepInView ? (
-            <section className="card p-4">
+            <Card as="section" className="p-4">
               <FunnelStepEditor
                 stepId={stepInView.id}
                 stepType={stepInView.step_type}
@@ -195,7 +196,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
                 crossSellOptions={crossSellOptions}
                 onSaved={() => load()}
               />
-            </section>
+            </Card>
           ) : (
             <p className="text-sm text-zinc-500">
               That step no longer exists.{" "}

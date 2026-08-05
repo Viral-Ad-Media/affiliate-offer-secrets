@@ -18,6 +18,7 @@ import PageThemePanel from "@/components/PageThemePanel";
 import FeaturedImageField from "@/components/FeaturedImageField";
 import { resizeImageFile } from "@/lib/images/resizeClient";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type Post = {
   id: string;
@@ -275,7 +276,7 @@ export default function BlogPostEditor({
             <div className="space-y-4">
               <ContentWidthField tree={tree} onChange={setTree} />
               <PageThemePanel tree={tree} onChange={setTree} />
-      <section className="card space-y-4 p-4">
+      <Card as="section" className="space-y-4 p-4">
         <FeaturedImageField
           postId={post.id}
           value={featuredImage}
@@ -310,7 +311,7 @@ export default function BlogPostEditor({
             </span>
           </label>
         </div>
-      </section>
+      </Card>
 
       <SeoFields
         values={seo}

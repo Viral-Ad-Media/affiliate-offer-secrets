@@ -11,6 +11,7 @@ import {
   type EmailSettings,
 } from "@/lib/emailSettings";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 const FIELDS: { key: keyof EmailSettings; label: string; hint?: string; wide?: boolean }[] = [
   { key: "business_name", label: "Business name", hint: "Shown above the address in the footer", wide: true },
@@ -63,7 +64,7 @@ export default function EmailSettingsPanel({ initial }: { initial: EmailSettings
 
   return (
     <div className="space-y-6">
-      <section className="card space-y-3 p-4">
+      <Card as="section" className="space-y-3 p-4">
         <div>
           <h2 className="text-sm font-semibold text-zinc-100">Replies</h2>
           <p className="mt-0.5 text-xs text-zinc-500">
@@ -82,9 +83,9 @@ export default function EmailSettingsPanel({ initial }: { initial: EmailSettings
             className={inputClass}
           />
         </label>
-      </section>
+      </Card>
 
-      <section className="card space-y-3 p-4">
+      <Card as="section" className="space-y-3 p-4">
         <div>
           <h2 className="text-sm font-semibold text-zinc-100">Business details</h2>
           <p className="mt-0.5 text-xs text-zinc-500">
@@ -125,9 +126,9 @@ export default function EmailSettingsPanel({ initial }: { initial: EmailSettings
             treat as non-compliant for commercial email.
           </p>
         )}
-      </section>
+      </Card>
 
-      <section className="card space-y-2 p-4">
+      <Card as="section" className="space-y-2 p-4">
         <h2 className="text-sm font-semibold text-zinc-100">Footer preview</h2>
         <p className="text-xs text-zinc-500">
           Exactly what gets appended to every broadcast — rendered by the same function the sender
@@ -145,7 +146,7 @@ export default function EmailSettingsPanel({ initial }: { initial: EmailSettings
             }}
           />
         </div>
-      </section>
+      </Card>
 
       <div className="flex items-center gap-2">
         <Button onClick={save} disabled={busy} className="text-sm">

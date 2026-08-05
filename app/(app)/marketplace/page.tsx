@@ -13,6 +13,7 @@ import type { Job } from "@/lib/shared";
 import MarketplaceHighlights from "@/components/MarketplaceHighlights";
 import ProductsPanel, { type ProductStats } from "@/components/ProductsPanel";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 function StatTile({
   icon,
@@ -112,7 +113,7 @@ export default function Marketplace() {
         </p>
       </header>
 
-      <section className="card p-4">
+      <Card as="section" className="p-4">
         <form onSubmit={discover} className="space-y-3">
           <div className="flex items-center gap-1">
             <button
@@ -198,7 +199,7 @@ export default function Marketplace() {
             </Button>
           </div>
         </form>
-      </section>
+      </Card>
 
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">

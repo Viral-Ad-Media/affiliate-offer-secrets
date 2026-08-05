@@ -6,6 +6,7 @@ import { Settings, Loader2, CheckCircle2, ExternalLink, ImagePlus, Trash2, Eye }
 import { PERMALINK_STYLES, type PermalinkStyle } from "@/lib/blog";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 export type Settings = {
   blog_title: string | null;
@@ -127,7 +128,7 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
         </div>
       )}
 
-      <section className="card space-y-4 p-4">
+      <Card as="section" className="space-y-4 p-4">
         <div className="text-sm font-semibold text-zinc-100">Blog</div>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-zinc-400">Blog address</span>
@@ -244,9 +245,9 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
             Shown under the blog name and used as the index page&apos;s meta description.
           </span>
         </label>
-      </section>
+      </Card>
 
-      <section className="card space-y-4 p-4">
+      <Card as="section" className="space-y-4 p-4">
         <div className="text-sm font-semibold text-zinc-100">Author</div>
         <div className="flex flex-wrap items-start gap-4">
           <div className="shrink-0">
@@ -302,7 +303,7 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
             e.target.value = "";
           }}
         />
-      </section>
+      </Card>
 
       {error && <p className="text-sm text-red-300">{error}</p>}
 

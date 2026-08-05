@@ -7,6 +7,7 @@ import { renderEmailPreviewHtml } from "@/lib/engine/broadcastEmail";
 import { createClient } from "@/lib/supabase/client";
 import type { BroadcastStep } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type DraftStep = Partial<BroadcastStep> & { key: string; step_index: number; delay_days: number; subject: string; body_md: string };
 
@@ -78,7 +79,7 @@ export default function BroadcastStepsEditor({
   }
 
   return (
-    <section className="card p-4">
+    <Card as="section" className="p-4">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-zinc-100">Steps</h2>
@@ -151,6 +152,6 @@ export default function BroadcastStepsEditor({
         </div>
       )}
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-    </section>
+    </Card>
   );
 }

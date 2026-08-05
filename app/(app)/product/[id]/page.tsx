@@ -14,6 +14,7 @@ import AdAnglesPanel from "@/components/AdAnglesPanel";
 import SocialPostsPanel from "@/components/SocialPostsPanel";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 const TABS = [
   { key: "fb_ads_md", label: "FB/IG Ads" },
@@ -95,7 +96,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         <ArrowLeft className="h-4 w-4" /> Back to marketplace
       </Link>
 
-      <header className="card p-5">
+      <Card as="header" className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold text-zinc-100">{product.product_title}</h1>
@@ -165,9 +166,9 @@ export default function ProductPage({ params }: { params: { id: string } }) {
             </a>
           )}
         </div>
-      </header>
+      </Card>
 
-      <section className="card">
+      <Card as="section">
         <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">
           <h2 className="text-sm font-semibold text-zinc-100">
             Campaign kit{" "}
@@ -288,7 +289,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
             </div>
           </>
         )}
-      </section>
+      </Card>
     </main>
   );
 }

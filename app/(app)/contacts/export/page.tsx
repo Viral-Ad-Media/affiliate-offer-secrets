@@ -1,4 +1,5 @@
 import { Download } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default function ContactExportPage() {
         </p>
       </div>
 
-      <section className="card space-y-3 p-4">
+      <Card as="section" className="space-y-3 p-4">
         <div className="text-sm text-zinc-300">The file has one row per contact, with:</div>
         <ul className="list-inside list-disc space-y-1 text-xs text-zinc-500">
           <li>First name and email</li>
@@ -32,7 +33,7 @@ export default function ContactExportPage() {
           Unsubscribed contacts are included — your sending tools decide who to mail, and dropping
           them here would quietly lose data you may still need for suppression lists.
         </p>
-      </section>
+      </Card>
     </div>
   );
 }

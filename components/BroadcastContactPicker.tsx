@@ -5,6 +5,7 @@ import { Loader2, Save } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Contact } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 export default function BroadcastContactPicker({
   sequenceId,
@@ -49,7 +50,7 @@ export default function BroadcastContactPicker({
   }
 
   return (
-    <section className="card overflow-hidden">
+    <Card as="section" className="overflow-hidden">
       <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-zinc-100">Contacts</h2>
@@ -96,6 +97,6 @@ export default function BroadcastContactPicker({
         </div>
       )}
       {error && <p className="border-t border-ink-700 px-4 py-2 text-xs text-red-400">{error}</p>}
-    </section>
+    </Card>
   );
 }

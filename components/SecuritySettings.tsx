@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ShieldCheck, Loader2, LogOut, KeyRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 const MIN_PASSWORD = 8;
 
@@ -81,7 +82,7 @@ export default function SecuritySettings({ email }: { email: string }) {
     "w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500";
 
   return (
-    <section className="card space-y-4 p-5">
+    <Card as="section" className="space-y-4 p-5">
       <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
         <ShieldCheck className="h-4 w-4 text-emerald-400" /> Security
       </div>
@@ -144,6 +145,6 @@ export default function SecuritySettings({ email }: { email: string }) {
           Sign out everywhere
         </button>
       </div>
-    </section>
+    </Card>
   );
 }

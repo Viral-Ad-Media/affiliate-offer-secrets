@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Users, Loader2, Copy, Check, Trash2, Crown, Link2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type Role = "owner" | "admin" | "member";
 
@@ -110,7 +111,7 @@ export default function TeamSettings({
 
   return (
     <div className="space-y-6">
-      <section className="card space-y-4 p-5">
+      <Card as="section" className="space-y-4 p-5">
         <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
           <Users className="h-4 w-4 text-emerald-400" /> Members
         </div>
@@ -209,10 +210,10 @@ export default function TeamSettings({
           <span className="text-zinc-400">Admin</span> {ROLE_HELP.admin}{" "}
           <span className="text-zinc-400">Member</span> {ROLE_HELP.member}
         </p>
-      </section>
+      </Card>
 
       {canManage && (
-        <section className="card space-y-3 p-5">
+        <Card as="section" className="space-y-3 p-5">
           <div className="text-sm font-semibold text-zinc-100">Invite someone</div>
           <div className="flex flex-wrap gap-2">
             <input
@@ -285,7 +286,7 @@ export default function TeamSettings({
               ))}
             </div>
           )}
-        </section>
+        </Card>
       )}
 
       {err && <p className="text-sm text-red-300">{err}</p>}

@@ -6,6 +6,7 @@ import { Building2, Check, Copy, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { workspaceOrigin } from "@/lib/host";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 // Mirrors slugify_workspace() in 0041 closely enough for a live preview. The server re-slugifies
 // and re-validates whatever is submitted, so this is guidance, not the boundary — but showing the
@@ -63,7 +64,7 @@ export default function WorkspaceSettings({
     "w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500 disabled:opacity-60";
 
   return (
-    <section className="card space-y-4 p-5">
+    <Card as="section" className="space-y-4 p-5">
       <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
         <Building2 className="h-4 w-4 text-emerald-400" /> Workspace
       </div>
@@ -130,6 +131,6 @@ export default function WorkspaceSettings({
           )}
         </div>
       )}
-    </section>
+    </Card>
   );
 }

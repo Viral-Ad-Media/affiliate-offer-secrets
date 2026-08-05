@@ -7,6 +7,7 @@ import { Send, Loader2, CheckCircle2, AlertTriangle, Users, Plus, Sparkles } fro
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type HistoryRow = {
   id: string;
@@ -281,7 +282,7 @@ export default function BroadcastComposer({
         </DialogContent>
       </Dialog>
 
-      <section className="card p-4">
+      <Card as="section" className="p-4">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-100">
           <Users className="h-4 w-4 text-emerald-400" /> Past broadcasts
         </div>
@@ -310,7 +311,7 @@ export default function BroadcastComposer({
             ))}
           </div>
         )}
-      </section>
+      </Card>
     </div>
   );
 }

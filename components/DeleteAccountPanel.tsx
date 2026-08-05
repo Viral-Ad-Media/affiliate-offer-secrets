@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { TriangleAlert, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 // The one irreversible action in the app. Three gates, deliberately: expand the panel, type your
 // own email address, and enter your password — the password alone is muscle memory, and this
@@ -42,7 +43,7 @@ export default function DeleteAccountPanel({ email }: { email: string }) {
     "w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none placeholder:text-zinc-600 focus:border-red-500";
 
   return (
-    <section className="card space-y-3 border-red-500/30 p-5">
+    <Card as="section" className="space-y-3 border-red-500/30 p-5">
       <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
         <TriangleAlert className="h-4 w-4 text-red-300" /> Delete account
       </div>
@@ -107,6 +108,6 @@ export default function DeleteAccountPanel({ email }: { email: string }) {
           </div>
         </div>
       )}
-    </section>
+    </Card>
   );
 }
