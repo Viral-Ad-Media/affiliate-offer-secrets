@@ -2293,7 +2293,17 @@ Things worth knowing if you extend this:
   tile row per member instead of one describing the workspace. `audit_events` carries both.
 - **A user id passed into a parameter renamed `workspaceId` is still a `string`** — `tsc` cannot
   catch it. Four of those were found by grepping call sites, not by a clean typecheck. Grep when
-  you rename a scope parameter.
+  you rename a scope parameter. **A fifth surfaced on 2026-08-05 and it broke Build kit outright**:
+  `worker.ts`'s `processBuildCampaignStage` called `getAffiliateId(job.user_id, …)` while
+  `network_connections` has been workspace-scoped since 0057, so the lookup never matched and
+  EVERY `build_campaign` job died with "No clickbank connection found — connect your clickbank
+  affiliate ID first" no matter how the connection was set up. Four jobs burned five attempts each
+  across two days. Two things hid it: the promote route's own check is correctly workspace-scoped,
+  so it passed and queued the job (the two layers disagreeing is exactly what made the message a
+  lie), and until the progress dialog shipped, a terminally-failed build said nothing at all in the
+  UI. Confirmed against the live database that the old lookup returns NULL and the fixed one
+  returns the real affiliate id for the same job. **When a check exists at both the route and the
+  worker, verify they scope on the same column** — divergence there is invisible until a job fails.
 - The `assert_owns_*` functions are membership checks now; a plain ownership check would refuse an
   invited member their own workspace's campaigns.
 - Slugs are reserved against `reserved_workspace_slugs` so a workspace can't take `api`, `app`,

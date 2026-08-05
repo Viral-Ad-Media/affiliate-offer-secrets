@@ -306,7 +306,12 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
     return { done: true };
   }
 
-  const affiliateId = await getAffiliateId(job.user_id, product.network);
+  // WORKSPACE, not user. network_connections has been workspace-scoped since 0057, so passing
+  // job.user_id here never matched a row — every build_campaign job failed with "No clickbank
+  // connection found" no matter how the connection was set up, while the promote route's own
+  // (correctly workspace-scoped) check passed and let the job through. Both arguments are
+  // strings, so tsc had nothing to catch. Same slip as rerenderFunnelSequence's five call sites.
+  const affiliateId = await getAffiliateId(job.workspace_id, product.network);
   // Absent means everything — see normalizeKitAssets. That keeps jobs queued before this shipped,
   // and any direct API caller, behaving exactly as they did.
   const assets = normalizeKitAssets(job.payload?.assets);
