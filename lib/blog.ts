@@ -162,7 +162,57 @@ export type BlogSettings = {
   // intro_copy — the index never renders the tree directly, same as posts.
   intro_copy?: unknown;
   intro_html?: string | null;
+  // How the home page lists posts (0065). Columns x rows is also the page size — see
+  // postsPerPage() below.
+  index_layout?: BlogIndexLayout | null;
+  index_columns?: number | null;
+  index_rows?: number | null;
 };
+
+export type BlogIndexLayout = "grid" | "list";
+
+export const MIN_INDEX_COLUMNS = 1;
+export const MAX_INDEX_COLUMNS = 4;
+export const MIN_INDEX_ROWS = 1;
+export const MAX_INDEX_ROWS = 12;
+
+export function isBlogIndexLayout(v: unknown): v is BlogIndexLayout {
+  return v === "grid" || v === "list";
+}
+
+const clampInt = (v: unknown, min: number, max: number, fallback: number) => {
+  const n = typeof v === "number" ? Math.round(v) : Number.NaN;
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+};
+
+/** The layout, with every stored value clamped — callers never see an out-of-range number. */
+export function indexLayout(settings: BlogSettings): {
+  layout: BlogIndexLayout;
+  columns: number;
+  rows: number;
+} {
+  const layout = isBlogIndexLayout(settings.index_layout) ? settings.index_layout : "grid";
+  return {
+    layout,
+    // A list is one post per row by definition, so the stored column count is ignored rather than
+    // silently applied — otherwise switching to list and back would look like it lost the setting.
+    columns: layout === "list" ? 1 : clampInt(settings.index_columns, MIN_INDEX_COLUMNS, MAX_INDEX_COLUMNS, 3),
+    rows: clampInt(settings.index_rows, MIN_INDEX_ROWS, MAX_INDEX_ROWS, 4),
+  };
+}
+
+/**
+ * Posts per page = the shape you chose. A 3x4 grid shows 12; a list of 8 shows 8.
+ *
+ * Deriving it rather than storing it separately is what stops the pager and the visible layout
+ * from disagreeing — a standalone "posts per page" field would eventually be set to a number that
+ * doesn't fill the last row.
+ */
+export function postsPerPage(settings: BlogSettings): number {
+  const { columns, rows } = indexLayout(settings);
+  return columns * rows;
+}
 
 // URL structure for the path AFTER the blog root — the same on the app domain (under
 // /b/{blogSlug}) and on a connected domain (where the blog IS the root).
@@ -287,6 +337,25 @@ const PUBLIC_CSS = `
   .pager a:hover { border-color: var(--accent); }
   .pager .page-of { color: var(--muted); font-size: .85rem; }
   .post-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 32px; list-style: none; padding: 0; margin: 0; }
+  /* Chosen column counts. minmax(0,1fr) rather than a min width, so N columns really means N —
+     an auto-fill min width would silently reflow 4 into 3 on a laptop. The media query below is
+     what handles narrow screens, once, in a predictable place. */
+  .post-grid.cols-1 { grid-template-columns: minmax(0, 1fr); }
+  .post-grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .post-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .post-grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
+  /* List: one per row, thumbnail beside the text instead of above it. */
+  .post-grid.as-list { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .post-grid.as-list .post-card { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; align-items: start; border-bottom: 1px solid var(--line); padding-bottom: 24px; }
+  .post-grid.as-list .post-card:last-child { border-bottom: none; }
+  .post-grid.as-list .post-card h2 { margin-top: 0; }
+  @media (max-width: 900px) {
+    .post-grid.cols-3, .post-grid.cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 620px) {
+    .post-grid.cols-2, .post-grid.cols-3, .post-grid.cols-4 { grid-template-columns: minmax(0, 1fr); }
+    .post-grid.as-list .post-card { grid-template-columns: minmax(0, 1fr); }
+  }
   .post-card a.thumb { display: block; }
   .post-card img { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: 12px; display: block; }
   .post-card .ph { width: 100%; aspect-ratio: 16/9; border-radius: 12px; background: linear-gradient(135deg,#ecfdf5,#e0f2fe); }
@@ -440,6 +509,9 @@ export type BlogIndexPost = {
   category_slug?: string | null;
 };
 
+// Fallback page size only — the real one is postsPerPage(settings), derived from the tenant's
+// chosen columns x rows. Kept for callers that have no settings row to read (feeds use their
+// own MAX_FEED_POSTS cap instead).
 export const POSTS_PER_PAGE = 12;
 
 export type BlogIndexCategory = { name: string; slug: string | null; description?: string | null };
@@ -481,6 +553,8 @@ export function renderBlogIndexHtml(
     const q = qs.toString();
     return `${base || "/"}${q ? `?${q}` : ""}`;
   };
+
+  const { layout, columns } = indexLayout(settings);
 
   const baseTitle = settings.blog_title || "Blog";
   // Filtered/paged views get a distinct <title> so search results and browser tabs aren't a wall
@@ -576,7 +650,7 @@ ${siteHeader(settings, base)}
       ? `<p class="empty">${
           activeCategory ? `No posts in ${escapeHtml(activeCategory.name)} yet.` : "No posts published yet."
         }</p>`
-      : `<ul class="post-grid">${cards}</ul>`
+      : `<ul class="post-grid ${layout === "list" ? "as-list" : `cols-${columns}`}">${cards}</ul>`
   }
   ${pager}
   ${authorBox(settings)}

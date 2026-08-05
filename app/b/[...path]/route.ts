@@ -82,13 +82,18 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
   // Everything else is keyed off the blog slug.
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("workspace_id, blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html")
+    .select("workspace_id, blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html, index_layout, index_columns, index_rows")
     .ilike("slug", segments[0])
     .maybeSingle();
   if (!settings || rejects(settings.workspace_id as string)) return notFound();
 
   if (segments.length === 1) {
-    const index = await loadBlogIndex(admin, settings.workspace_id as string, new URL(req.url).searchParams);
+    const index = await loadBlogIndex(
+      admin,
+      settings.workspace_id as string,
+      new URL(req.url).searchParams,
+      settings
+    );
     // Unknown category slug or a page past the end — 404 rather than silently showing everything.
     if (!index) return notFound();
     return new Response(renderBlogIndexHtml(settings, index.posts, index), {

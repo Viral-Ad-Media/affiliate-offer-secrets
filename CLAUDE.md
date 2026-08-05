@@ -660,6 +660,39 @@ opt-in page plus a link to `/funnels/{campaignId}`); it no longer mounts `Publis
 `PageEditor`/`SplitTestPanel` directly. A "Testing (N)" chip appears once a campaign has active
 `bridge_variants` rows (see below).
 
+**Creating one by hand.** "New funnel" on that page (`components/NewFunnelButton.tsx` →
+`NewFunnelDialog.tsx` → `POST /api/funnels`) writes an opt-in page and its steps directly — no AI,
+no credits, the alternative to Promote. Three steps: which product, which funnel type, template or
+scratch. The product step is not optional decoration — a funnel IS a campaign's opt-in page, and
+the affiliate link behind its CTA comes from that product, so there is nothing to build without
+one. `lib/funnelTypes.ts` lists eight types and, honestly, which four this app can actually
+deliver: VSL and Webinar need a video block that `blockTree.ts` doesn't have, Survey needs
+answer-based routing that `funnel_steps` (a linear chain ordered by `step_index`) can't express,
+and Book/free-plus-shipping needs checkout charging the VISITOR, which is a different system from
+the Stripe integration that bills tenants for their own access. Those four render **disabled with
+the reason shown**, not hidden — someone who came looking for a webinar funnel should learn why
+it isn't there. `isBuildable()` is re-checked server-side; the greyed-out UI is not the boundary.
+
+`lib/funnelTemplates.ts` authors starter copy in the LEGACY flat `PageCopy` shape and runs it
+through `normalizePageCopy` — the same permanent adapter every AI-generated campaign uses — so a
+template can't produce a tree shape the renderer hasn't already been serving, and the locked
+compliance blocks come from one place. The copy is deliberately generic and product-agnostic:
+asserting a benefit or a result in a template would put words in the affiliate's mouth on a page
+carrying their disclosure. "Scratch" builds its tree directly instead (the adapter always emits
+all five legacy sections by design), but still carries the disclosure and a working opt-in form.
+
+Steps are inserted with the admin client rather than via `add_funnel_step()`, whose ownership
+check is still `campaigns.user_id = auth.uid()` and predates workspaces — it would reject a
+teammate adding a step to a campaign another member created. **That RPC is still used by
+`POST /api/funnel-steps`, so the same gap is live there.** Worth closing when workspaces get
+another pass.
+
+`rerenderFunnelSequence(admin, campaignId, workspaceId)` takes a WORKSPACE id. Five call sites
+passed `user.id` for months after `network_connections` became workspace-scoped, so the affiliate
+lookup never matched, `affiliateId` came back null, and the function returned before rendering
+anything — add/move/delete step and tracking edits silently re-rendered nothing. Fixed; if you add
+a call site, pass `await currentWorkspaceId()`.
+
 ## Bridge page A/B / split testing
 
 `bridge_variants` (`supabase/migrations/0022_bridge_variants.sql`) lets a tenant run copy variants
@@ -1720,11 +1753,25 @@ The blog is a real published site, not just per-post links.
   SVG featured image and a reserved slug are both rejected. All test data reverted afterward.
 - **Pagination + category filter** (0034): both are query params on the index —
   `?category={slug}&page={n}` — deliberately NOT path segments, which would risk a category slug
-  shadowing a post slug under `/b/{blog}/{...}`. 12 posts per page (`POSTS_PER_PAGE`).
+  shadowing a post slug under `/b/{blog}/{...}`. Page size is `postsPerPage(settings)` — the
+  tenant's chosen columns x rows (see Blog home layout below), defaulting to 3x4 = 12.
+  `POSTS_PER_PAGE` survives only as the fallback for callers with no settings row.
   `lib/blogIndex.ts`'s `loadBlogIndex()` is shared by the app-domain and custom-domain routes so
   the two can't drift; it returns `null` for an unknown category or a page past the end, which
   both callers turn into a 404 (a typo'd filter must not silently render everything). Chips only
   list categories that actually contain a published post — an empty chip is a dead end.
+- **Blog home layout** (0065): `blog_settings.index_layout` (`grid`|`list`), `index_columns` (1-4)
+  and `index_rows` (1-12), edited on `/blog/home` under the intro editor. Columns x rows IS the
+  page size — deriving it (`postsPerPage()`) rather than storing a separate "posts per page" is
+  what stops the pager and the visible grid from disagreeing. `indexLayout()` clamps whatever is
+  stored, so a bound change later can't break existing rows; the API route REJECTS out-of-range
+  input instead of clamping, because a request naming 9 columns is a client with the wrong idea
+  and silently saving something else would leave the UI showing a setting the server didn't take.
+  A list ignores the stored column count rather than applying it, so switching to list and back
+  doesn't look like it lost the setting. Fixed `cols-N` CSS classes use `minmax(0,1fr)`, not an
+  auto-fill min width — 4 columns really means 4; one media query handles narrow screens.
+- **The blog home editor has no inline live-preview iframe.** It uses `EditorPreviewButton` like
+  every other editor in the app; the old always-on iframe below the canvas was the odd one out.
   `blog_categories.slug` is unique per blog, backfilled from existing names in the migration.
 - **Paginated SEO**: each page self-canonicalises and carries `rel="prev"`/`rel="next"`; filtered
   and paged views get distinct `<title>`s ("Blog — Tool Reviews", "Blog — Page 2") so search
@@ -2459,6 +2506,18 @@ Full name / Phone / Second email / Message / Checkbox / Choose one / Dropdown, e
 - Verified live end to end: every type rendered with the right markup, a submission stored
   last_name/phone/message/budget plus the SELECTED radio option, an unticked checkbox stored
   nothing and a ticked one stored "yes".
+
+## My Products vs Marketplace
+
+`/marketplace` is discovery; `/products` ("My Products" in the sidebar) is the offers you already
+track. Both render the same `components/ProductsPanel.tsx` — the table, its status filter, bulk
+bar, manual-add row and the Promote flow. It is shared rather than copied because it owns the
+Promote path, which charges credits; a second copy would be a second billing path to keep in step,
+the same reason bulk promote calls `/api/promote` once per product instead of growing its own
+endpoint. The panel owns its 5s poll and URL-driven pager; the host page passes `basePath` (where
+the pager and filter-reset navigate) and can read the stats the panel already fetched via
+`onData`. Marketplace nudges it with `refreshKey` after queueing a discovery run. Product detail
+pages highlight My Products in the nav.
 
 ## Marketplace: Top products and Trending
 

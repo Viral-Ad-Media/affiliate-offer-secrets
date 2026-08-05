@@ -3,15 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Home, Loader2, CheckCircle2, Settings, RefreshCw } from "lucide-react";
+import { Home, Loader2, CheckCircle2, LayoutGrid, Rows3 } from "lucide-react";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import EditorPreviewButton from "@/components/EditorPreview";
 import type { PageBlockTree } from "@/lib/engine/renderPages";
 import {
   blogRenderCtx,
   emptyPostTree,
+  indexLayout,
   renderBlockTree,
   renderBlogIndexHtml,
+  MIN_INDEX_COLUMNS,
+  MAX_INDEX_COLUMNS,
+  MIN_INDEX_ROWS,
+  MAX_INDEX_ROWS,
+  type BlogIndexLayout,
   type BlogIndexPost,
   type BlogSettings,
 } from "@/lib/blog";
@@ -42,8 +48,16 @@ export default function BlogHomeEditor({
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [imageBusyBlockId, setImageBusyBlockId] = useState<string | null>(null);
-  // Bumped on save so the preview iframe refetches instead of showing the pre-save render.
-  const [previewNonce, setPreviewNonce] = useState(0);
+  // Post-list layout. indexLayout() clamps whatever is stored, so the controls always start from
+  // a value that's actually in range.
+  const stored = indexLayout(settings);
+  const [layout, setLayout] = useState<BlogIndexLayout>(stored.layout);
+  const [columns, setColumns] = useState(stored.columns);
+  const [rows, setRows] = useState(stored.rows);
+
+  // What the reader sees per page — the same derivation the server does, shown here so the choice
+  // isn't abstract.
+  const perPage = (layout === "list" ? 1 : columns) * rows;
 
   async function save() {
     setBusy(true);
@@ -52,12 +66,16 @@ export default function BlogHomeEditor({
       const res = await fetch("/api/blog/home", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blocks: tree.blocks }),
+        body: JSON.stringify({
+          blocks: tree.blocks,
+          index_layout: layout,
+          index_columns: columns,
+          index_rows: rows,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
       setSavedAt(Date.now());
-      setPreviewNonce((n) => n + 1);
       toast.success("Blog home saved");
       router.refresh();
     } catch (err: any) {
@@ -94,9 +112,17 @@ export default function BlogHomeEditor({
             // is the finished page rather than the band on its own.
             render={() =>
               renderBlogIndexHtml(
-                { ...settings, intro_html: renderBlockTree(tree, blogRenderCtx()) },
-                posts,
-                { page: 1, totalPages: 1 }
+                {
+                  ...settings,
+                  intro_html: renderBlockTree(tree, blogRenderCtx()),
+                  // The unsaved choices, not the stored ones — otherwise switching to a list and
+                  // pressing Preview would show the old grid.
+                  index_layout: layout,
+                  index_columns: columns,
+                  index_rows: rows,
+                },
+                posts.slice(0, perPage),
+                { page: 1, totalPages: Math.max(1, Math.ceil(posts.length / perPage)) }
               )
             }
           />
@@ -130,33 +156,88 @@ export default function BlogHomeEditor({
         />
       </section>
 
-      <section className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
-            <Settings className="h-4 w-4 text-emerald-400" /> Live home page
-          </div>
-          <button
-            type="button"
-            onClick={() => setPreviewNonce((n) => n + 1)}
-            title="Reload the preview"
-            className="btn-ghost text-xs"
-          >
-            <RefreshCw className="h-3.5 w-3.5" /> Reload
-          </button>
+      <section className="card space-y-3 p-4">
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-100">Post list</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            How the posts below your intro are laid out. Columns × rows is also the page size, so
+            the pager and the grid can never disagree.
+          </p>
         </div>
-        <p className="text-xs text-zinc-500">
-          Your saved home page, drafts included. Save above to see edits here.
+
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <span className="mb-1 block text-xs text-zinc-400">Layout</span>
+            <div className="flex items-center gap-1">
+              {([
+                { value: "grid" as const, label: "Grid", icon: LayoutGrid },
+                { value: "list" as const, label: "List", icon: Rows3 },
+              ]).map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => setLayout(o.value)}
+                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                    layout === o.value
+                      ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-300"
+                      : "border-ink-600 text-zinc-400 hover:bg-ink-700"
+                  }`}
+                >
+                  <o.icon className="h-3.5 w-3.5" /> {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Hidden rather than disabled for a list: one post per row isn't a setting you can
+              change, it's what a list is. Leaving a dead control on screen invites the question. */}
+          {layout === "grid" && (
+            <label className="block">
+              <span className="mb-1 block text-xs text-zinc-400">Columns</span>
+              <select
+                value={columns}
+                onChange={(e) => setColumns(Number(e.target.value))}
+                className="rounded-lg border border-ink-600 bg-ink-900 px-3 py-1.5 text-sm outline-none focus:border-emerald-500"
+              >
+                {Array.from({ length: MAX_INDEX_COLUMNS - MIN_INDEX_COLUMNS + 1 }, (_, i) => i + MIN_INDEX_COLUMNS).map(
+                  (n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+          )}
+
+          <label className="block">
+            <span className="mb-1 block text-xs text-zinc-400">Rows per page</span>
+            <select
+              value={rows}
+              onChange={(e) => setRows(Number(e.target.value))}
+              className="rounded-lg border border-ink-600 bg-ink-900 px-3 py-1.5 text-sm outline-none focus:border-emerald-500"
+            >
+              {Array.from({ length: MAX_INDEX_ROWS - MIN_INDEX_ROWS + 1 }, (_, i) => i + MIN_INDEX_ROWS).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <p className="pb-2 text-xs text-zinc-500">
+            {perPage} post{perPage === 1 ? "" : "s"} per page
+            {posts.length > perPage ? ` · ${Math.ceil(posts.length / perPage)} pages today` : ""}
+          </p>
+        </div>
+
+        {/* Narrow screens collapse to fewer columns regardless — worth saying once here rather
+            than letting someone conclude the setting didn't save when they check on a phone. */}
+        <p className="text-xs text-zinc-600">
+          On phones and small tablets the grid narrows automatically; the page size stays the same.
         </p>
-        {/* sandbox="" for the same reason as every other preview in this app: no scripts, no form
-            submits, nothing that could fire from a page being looked at rather than visited. */}
-        <iframe
-          key={previewNonce}
-          src={`/api/blog/preview?v=${previewNonce}`}
-          sandbox=""
-          title="Blog home preview"
-          className="h-[60vh] w-full rounded-lg border border-ink-700 bg-white"
-        />
       </section>
+
     </div>
   );
 }

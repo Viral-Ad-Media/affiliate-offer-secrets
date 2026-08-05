@@ -18,7 +18,7 @@ export default async function BlogHomePage() {
     supabase
       .from("blog_settings")
       .select(
-        "blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_copy, intro_html"
+        "blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_copy, intro_html, index_layout, index_columns, index_rows"
       )
       .maybeSingle(),
     // The editor's own Preview renders the whole index, so it needs the real posts — drafts

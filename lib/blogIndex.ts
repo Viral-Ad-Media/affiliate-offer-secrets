@@ -1,5 +1,11 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { POSTS_PER_PAGE, MAX_FEED_POSTS, type BlogIndexPost, type BlogIndexCategory } from "@/lib/blog";
+import {
+  postsPerPage,
+  MAX_FEED_POSTS,
+  type BlogIndexPost,
+  type BlogIndexCategory,
+  type BlogSettings,
+} from "@/lib/blog";
 
 const POST_COLUMNS =
   "id, title, slug, excerpt, content_md, html, featured_image_url, published_at, blog_categories(name, slug)";
@@ -52,8 +58,12 @@ export type BlogIndexData = {
 export async function loadBlogIndex(
   admin: ReturnType<typeof createAdminClient>,
   workspaceId: string,
-  params: URLSearchParams
+  params: URLSearchParams,
+  // The page size is the tenant's chosen columns x rows, so paging can't disagree with the shape
+  // the index actually renders. Omitted (no settings row yet) falls back to the default grid.
+  settings?: BlogSettings
 ): Promise<BlogIndexData | null> {
+  const perPage = postsPerPage(settings ?? {});
   const categorySlug = (params.get("category") || "").trim() || null;
   const requestedPage = Number.parseInt(params.get("page") || "1", 10);
   const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
@@ -96,14 +106,14 @@ export async function loadBlogIndex(
     admin.from("blog_posts").select("id", { count: "exact", head: true }) as any
   );
   const total = count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / POSTS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
   // A page past the end is a 404 rather than an empty grid — keeps crawlers off infinite ranges.
   if (page > totalPages && total > 0) return null;
 
-  const from = (page - 1) * POSTS_PER_PAGE;
+  const from = (page - 1) * perPage;
   const { data: rows } = await applyFilters(admin.from("blog_posts").select(POST_COLUMNS) as any)
     .order("published_at", { ascending: false, nullsFirst: false })
-    .range(from, from + POSTS_PER_PAGE - 1);
+    .range(from, from + perPage - 1);
 
   const posts: BlogIndexPost[] = (rows ?? []).map(toIndexPost);
 

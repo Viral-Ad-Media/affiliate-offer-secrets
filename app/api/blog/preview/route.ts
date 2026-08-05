@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { renderBlogIndexHtml, type BlogIndexPost } from "@/lib/blog";
+import { renderBlogIndexHtml, postsPerPage, type BlogIndexPost } from "@/lib/blog";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
   const [{ data: settings }, { data: rows }, { data: cats }] = await Promise.all([
     supabase
       .from("blog_settings")
-      .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html")
+      .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html, index_layout, index_columns, index_rows")
       .maybeSingle(),
     supabase
       .from("blog_posts")
@@ -67,7 +67,8 @@ export async function GET(req: Request) {
   const activeCategory = categoryParam ? (categories.find((c) => c.slug === categoryParam) ?? null) : null;
   const filtered = activeCategory ? posts.filter((p) => p.category_slug === activeCategory.slug) : posts;
 
-  const perPage = 12;
+  // Same page size the public index uses, so the preview's pager matches the real one.
+  const perPage = postsPerPage(settings ?? {});
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   // Clamped rather than 404'd on an out-of-range page — a preview should always render something,
   // and the only way to land here is by clicking the app's own pager.

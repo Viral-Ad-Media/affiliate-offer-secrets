@@ -31,13 +31,13 @@ async function serveBlogOnDomain(
 ): Promise<Response | null> {
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html")
+    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html, index_layout, index_columns, index_rows")
     .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!settings) return null;
 
   if (path === "") {
-    const index = await loadBlogIndex(admin, workspaceId, searchParams);
+    const index = await loadBlogIndex(admin, workspaceId, searchParams, settings);
     if (!index) return null; // unknown category / page past the end → caller's generic 404
     return new Response(renderBlogIndexHtml(settings, index.posts, { ...index, siteOrigin }), {
       status: 200,
