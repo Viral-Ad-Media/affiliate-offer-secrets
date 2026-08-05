@@ -1383,6 +1383,81 @@ manage, not an afterthought.
   safely generalize to audit's fetch-all pattern. Full pagination/search/date-filter is an
   explicit deferred v2, not silently absent.
 
+## Credits are consumed by work, not just by ad spend
+
+Until 0063, `credits_ledger` was debited in exactly ONE place — `reserve_ad_credits()` at ad
+activation — while every unit of real platform cost (Anthropic calls, kie.ai images, Veo video)
+landed in `usage_ledger` as tracking with nothing deducted. Fine while one operator tested solo on
+their own API keys; wrong for paying customers. `lib/credits.ts`'s `JOB_CREDIT_COST` is now the
+price list and the single place to change what anything costs.
+
+- **A job is charged ONCE, at queue time, keyed on its own id — never inside a stage handler.**
+  `worker.ts` re-runs stages, reclaims jobs whose `locked_at` went stale, and retries to
+  `MAX_ATTEMPTS`; a debit written inside a stage would fire on every one of those. Two partial
+  unique indexes on `credits_ledger (job_id)` — one per sign — make "one charge and one refund per
+  job" a database guarantee rather than app discipline, and `charge_job_credits` swallows the
+  duplicate and returns the current balance, so a retried request is idempotent by construction.
+- **Ordering: insert the job, then charge, then delete the job if the charge is declined.** The
+  debit is keyed on the job id, so the row must exist first. `queueChargedJob()` owns that triple
+  (plus an `onRollback` for the two routes that take a concurrency claim first — `video_status`,
+  `claim_campaign_creative` — which would otherwise sit "generating" forever after a declined
+  charge). The alternative, charging against a client-chosen id, would let a caller mint the
+  primary key of a row only the admin client writes; nothing else here allows that.
+- **A REAL PRE-EXISTING BUG got fixed in the same pass**: `reserve_ad_credits()` summed the balance
+  `where user_id = auth.uid()` while `credits_ledger` has been workspace-scoped since 0057 and the
+  credits chip sums by `workspace_id`. In a workspace with more than one member those disagree —
+  credits bought by one member were invisible to another member trying to spend them, while the
+  chip showed the shared total. Both now go through `workspace_credit_balance()`, and both debit
+  paths take the SAME advisory lock key (`'credits:' || workspace_id`) so a job charge and an
+  ad-spend reservation serialise against each other. Two debits racing under READ COMMITTED can
+  both read the same starting balance — the exact race 0008 documented, which only holds if
+  everyone shares the lock.
+- **`launch_ad` and `send_broadcast_email` cost 0 deliberately.** The ad's budget is already
+  reserved by `reserve_ad_credits()` at activation (charging to queue the draft would bill twice
+  for one action, and paused drafts are free on purpose); broadcast sends are governed by the
+  pooled daily cap that exists to protect a real mailbox, and a per-email price would be a second
+  unrelated limiter on the same action.
+- **Refund on TERMINAL failure only** (`failJob`, attempts exhausted). A job with retries left may
+  still succeed, and refunding early would let a flaky-then-successful job run free.
+  `refund_job_credits` mirrors the original debit rather than taking an amount, so a price change
+  between queueing and failing can't refund the wrong number. A refund failure is logged, never
+  allowed to mask the real error.
+- **Synchronous AI helpers are NOT charged** (`/api/broadcast/generate`). Charging safely depends
+  on the job-id key; a synchronous call has none, so pricing it would add a second, weaker billing
+  path for one cheap text call. Tokens still land in `usage_ledger`. If one ever needs a price,
+  give it a client-supplied idempotency key first (the `meta_posts` pattern) — don't bolt on an
+  unguarded debit.
+- **`CostBadge` is a hint, never a gate.** It shows the price beside every spending action and
+  turns amber below balance, but disables nothing: the server re-checks under the advisory lock and
+  answers 402, and that is the only trustworthy answer. A client-side block from a possibly-stale
+  number would either lie about affordability or grey out a button that would have worked.
+  `CreditsProvider` seeds the balance from the value the app layout already computes for the chip
+  (correct on first paint, no flash) and each spend calls `refresh()` rather than a full
+  `router.refresh()` for one number.
+
+## Bulk actions and quick edit (leads, blog posts)
+
+Two lists carry row selection with a bulk bar: Contacts → Leads and Blog → Posts. Both bulk
+endpoints share one non-negotiable shape, and it is the whole security story of each: **they write
+on the admin client, which bypasses RLS, and the ids come from the request body — so every id is
+re-resolved against the caller's workspace FIRST and only that verified set is touched.** Ids from
+another workspace are silently dropped, never acted on. Any second caller-supplied reference in the
+same request (`tag_id`, `category_id`) gets its own identical check, or a caller could staple
+another workspace's tag onto their own leads / file posts under another workspace's category. Same
+discipline as `set_broadcast_sequence_contacts` validating every element of its array: a determined
+caller talks to the endpoint, not the UI, and "the UI only sends ids it rendered" is not an
+authorization argument. Verified live for contacts: of 3 supplied ids (1 real, 2 foreign) exactly 1
+passed the filter.
+
+- **Blog quick edit reuses the existing `PATCH /api/blog/posts/[id]`** rather than adding a route —
+  that route already handled title, category and status, so there is no second write path to keep
+  in step. Changing a title moves the slug, and the dialog says so: old links to the previous slug
+  stop resolving.
+- **Bulk publish is a real publish** — it stamps `published_at` exactly as a single publish does.
+  A bulk path with quieter semantics is how a bulk action ends up doing less than the single one.
+  Unpublish deliberately LEAVES `published_at` in place: it records when the post first went live,
+  and the public routes gate on `status`, not on that column.
+
 ## shadcn/ui + 21st.dev components
 
 First use of shadcn/ui in this codebase (everything before this was hand-rolled Tailwind classes —
