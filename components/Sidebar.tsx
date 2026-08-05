@@ -202,6 +202,8 @@ export default function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  // Which collapsed-rail section is showing its children, and the viewport y to pin it to.
+  const [flyout, setFlyout] = useState<{ href: string; top: number } | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -215,6 +217,9 @@ export default function Sidebar({
   }, [pathname]);
 
   function toggleCollapsed() {
+    // Expanding renders the children inline, so a flyout pinned to the old rail width would
+    // otherwise hang there over the page until the next hover.
+    setFlyout(null);
     setCollapsed((c) => {
       localStorage.setItem("sidebar_collapsed", c ? "0" : "1");
       return !c;
@@ -254,8 +259,26 @@ export default function Sidebar({
         );
       }
 
+      // Collapsed, a section's children have nowhere to render inline — so they get a hover
+      // flyout instead of being unreachable without expanding the rail first.
+      const hasFlyout = iconOnly && !!children?.length;
+
       return (
-        <div key={item.href}>
+        <div
+          key={item.href}
+          onMouseEnter={
+            hasFlyout
+              ? (e) => setFlyout({ href: item.href, top: e.currentTarget.getBoundingClientRect().top })
+              : undefined
+          }
+          onMouseLeave={hasFlyout ? () => setFlyout(null) : undefined}
+          onFocus={
+            hasFlyout
+              ? (e) => setFlyout({ href: item.href, top: e.currentTarget.getBoundingClientRect().top })
+              : undefined
+          }
+          onBlur={hasFlyout ? () => setFlyout(null) : undefined}
+        >
           <Link
             href={item.href}
             title={iconOnly ? item.label : undefined}
@@ -267,6 +290,41 @@ export default function Sidebar({
             <item.icon className="h-4 w-4 shrink-0" />
             {!iconOnly && <span>{item.label}</span>}
           </Link>
+
+          {/* Fixed, not absolute: the rail is overflow-y-auto, which computes overflow-x to auto
+              too, so an absolutely-positioned panel would be clipped. Kept as a DOM child of the
+              hover target so moving the pointer into it doesn't fire the wrapper's mouseleave,
+              and left-14 + pl-2 bridges the rail's padding so the gap isn't a dead zone. */}
+          {hasFlyout && flyout?.href === item.href && (
+            <div style={{ top: flyout.top }} className="fixed left-14 z-50 pl-2">
+              <div className="min-w-[11rem] rounded-lg border border-ink-700 bg-ink-900 p-1.5 shadow-xl">
+                <div className="px-2 pb-1 pt-0.5 text-[11px] uppercase tracking-wide text-zinc-500">
+                  {item.label}
+                </div>
+                {children!.map((c) => {
+                  const childActive = c.match(pathname);
+                  return (
+                    <Link
+                      key={c.href}
+                      href={c.href}
+                      onClick={() => {
+                        setFlyout(null);
+                        setMobileOpen(false);
+                      }}
+                      className={`block rounded-md px-2 py-1.5 text-[13px] transition-colors ${
+                        childActive
+                          ? "bg-emerald-600/15 text-emerald-300"
+                          : "text-zinc-400 hover:bg-ink-800 hover:text-zinc-100"
+                      }`}
+                    >
+                      {c.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {!iconOnly && active && children && (
             <div className="ml-4 mt-0.5 space-y-0.5 border-l border-ink-700 pl-3">
               {children.map((c) => {

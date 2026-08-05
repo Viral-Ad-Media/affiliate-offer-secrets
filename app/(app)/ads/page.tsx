@@ -80,7 +80,9 @@ export default async function AdsPage() {
       .eq("workspace_id", ws)
       .order("created_at", { ascending: false })
       .limit(200),
-    supabase.rpc("get_meta_connection_status").then((r) => r.data ?? { connected: false }),
+    supabase
+      .rpc("get_meta_connection_status", { p_workspace_id: ws })
+      .then((r) => r.data ?? { connected: false }),
   ]);
 
   const rows = ((launches ?? []) as any[]).map((l) => ({

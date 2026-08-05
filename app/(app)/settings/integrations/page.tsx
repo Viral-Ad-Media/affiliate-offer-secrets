@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
 import Link from "next/link";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -24,8 +25,14 @@ export default async function ConnectionsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Host-resolved, so the panel shows the workspace whose subdomain you are actually on --
+  // not whichever workspace profiles.active_workspace_id happens to hold in another tab.
+  const ws = await currentWorkspaceId();
+
   const [metaStatus, tiktokStatus, mailProviders, networkRows, everflowRow] = await Promise.all([
-    supabase.rpc("get_meta_connection_status").then((r) => r.data ?? { connected: false }),
+    supabase
+      .rpc("get_meta_connection_status", { p_workspace_id: ws })
+      .then((r) => r.data ?? { connected: false }),
     supabase.rpc("get_tiktok_connection_status").then((r) => r.data ?? { connected: false }),
     supabase
       .rpc("get_mail_provider_connections")

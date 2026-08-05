@@ -112,6 +112,7 @@ export async function GET(req: Request) {
         .from("meta_connections")
         .insert({
           user_id: user.id,
+          workspace_id: ws,
           fb_user_id: me.id,
           user_token_secret_id: userSecretId,
           token_expires_at: toExpiryIso(tokenInfo.expires_at),
@@ -157,6 +158,7 @@ export async function GET(req: Request) {
       } else {
         await admin.from("meta_pages").insert({
           user_id: user.id,
+          workspace_id: ws,
           connection_id: connectionId,
           page_id: page.id,
           page_name: page.name,
@@ -188,6 +190,7 @@ export async function GET(req: Request) {
         } else {
           await admin.from("meta_instagram_accounts").insert({
             user_id: user.id,
+            workspace_id: ws,
             connection_id: connectionId,
             ig_user_id: igAccount.id,
             ig_username: igAccount.username,
@@ -220,6 +223,7 @@ export async function GET(req: Request) {
       } else {
         await admin.from("meta_ad_accounts").insert({
           user_id: user.id,
+          workspace_id: ws,
           connection_id: connectionId,
           ad_account_id: account.id,
           ad_account_name: account.name,

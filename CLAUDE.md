@@ -413,6 +413,35 @@ Phase B — OAuth + real posting to a client's own Page, no ad spend involved (r
 are Phase C, documented separately below). Schema in `supabase/migrations/0006_meta_connections.sql`
 + `0007_meta_secret_helper.sql`; client code in `lib/meta/*`, routes under `app/api/meta/*`.
 
+- **A Meta connection belongs to the workspace, not to whoever clicked Connect**
+  (`0071_meta_workspace_scope.sql`). Phase 2 added `workspace_id` to all six Meta tables but left
+  the UNIQUE constraints and three RPCs keyed on `user_id`, which broke three things: a user in
+  two workspaces could not connect Meta in the second at all (the insert collided with
+  `unique(user_id)` from the first); `get_meta_connection_status()` read `where user_id =
+  auth.uid()`, so a teammate who did not personally run the OAuth flow saw "not connected" for a
+  workspace that is connected; and `disconnect_meta()` deleted by `user_id`, so a teammate could
+  not unhook a bad connection. All six constraints are now `(workspace_id, …)`.
+- **The `stamp_workspace_id` trigger is not a substitute for stamping it yourself in the OAuth
+  callback.** The callback writes through the admin client, where `auth.uid()` is NULL, so the
+  trigger falls through to "this user's first owned workspace" — connecting from workspace B
+  would file the connection under workspace A, and every read (all workspace-scoped) would then
+  show nothing. `app/api/meta/callback/route.ts` passes `workspace_id: ws` on all four inserts.
+  Any future connector written on the admin client must do the same.
+- `get_meta_connection_status`, `disconnect_meta` and `set_active_meta_page` take an optional
+  `p_workspace_id`, so a server caller that already resolved the workspace from the request host
+  (Phase 3's rule) passes it rather than letting the RPC re-resolve to whatever
+  `profiles.active_workspace_id` holds. Omitted, it falls back to `current_workspace_id()` — what
+  browser-side callers do. Membership is re-checked either way in `resolve_workspace_arg()`, so
+  passing an id can only narrow, never widen.
+- `assert_owns_meta_page`/`assert_owns_ig_account` are membership-only. They used to read
+  `user_id = auth.uid() OR is_workspace_member(...)`, which let a person *removed* from a
+  workspace keep passing the ownership check on rows they originally created.
+
+**Still user-keyed, same latent bug, not yet fixed**: `tiktok_connections` (`unique(user_id)`),
+`mail_provider_connections` (`unique(user_id, provider)`) and `network_connections`
+(`unique(user_id, network)`), plus their own `get_*_connection_status`/`disconnect_*` RPCs. Same
+shape, same fix — do these before anyone is genuinely in two workspaces.
+
 - **Tokens are never stored as plaintext columns.** `meta_connections.user_token_secret_id` /
   `meta_pages.page_token_secret_id` point into Supabase Vault (`vault.create_secret`, via the
   `store_meta_secret()` wrapper — `vault` isn't exposed to PostgREST directly). Retrieval is a
