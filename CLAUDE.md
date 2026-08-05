@@ -2507,6 +2507,15 @@ Full name / Phone / Second email / Message / Checkbox / Choose one / Dropdown, e
   last_name/phone/message/budget plus the SELECTED radio option, an unticked checkbox stored
   nothing and a ticked one stored "yes".
 
+## Where email sending is configured
+
+The transactional provider (Resend / SendGrid / Mailgun / SMTP) and the from-address live on
+**Emails → Settings** (`/emails/settings`), not on Settings → Integrations where they started.
+Integrations is where you connect an *account*; it is not where anyone looks when a broadcast
+won't send. Moved, not copied — a second page setting the active sender would eventually disagree
+with the first about which is authoritative — and Integrations now carries a one-line pointer.
+Gmail stays on Integrations because it is an OAuth connection like Facebook and TikTok.
+
 ## My Products vs Marketplace
 
 `/marketplace` is discovery; `/products` ("My Products" in the sidebar) is the offers you already

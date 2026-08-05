@@ -72,6 +72,7 @@ const NAV: NavItem[] = [
     children: [
       { href: "/emails/broadcast", label: "Broadcast", match: (p: string) => p === "/emails/broadcast" },
       { href: "/emails/sequences", label: "Sequences", match: (p: string) => p.startsWith("/emails/sequences") },
+      { href: "/emails/settings", label: "Settings", match: (p: string) => p === "/emails/settings" },
     ],
   },
   { href: "/sms", label: "SMS", icon: MessageSquare, match: () => false, soon: true },
