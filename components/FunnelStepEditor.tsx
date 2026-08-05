@@ -7,6 +7,7 @@ import {
   normalizePageCopy,
   firstImageDataUrl,
   renderFunnelStepHtml,
+  renderBlockTree,
   type PageBlockTree,
   type FunnelStepType,
 } from "@/lib/engine/renderPages";
@@ -15,6 +16,7 @@ import type { FunnelStepCtaAction } from "@/lib/shared";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import ContentWidthField from "@/components/ContentWidthField";
 import PageThemePanel from "@/components/PageThemePanel";
+import PostSeoPanel from "@/components/PostSeoPanel";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
 import { resizeImageFile } from "@/lib/images/resizeClient";
 
@@ -128,6 +130,19 @@ export default function FunnelStepEditor({
             <div className="space-y-4">
               <ContentWidthField tree={tree} onChange={setTree} />
               <PageThemePanel tree={tree} onChange={setTree} />
+              {/* Same analyzePostSeo the blog editor runs, in funnel mode — see lib/blogSeo.ts for
+                  which checks drop out and why. Scored from the CURRENT tree, not the last save. */}
+              <PostSeoPanel
+                input={{
+                  title: seo.seo_title || productTitle,
+                  contentMd: "",
+                  html: renderBlockTree(tree, { pageKind: "bridge", disclosureText: DISCLOSURE, leadConsentText: "", campaignId: "", primaryHref: "#", productTitle }),
+                  seoTitle: seo.seo_title,
+                  seoDescription: seo.seo_description,
+                  featuredImageUrl: firstImageDataUrl(tree),
+                  pageKind: "funnel",
+                }}
+              />
             </div>
           ),
         }}

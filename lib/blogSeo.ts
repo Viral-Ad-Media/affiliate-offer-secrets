@@ -47,6 +47,13 @@ export type SeoInput = {
   slug?: string | null;
   /** The blog's own host(s), so a link to your own site counts as internal. */
   siteHosts?: string[];
+  /**
+   * Which checks apply. A funnel page is served X-Robots-Tag: noindex on purpose, so scoring it
+   * on slug shape or internal linking would be scoring it against a job it doesn't have. What
+   * still matters there is the share preview (title/description drive og: tags when the link is
+   * pasted into a DM or an ad review) and plain readability.
+   */
+  pageKind?: "post" | "funnel";
 };
 
 // Google truncates around these; they're display limits, not ranking factors, which is why
@@ -151,6 +158,7 @@ export function analyzePostSeo(input: SeoInput): SeoReport {
   const metaDesc = (input.seoDescription || input.excerpt || "").trim();
   const h2s = headings.filter((h) => h.level === 2).length;
 
+  const isFunnel = input.pageKind === "funnel";
   const checks: SeoCheck[] = [
     {
       id: "title",
@@ -192,7 +200,7 @@ export function analyzePostSeo(input: SeoInput): SeoReport {
     {
       id: "internal",
       label: "Internal links",
-      weight: 2,
+      weight: input.pageKind === "funnel" ? 0 : 2,
       ...(internalLinks >= 1
         ? { status: "pass" as const, detail: `${internalLinks} link${internalLinks === 1 ? "" : "s"} to your own pages.` }
         : { status: "warn" as const, detail: "No internal links. Link to a related post so readers (and crawlers) have somewhere to go." }),
@@ -203,7 +211,12 @@ export function analyzePostSeo(input: SeoInput): SeoReport {
       weight: 1,
       ...(externalLinks >= 1
         ? { status: "pass" as const, detail: `${externalLinks} outbound link${externalLinks === 1 ? "" : "s"}, including your affiliate links.` }
-        : { status: "warn" as const, detail: "No outbound links — including the offer you're promoting. Is that intentional?" }),
+        : {
+            status: "warn" as const,
+            detail: isFunnel
+              ? "No outbound link — this page has nowhere to send anyone. Check the CTA's destination."
+              : "No outbound links — including the offer you're promoting. Is that intentional?",
+          }),
     },
     {
       id: "image",
@@ -216,18 +229,24 @@ export function analyzePostSeo(input: SeoInput): SeoReport {
     {
       id: "slug",
       label: "URL",
-      weight: 1,
+      // Weight 0 on a funnel: its URL is /p/{campaignId}/bridge or a mapped domain path, neither
+      // of which this page controls, so scoring it would only ever be a permanent deduction for
+      // something nobody can fix.
+      weight: input.pageKind === "funnel" ? 0 : 1,
       ...slugCheck(input.slug ?? null),
     },
   ];
 
   // Warn counts half: it's a real deduction, but a post with eight warnings and no failures isn't
   // in the same state as one with eight failures, and a pass/fail-only score would say it was.
-  const earned = checks.reduce((n, c) => n + c.weight * (c.status === "pass" ? 1 : c.status === "warn" ? 0.5 : 0), 0);
-  const total = checks.reduce((n, c) => n + c.weight, 0);
+  const scored = checks.filter((c) => c.weight > 0);
+  const earned = scored.reduce((n, c) => n + c.weight * (c.status === "pass" ? 1 : c.status === "warn" ? 0.5 : 0), 0);
+  const total = scored.reduce((n, c) => n + c.weight, 0);
   const score = total > 0 ? Math.round((earned / total) * 100) : 0;
 
-  return { score, checks, wordCount, internalLinks, externalLinks, links, headings };
+  // Zero-weight checks are dropped entirely rather than shown as a permanent grey row —
+  // a check that can't affect the score and can't be acted on is just noise.
+  return { score, checks: scored, wordCount, internalLinks, externalLinks, links, headings };
 }
 
 function lengthCheck(

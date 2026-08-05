@@ -18,6 +18,7 @@ import { analyzePostSeo, scoreTone, type SeoInput } from "@/lib/blogSeo";
  * implies knowledge of a search engine it can't see would be worse than no number.
  */
 export default function PostSeoPanel({ input }: { input: SeoInput }) {
+  const funnel = input.pageKind === "funnel";
   const report = useMemo(() => analyzePostSeo(input), [input]);
   const [showLinks, setShowLinks] = useState(false);
 
@@ -31,10 +32,13 @@ export default function PostSeoPanel({ input }: { input: SeoInput }) {
     <section className="card space-y-4 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-zinc-100">SEO</h2>
-          <p className="mt-0.5 text-[11px] text-zinc-500">
-            On-page checks only — nothing here can see a search engine, so this is hygiene, not a
-            ranking prediction.
+          <h2 className="text-sm font-semibold text-zinc-100">{funnel ? "Page check" : "SEO"}</h2>
+          <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">
+            {funnel
+              ? // Said plainly because the alternative is a number that quietly implies Google is
+                // looking at a page that is explicitly told not to look.
+                "This page is noindex by design, so this isn't a ranking score — it's the share preview (what shows when the link is pasted anywhere) and plain readability."
+              : "On-page checks only — nothing here can see a search engine, so this is hygiene, not a ranking prediction."}
           </p>
         </div>
         <div className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-full border-2 ${ringClass}`}>
