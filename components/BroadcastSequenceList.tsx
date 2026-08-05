@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
 import { Plus, Loader2, Send , Layers} from "lucide-react";
 import { toast } from "@/lib/toast";
 import { createClient } from "@/lib/supabase/client";
@@ -86,25 +90,26 @@ export default function BroadcastSequenceList({
   }
 
   return (
-    <div className="card overflow-hidden">
+    <Card className="overflow-hidden">
       <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-zinc-100">Sequences</h2>
           <p className="text-xs text-zinc-500">Named drip sequences, each with its own audience and steps.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            variant="outline"
             onClick={importAll}
             disabled={importing}
             title="Create a draft sequence from every campaign kit's generated email swipe"
-            className="btn-ghost !py-1.5 text-xs"
+            className="text-xs"
           >
             {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Layers className="h-3.5 w-3.5" />}
             Import all swipes
-          </button>
-          <button onClick={() => setCreating((v) => !v)} className="btn-ghost !py-1.5 text-xs">
+          </Button>
+          <Button variant="outline" onClick={() => setCreating((v) => !v)} className="text-xs">
             <Plus className="h-3.5 w-3.5" /> New sequence
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -148,14 +153,13 @@ export default function BroadcastSequenceList({
                 </select>
               </div>
             )}
-            <button
+            <Button
               onClick={create}
               disabled={busy || !name.trim() || (audienceType === "campaign" && !campaignId)}
-              className="btn-primary"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Create
-            </button>
+            </Button>
           </div>
           {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
         </div>
@@ -167,19 +171,19 @@ export default function BroadcastSequenceList({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="data-table w-full text-sm">
-            <thead>
+          <Table className="text-sm">
+            <TableHeader>
               <tr>
-                <th>Name</th>
-                <th>Audience</th>
-                <th className="text-right">Steps</th>
-                <th className="text-right">Enrolled</th>
-                <th>Status</th>
+                <TableHead edge>Name</TableHead>
+                <TableHead>Audience</TableHead>
+                <TableHead className="text-right">Steps</TableHead>
+                <TableHead className="text-right">Enrolled</TableHead>
+                <TableHead edge>Status</TableHead>
               </tr>
-            </thead>
-            <tbody>
+            </TableHeader>
+            <TableBody>
               {rows.map(({ sequence, campaignTitle, stepCount, enrolledCount }) => (
-                <tr key={sequence.id}>
+                <TableRow key={sequence.id}>
                   <td className="px-4 py-2.5">
                     <Link href={`/emails/sequences/${sequence.id}`} className="font-medium text-zinc-100 hover:text-emerald-400">
                       <span className="inline-flex items-center gap-1.5">
@@ -194,14 +198,14 @@ export default function BroadcastSequenceList({
                   <td className="px-2 py-2.5 text-right tabular-nums">{stepCount}</td>
                   <td className="px-2 py-2.5 text-right tabular-nums">{enrolledCount}</td>
                   <td className="px-2 py-2.5">
-                    <span className={`chip ${STATUS_COLORS[sequence.status]}`}>{sequence.status}</span>
+                    <Badge className={STATUS_COLORS[sequence.status]}>{sequence.status}</Badge>
                   </td>
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

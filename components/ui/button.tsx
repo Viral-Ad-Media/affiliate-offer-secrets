@@ -24,7 +24,9 @@ import { cn } from "@/lib/utils";
  * browser default. It's the one deliberate visual change here, and only shows on keyboard focus.
  */
 const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+  // No whitespace-nowrap, despite stock shadcn having it: .btn didn't, so adding it would change
+  // how long-labelled buttons wrap. The focus ring below is the only intentional addition.
+  "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg text-sm font-medium ring-offset-background transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
   {
     variants: {
       variant: {
