@@ -6,6 +6,7 @@ import { RotateCcw, XCircle, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { AdminProblemJob } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 // Jobs that need a human: terminally failed, or sitting pending/running far longer than the
 // 1-minute backstop should ever allow. Both actions go straight to the self-gating RPCs — no
@@ -54,7 +55,7 @@ export default function AdminProblemJobs({ jobs }: { jobs: AdminProblemJob[] }) 
           Nothing failed, stuck or backed up. The queue is healthy.
         </p>
       ) : (
-        <div className="card overflow-x-auto">
+        <Card className="overflow-x-auto">
           <table className="data-table w-full">
             <thead>
               <tr>
@@ -121,7 +122,7 @@ export default function AdminProblemJobs({ jobs }: { jobs: AdminProblemJob[] }) 
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
     </section>
   );

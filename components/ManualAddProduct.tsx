@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 const NETWORK_OPTIONS = [
   { value: "clickbank", label: "ClickBank" },
@@ -65,7 +66,7 @@ export default function ManualAddProduct({ onAdded }: { onAdded: () => void }) {
   }
 
   return (
-    <div className="card p-4">
+    <Card className="p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-zinc-100">Add a product manually</h3>
         <button onClick={() => setOpen(false)} className="rounded p-1 text-zinc-500 hover:bg-ink-700 hover:text-zinc-200">
@@ -143,6 +144,6 @@ export default function ManualAddProduct({ onAdded }: { onAdded: () => void }) {
           Add product
         </Button>
       </form>
-    </div>
+    </Card>
   );
 }

@@ -1,4 +1,5 @@
 import type { UsageEntry } from "@/lib/shared";
+import { Card } from "@/components/ui/card";
 
 function formatCost(usd: number): string {
   if (usd === 0) return "$0.00";
@@ -19,7 +20,7 @@ export default function UsageLedger({
   totalCostUsd: number;
 }) {
   return (
-    <div className="card overflow-hidden">
+    <Card className="overflow-hidden">
       <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-zinc-100">Resource usage</h2>
@@ -69,6 +70,6 @@ export default function UsageLedger({
           </tbody>
         </table>
       </div>
-    </div>
+    </Card>
   );
 }

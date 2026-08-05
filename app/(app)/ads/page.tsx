@@ -14,6 +14,7 @@ import {
   Loader2,
   ExternalLink,
 } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 
@@ -122,7 +123,7 @@ export default async function AdsPage() {
       </header>
 
       {!adsReady && (
-        <div className="card flex flex-wrap items-center justify-between gap-3 border-amber-500/30 p-4">
+        <Card className="flex flex-wrap items-center justify-between gap-3 border-amber-500/30 p-4">
           <p className="text-sm text-amber-300">
             {(metaStatus as any)?.connected
               ? "Facebook is connected, but ad permissions weren't granted — reconnect and accept ads_management to launch ads."
@@ -131,18 +132,18 @@ export default async function AdsPage() {
           <Link href="/settings/integrations" className="btn-ghost text-xs">
             Go to Integrations
           </Link>
-        </div>
+        </Card>
       )}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="card p-4">
+        <Card className="p-4">
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
             <CircleCheck className="h-3.5 w-3.5 text-emerald-400" /> Active ads
           </div>
           <div className="mt-2 text-2xl font-bold text-zinc-100">{active.length}</div>
           <div className="mt-1 text-xs text-zinc-500">Live and delivering on Meta</div>
-        </div>
-        <div className="card p-4">
+        </Card>
+        <Card className="p-4">
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
             <Coins className="h-3.5 w-3.5 text-emerald-400" /> Daily budget authorized
           </div>
@@ -150,14 +151,14 @@ export default async function AdsPage() {
           <div className="mt-1 text-xs text-zinc-500">
             Credits/day across active ads — Meta bills your own ad account
           </div>
-        </div>
-        <div className="card p-4">
+        </Card>
+        <Card className="p-4">
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
             <CirclePause className="h-3.5 w-3.5 text-amber-300" /> Awaiting review
           </div>
           <div className="mt-2 text-2xl font-bold text-zinc-100">{awaitingReview}</div>
           <div className="mt-1 text-xs text-zinc-500">Paused drafts you haven&apos;t activated</div>
-        </div>
+        </Card>
       </div>
 
       <section className="card overflow-hidden">

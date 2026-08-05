@@ -5,6 +5,7 @@ import { Link2, Loader2, CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Network } from "@/lib/engine/renderPages";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type NetworkConfig = {
   network: Network;
@@ -99,7 +100,7 @@ function NetworkCard({
   }
 
   return (
-    <div className="card p-5">
+    <Card className="p-5">
       <div className="mb-1 flex items-center gap-2">
         <Link2 className="h-4 w-4 text-zinc-400" />
         <h2 className="text-sm font-semibold text-zinc-100">{config.label}</h2>
@@ -123,6 +124,6 @@ function NetworkCard({
         </Button>
       </div>
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-    </div>
+    </Card>
   );
 }

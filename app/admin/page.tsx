@@ -12,6 +12,7 @@ import {
 import AdminAccountsTable from "@/components/AdminAccountsTable";
 import AdminProblemJobs from "@/components/AdminProblemJobs";
 import type { AdminAccountRow, AdminProblemJob, AdminActionRow } from "@/lib/shared";
+import { Card } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Superadmin" };
@@ -37,13 +38,13 @@ function Tile({
   const valueTone =
     tone === "bad" ? "text-red-300" : tone === "warn" ? "text-amber-300" : "text-zinc-100";
   return (
-    <div className="card p-4">
+    <Card className="p-4">
       <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
         <Icon className="h-3.5 w-3.5 text-emerald-400" /> {label}
       </div>
       <div className={`mt-2 text-2xl font-bold ${valueTone}`}>{value}</div>
       {hint && <div className="mt-1 text-xs text-zinc-500">{hint}</div>}
-    </div>
+    </Card>
   );
 }
 
@@ -168,7 +169,7 @@ export default async function AdminPage() {
         {actions.length === 0 ? (
           <p className="text-sm text-zinc-500">Nothing yet.</p>
         ) : (
-          <div className="card overflow-x-auto">
+          <Card className="overflow-x-auto">
             <table className="data-table w-full">
               <thead>
                 <tr>
@@ -195,7 +196,7 @@ export default async function AdminPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </Card>
         )}
       </section>
     </main>

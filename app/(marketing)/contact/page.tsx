@@ -1,5 +1,6 @@
 import { Mail } from "lucide-react";
 import { SUPPORT_EMAIL } from "@/lib/brand";
+import { Card } from "@/components/ui/card";
 
 export const metadata = {
   title: "Contact",
@@ -15,7 +16,7 @@ export default function ContactPage() {
         us is email. We typically reply within one business day.
       </p>
 
-      <div className="card mt-8 flex items-center gap-4 p-6">
+      <Card className="mt-8 flex items-center gap-4 p-6">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
           <Mail className="h-5 w-5" />
         </div>
@@ -28,7 +29,7 @@ export default function ContactPage() {
             {SUPPORT_EMAIL}
           </a>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

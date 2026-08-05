@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import AuthForm, { type AuthMode } from "@/components/AuthForm";
+import { Card } from "@/components/ui/card";
 
 // Still a real page, and it has to stay one even though the marketing site now opens the same
 // form in a popup: ~15 server-side `redirect("/login")` calls target this route, middleware's auth
@@ -20,9 +21,9 @@ function LoginInner() {
             Affiliate Offer <span className="text-emerald-400">Secrets</span>
           </h1>
         </div>
-        <div className="card p-5">
+        <Card className="p-5">
           <AuthForm initialMode={initialMode} />
-        </div>
+        </Card>
       </div>
     </main>
   );

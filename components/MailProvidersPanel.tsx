@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type ProviderRow = {
   provider: "resend" | "sendgrid" | "mailgun" | "smtp";
@@ -178,7 +179,7 @@ export default function MailProvidersPanel({
   }
 
   return (
-    <div className="card space-y-5 p-5">
+    <Card className="space-y-5 p-5">
       <div>
         <h2 className="mb-1 text-sm font-semibold text-zinc-100">Email providers</h2>
         <p className="text-sm text-zinc-400">
@@ -293,6 +294,6 @@ export default function MailProvidersPanel({
           })}
         </RadioGroup>
       </div>
-    </div>
+    </Card>
   );
 }

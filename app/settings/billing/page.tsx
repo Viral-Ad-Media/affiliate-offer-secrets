@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasAppAccess } from "@/lib/shared";
 import { BuyAccessButton, BuyCreditsGrid, StartTrialButton } from "@/components/BillingActions";
 import LogoutButton from "@/components/LogoutButton";
+import { Card } from "@/components/ui/card";
 
 export default async function BillingPage({
   searchParams,
@@ -69,16 +70,16 @@ export default async function BillingPage({
             </div>
           )}
           {trialEligible && (
-            <div className="card p-5">
+            <Card className="p-5">
               <h2 className="mb-1 text-sm font-semibold text-zinc-100">Try it free for 30 days</h2>
               <p className="mb-4 text-sm text-zinc-400">
                 Full access to discovery and campaign kit generation, no payment required. One
                 trial per account.
               </p>
               <StartTrialButton />
-            </div>
+            </Card>
           )}
-          <div className="card p-5">
+          <Card className="p-5">
             <h2 className="mb-1 text-sm font-semibold text-zinc-100">
               {onTrial ? "Unlock permanently" : "Unlock Affiliate Offer Secrets"}
             </h2>
@@ -87,15 +88,15 @@ export default async function BillingPage({
               posting and ad launches on your own accounts.
             </p>
             <BuyAccessButton />
-          </div>
+          </Card>
         </div>
       ) : (
         <div className="space-y-5">
-          <div className="card p-5 text-center">
+          <Card className="p-5 text-center">
             <div className="text-3xl font-bold text-emerald-400">{creditBalance}</div>
             <div className="text-xs text-zinc-500">credits available</div>
-          </div>
-          <div className="card p-5">
+          </Card>
+          <Card className="p-5">
             <h2 className="mb-1 text-sm font-semibold text-zinc-100">Buy credits</h2>
             <p className="mb-4 text-sm text-zinc-400">
               1 credit ≈ $1 of ad budget the platform is authorized to launch on your own
@@ -103,7 +104,7 @@ export default async function BillingPage({
               credits are a spend cap, not funds held by us.
             </p>
             <BuyCreditsGrid />
-          </div>
+          </Card>
           <Link href="/dashboard" className="btn-ghost block text-center">
             Back to dashboard
           </Link>

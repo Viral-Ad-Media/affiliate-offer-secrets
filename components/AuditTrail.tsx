@@ -1,5 +1,6 @@
 import { Facebook, Instagram, Music2, Youtube, Mail, Send, ExternalLink } from "lucide-react";
 import type { AuditEntry, AuditPlatform } from "@/lib/shared";
+import { Card } from "@/components/ui/card";
 
 const PLATFORM_META: Record<AuditPlatform, { label: string; icon: typeof Facebook; className: string }> = {
   facebook: { label: "Facebook", icon: Facebook, className: "border-sky-500/30 bg-sky-500/10 text-sky-300" },
@@ -12,7 +13,7 @@ const PLATFORM_META: Record<AuditPlatform, { label: string; icon: typeof Faceboo
 
 export default function AuditTrail({ entries }: { entries: AuditEntry[] }) {
   return (
-    <div className="card overflow-hidden">
+    <Card className="overflow-hidden">
       <div className="border-b border-ink-700 px-4 py-3">
         <h2 className="text-sm font-semibold text-zinc-100">Posting activity</h2>
         <p className="text-xs text-zinc-500">
@@ -81,6 +82,6 @@ export default function AuditTrail({ entries }: { entries: AuditEntry[] }) {
           </table>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

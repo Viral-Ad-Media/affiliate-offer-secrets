@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Music2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type Status = { connected: boolean; status?: string; tiktok_username?: string; avatar_url?: string };
 
@@ -20,7 +21,7 @@ export default function TikTokPanel({ status }: { status: Status }) {
 
   if (!status.connected) {
     return (
-      <div className="card p-5">
+      <Card className="p-5">
         <h2 className="mb-1 text-sm font-semibold text-zinc-100">Connect TikTok</h2>
         <p className="mb-4 text-sm text-zinc-400">
           Connect your TikTok account now so it's ready the moment video posting ships.
@@ -28,12 +29,12 @@ export default function TikTokPanel({ status }: { status: Status }) {
         <a href="/api/tiktok/connect" className="btn-primary inline-flex w-fit">
           <Music2 className="h-4 w-4" /> Connect TikTok
         </a>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="card p-5">
+    <Card className="p-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {status.avatar_url && (
@@ -52,6 +53,6 @@ export default function TikTokPanel({ status }: { status: Status }) {
           Disconnect
         </Button>
       </div>
-    </div>
+    </Card>
   );
 }

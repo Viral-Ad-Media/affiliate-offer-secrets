@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 // Flattens a lead's user-added form fields (Phase O.5) into one "key: value; key: value" string —
 // deliberate v1 scope cut, matching the plan's own call: no dynamic per-field columns, since the
@@ -127,7 +128,7 @@ export default function ContactsTable({
 
   return (
     <>
-      <div className="card overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-700 px-4 py-3">
           <div>
             <h2 className="text-sm font-semibold text-zinc-100">Captured leads</h2>
@@ -360,7 +361,7 @@ export default function ContactsTable({
             </table>
           </div>
         )}
-      </div>
+      </Card>
 
       {editing && (
         <EditContactDialog

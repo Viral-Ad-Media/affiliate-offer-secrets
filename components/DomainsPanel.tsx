@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type DomainRoute = {
   id: string;
@@ -326,7 +327,7 @@ function DomainRow({
   }
 
   return (
-    <div className="card">
+    <Card>
       <div className="flex items-center justify-between px-4 py-3">
         <button
           onClick={() => setExpanded((v) => !v)}
@@ -467,7 +468,7 @@ function DomainRow({
           />
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -515,7 +516,7 @@ export default function DomainsPanel({
 
   return (
     <div className="space-y-4">
-      <div className="card p-4">
+      <Card className="p-4">
         <div className="flex flex-wrap items-center gap-2">
           <input
             value={newDomain}
@@ -529,7 +530,7 @@ export default function DomainsPanel({
           </Button>
         </div>
         {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
-      </div>
+      </Card>
 
       {domains.length === 0 ? (
         <p className="text-sm text-zinc-500">No domains connected yet.</p>

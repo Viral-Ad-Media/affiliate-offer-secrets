@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Facebook, Instagram, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type Page = { page_id: string; page_name: string; is_active: boolean; status: string };
 type AdAccount = { ad_account_id: string; ad_account_name: string; currency: string; is_active: boolean };
@@ -45,7 +46,7 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
 
   if (!status.connected) {
     return (
-      <div className="card p-5">
+      <Card className="p-5">
         <h2 className="mb-1 text-sm font-semibold text-zinc-100">Connect Facebook</h2>
         <p className="mb-4 text-sm text-zinc-400">
           Connect your Facebook Page to publish generated captions with one click.
@@ -53,7 +54,7 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
         <a href="/api/meta/connect" className="btn-primary inline-flex w-fit">
           <Facebook className="h-4 w-4" /> Connect Facebook
         </a>
-      </div>
+      </Card>
     );
   }
 
@@ -81,7 +82,7 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
           </a>
         </div>
       )}
-      <div className="card p-5">
+      <Card className="p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-zinc-100">Connected Pages</h2>
           <Button
@@ -123,9 +124,9 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
             <li className="text-sm text-zinc-500">No Pages found for this Facebook account.</li>
           )}
         </ul>
-      </div>
+      </Card>
 
-      <div className="card p-5">
+      <Card className="p-5">
         <h2 className="mb-3 text-sm font-semibold text-zinc-100">Instagram Accounts</h2>
         <ul className="space-y-2">
           {igAccounts.map((a) => (
@@ -149,10 +150,10 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
             </li>
           )}
         </ul>
-      </div>
+      </Card>
 
       {status.ads_management_granted && (
-        <div className="card p-5">
+        <Card className="p-5">
           <h2 className="mb-3 text-sm font-semibold text-zinc-100">Connected Ad Accounts</h2>
           <ul className="space-y-2">
             {adAccounts.map((a) => (
@@ -185,7 +186,7 @@ export default function ConnectionsPanel({ status }: { status: Status }) {
               <li className="text-sm text-zinc-500">No ad accounts found for this Facebook account.</li>
             )}
           </ul>
-        </div>
+        </Card>
       )}
     </div>
   );

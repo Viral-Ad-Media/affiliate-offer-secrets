@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { AdminAccountRow } from "@/lib/shared";
 import { hasAppAccess } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 // One row per account with the numbers a support question starts from, plus the three actions
 // worth doing by hand. Every action is a self-gating RPC that writes its own audit row — see
@@ -115,7 +116,7 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
         </p>
       )}
 
-      <div className="card overflow-x-auto">
+      <Card className="overflow-x-auto">
         <table className="data-table w-full">
           <thead>
             <tr>
@@ -242,7 +243,7 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
             })}
           </tbody>
         </table>
-      </div>
+      </Card>
     </section>
   );
 }

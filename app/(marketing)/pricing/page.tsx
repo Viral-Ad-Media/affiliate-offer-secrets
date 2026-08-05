@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { ACCESS_FEE_CENTS, CREDIT_PACKS } from "@/lib/pricing";
+import { Card } from "@/components/ui/card";
 
 export const metadata = {
   title: "Pricing",
@@ -33,7 +34,7 @@ export default function PricingPage() {
       </div>
 
       <div className="mt-12 grid gap-6 lg:grid-cols-2">
-        <div className="card flex flex-col p-7">
+        <Card className="flex flex-col p-7">
           <span className="chip w-fit border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
             Software access
           </span>
@@ -57,9 +58,9 @@ export default function PricingPage() {
           <Link href="/login" className="btn-primary mt-8 w-full py-2.5 text-base">
             Start your free trial
           </Link>
-        </div>
+        </Card>
 
-        <div className="card flex flex-col p-7">
+        <Card className="flex flex-col p-7">
           <span className="chip w-fit border-ink-600 bg-ink-800 text-zinc-300">
             Ad credits (optional)
           </span>
@@ -89,7 +90,7 @@ export default function PricingPage() {
             Credits are only spent when you explicitly activate a paused ad campaign — building
             and reviewing drafts is always free.
           </p>
-        </div>
+        </Card>
       </div>
 
       <p className="mx-auto mt-10 max-w-2xl text-center text-xs text-zinc-600">

@@ -15,6 +15,7 @@ import {
   Beaker,
   BarChart3,
 } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 // Everything claimed on this page has actually shipped. Two things deliberately NOT claimed,
 // because they haven't: automated marketplace discovery for anything but ClickBank (Digistore24 is
@@ -156,7 +157,7 @@ export default function HomePage() {
         </div>
         <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((step, i) => (
-            <div key={step.title} className="card p-6">
+            <Card key={step.title} className="p-6">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
                   <step.icon className="h-4.5 w-4.5" />
@@ -169,7 +170,7 @@ export default function HomePage() {
                 {step.title}
               </h3>
               <p className="mt-2 text-sm leading-relaxed text-zinc-400">{step.body}</p>
-            </div>
+            </Card>
           ))}
         </div>
       </section>
@@ -185,7 +186,7 @@ export default function HomePage() {
           </div>
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f) => (
-              <div key={f.title} className="card p-5">
+              <Card key={f.title} className="p-5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
                   <f.icon className="h-4.5 w-4.5" />
                 </div>
@@ -193,7 +194,7 @@ export default function HomePage() {
                   {f.title}
                 </h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-zinc-400">{f.body}</p>
-              </div>
+              </Card>
             ))}
           </div>
         </div>

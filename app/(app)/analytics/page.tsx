@@ -3,6 +3,7 @@ import { currentWorkspaceId } from "@/lib/workspace";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { BarChart3, Users, Eye, Send, FileText, TrendingUp } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 
@@ -28,13 +29,13 @@ function StatCard({
   Icon: typeof Users;
 }) {
   const body = (
-    <div className="card h-full p-4">
+    <Card className="h-full p-4">
       <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
         <Icon className="h-3.5 w-3.5 text-emerald-400" /> {label}
       </div>
       <div className="mt-2 text-2xl font-bold text-zinc-100">{value}</div>
       <div className="mt-1 text-xs text-zinc-500">{hint}</div>
-    </div>
+    </Card>
   );
   return href ? (
     <Link href={href} className="block transition-opacity hover:opacity-80">
