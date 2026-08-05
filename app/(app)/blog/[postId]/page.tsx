@@ -19,7 +19,7 @@ export default async function BlogPostPage({ params }: { params: { postId: strin
     supabase
       .from("blog_posts")
       .select(
-        "id, title, slug, excerpt, content_md, page_copy, status, category_id, published_at, seo_title, seo_description, seo_index, featured_image_url, featured_image_status, featured_image_error"
+        "id, title, slug, excerpt, content_md, page_copy, status, category_id, published_at, seo_title, seo_description, seo_index, featured_image_url, featured_image_status, featured_image_error, previous_version, previous_saved_at"
       )
       .eq("id", params.postId)
       .maybeSingle(),

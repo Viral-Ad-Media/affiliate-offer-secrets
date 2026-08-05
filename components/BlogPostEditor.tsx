@@ -11,6 +11,7 @@ import StatusDropdownButton from "@/components/StatusDropdownButton";
 import { toast } from "@/lib/toast";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
+import PostSeoPanel from "@/components/PostSeoPanel";
 import FeaturedImageField from "@/components/FeaturedImageField";
 import { resizeImageFile } from "@/lib/images/resizeClient";
 
@@ -30,6 +31,8 @@ type Post = {
   featured_image_url: string | null;
   featured_image_status: string;
   featured_image_error: string | null;
+  previous_version: unknown;
+  previous_saved_at: string | null;
 };
 type Category = { id: string; name: string };
 
@@ -257,6 +260,27 @@ export default function BlogPostEditor({ post, categories }: { post: Post; categ
         onChange={setSeo}
         fallbackTitle={title}
         showIndexToggle
+      />
+
+      {/* Scored from what's in the editor right now, not what's saved — the point is to react
+          while you write. Rendering the tree here (rather than reading post.html) is what makes
+          the link and heading counts reflect unsaved edits. */}
+      <PostSeoPanel
+        postId={post.id}
+        input={{
+          title,
+          contentMd: post.content_md,
+          html: renderBlockTree(tree, blogRenderCtx()),
+          excerpt,
+          seoTitle: seo.seo_title,
+          seoDescription: seo.seo_description,
+          featuredImageUrl: featuredImage,
+          slug,
+          siteHosts: origin ? [new URL(origin).hostname] : [],
+        }}
+        hasSnapshot={!!post.previous_version}
+        snapshotAt={post.previous_saved_at}
+        onApplied={() => router.refresh()}
       />
 
       <p className="text-xs text-zinc-500">
