@@ -82,7 +82,7 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
   // Everything else is keyed off the blog slug.
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("workspace_id, blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html, index_layout, index_columns, index_rows")
+    .select("workspace_id, blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html, index_layout, index_columns, index_rows, toc_enabled, toc_title, toc_min_headings")
     .ilike("slug", segments[0])
     .maybeSingle();
   if (!settings || rejects(settings.workspace_id as string)) return notFound();
@@ -158,7 +158,7 @@ async function renderPost(admin: ReturnType<typeof createAdminClient>, postId: s
 
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style")
+    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, toc_enabled, toc_title, toc_min_headings")
     .eq("workspace_id", post.workspace_id as string)
     .maybeSingle();
 

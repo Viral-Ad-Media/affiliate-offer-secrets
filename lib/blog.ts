@@ -167,7 +167,15 @@ export type BlogSettings = {
   index_layout?: BlogIndexLayout | null;
   index_columns?: number | null;
   index_rows?: number | null;
+  // Table of contents on post pages (0069). Off by default: a two-heading post gets a contents
+  // box longer than the gap it summarises, which is worse than no box.
+  toc_enabled?: boolean | null;
+  toc_title?: string | null;
+  toc_min_headings?: number | null;
 };
+
+export const MIN_TOC_HEADINGS = 2;
+export const MAX_TOC_HEADINGS = 10;
 
 export type BlogIndexLayout = "grid" | "list";
 
@@ -320,6 +328,16 @@ const PUBLIC_CSS = `
   .featured { width: 100%; height: auto; border-radius: 14px; margin: 0 0 32px; display: block; }
   article h1, article h2, article h3 { line-height: 1.3; margin-top: 2em; }
   article img { max-width: 100%; height: auto; }
+  /* Contents box. scroll-margin-top on the headings keeps an anchored jump from parking the
+     heading flush against the viewport edge. */
+  .toc { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 28px 0; background: #fbfbfb; }
+  .toc-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 8px; }
+  .toc ul { list-style: none; margin: 0; padding: 0; }
+  .toc li { margin: 4px 0; font-size: .95rem; }
+  .toc li.toc-l3 { padding-left: 18px; font-size: .9rem; }
+  .toc a { color: var(--ink); text-decoration: none; }
+  .toc a:hover { color: var(--accent); text-decoration: underline; }
+  article h2, article h3 { scroll-margin-top: 16px; }
   article blockquote { border-left: 3px solid #d1d5db; margin-left: 0; padding-left: 16px; color: #4b5563; }
   article pre { overflow-x: auto; background: #f3f4f6; padding: 12px; border-radius: 8px; }
   .author-box { display: flex; gap: 16px; align-items: flex-start; margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--line); }
@@ -419,6 +437,82 @@ function postExcerpt(post: { content_md: string; html?: string | null }): string
 // post has one, else the legacy markdown path. Deliberately indexable (no noindex — blog posts
 // are content marketing), self-contained, no scripts. The .section/.row/.block-btn/etc styles
 // mirror the funnel pages' stylesheet for the block-tree markup.
+
+// ---------------------------------------------------------------------------------------------
+// Table of contents
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Builds a contents list from a post's own H2/H3 headings, and gives each one an anchor.
+ *
+ * Works on the RENDERED HTML rather than the block tree because that's what a post page actually
+ * has: `post.html` is baked at save time for published posts, and only falls back to rendering the
+ * markdown. Deriving from the tree would mean the TOC and the body could disagree for any post
+ * whose stored HTML predates a renderer change.
+ *
+ * The regex is deliberately narrow and only ever matches headings this codebase's own renderers
+ * emit. Extracted text is stripped of tags and escaped before it goes into the link, so a heading
+ * containing markup can't reach the page as markup a second time.
+ *
+ * Returns the body unchanged and an empty toc when there aren't enough headings to be worth one —
+ * the caller renders nothing rather than an empty box.
+ */
+export function buildTableOfContents(
+  bodyHtml: string,
+  settings: BlogSettings | null | undefined
+): { body: string; toc: string } {
+  const none = { body: bodyHtml, toc: "" };
+  if (!settings?.toc_enabled) return none;
+
+  const min = Math.min(
+    MAX_TOC_HEADINGS,
+    Math.max(MIN_TOC_HEADINGS, settings.toc_min_headings ?? 3)
+  );
+
+  const found: { id: string; text: string; level: 2 | 3 }[] = [];
+  const used = new Set<string>();
+
+  const body = bodyHtml.replace(
+    /<h([23])([^>]*)>([\s\S]*?)<\/h\1>/gi,
+    (match, lvl: string, attrs: string, inner: string) => {
+      const text = inner.replace(/<[^>]*>/g, "").trim();
+      if (!text) return match;
+
+      // Reuse an id the heading already carries; otherwise derive one and de-duplicate, since two
+      // sections legitimately called "Overview" would otherwise both anchor to the first.
+      const existing = attrs.match(/\sid="([^"]*)"/)?.[1];
+      let id = existing || slugify(text) || `section-${found.length + 1}`;
+      if (!existing) {
+        let n = 2;
+        const stem = id;
+        while (used.has(id)) id = `${stem}-${n++}`;
+      }
+      used.add(id);
+      found.push({ id, text, level: Number(lvl) as 2 | 3 });
+
+      return existing ? match : `<h${lvl}${attrs} id="${escapeHtml(id)}">${inner}</h${lvl}>`;
+    }
+  );
+
+  if (found.length < min) return none;
+
+  const title = (settings.toc_title || "Contents").trim();
+  const items = found
+    .map(
+      (h) =>
+        `<li class="toc-l${h.level}"><a href="#${escapeHtml(h.id)}">${escapeHtml(h.text)}</a></li>`
+    )
+    .join("");
+  return {
+    body,
+    // <nav> rather than a bare div, and labelled — this is navigation, and a screen reader should
+    // be able to skip it like any other nav.
+    toc: `<nav class="toc" aria-label="${escapeHtml(title)}"><p class="toc-title">${escapeHtml(
+      title
+    )}</p><ul>${items}</ul></nav>`,
+  };
+}
+
 export function renderPublicPostHtml(post: {
   id?: string;
   title: string;
@@ -466,7 +560,10 @@ export function renderPublicPostHtml(post: {
     .join(" · ");
   const seoTitle = (post.seo_title || "").trim() || post.title;
   const titleTag = post.settings?.blog_title ? `${seoTitle} — ${post.settings.blog_title}` : seoTitle;
-  const body = post.html ?? renderPostContentHtml(post.content_md);
+  const { body, toc } = buildTableOfContents(
+    post.html ?? renderPostContentHtml(post.content_md),
+    post.settings
+  );
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -493,6 +590,7 @@ ${siteHeader(post.settings, base)}
   <h1 class="post-title">${escapeHtml(post.title)}</h1>
   ${meta ? `<div class="post-meta">${meta}</div>` : ""}
   ${post.featured_image_url ? `<img class="featured" src="${escapeHtml(post.featured_image_url)}" alt="${escapeHtml(post.title)}" />` : ""}
+  ${toc}
   <article>${body}</article>
   ${authorBox(post.settings)}
 </main>

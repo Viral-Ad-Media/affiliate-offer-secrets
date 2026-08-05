@@ -14,6 +14,9 @@ export type Settings = {
   author_bio: string | null;
   author_avatar_url: string | null;
   permalink_style: PermalinkStyle | null;
+  toc_enabled: boolean | null;
+  toc_title: string | null;
+  toc_min_headings: number | null;
 };
 
 const MAX_AVATAR_CHARS = 900_000;
@@ -31,6 +34,9 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
   const [authorBio, setAuthorBio] = useState(initial.author_bio ?? "");
   const [avatar, setAvatar] = useState<string | null>(initial.author_avatar_url);
   const [permalink, setPermalink] = useState<PermalinkStyle>(initial.permalink_style ?? "post");
+  const [tocEnabled, setTocEnabled] = useState(initial.toc_enabled === true);
+  const [tocTitle, setTocTitle] = useState(initial.toc_title ?? "");
+  const [tocMin, setTocMin] = useState(initial.toc_min_headings ?? 3);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -56,6 +62,9 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
           description,
           author_bio: authorBio,
           author_avatar_url: avatar,
+          toc_enabled: tocEnabled,
+          toc_title: tocTitle,
+          toc_min_headings: tocMin,
         }),
       });
       const data = await res.json();
@@ -160,6 +169,57 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
             old addresses redirect to the new structure. A post with no publish date or no category
             falls back to just its name.
           </span>
+        </fieldset>
+
+        <fieldset className="block">
+          <legend className="mb-1 block text-xs font-medium text-zinc-400">Table of contents</legend>
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={tocEnabled}
+              onChange={(e) => setTocEnabled(e.target.checked)}
+              className="mt-0.5 accent-emerald-500"
+            />
+            <span className="text-sm text-zinc-300">
+              Show a contents list on post pages
+              <span className="mt-0.5 block text-[11px] text-zinc-500">
+                Built from each post&apos;s own headings — nothing to maintain per post. Headings
+                get anchors, so the links are shareable.
+              </span>
+            </span>
+          </label>
+
+          {tocEnabled && (
+            <div className="mt-2 flex flex-wrap items-end gap-3 pl-6">
+              <label className="block">
+                <span className="mb-1 block text-[11px] text-zinc-500">Heading</span>
+                <input
+                  value={tocTitle}
+                  onChange={(e) => setTocTitle(e.target.value)}
+                  maxLength={60}
+                  placeholder="Contents"
+                  className="w-40 rounded-lg border border-ink-600 bg-ink-900 py-1.5 px-2.5 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] text-zinc-500">Only if the post has</span>
+                <select
+                  value={tocMin}
+                  onChange={(e) => setTocMin(Number(e.target.value))}
+                  className="rounded-lg border border-ink-600 bg-ink-900 py-1.5 px-2.5 text-sm outline-none focus:border-emerald-500"
+                >
+                  {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                    <option key={n} value={n}>
+                      {n}+ headings
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {/* Short posts are the reason this threshold exists: a contents box listing two
+                  items is longer than the scroll it saves. */}
+              <p className="pb-2 text-[11px] text-zinc-500">Shorter posts show none.</p>
+            </div>
+          )}
         </fieldset>
 
         <label className="block">

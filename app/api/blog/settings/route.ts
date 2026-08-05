@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MAX_BLOG_SETTING, MAX_BLOG_BIO, MAX_FEATURED_IMAGE_CHARS, slugify, isPermalinkStyle } from "@/lib/blog";
+import {
+  MAX_BLOG_SETTING,
+  MAX_BLOG_BIO,
+  MAX_FEATURED_IMAGE_CHARS,
+  MIN_TOC_HEADINGS,
+  MAX_TOC_HEADINGS,
+  slugify,
+  isPermalinkStyle,
+} from "@/lib/blog";
 import { isValidImageDataUrl } from "@/lib/images/validate";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +40,17 @@ export async function POST(req: Request) {
     author_bio: clean(body.author_bio, MAX_BLOG_BIO),
     updated_at: new Date().toISOString(),
   };
+
+  // Table of contents (0069). Clamped rather than rejected: these are a checkbox and a small
+  // number picker, so an out-of-range value means a stale client, not a person to correct.
+  if ("toc_enabled" in body) patch.toc_enabled = body.toc_enabled === true;
+  if ("toc_title" in body) patch.toc_title = clean(body.toc_title, 60);
+  if ("toc_min_headings" in body) {
+    const n = Number(body.toc_min_headings);
+    patch.toc_min_headings = Number.isFinite(n)
+      ? Math.min(MAX_TOC_HEADINGS, Math.max(MIN_TOC_HEADINGS, Math.round(n)))
+      : 3;
+  }
 
   // Permalink structure (0044). Only set when the body names a known style — an unrecognized value
   // is ignored rather than 400ing, so an older client can keep saving the rest of the form.
