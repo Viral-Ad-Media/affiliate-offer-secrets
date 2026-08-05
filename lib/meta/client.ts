@@ -6,20 +6,54 @@ export class MetaApiError extends Error {
   /** Meta's own human-readable explanation, when it sends one. */
   userTitle?: string;
   userMessage?: string;
+  /** True when retrying this exact request cannot succeed — see isPermanentMetaError. */
+  permanent?: boolean;
 
   constructor(
     message: string,
     code?: number,
     subcode?: number,
     userTitle?: string,
-    userMessage?: string
+    userMessage?: string,
+    permanent?: boolean
   ) {
     super(message);
     this.code = code;
     this.subcode = subcode;
     this.userTitle = userTitle;
     this.userMessage = userMessage;
+    this.permanent = permanent;
   }
+}
+
+/**
+ * Whether retrying this exact request could ever succeed.
+ *
+ * The classification errs toward RETRY — a wrong "permanent" kills a recoverable job, a wrong
+ * "transient" only wastes attempts — so this is a narrow allowlist, not a catch-all.
+ *
+ * Code 100 ("Invalid parameter") is included, which deserves justification because Meta also
+ * uses it for eventual-consistency hiccups. Two reasons it's safe HERE: the worker retries a
+ * byte-identical request, so a deterministic validation failure cannot come out differently; and
+ * the retries all happen inside one invocation loop seconds apart, which was never long enough
+ * for propagation to help anyway. A real ad account being disabled — the case that prompted this
+ * — arrives as code 100 and would otherwise burn five attempts in twenty seconds.
+ *
+ * Explicitly NOT permanent: 1 and 2 (transient API/service errors) and 4/17/32/613 (rate limits).
+ * Those are exactly what retries are for.
+ */
+const PERMANENT_CODES = new Set([
+  10, // permission denied
+  100, // invalid parameter — see note above
+  190, // invalid/expired OAuth token; needs a reconnect, not a retry
+  200, 201, 202, 203, 204, 205, 206, 207, 208, 209, // permission errors
+  272, // ad account permission
+  294, // managing ads requires an ads_management permission
+]);
+
+export function isPermanentMetaError(code?: number, subcode?: number): boolean {
+  if (subcode === 1487742) return true; // ad account has a billing/active issue
+  return code !== undefined && PERMANENT_CODES.has(code);
 }
 
 /**
@@ -47,7 +81,8 @@ function metaError(err: {
     err.code,
     err.error_subcode,
     err.error_user_title,
-    err.error_user_msg
+    err.error_user_msg,
+    isPermanentMetaError(err.code, err.error_subcode)
   );
 }
 

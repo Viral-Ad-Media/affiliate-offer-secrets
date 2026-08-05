@@ -137,8 +137,19 @@ async function markDone(jobId: string, result: string) {
     .eq("id", jobId);
 }
 
-async function failJob(job: JobRow, message: string) {
-  if (job.attempts >= MAX_ATTEMPTS) {
+/**
+ * `permanent` short-circuits the retry budget: some failures cannot come out differently on
+ * attempt 5 than on attempt 1 (a disabled ad account, a revoked permission, a rejected
+ * parameter), and retrying them only delays the moment the tenant learns they need to act. The
+ * classification lives with the API client that raises the error — see isPermanentMetaError —
+ * because only it knows which codes are deterministic.
+ *
+ * Everything terminal below (refund, notify, per-type status write) then runs exactly as it would
+ * have on exhaustion, so a permanent failure and an exhausted one are indistinguishable
+ * downstream. That's deliberate: it means this flag can only make failure FASTER, never quieter.
+ */
+async function failJob(job: JobRow, message: string, permanent = false) {
+  if (permanent || job.attempts >= MAX_ATTEMPTS) {
     await db
       .from("jobs")
       .update({ status: "error", result: message, updated_at: new Date().toISOString() })
@@ -796,7 +807,7 @@ export async function runWorkerLoop(): Promise<{ processed: number }> {
         await failJob(job, `Unknown job type: ${job.type}`);
       }
     } catch (err: any) {
-      await failJob(job, err?.message ?? String(err));
+      await failJob(job, err?.message ?? String(err), err?.permanent === true);
     }
   }
 
