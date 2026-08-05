@@ -120,29 +120,17 @@ h1, h2, h3, h4, h5, h6 {
   @apply font-heading tracking-tight;
 }
 
-.card {
-  @apply rounded-xl border border-ink-700 bg-ink-900;
-}
+/* .card, .chip, .btn/.btn-primary/.btn-ghost and the .data-table descendant rules used to live
+   here. They're now components/ui/{card,badge,button,table}.tsx — same classes, but attached to
+   something with a type signature, so a call site can't quietly drift from the convention. See
+   the note in components/ui/button.tsx on why the variants emit these exact utilities rather
+   than shadcn's stock ones. */
 
-.chip {
-  @apply inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium;
-}
-
-.btn {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50;
-}
-
-.btn-primary {
-  @apply btn bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700;
-}
-
-.btn-ghost {
-  @apply btn border border-ink-600 text-zinc-300 hover:border-ink-500 hover:bg-ink-800 hover:text-zinc-100;
-}
-
-/* Compact KPI/metric tile used on the dashboard header row. */
+/* Compact KPI/metric tile used on the dashboard header row. Card's utilities are inlined here
+   rather than @apply'd from it — .card is gone, and this is a CSS class, so it can't compose
+   with a React component the way it composed with another class. */
 .stat-tile {
-  @apply card flex items-center gap-3 px-4 py-3.5 transition-colors hover:border-ink-600;
+  @apply flex items-center gap-3 rounded-xl border border-ink-700 bg-ink-900 px-4 py-3.5 transition-colors hover:border-ink-600;
 }
 
 .stat-tile-value {
@@ -151,20 +139,6 @@ h1, h2, h3, h4, h5, h6 {
 
 .stat-tile-label {
   @apply mt-1.5 text-xs text-zinc-500;
-}
-
-/* Data-table conventions: dense rows, consistent header treatment, subtle row hover.
-   Cells set their own horizontal padding/alignment (tighter interior columns, wider edges). */
-.data-table thead th {
-  @apply border-b border-ink-700 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500;
-}
-
-.data-table thead th:not(:first-child):not(:last-child) {
-  @apply px-2;
-}
-
-.data-table tbody tr {
-  @apply border-b border-ink-800 transition-colors hover:bg-ink-800/40;
 }
 
 .prose-dark {

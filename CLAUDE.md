@@ -1620,10 +1620,32 @@ passed the filter.
 
 ## shadcn/ui + 21st.dev components
 
-First use of shadcn/ui in this codebase (everything before this was hand-rolled Tailwind classes —
-`.card`/`.chip`/`.btn-*`/`.data-table` in `app/globals.css`, still the primary system for existing
-UI). Added so components sourced from 21st.dev's registry (`components/ui/*`) can drop in without
-per-component recoloring:
+**The hand-rolled classes are gone.** `.card` / `.chip` / `.btn` / `.btn-primary` / `.btn-ghost` and
+the `.data-table` descendant rules no longer exist in `app/globals.css` — every call site now uses
+`components/ui/{card,badge,button,table}.tsx`. Only `.stat-tile*` and `.prose-dark` remain as CSS
+classes. What to know before adding UI:
+
+- **The primitives were retuned to match this app, not the other way round.** Stock shadcn `Button`
+  is `rounded-md`, `h-10 px-4 py-2` and fades hover with `bg-primary/90`; this app's buttons are
+  `rounded-lg`, `px-3 py-1.5` and hover to a distinct *shade*. `buttonVariants` emits the latter.
+  Don't "fix" it back toward stock — that silently restyles ~130 call sites.
+- **Variant names don't map to their old class names.** `.btn-ghost` had a border, so it is
+  `variant="outline"`; `ghost` is the borderless one. `Badge`'s default variant carries **no**
+  colours, because `.chip` didn't either — call sites pass their own.
+- **`Card` takes `as`.** A good number of cards are `<section>`/`<header>`; Card is cosmetic and
+  shouldn't cost a page its document structure, so the element stays the caller's choice.
+- **`Table` moved the descendant selectors onto components.** `.data-table` styled `thead th` and
+  `tbody tr` from the parent; `TableHead`/`TableRow` own those rules now, and a row opts out by
+  not using them. The interior-vs-edge header padding that was
+  `:not(:first-child):not(:last-child)` is an explicit `edge` prop — mark the first and last
+  `TableHead` of each header row.
+- **For links, use `className={buttonVariants(...)}`, not `asChild`.** It keeps the anchor exactly
+  where it is; `asChild` restructures the tree and can drop an `href`.
+- Three interactive `.card` sites (a `Link`, a `form`, a `button`) inline the card utilities
+  directly, because `Card` can't be any of those elements.
+
+Originally added so components sourced from 21st.dev's registry (`components/ui/*`) could drop in
+without per-component recoloring:
 
 - `components.json` — `cssVariables: true`. The semantic tokens (`background`, `card`, `primary`,
   `border`, etc.) are **not** shadcn's default slate/zinc — they're hand-mapped in
