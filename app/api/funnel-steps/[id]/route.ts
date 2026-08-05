@@ -33,6 +33,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return NextResponse.json({ error: "no workspace" }, { status: 400 });
 
   const stepId = params.id;
 
@@ -131,7 +132,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "failed to save" }, { status: 500 });
   }
 
-  await rerenderFunnelSequence(admin, step.campaign_id, user.id);
+  await rerenderFunnelSequence(admin, step.campaign_id, ws);
 
   const { data: rendered } = await admin.from("funnel_steps").select("html").eq("id", stepId).single();
 
@@ -145,6 +146,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
   const ws = await currentWorkspaceId();
+  if (!ws) return NextResponse.json({ error: "no workspace" }, { status: 400 });
 
   const stepId = params.id;
 
@@ -159,7 +161,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     return NextResponse.json({ error: rpcErr.message }, { status: 400 });
   }
 
-  await rerenderFunnelSequence(admin, step.campaign_id, user.id);
+  await rerenderFunnelSequence(admin, step.campaign_id, ws);
 
   return NextResponse.json({ ok: true });
 }

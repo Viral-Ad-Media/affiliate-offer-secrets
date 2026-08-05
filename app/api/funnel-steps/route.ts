@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rerenderFunnelSequence } from "@/lib/funnelSteps";
@@ -17,6 +18,9 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  const ws = await currentWorkspaceId();
+  if (!ws) return NextResponse.json({ error: "no workspace" }, { status: 400 });
+
   const body = await req.json().catch(() => ({}));
   const campaignId = typeof body.campaign_id === "string" ? body.campaign_id : "";
   const stepType = typeof body.step_type === "string" ? body.step_type : "";
@@ -33,7 +37,7 @@ export async function POST(req: Request) {
   }
 
   const admin = createAdminClient();
-  await rerenderFunnelSequence(admin, campaignId, user.id);
+  await rerenderFunnelSequence(admin, campaignId, ws);
 
   return NextResponse.json({ ok: true, step });
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateTracking } from "@/lib/engine/renderPages";
@@ -23,6 +24,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const { data: owns } = await supabase.rpc("assert_owns_campaign", { p_campaign_id: params.id });
   if (!owns) return NextResponse.json({ error: "campaign not found" }, { status: 404 });
 
+  // The workspace, not the user — rerenderFunnelSequence resolves the affiliate id from
+  // network_connections, which has been workspace-scoped since the workspace migration.
+  const ws = await currentWorkspaceId();
+  if (!ws) return NextResponse.json({ error: "no workspace" }, { status: 400 });
+
   let body: unknown;
   try {
     body = await req.json();
@@ -40,7 +46,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .eq("id", params.id);
   if (updateErr) return NextResponse.json({ error: "failed to save" }, { status: 500 });
 
-  await rerenderFunnelSequence(admin, params.id, user.id);
+  await rerenderFunnelSequence(admin, params.id, ws);
 
   return NextResponse.json({ ok: true, tracking: result.tracking });
 }

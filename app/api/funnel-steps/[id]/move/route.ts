@@ -14,6 +14,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return NextResponse.json({ error: "no workspace" }, { status: 400 });
 
   const stepId = params.id;
   const body = await req.json().catch(() => ({}));
@@ -41,7 +42,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: rpcErr.message }, { status: 400 });
   }
 
-  await rerenderFunnelSequence(admin, step.campaign_id, user.id);
+  await rerenderFunnelSequence(admin, step.campaign_id, ws);
 
   return NextResponse.json({ ok: true });
 }

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { originFromHost } from "@/lib/host";
 import { createClient } from "@/lib/supabase/server";
+import NewFunnelButton from "@/components/NewFunnelButton";
 import { Radio, ExternalLink, Inbox, Beaker, Layers } from "lucide-react";
 
 // A "funnel" isn't its own entity — it's a derived view over campaigns that already have a bridge
@@ -18,8 +19,14 @@ export default async function FunnelsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: campaigns }, { data: routes }, { data: contactRows }, { data: variantRows }, { data: stepRows }] =
-    await Promise.all([
+  const [
+    { data: campaigns },
+    { data: routes },
+    { data: contactRows },
+    { data: variantRows },
+    { data: stepRows },
+    { data: productRows },
+  ] = await Promise.all([
       supabase
         .from("campaigns")
         .select("id, product_id, bridge_published, updated_at, products(product_title)")
@@ -32,6 +39,14 @@ export default async function FunnelsPage() {
       supabase.from("contacts").select("campaign_id").not("campaign_id", "is", null).limit(1000),
       supabase.from("bridge_variants").select("campaign_id"),
       supabase.from("funnel_steps").select("campaign_id"),
+      // Offers a funnel can be built for. Dead/Paused products are left out — they're not what
+      // anyone is about to build a landing page for, and a long picker list is its own problem.
+      supabase
+        .from("products")
+        .select("id, product_title")
+        .not("status", "in", "(Dead,Paused)")
+        .order("product_title", { ascending: true })
+        .limit(200),
     ]);
 
   const leadCounts = new Map<string, number>();
@@ -73,14 +88,27 @@ export default async function FunnelsPage() {
     stepCount: stepCounts.get(c.id) ?? 0,
   }));
 
+  // A product with a funnel already can't get a second one — one campaign per product, one opt-in
+  // page per campaign — so the picker shows it greyed rather than silently omitting it, which
+  // would read as "that offer is gone".
+  const withFunnel = new Set(funnels.map((f) => f.productId));
+  const productOptions = (productRows ?? []).map((p: any) => ({
+    id: p.id as string,
+    title: (p.product_title as string) ?? "Untitled",
+    hasFunnel: withFunnel.has(p.id as string),
+  }));
+
   return (
     <main className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-zinc-100">Funnels</h1>
-        <p className="text-sm text-zinc-400">
-          Every lead-capture bridge page your campaigns have generated. A funnel shows up here
-          automatically as soon as a campaign kit finishes building.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">Funnels</h1>
+          <p className="text-sm text-zinc-400">
+            Every lead-capture page your offers have. One appears here automatically when a campaign
+            kit finishes building — or build one by hand.
+          </p>
+        </div>
+        <NewFunnelButton products={productOptions} />
       </header>
 
       <section className="card overflow-hidden">
@@ -89,11 +117,12 @@ export default async function FunnelsPage() {
             <Inbox className="mx-auto mb-2.5 h-7 w-7 text-zinc-600" />
             <p className="text-sm text-zinc-400">No funnels yet</p>
             <p className="mt-1 text-xs text-zinc-600">
-              Build a campaign kit from the{" "}
+              Use <span className="text-zinc-400">New funnel</span> to build one by hand, or
+              promote an offer from the{" "}
               <Link href="/marketplace" className="underline">
                 Marketplace
               </Link>{" "}
-              page — its bridge page becomes a funnel here the moment it's generated.
+              — a generated kit's bridge page becomes a funnel here automatically.
             </p>
           </div>
         ) : (
