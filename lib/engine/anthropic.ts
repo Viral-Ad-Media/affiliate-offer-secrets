@@ -26,7 +26,10 @@ const PRICE_PER_MTOK_USD = {
 
 export type UsageContext = {
   userId: string;
-  jobId: string;
+  // Nullable because not every Anthropic call belongs to a job. Synchronous helpers the operator
+  // triggers from a form (the AI broadcast drafter) still cost real tokens and still belong in the
+  // ledger; usage_ledger.job_id has always been nullable, only this type insisted otherwise.
+  jobId: string | null;
   jobType: string;
   stage: string;
 };

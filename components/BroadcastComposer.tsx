@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import ManualSendPanel, { type ManualContact } from "@/components/ManualSendPanel";
-import { Send, Loader2, CheckCircle2, AlertTriangle, Users, Plus } from "lucide-react";
+import { Send, Loader2, CheckCircle2, AlertTriangle, Users, Plus, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
 
@@ -42,6 +42,36 @@ export default function BroadcastComposer({
   const [error, setError] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState<number | null>(null);
   const [composing, setComposing] = useState(false);
+  const [angle, setAngle] = useState("");
+  const [drafting, setDrafting] = useState(false);
+
+  // Fills the same subject/body fields a person would type into, rather than sending anything —
+  // the draft is always reviewed and editable before it goes out to a real list.
+  async function draftWithAi() {
+    setDrafting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/broadcast/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaign_id: audience === "campaign" && campaignId ? campaignId : null,
+          angle: angle.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Could not draft the email");
+        return;
+      }
+      if (data.subject) setSubject(data.subject);
+      if (data.body_md) setBody(data.body_md);
+    } catch (err: any) {
+      setError(err?.message ?? "Could not draft the email");
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   // No active provider means nothing can be sent automatically — the manual path below still
   // works, since that only needs the composed text and the visitor's own mail client.
@@ -153,6 +183,44 @@ export default function BroadcastComposer({
                   </select>
                 </label>
               )}
+            </div>
+
+            {/* Write it yourself or have it drafted — the AI path fills the same two fields you'd
+                type into, so everything downstream (send, audience, unsubscribe footer) is
+                identical either way and the draft stays fully editable before it goes out. */}
+            <div className="rounded-lg border border-dashed border-ink-600 p-3">
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="min-w-[12rem] flex-1">
+                  <span className="mb-1 block text-xs font-medium text-zinc-400">
+                    Draft with AI <span className="text-zinc-600">(optional)</span>
+                  </span>
+                  <input
+                    value={angle}
+                    onChange={(e) => setAngle(e.target.value)}
+                    placeholder="What should this email be about?"
+                    className="w-full rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={draftWithAi}
+                  disabled={drafting}
+                  className="btn-ghost text-xs"
+                >
+                  {drafting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  {drafting ? "Drafting…" : "Draft email"}
+                </button>
+              </div>
+              <p className="mt-1.5 text-[11px] text-zinc-500">
+                {audience === "campaign" && campaignId
+                  ? "Uses the chosen campaign's product and existing email copy for context."
+                  : "Pick a campaign audience above to give the draft product context."}{" "}
+                Replaces whatever is in the subject and message fields.
+              </p>
             </div>
 
             <label className="block">
