@@ -6,6 +6,7 @@ import { ArrowLeft, LayoutDashboard } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Campaign, FunnelStep, BridgeVariant } from "@/lib/shared";
 import PublishBridge from "@/components/PublishBridge";
+import OfferLinkPanel from "@/components/OfferLinkPanel";
 import PageEditor from "@/components/PageEditor";
 import SplitTestPanel from "@/components/SplitTestPanel";
 import FunnelMap from "@/components/FunnelMap";
@@ -67,7 +68,8 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
     }
 
     setCampaign(c as unknown as Campaign);
-    setProductTitle((c as any).products?.product_title ?? "Untitled");
+    // A hand-built funnel has no product to borrow a title from, so it carries its own name.
+    setProductTitle((c as any).products?.product_title ?? (c as any).name ?? "Untitled");
 
     const [{ data: stepRows }, { data: products }] = await Promise.all([
       supabase
@@ -232,6 +234,16 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
         </p>
       ) : (
         <>
+          {/* Only without a product: with one, the affiliate hoplink is the destination and this
+              would be a second control claiming to set the same thing. */}
+          {!(campaign as any).product_id && (
+            <OfferLinkPanel
+              campaignId={campaign.id}
+              initialUrl={(campaign as any).cta_url ?? null}
+              onSaved={load}
+            />
+          )}
+
           <PublishBridge campaignId={campaign.id} initialPublished={campaign.bridge_published} />
 
           <FunnelMap

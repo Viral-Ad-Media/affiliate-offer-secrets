@@ -669,7 +669,11 @@ no credits, the alternative to Promote. Two steps: funnel type, then name + layo
 an offer is chosen — and requiring one only made people attach an arbitrary product to get past the
 dialog, which is worse data than none. Without a product there's no hoplink to bake, so the CTA
 falls back to `campaigns.cta_url` and to `"#"` until one is set; `rerenderFunnelSequence`'s
-`offerHref()` is the single place that decision lives. Its old early-return when the product or
+`offerHref()` is the single place that decision lives. `components/OfferLinkPanel.tsx` sets it, via
+`POST /api/campaigns/[id]/cta-url`, and is rendered ONLY when the funnel has no product — with one,
+the hoplink is the destination and a second control would claim to set the same thing. Saving
+re-renders the funnel, because hrefs are baked at write time; without that the pages would keep
+sending real traffic to the old destination while the UI claimed otherwise. Its old early-return when the product or
 affiliate id was missing would have left every standalone funnel with no HTML at all.
 
 **Six layout styles** (`lib/funnelStyles.ts`), composed against the type rather than hand-written
