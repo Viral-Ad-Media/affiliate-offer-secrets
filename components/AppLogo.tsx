@@ -19,25 +19,48 @@ function LogoMark({ className = "h-7 w-7" }: { className?: string }) {
   );
 }
 
-// `wordmark={false}` is the collapsed-sidebar case: the mark alone still identifies the app and
-// doubles as the "go home" target that the text link provides when expanded.
+/**
+ * Three lockups, one component.
+ *
+ *   "full"  — mark + "Affiliate Offer Secrets". Marketing site and login, where the reader may
+ *             never have seen the product before and a monogram would tell them nothing.
+ *   "short" — mark + "AOS". The signed-in app, where the operator already knows what they're in
+ *             and the expanded sidebar has ~208px of usable width that three words must wrap over.
+ *   false   — mark alone. The collapsed icon rail, where it doubles as the "go home" target.
+ *
+ * The monogram is set in the app's own heading font rather than drawn as glyph paths, deliberately:
+ * three letterforms inside a 28px tile are illegible, and hand-drawing them would drift from the
+ * favicon (app/icon.svg), which stays the single "A" mark and is the same SVG as LogoMark above.
+ * A bespoke drawn AOS glyph is a design pass to do with eyes on it at real sizes, not something to
+ * derive blind here.
+ *
+ * The accent falls on the last word in one and the last letter in the other — "Secrets" and the
+ * "S" — so both read as the same identity at two different lengths.
+ */
 export default function AppLogo({
-  wordmark = true,
+  wordmark = "full",
   markClassName,
   textClassName = "font-heading text-base font-bold text-zinc-100",
 }: {
-  wordmark?: boolean;
+  wordmark?: "full" | "short" | false;
   markClassName?: string;
   textClassName?: string;
 }) {
   return (
     <span className="flex items-center gap-2">
       <LogoMark className={markClassName} />
-      {/* Three words don't fit the 208px of usable width in the expanded sidebar on one line, so
-          the wordmark is allowed to wrap to two — leading-tight keeps that from looking loose. */}
-      {wordmark && (
+      {wordmark === "full" && (
+        // Three words don't fit the expanded sidebar's usable width on one line, so the wordmark
+        // is allowed to wrap to two — leading-tight keeps that from looking loose.
         <span className={`${textClassName} min-w-0 leading-tight`}>
           Affiliate Offer <span className="text-emerald-400">Secrets</span>
+        </span>
+      )}
+      {wordmark === "short" && (
+        // Never wraps, so it can be tracked out slightly — a three-letter monogram at normal
+        // letter-spacing reads as an abbreviation rather than as a mark.
+        <span className={`${textClassName} tracking-wide`}>
+          AO<span className="text-emerald-400">S</span>
         </span>
       )}
     </span>

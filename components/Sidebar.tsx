@@ -298,7 +298,7 @@ export default function Sidebar({
               </Link>
             ) : (
               <Link href="/dashboard">
-                <AppLogo />
+                <AppLogo wordmark="short" />
               </Link>
             )}
             <div className="flex items-center gap-0.5">
@@ -319,7 +319,7 @@ export default function Sidebar({
       {/* Mobile top bar */}
       <header className="flex items-center justify-between border-b border-ink-700 bg-ink-900/60 px-4 py-3 sm:hidden">
         <Link href="/dashboard">
-          <AppLogo />
+          <AppLogo wordmark="short" />
         </Link>
         <div className="flex items-center gap-2">
           <CreditsChip creditBalance={creditBalance} />
@@ -348,7 +348,7 @@ export default function Sidebar({
             <div className="flex flex-col gap-6">
               <div className="flex items-center justify-between px-2">
                 <Link href="/dashboard" onClick={() => setMobileOpen(false)}>
-                  <AppLogo />
+                  <AppLogo wordmark="short" />
                 </Link>
                 <button
                   onClick={() => setMobileOpen(false)}
