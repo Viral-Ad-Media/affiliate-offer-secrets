@@ -416,7 +416,7 @@ async function finalizeBuildCampaign(job: JobRow, productId: string): Promise<vo
         kind: "job_failed",
         title: "Blog post wasn't created",
         body: "The kit built fine, but its article couldn't be turned into a draft post.",
-        href: "/blog",
+        href: "/blog/posts",
       });
     }
   }

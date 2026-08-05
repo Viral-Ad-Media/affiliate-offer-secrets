@@ -7,12 +7,14 @@ import { Newspaper, Plus, Loader2, Tag, ExternalLink, Trash2, Eye, Pencil } from
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
 import { blogPostPath, type PermalinkStyle } from "@/lib/blog";
+import { scoreTone } from "@/lib/blogSeo";
 
 type PostRow = {
   id: string;
   title: string;
   slug: string | null;
   category_slug?: string | null;
+  seo_score?: number;
   status: string;
   category_id: string | null;
   campaign_id: string | null;
@@ -268,6 +270,23 @@ export default function BlogManager({
                     </span>
                     {p.category_id && categoryName.get(p.category_id) && <span>{categoryName.get(p.category_id)}</span>}
                     <span>Updated {new Date(p.updated_at).toLocaleDateString()}</span>
+                    {typeof p.seo_score === "number" && (
+                      // Same analyzePostSeo the editor's panel runs, scored server-side — one
+                      // definition of the number, so the list and the editor can't disagree.
+                      // Traffic-light via the shared scoreTone, so "good" means the same thing here.
+                      <span
+                        title="On-page SEO score — open the post to see what's missing"
+                        className={`rounded-full px-2 py-px tabular-nums ${
+                          scoreTone(p.seo_score) === "good"
+                            ? "bg-emerald-500/15 text-emerald-300"
+                            : scoreTone(p.seo_score) === "ok"
+                              ? "bg-amber-500/15 text-amber-300"
+                              : "bg-red-500/15 text-red-300"
+                        }`}
+                      >
+                        SEO {p.seo_score}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <a

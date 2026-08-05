@@ -17,9 +17,11 @@ import {
   MAX_INDEX_COLUMNS,
   MIN_INDEX_ROWS,
   MAX_INDEX_ROWS,
+  blogPostPath,
   type BlogIndexLayout,
   type BlogIndexPost,
   type BlogSettings,
+  type PermalinkStyle,
 } from "@/lib/blog";
 import { toast } from "@/lib/toast";
 import { resizeImageFile } from "@/lib/images/resizeClient";
@@ -36,9 +38,17 @@ const POST_LIST_BLOCK_ID = "__post_list__";
 /**
  * What the post list looks like on the page sheet, at the chosen shape.
  *
- * Skeleton cards, not the real posts: the point is the LAYOUT, and rendering actual titles here
- * would imply the intro editor can edit them (it can't — a post is edited on its own page). It
- * mirrors the public stylesheet's proportions — 16:9 thumbnails, one-per-row list with the image
+ * Shows the REAL posts, and their titles link to the real published pages (new tab).
+ *
+ * It used to draw grey skeletons, on the reasoning that the point is the LAYOUT and real titles
+ * would imply this editor can edit them. In practice that read as "the links on the blog home
+ * don't work" — because there were none. Real titles also demonstrate the layout BETTER, since
+ * real titles have real lengths and a skeleton bar never wraps the way a long one does.
+ *
+ * Editing a post still happens on its own page; these are links out, not fields. Drafts are shown
+ * (they're in the editor's data) but marked, since they won't appear publicly.
+ *
+ * Mirrors the public stylesheet's proportions — 16:9 thumbnails, one-per-row list with the image
  * beside the text — so what you pick reads the same way it will publish.
  */
 function PostListPreview({
@@ -46,15 +56,20 @@ function PostListPreview({
   columns,
   rows,
   perPage,
+  posts,
+  hrefFor,
 }: {
   layout: BlogIndexLayout;
   columns: number;
   rows: number;
   perPage: number;
+  posts: BlogIndexPost[];
+  hrefFor: (p: BlogIndexPost) => string;
 }) {
   // Cap the drawn cards so a 4x12 choice doesn't render 48 skeletons into the sheet; the label
   // below still states the real number, so nothing is hidden by the cap.
   const shown = Math.min(perPage, layout === "list" ? 3 : columns * Math.min(rows, 2));
+  const visible = posts.slice(0, shown);
   return (
     <div className="my-4">
       <div className="mb-2 text-[11px] uppercase tracking-wide text-gray-400">
@@ -62,30 +77,66 @@ function PostListPreview({
       </div>
       {layout === "list" ? (
         <div className="space-y-3">
-          {Array.from({ length: shown }).map((_, i) => (
-            <div key={i} className="flex gap-3 border-b border-gray-200 pb-3 last:border-b-0">
-              <div className="h-14 w-24 shrink-0 rounded-md bg-gradient-to-br from-emerald-50 to-sky-50" />
-              <div className="min-w-0 flex-1 space-y-1.5 pt-1">
-                <div className="h-2.5 w-3/4 rounded bg-gray-200" />
-                <div className="h-2 w-full rounded bg-gray-100" />
-                <div className="h-2 w-1/3 rounded bg-gray-100" />
+          {visible.map((p) => (
+            <div key={p.id} className="flex gap-3 border-b border-gray-200 pb-3 last:border-b-0">
+              <Thumb post={p} className="h-14 w-24 shrink-0" />
+              <div className="min-w-0 flex-1 pt-1">
+                <CardTitle post={p} href={hrefFor(p)} />
+                <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-gray-500">{p.excerpt ?? ""}</p>
               </div>
             </div>
           ))}
+          {visible.length === 0 && <EmptyNote />}
         </div>
       ) : (
         <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-          {Array.from({ length: shown }).map((_, i) => (
-            <div key={i} className="space-y-1.5">
-              <div className="aspect-video w-full rounded-md bg-gradient-to-br from-emerald-50 to-sky-50" />
-              <div className="h-2.5 w-4/5 rounded bg-gray-200" />
-              <div className="h-2 w-full rounded bg-gray-100" />
+          {visible.map((p) => (
+            <div key={p.id} className="space-y-1.5">
+              <Thumb post={p} className="aspect-video w-full" />
+              <CardTitle post={p} href={hrefFor(p)} />
+              <p className="line-clamp-2 text-[12px] leading-snug text-gray-500">{p.excerpt ?? ""}</p>
             </div>
           ))}
+          {visible.length === 0 && <EmptyNote />}
         </div>
       )}
     </div>
   );
+}
+
+function Thumb({ post, className }: { post: BlogIndexPost; className: string }) {
+  return post.featured_image_url ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={post.featured_image_url} alt="" className={`${className} rounded-md object-cover`} />
+  ) : (
+    <div className={`${className} rounded-md bg-gradient-to-br from-emerald-50 to-sky-50`} />
+  );
+}
+
+function CardTitle({ post, href }: { post: BlogIndexPost; href: string }) {
+  const draft = !post.published_at;
+  return (
+    <span className="flex items-start gap-1.5">
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        // stopPropagation: clicking inside the canvas normally selects the block, and a link that
+        // selects instead of navigating is the exact complaint this preview caused.
+        onClick={(e) => e.stopPropagation()}
+        className="line-clamp-2 text-[13px] font-semibold text-gray-800 underline decoration-gray-300 underline-offset-2 hover:decoration-gray-600"
+      >
+        {post.title}
+      </a>
+      {draft && (
+        <span className="mt-px shrink-0 rounded bg-gray-200 px-1 text-[10px] text-gray-600">Draft</span>
+      )}
+    </span>
+  );
+}
+
+function EmptyNote() {
+  return <p className="text-[12px] text-gray-400">No posts yet — published posts will appear here.</p>;
 }
 
 /** The post list's settings, shown in the canvas side rail like any block's. */
@@ -310,7 +361,16 @@ export default function BlogHomeEditor({
             id: POST_LIST_BLOCK_ID,
             title: "Post list",
             preview: (
-              <PostListPreview layout={layout} columns={columns} rows={rows} perPage={perPage} />
+              <PostListPreview
+                layout={layout}
+                columns={columns}
+                rows={rows}
+                perPage={perPage}
+                posts={posts}
+                hrefFor={(p) =>
+                  blogPostPath(settings.slug, p.slug, p.id, p, settings.permalink_style as PermalinkStyle | null)
+                }
+              />
             ),
             panel: (
               <PostListSettings

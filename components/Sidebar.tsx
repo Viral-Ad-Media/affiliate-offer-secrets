@@ -43,7 +43,7 @@ type NavItem = {
   /**
    * The section's own URL prefix, when `href` points at a child instead of it.
    *
-   * Blog's parent link goes to /blog/home (its first child) but the SECTION is still /blog, and
+   * Blog's parent link goes to /blog (its Home child) but the SECTION is still /blog, and
    * breadcrumbs need that to render "Blog / Categories" rather than "Posts / Categories" — /blog
    * is also the Posts child's href, so the flattened label map resolves it to "Posts".
    */
@@ -89,7 +89,7 @@ const NAV: NavItem[] = [
     // used to land on the second item in its own submenu. Every other section here points at the
     // top of its list; this one was the exception because its list grew a Home above the original
     // page rather than beside it.
-    href: "/blog/home",
+    href: "/blog",
     sectionHref: "/blog",
     label: "Blog",
     icon: Newspaper,
@@ -97,16 +97,16 @@ const NAV: NavItem[] = [
     // Shown indented under the parent whenever any /blog route is active (expanded rail + mobile
     // drawer only — the icon-only collapsed rail keeps just the parent icon).
     children: [
-      { href: "/blog/home", label: "Home", match: (p: string) => p === "/blog/home" },
+      { href: "/blog", label: "Home", match: (p: string) => p === "/blog" },
       {
-        href: "/blog",
+        href: "/blog/posts",
         label: "Posts",
         // Deliberately a negative match, not p === "/blog": the post editor lives at /blog/{id},
         // and Posts should stay highlighted while you're editing one. Listing the siblings is what
         // keeps that from also lighting up on Home/Categories/Settings — so any NEW /blog/*
         // sibling must be added here too, or it will highlight Posts as well as itself.
         match: (p: string) =>
-          p.startsWith("/blog") && !["/blog/home", "/blog/categories", "/blog/settings"].includes(p),
+          p.startsWith("/blog") && !["/blog", "/blog/categories", "/blog/settings"].includes(p),
       },
       { href: "/blog/categories", label: "Categories", match: (p: string) => p === "/blog/categories" },
       { href: "/blog/settings", label: "Settings", match: (p: string) => p === "/blog/settings" },

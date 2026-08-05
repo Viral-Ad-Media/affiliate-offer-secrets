@@ -154,7 +154,7 @@ export default function BlogPostEditor({
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-ink-950">
       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-ink-700 bg-ink-900/90 px-4 py-3 backdrop-blur">
-        <Link href="/blog" className="inline-flex shrink-0 items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200">
+        <Link href="/blog/posts" className="inline-flex shrink-0 items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200">
           <ArrowLeft className="h-4 w-4" /> Posts
         </Link>
         <div className="min-w-0 truncate text-sm font-medium text-zinc-100">{title || "Untitled post"}</div>

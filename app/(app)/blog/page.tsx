@@ -1,53 +1,49 @@
 import { redirect } from "next/navigation";
-import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
-import BlogManager from "@/components/BlogManager";
-import Pager, { PAGE_SIZE, pageFromParam, pageRange } from "@/components/Pager";
+import BlogHomeEditor from "@/components/BlogHomeEditor";
+import type { BlogIndexPost } from "@/lib/blog";
 
 export const dynamic = "force-dynamic";
 
-// Blog manager: posts imported from campaigns' generated blog_md (or written from scratch),
-// organized into user-created categories, published at public /b/{postId} URLs.
-export default async function BlogPage({ searchParams }: { searchParams: { page?: string } }) {
+// Static segment, deliberately shadowing /blog/[postId] — post ids are UUIDs, never "home"
+// (same reasoning as /blog/categories and /blog/settings).
+export default async function BlogHomePage() {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const ws = await currentWorkspaceId();
-
-  const { count } = await supabase
-    .from("blog_posts")
-    .select("id", { count: "exact", head: true })
-    .eq("workspace_id", ws);
-  const total = count ?? 0;
-  const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
-  const [from, to] = pageRange(page);
-
-  const [{ data: posts }, { data: categories }, { data: settings }] = await Promise.all([
+  const [{ data: settings }, { data: rows }] = await Promise.all([
+    supabase
+      .from("blog_settings")
+      .select(
+        "blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_copy, intro_html, index_layout, index_columns, index_rows"
+      )
+      .maybeSingle(),
+    // The editor's own Preview renders the whole index, so it needs the real posts — drafts
+    // included, matching what the saved-preview iframe shows.
     supabase
       .from("blog_posts")
-      .select("id, title, slug, status, category_id, campaign_id, published_at, updated_at, blog_categories(slug)")
-      .eq("workspace_id", ws)
-      .order("updated_at", { ascending: false })
-      .range(from, to),
-    supabase.from("blog_categories").select("id, name").eq("workspace_id", ws).order("name"),
-    supabase.from("blog_settings").select("slug, permalink_style").eq("workspace_id", ws).maybeSingle(),
+      .select(
+        "id, title, slug, excerpt, content_md, html, featured_image_url, published_at, blog_categories(name, slug)"
+      )
+      .order("published_at", { ascending: false, nullsFirst: true })
+      .limit(24),
   ]);
 
-  return (
-    <div className="space-y-4">
-      <BlogManager
-        posts={(posts ?? []).map((p) => ({
-          ...p,
-          category_slug: ((p as any).blog_categories?.slug as string | null) ?? null,
-        }))}
-        categories={categories ?? []}
-        blogSlug={settings?.slug ?? null}
-        permalinkStyle={settings?.permalink_style ?? null}
-      />
-      <Pager page={page} total={total} basePath="/blog" label="posts" />
-    </div>
-  );
+  const posts: BlogIndexPost[] = (rows ?? []).map((r: any) => ({
+    id: r.id,
+    title: r.title,
+    slug: r.slug,
+    excerpt: r.excerpt,
+    content_md: r.content_md ?? "",
+    html: r.html,
+    featured_image_url: r.featured_image_url,
+    published_at: r.published_at,
+    category_name: r.blog_categories?.name ?? null,
+    category_slug: r.blog_categories?.slug ?? null,
+  }));
+
+  return <BlogHomeEditor settings={settings ?? {}} posts={posts} />;
 }

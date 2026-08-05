@@ -128,7 +128,7 @@ export default async function AnalyticsPage() {
           label="Posts published"
           value={published.count ?? 0}
           hint="Live on your public blog"
-          href="/blog"
+          href="/blog/posts"
           Icon={FileText}
         />
       </div>
