@@ -28,6 +28,157 @@ function isTree(v: unknown): v is PageBlockTree {
   return !!v && typeof v === "object" && (v as { version?: number }).version === 2;
 }
 
+
+// Not a real block id — the appendix lives outside the tree, and this must never collide with one
+// the canvas could resolve via findBlockLocation.
+const POST_LIST_BLOCK_ID = "__post_list__";
+
+/**
+ * What the post list looks like on the page sheet, at the chosen shape.
+ *
+ * Skeleton cards, not the real posts: the point is the LAYOUT, and rendering actual titles here
+ * would imply the intro editor can edit them (it can't — a post is edited on its own page). It
+ * mirrors the public stylesheet's proportions — 16:9 thumbnails, one-per-row list with the image
+ * beside the text — so what you pick reads the same way it will publish.
+ */
+function PostListPreview({
+  layout,
+  columns,
+  rows,
+  perPage,
+}: {
+  layout: BlogIndexLayout;
+  columns: number;
+  rows: number;
+  perPage: number;
+}) {
+  // Cap the drawn cards so a 4x12 choice doesn't render 48 skeletons into the sheet; the label
+  // below still states the real number, so nothing is hidden by the cap.
+  const shown = Math.min(perPage, layout === "list" ? 3 : columns * Math.min(rows, 2));
+  return (
+    <div className="my-4">
+      <div className="mb-2 text-[11px] uppercase tracking-wide text-gray-400">
+        Post list — {layout === "list" ? "list" : `${columns}-column grid`}, {perPage} per page
+      </div>
+      {layout === "list" ? (
+        <div className="space-y-3">
+          {Array.from({ length: shown }).map((_, i) => (
+            <div key={i} className="flex gap-3 border-b border-gray-200 pb-3 last:border-b-0">
+              <div className="h-14 w-24 shrink-0 rounded-md bg-gradient-to-br from-emerald-50 to-sky-50" />
+              <div className="min-w-0 flex-1 space-y-1.5 pt-1">
+                <div className="h-2.5 w-3/4 rounded bg-gray-200" />
+                <div className="h-2 w-full rounded bg-gray-100" />
+                <div className="h-2 w-1/3 rounded bg-gray-100" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+          {Array.from({ length: shown }).map((_, i) => (
+            <div key={i} className="space-y-1.5">
+              <div className="aspect-video w-full rounded-md bg-gradient-to-br from-emerald-50 to-sky-50" />
+              <div className="h-2.5 w-4/5 rounded bg-gray-200" />
+              <div className="h-2 w-full rounded bg-gray-100" />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The post list's settings, shown in the canvas side rail like any block's. */
+function PostListSettings({
+  layout,
+  columns,
+  rows,
+  perPage,
+  totalPosts,
+  onLayout,
+  onColumns,
+  onRows,
+}: {
+  layout: BlogIndexLayout;
+  columns: number;
+  rows: number;
+  perPage: number;
+  totalPosts: number;
+  onLayout: (v: BlogIndexLayout) => void;
+  onColumns: (v: number) => void;
+  onRows: (v: number) => void;
+}) {
+  const label = "mb-1 block text-[12px] font-medium text-zinc-400";
+  const input = "w-full rounded border border-ink-600 bg-ink-800 px-2 py-1 text-xs text-zinc-100";
+  return (
+    <>
+      <div>
+        <span className={label}>Layout</span>
+        <div className="flex items-center gap-1">
+          {(
+            [
+              { value: "grid" as const, label: "Grid", icon: LayoutGrid },
+              { value: "list" as const, label: "List", icon: Rows3 },
+            ]
+          ).map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => onLayout(o.value)}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded border px-2 py-1.5 text-[11px] font-medium ${
+                layout === o.value
+                  ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-300"
+                  : "border-ink-600 text-zinc-400 hover:bg-ink-700"
+              }`}
+            >
+              <o.icon className="h-3.5 w-3.5" /> {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {/* Hidden rather than disabled for a list: one post per row isn't a setting you can
+            change, it's what a list is. A dead control on screen invites the question. */}
+        {layout === "grid" && (
+          <label className="block">
+            <span className={label}>Columns</span>
+            <select value={columns} onChange={(e) => onColumns(Number(e.target.value))} className={input}>
+              {Array.from(
+                { length: MAX_INDEX_COLUMNS - MIN_INDEX_COLUMNS + 1 },
+                (_, i) => i + MIN_INDEX_COLUMNS
+              ).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="block">
+          <span className={label}>Rows per page</span>
+          <select value={rows} onChange={(e) => onRows(Number(e.target.value))} className={input}>
+            {Array.from({ length: MAX_INDEX_ROWS - MIN_INDEX_ROWS + 1 }, (_, i) => i + MIN_INDEX_ROWS).map(
+              (n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              )
+            )}
+          </select>
+        </label>
+      </div>
+
+      <p className="text-[11px] text-zinc-500">
+        {perPage} post{perPage === 1 ? "" : "s"} per page
+        {totalPosts > perPage ? ` · ${Math.ceil(totalPosts / perPage)} pages today` : ""}. Columns ×
+        rows is the page size, so the pager and the grid can never disagree. On phones the grid
+        narrows automatically; the page size stays the same.
+      </p>
+    </>
+  );
+}
+
 // Blog → Home. The rest of the index is generated (site header, category chips, post grid), so the
 // editable part is the intro band between the header and the posts — that's what this writes.
 // Identity fields (blog name, tagline, author) stay on Settings rather than being duplicated here.
@@ -142,8 +293,10 @@ export default function BlogHomeEditor({
 
       <section className="space-y-2">
         <p className="text-xs text-zinc-500">
-          Click any text to edit it in place, drag ⠿ to reorder. The affiliate disclosure is locked
-          — the home page links to affiliate articles, so it can&apos;t be edited or removed.
+          Click any text to edit it in place, drag ⠿ to reorder, and click the ⚙ on a block to open
+          its settings. The affiliate disclosure is locked — the home page links to affiliate
+          articles, so it can&apos;t be edited or removed. The post list below your intro is
+          generated from your posts; its layout is a block setting like any other.
         </p>
         <WysiwygCanvas
           tree={tree}
@@ -153,89 +306,26 @@ export default function BlogHomeEditor({
           onImageBusyChange={setImageBusyBlockId}
           onImageError={setError}
           productTitle={settings.blog_title ?? "Blog"}
+          appendix={{
+            id: POST_LIST_BLOCK_ID,
+            title: "Post list",
+            preview: (
+              <PostListPreview layout={layout} columns={columns} rows={rows} perPage={perPage} />
+            ),
+            panel: (
+              <PostListSettings
+                layout={layout}
+                columns={columns}
+                rows={rows}
+                perPage={perPage}
+                totalPosts={posts.length}
+                onLayout={setLayout}
+                onColumns={setColumns}
+                onRows={setRows}
+              />
+            ),
+          }}
         />
-      </section>
-
-      <section className="card space-y-3 p-4">
-        <div>
-          <h2 className="text-sm font-semibold text-zinc-100">Post list</h2>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            How the posts below your intro are laid out. Columns × rows is also the page size, so
-            the pager and the grid can never disagree.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-end gap-4">
-          <div>
-            <span className="mb-1 block text-xs text-zinc-400">Layout</span>
-            <div className="flex items-center gap-1">
-              {([
-                { value: "grid" as const, label: "Grid", icon: LayoutGrid },
-                { value: "list" as const, label: "List", icon: Rows3 },
-              ]).map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  onClick={() => setLayout(o.value)}
-                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${
-                    layout === o.value
-                      ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-300"
-                      : "border-ink-600 text-zinc-400 hover:bg-ink-700"
-                  }`}
-                >
-                  <o.icon className="h-3.5 w-3.5" /> {o.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Hidden rather than disabled for a list: one post per row isn't a setting you can
-              change, it's what a list is. Leaving a dead control on screen invites the question. */}
-          {layout === "grid" && (
-            <label className="block">
-              <span className="mb-1 block text-xs text-zinc-400">Columns</span>
-              <select
-                value={columns}
-                onChange={(e) => setColumns(Number(e.target.value))}
-                className="rounded-lg border border-ink-600 bg-ink-900 px-3 py-1.5 text-sm outline-none focus:border-emerald-500"
-              >
-                {Array.from({ length: MAX_INDEX_COLUMNS - MIN_INDEX_COLUMNS + 1 }, (_, i) => i + MIN_INDEX_COLUMNS).map(
-                  (n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  )
-                )}
-              </select>
-            </label>
-          )}
-
-          <label className="block">
-            <span className="mb-1 block text-xs text-zinc-400">Rows per page</span>
-            <select
-              value={rows}
-              onChange={(e) => setRows(Number(e.target.value))}
-              className="rounded-lg border border-ink-600 bg-ink-900 px-3 py-1.5 text-sm outline-none focus:border-emerald-500"
-            >
-              {Array.from({ length: MAX_INDEX_ROWS - MIN_INDEX_ROWS + 1 }, (_, i) => i + MIN_INDEX_ROWS).map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <p className="pb-2 text-xs text-zinc-500">
-            {perPage} post{perPage === 1 ? "" : "s"} per page
-            {posts.length > perPage ? ` · ${Math.ceil(posts.length / perPage)} pages today` : ""}
-          </p>
-        </div>
-
-        {/* Narrow screens collapse to fewer columns regardless — worth saying once here rather
-            than letting someone conclude the setting didn't save when they check on a phone. */}
-        <p className="text-xs text-zinc-600">
-          On phones and small tablets the grid narrows automatically; the page size stays the same.
-        </p>
       </section>
 
     </div>

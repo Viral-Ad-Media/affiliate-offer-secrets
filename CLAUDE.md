@@ -1772,6 +1772,14 @@ The blog is a real published site, not just per-post links.
   auto-fill min width — 4 columns really means 4; one media query handles narrow screens.
 - **The blog home editor has no inline live-preview iframe.** It uses `EditorPreviewButton` like
   every other editor in the app; the old always-on iframe below the canvas was the odd one out.
+- **The post list is a block on the canvas, not a form below it.** `WysiwygCanvas` takes an
+  optional `appendix` — an editor-only block pinned after the tree, with its own hover ⚙ and its
+  own side-rail panel (via the shared `EditorSidePanel` chrome). It exists for page furniture that
+  is *generated* rather than authored, so it has no place in `page_copy` but is still part of the
+  page you're looking at. Not draggable and not deletable: its position on the real page is fixed.
+  `StaticBlockWrapper` is `RootBlockWrapper` minus the drag handle, so it can't look reorderable.
+  The appendix id must not collide with a real block id (`__post_list__` is prefixed for that
+  reason) — `findBlockLocation` can't resolve it, so selection is checked by id separately.
   `blog_categories.slug` is unique per blog, backfilled from existing names in the migration.
 - **Paginated SEO**: each page self-canonicalises and carries `rel="prev"`/`rel="next"`; filtered
   and paged views get distinct `<title>`s ("Blog — Tool Reviews", "Blog — Page 2") so search

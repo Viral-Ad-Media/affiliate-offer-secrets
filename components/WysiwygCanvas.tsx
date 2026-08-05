@@ -58,6 +58,7 @@ import {
   type BlockStyle,
 } from "@/lib/engine/renderPages";
 import BlockStylePanel from "@/components/BlockStylePanel";
+import EditorSidePanel from "@/components/EditorSidePanel";
 
 // What the per-field dropdown offers. Labelled for humans ("Phone", not "tel") but valued with
 // the exact schema strings, so the editor and the renderer can't drift.
@@ -272,6 +273,45 @@ function RootBlockWrapper({
           className="flex h-6 w-6 cursor-grab items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-emerald-600 active:cursor-grabbing"
         >
           <GripVertical className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// Same hover/select affordance as RootBlockWrapper, minus the drag handle — for the appendix,
+// which has a fixed position on the real page and so must not look reorderable.
+function StaticBlockWrapper({
+  isSelected,
+  onSelect,
+  children,
+}: {
+  isSelected: boolean;
+  onSelect: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect();
+      }}
+      className={`group relative rounded-md border px-1 py-1 hover:border-dashed hover:border-emerald-300 ${
+        isSelected ? "border-emerald-400" : "border-transparent"
+      }`}
+    >
+      <div className="absolute -top-3 right-1 z-10 hidden gap-0.5 group-hover:flex">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+          title="Block settings"
+          className="flex h-6 w-6 items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-emerald-600"
+        >
+          <Settings2 className="h-3.5 w-3.5" />
         </button>
       </div>
       {children}
@@ -660,6 +700,25 @@ export type WysiwygCanvasProps = {
   onImageError: (message: string) => void;
   productTitle: string;
   ctaClassName?: string;
+  /**
+   * An editor-only block pinned after the tree — for page furniture that is generated, not
+   * authored, so it has no place in page_copy but still belongs on the canvas.
+   *
+   * The blog home's post list is the case this exists for: it's rendered from the tenant's posts,
+   * not from their block tree, but it IS part of the page they're looking at, and its settings
+   * should open in the same panel as everything else rather than in a separate form below the
+   * sheet. Not draggable and not deletable, because its position on the real page is fixed.
+   */
+  appendix?: {
+    /** Selection key. Must not collide with a real block id — prefix it. */
+    id: string;
+    /** Title shown at the top of the settings panel. */
+    title: string;
+    /** What appears on the page sheet. */
+    preview: React.ReactNode;
+    /** The controls shown in the side panel while it's selected. */
+    panel: React.ReactNode;
+  };
 };
 
 // Shared visual surface for both components/PageEditor.tsx (opt-in page + bridge_variants) and
@@ -683,6 +742,7 @@ export default function WysiwygCanvas({
   onImageError,
   productTitle,
   ctaClassName,
+  appendix,
 }: WysiwygCanvasProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -693,6 +753,8 @@ export default function WysiwygCanvas({
   // OTHER blocks (a sibling's commit re-renders the tree, but the selected id still resolves).
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const selectedBlock: Block | null = selectedBlockId ? findBlockLocation(tree, selectedBlockId)?.block ?? null : null;
+  // The appendix isn't in the tree, so findBlockLocation can't resolve it — check by id instead.
+  const appendixSelected = !!appendix && selectedBlockId === appendix.id;
 
   function updateStyle(blockId: string, patch: Record<string, unknown>) {
     onChange(updateBlockStyle(tree, blockId, patch));
@@ -1291,12 +1353,29 @@ export default function WysiwygCanvas({
               ))}
             </SortableContext>
           </DndContext>
+
+          {appendix && (
+            <StaticBlockWrapper
+              isSelected={appendixSelected}
+              onSelect={() => setSelectedBlockId(appendix.id)}
+            >
+              {appendix.preview}
+            </StaticBlockWrapper>
+          )}
         </div>
       </div>
 
-      {selectedBlock && (
+      {(selectedBlock || appendixSelected) && (
         <div className="lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:w-80 lg:shrink-0 lg:overflow-y-auto">
-          <BlockStylePanel block={selectedBlock} onChange={updateStyle} onClose={() => setSelectedBlockId(null)} />
+          {appendixSelected && appendix ? (
+            <EditorSidePanel title={appendix.title} onClose={() => setSelectedBlockId(null)}>
+              {appendix.panel}
+            </EditorSidePanel>
+          ) : (
+            selectedBlock && (
+              <BlockStylePanel block={selectedBlock} onChange={updateStyle} onClose={() => setSelectedBlockId(null)} />
+            )
+          )}
         </div>
       )}
     </div>
