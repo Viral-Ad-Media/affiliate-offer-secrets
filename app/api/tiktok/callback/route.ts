@@ -46,7 +46,10 @@ export async function GET(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return redirectClearingCookie("/login");
 
+  // Redirects rather than answering JSON, same as Meta's callback: this is a top-level browser
+  // navigation back from TikTok, and the insert below stamps workspace_id explicitly.
   const ws = await currentWorkspaceId();
+  if (!ws) return redirectClearingCookie("/settings/integrations?tiktok=error");
 
   try {
     const tokens = await exchangeTiktokCode(code);

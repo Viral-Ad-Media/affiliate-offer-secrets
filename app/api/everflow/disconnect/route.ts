@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { currentWorkspaceId } from "@/lib/workspace";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -16,6 +16,7 @@ export async function POST() {
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const admin = createAdminClient();
   const { data: existing } = await admin

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { currentWorkspaceId } from "@/lib/workspace";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { emptyPostTree, blogRenderCtx, renderBlockTree } from "@/lib/blog";
@@ -19,6 +19,7 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const body = await req.json().catch(() => ({}));
   const campaignId = typeof body.campaign_id === "string" ? body.campaign_id : null;
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
   // so a hand-imported post and an auto-created one can't diverge. Ownership is enforced by the
   // helper scoping every read to this user_id — another tenant's campaign id reads as nonexistent.
   if (campaignId) {
-    const result = await createPostFromCampaign(admin, ws as string, campaignId);
+    const result = await createPostFromCampaign(admin, ws, campaignId);
     if (!result.created && result.reason === "no_blog_content") {
       return NextResponse.json({ error: "campaign not found or has no blog content" }, { status: 404 });
     }
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
     .insert({
       user_id: user.id,
       title: "Untitled post",
-      slug: await uniquePostSlug(admin, ws as string, "post"),
+      slug: await uniquePostSlug(admin, ws, "post"),
       content_md: "",
       page_copy: tree,
       html,

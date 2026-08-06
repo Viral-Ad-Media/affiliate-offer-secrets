@@ -61,7 +61,13 @@ export async function GET(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return redirectClearingCookie("/login");
 
+  // This one redirects rather than answering JSON — it is a top-level browser navigation back from
+  // Meta, so a 401 body would just be text on a blank page. A null workspace here is also worse
+  // than a failed query: every insert below stamps workspace_id explicitly (the trigger's
+  // admin-client fallback would file the connection under the wrong workspace), so there is
+  // nothing safe to write without one.
   const ws = await currentWorkspaceId();
+  if (!ws) return redirectClearingCookie("/settings/integrations?meta=error");
 
   try {
     const { access_token: shortLived } = await exchangeCodeForToken(code);

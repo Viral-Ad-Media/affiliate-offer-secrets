@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { currentWorkspaceId } from "@/lib/workspace";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyApiKey } from "@/lib/everflow/client";
@@ -25,6 +25,7 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const body = await req.json().catch(() => ({}));
   const apiKey = typeof body.api_key === "string" ? body.api_key.trim() : "";

@@ -37,6 +37,7 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const body = await req.json();
   if (body.type !== "discover_products") {

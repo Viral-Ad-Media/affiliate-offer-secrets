@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { queueChargedJob } from "@/lib/credits";
-import { currentWorkspaceId } from "@/lib/workspace";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -20,6 +20,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   // RLS-scoped read doubles as the ownership check; the worker's stageVerify re-checks for real.
   const { data: post } = await supabase

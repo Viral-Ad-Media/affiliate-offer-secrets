@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { currentWorkspaceId } from "@/lib/workspace";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeTagFields } from "@/lib/contactTags";
@@ -19,6 +19,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const body = await req.json().catch(() => ({}));
   const { name, color, description } = normalizeTagFields(body);
@@ -49,6 +50,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const admin = createAdminClient();
   // Links cascade on tag delete — the contacts themselves are untouched, only the grouping goes.

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { currentWorkspaceId } from "@/lib/workspace";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MAX_POST_TITLE, MAX_POST_EXCERPT, MAX_FEATURED_IMAGE_CHARS, blogRenderCtx, renderBlockTree, slugify } from "@/lib/blog";
@@ -41,6 +41,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const body = await req.json().catch(() => ({}));
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -60,7 +61,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     // Slug follows the title unless explicitly set. Uniqueness is per-blog (0033's partial index),
     // so a collision within this tenant gets a numeric suffix rather than a 500 from the index.
     const desired = slugify(typeof body.slug === "string" && body.slug.trim() ? body.slug : (patch.title as string) ?? "");
-    if (desired) patch.slug = await uniquePostSlug(ws as string, params.id, desired);
+    if (desired) patch.slug = await uniquePostSlug(ws, params.id, desired);
   }
   if (typeof body.excerpt === "string") {
     patch.excerpt = body.excerpt.trim().slice(0, MAX_POST_EXCERPT) || null;
@@ -112,6 +113,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const admin = createAdminClient();
   const { data, error } = await admin

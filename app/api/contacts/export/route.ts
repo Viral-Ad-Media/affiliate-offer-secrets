@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { currentWorkspaceId } from "@/lib/workspace";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -34,6 +34,7 @@ export async function GET() {
   if (!user) return new Response("Not signed in", { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const { data: campaigns } = await supabase.from("campaigns").select("id, products(product_title)");
   const titleByCampaign = new Map<string, string>();

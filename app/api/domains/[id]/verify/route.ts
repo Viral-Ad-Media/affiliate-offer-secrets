@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { currentWorkspaceId } from "@/lib/workspace";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isDomainFullyVerified, verifyProjectDomain, VercelApiError } from "@/lib/vercel/client";
@@ -14,6 +14,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
   const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const admin = createAdminClient();
   const { data: domainRow } = await admin
