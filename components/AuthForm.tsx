@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import SignupCardStep from "@/components/SignupCardStep";
 import { REMEMBER_COOKIE } from "@/lib/supabase/cookieOptions";
 import { Button } from "@/components/ui/button";
 
@@ -16,6 +17,22 @@ export type AuthMode = "login" | "signup" | "forgot";
 const field =
   "w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-emerald-500";
 
+// Two dots and a label rather than a progress bar: there are exactly two steps and they're both
+// visible in one glance, so a percentage would be pretending the flow is longer than it is.
+function StepHeader({ step }: { step: 1 | 2 }) {
+  return (
+    <div className="flex items-center justify-between border-b border-ink-800 pb-2.5">
+      <span className="text-xs font-medium text-zinc-300">
+        {step === 1 ? "Your details" : "Payment method"}
+      </span>
+      <span className="flex items-center gap-1.5" aria-label={`Step ${step} of 2`}>
+        <span className={`h-1.5 w-5 rounded-full ${step === 1 ? "bg-emerald-500" : "bg-emerald-500/40"}`} />
+        <span className={`h-1.5 w-5 rounded-full ${step === 2 ? "bg-emerald-500" : "bg-ink-600"}`} />
+      </span>
+    </div>
+  );
+}
+
 export default function AuthForm({
   initialMode = "login",
   onSuccess,
@@ -25,6 +42,10 @@ export default function AuthForm({
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>(initialMode);
+  // Signup is two steps: account, then card. Only ever 2 while mode === "signup", and only after
+  // signUp actually returned a session — step 2 calls an authenticated route, so reaching it
+  // without one would just 401.
+  const [step, setStep] = useState<1 | 2>(1);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -42,6 +63,7 @@ export default function AuthForm({
 
   function switchTo(next: AuthMode) {
     setMode(next);
+    setStep(1);
     setError(null);
     setNotice(null);
     setConfirm("");
@@ -75,13 +97,26 @@ export default function AuthForm({
       // Name and phone travel as auth metadata, NOT a client write: profiles has been SELECT-only
       // for clients since 0002_trial.sql (a general update policy let users self-grant
       // access_granted). handle_new_user copies exactly these three keys server-side.
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { first_name: firstName, last_name: lastName, phone } },
       });
       setBusy(false);
       if (error) return setError(error.message);
+
+      // The 30-day trial is already granted at this point — handle_new_user sets trial_ends_at
+      // (0075), so it does not depend on anyone reaching, or finishing, step 2.
+      //
+      // Whether a session comes back depends on the project's "Confirm email" setting. With it off
+      // (how this project runs today) signUp returns one and we can go straight to the card step,
+      // which needs an authenticated call. With it on there is no session, so the only honest next
+      // move is the confirm-your-email notice — the card step would 401.
+      if (data.session) {
+        setStep(2);
+        router.refresh();
+        return;
+      }
       setNotice(`Check ${email} for a confirmation link, then come back and sign in.`);
       return;
     }
@@ -120,8 +155,24 @@ export default function AuthForm({
     );
   }
 
+  if (signup && step === 2) {
+    return (
+      <div className="space-y-3">
+        <StepHeader step={2} />
+        <SignupCardStep
+          onDone={() => {
+            onSuccess?.();
+            router.push("/dashboard");
+            router.refresh();
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={submit} className="space-y-3">
+      {signup && <StepHeader step={1} />}
       {signup && (
         <>
           <div className="grid grid-cols-2 gap-3">
@@ -246,7 +297,7 @@ export default function AuthForm({
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       <Button type="submit" disabled={busy} className="w-full justify-center">
-        {busy ? "Please wait…" : forgot ? "Send reset link" : signup ? "Sign up" : "Sign in"}
+        {busy ? "Please wait…" : forgot ? "Send reset link" : signup ? "Continue" : "Sign in"}
       </Button>
 
       <button

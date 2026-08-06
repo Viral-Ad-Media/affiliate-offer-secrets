@@ -350,6 +350,63 @@ must never be lost. Read-only Supabase queries (via the `mcp__supabase__execute_
    `<img>`/`og:image` candidates, then fetches and base64-encodes it (capped ~200KB). If nothing
    clean is available, the page stays text-only rather than fabricating a product image.
 
+## Two-step signup, and the card on file
+
+Signup is two steps: account details, then a payment method. `components/AuthForm.tsx` holds a
+`step` state that is only ever 2 while `mode === "signup"`, and only after `signUp` actually
+returned a session — step 2 calls an authenticated route, so reaching it without one would just
+401. With Supabase's "Confirm email" ON there IS no session, so that path still falls back to the
+confirm-your-email notice rather than pretending the card step can run.
+
+- **The 30-day trial is granted by the DATABASE, not by the client** (0075). `handle_new_user` now
+  sets `trial_ends_at = now() + interval '30 days'` on the profile it already creates, so an
+  abandoned signup, a crash between the two steps, or any future signup path all land on the same
+  answer. Before this, "everyone gets a trial" depended on someone finding and pressing
+  `StartTrialButton` on the billing page. `start_trial()` still exists and is unchanged — its
+  `trial_ends_at is null` guard simply stops matching for new accounts, and it remains correct for
+  the handful of older rows that never started one.
+  **The interval is a literal and `trial_ends_at` is NOT in the metadata allowlist.** That matters
+  because `raw_user_meta_data` is entirely caller-controlled via `signUp({options:{data}})`.
+  Verified with a hostile payload carrying `access_granted: true`, `is_superadmin: true` and a
+  10-year `trial_ends_at`: the profile came back with exactly 30 days, `access_granted` false and
+  `is_superadmin` false. Re-run that probe if you ever touch this function.
+- **Step 2 charges nothing.** It is a `mode: 'setup'` Checkout Session
+  (`app/api/billing/setup-session/route.ts`), so it saves a card for when the trial ends and moves
+  no money. It is also **skippable** — the trial is already live, so gating the app behind a card
+  would be a paywall this product doesn't have.
+- **`ui_mode: 'embedded'` is what makes it feel like one form.** It returns a `client_secret`
+  instead of a redirect URL, and `components/SignupCardStep.tsx` mounts Stripe's own form inline
+  via `EmbeddedCheckoutProvider`. **The card is entered inside Stripe's iframe — card data never
+  touches this app's DOM.** Never replace this with real `<input>` fields for a card number; that
+  would move the whole app into PCI scope for a cosmetic gain.
+  `payment_method_types: ['card']` is deliberate: it keeps `currency` optional (Stripe requires it
+  in setup mode only when the types are unset) and keeps every redirect-based method off the
+  session, which is the precondition for `redirect_on_completion: 'never'` — that is what lets the
+  browser stay on our page when the card saves.
+- **The Customer is created and persisted before the session**, not at webhook time. If someone
+  abandons step 2 the Customer still exists at Stripe, and creating a second one on their next
+  attempt would scatter duplicates across the account.
+- **A REAL BUG this fixed in passing**: the webhook rejected any `checkout.session.completed`
+  whose metadata wasn't `access` or `credits` with a **400**. Stripe treats a 400 as a delivery
+  failure and retries the same event on a schedule for days — over something no retry can fix. A
+  card-save session would have done exactly that. Unrecognised types are now acknowledged with a
+  200 and ignored.
+- **A card on file is not a purchase**, and the webhook's `card_on_file` branch returns before any
+  of the payment path: no `payments` row (that table is the paid-money audit trail, and the
+  referral program's qualifying event reads from this same handler), and no `access_granted`. It
+  stores only `card_brand`/`card_last4` — display echoes, never anything that can charge.
+  `profiles` stays SELECT-only for clients; these columns are written by the admin client only, and
+  they must not become the reason to re-add an update policy.
+- **The test-card banner is gated on `pk_test_`.** Stripe's `4242 4242 4242 4242` is public
+  documentation and safe to display, but on a live key that banner would be telling real paying
+  customers to type a number that will be declined.
+- **`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is new and required for step 2.** Without it the step
+  renders a plain "card setup isn't configured yet" message and a link onward — deliberately not a
+  dead end, since the account and the trial already exist by then.
+- **Still to build: nothing charges the card when the trial ends.** Capture is done; billing at
+  day 30 (a scheduled charge, a failure/dunning path, and the notifications around both) is a
+  separate piece of work and is not implied by this one.
+
 ## Billing (Stripe) and access control
 
 - One-time access fee and credit top-ups are both Stripe Checkout Sessions created ad-hoc
