@@ -400,7 +400,16 @@ confirm-your-email notice rather than pretending the card step can run.
 - **The test-card banner is gated on `pk_test_`.** Stripe's `4242 4242 4242 4242` is public
   documentation and safe to display, but on a live key that banner would be telling real paying
   customers to type a number that will be declined.
-- **`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is new and required for step 2.** Without it the step
+- **`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is required for step 2, and is set on Vercel for
+  production/preview/development as of 2026-08-06** (test-mode key). It is `NEXT_PUBLIC_*`, so it is
+  inlined at BUILD time — adding it does nothing until a fresh build runs. Setting it and waiting
+  for the next code push is a way to be confused for an hour.
+  **Do not verify it by grepping the bundle for `pk_test_`** — that matches the literal inside this
+  codebase's own `startsWith("pk_test_")` comparison, so it reports "present" whether or not a key
+  exists. It did exactly that here, and the false positive survived two rounds of checking. Grep for
+  `pk_(test|live)_[A-Za-z0-9]{12,}` instead, i.e. a key with its actual tail. The other tell is the
+  compiled output: an inlined var appears as a string literal, whereas a MISSING one compiles to a
+  runtime `s(…).env.NEXT_PUBLIC_…` lookup that resolves to `undefined` in the browser. Without it the step
   renders a plain "card setup isn't configured yet" message and a link onward — deliberately not a
   dead end, since the account and the trial already exist by then.
 - **Still to build: nothing charges the card when the trial ends.** Capture is done; billing at
