@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import SignupCardStep from "@/components/SignupCardStep";
+import TestCardBanner from "@/components/TestCardBanner";
 import { REMEMBER_COOKIE } from "@/lib/supabase/cookieOptions";
 import { Button } from "@/components/ui/button";
 
@@ -158,6 +159,7 @@ export default function AuthForm({
   if (signup && step === 2) {
     return (
       <div className="space-y-3">
+        <TestCardBanner />
         <StepHeader step={2} />
         <SignupCardStep
           onDone={() => {
@@ -172,6 +174,7 @@ export default function AuthForm({
 
   return (
     <form onSubmit={submit} className="space-y-3">
+      {signup && <TestCardBanner />}
       {signup && <StepHeader step={1} />}
       {signup && (
         <>

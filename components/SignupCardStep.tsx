@@ -3,7 +3,8 @@
 import { useCallback, useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
-import { ShieldCheck, Copy, Check } from "lucide-react";
+import { STRIPE_TEST_MODE } from "@/components/TestCardBanner";
+import { ShieldCheck } from "lucide-react";
 
 /**
  * Step 2 of signup: put a card on file. Charges nothing.
@@ -22,44 +23,9 @@ const PUBLISHABLE = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 // Stripe.js on every render.
 const stripePromise = PUBLISHABLE ? loadStripe(PUBLISHABLE) : null;
 
-// Stripe's documented test card. Shown ONLY against a pk_test_ key: on a live key this banner
-// would be telling real paying customers to type a number that will be declined.
-const TEST_MODE = PUBLISHABLE.startsWith("pk_test_");
-const TEST_CARD = { number: "4242 4242 4242 4242", expiry: "any future date", cvc: "any 3 digits", zip: "any 5 digits" };
-
-function TestCardBanner() {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-xs font-semibold text-amber-300">Test mode — no real charge</span>
-        <button
-          type="button"
-          onClick={() => {
-            navigator.clipboard?.writeText(TEST_CARD.number.replace(/\s/g, ""));
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          }}
-          className="flex items-center gap-1 text-[11px] text-amber-300/80 hover:text-amber-200"
-        >
-          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-          {copied ? "Copied" : "Copy number"}
-        </button>
-      </div>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px] text-amber-200/70">
-        <dt>Card</dt>
-        <dd className="font-mono text-amber-100">{TEST_CARD.number}</dd>
-        <dt>Expiry</dt>
-        <dd>{TEST_CARD.expiry}</dd>
-        <dt>CVC</dt>
-        <dd>{TEST_CARD.cvc}</dd>
-        <dt>ZIP</dt>
-        <dd>{TEST_CARD.zip}</dd>
-      </dl>
-    </div>
-  );
-}
-
+// The test-card banner itself now renders ABOVE the whole signup form (AuthForm), not here —
+// it's useful before you start typing, not once you've already reached step 2. STRIPE_TEST_MODE is
+// still read here because the copy below changes with it.
 export default function SignupCardStep({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
 
@@ -109,10 +75,9 @@ export default function SignupCardStep({ onDone }: { onDone: () => void }) {
         <p className="text-xs leading-relaxed text-zinc-400">
           Your 30-day trial is <span className="text-zinc-200">already active</span> — this saves a
           card for when it ends. <span className="text-zinc-200">You won&apos;t be charged today.</span>
+          {STRIPE_TEST_MODE && " Test mode: use the card shown above."}
         </p>
       </div>
-
-      {TEST_MODE && <TestCardBanner />}
 
       {error ? (
         <p className="text-sm text-red-400">{error}</p>
