@@ -1673,6 +1673,45 @@ price list and the single place to change what anything costs.
   (correct on first paint, no flash) and each spend calls `refresh()` rather than a full
   `router.refresh()` for one number.
 
+## Regenerate a kit, and restyle without rewriting
+
+Two separate actions, because only one of them can destroy work.
+
+**Regenerate** is `/api/promote` on a product that already has a kit — not a new endpoint.
+That route already owns the entitlement check, the credit charge and the rollback, and a second
+server-side copy would be a second billing path to keep in step. The bulk bar loops it per product
+exactly as bulk promote does. Both entry points exist: the bulk bar in `ProductsPanel`, and the
+kit page itself (`app/(app)/product/[id]/page.tsx`).
+
+**`PromoteKitDialog` gained a `mode`, rather than growing a second dialog.** The pieces you can
+regenerate are exactly the pieces you could build, so two components would drift the first time an
+asset was added to one of them. `openRegenerate` is the exact inverse of `openPromote` — it filters
+to products that HAVE a `campaign_status` — so the count, and the credit total quoted from it,
+describe what will really run.
+
+**The funnel page starts UNTICKED in regenerate mode, and that default is the safety mechanism —
+not the edit detection.** Rebuilding it overwrites `page_copy`, including copy someone wrote by
+hand on a page that may already be taking paid traffic. `campaigns.page_copy_edited_at` (0076,
+stamped by both editor PATCH routes) sharpens the wording to name the date, but it is null for
+anything edited before that column existed — so trusting it as the guard would silently destroy
+precisely the oldest, most worked-on pages. Ticking it shows a red, explicit "there is no undo".
+The "ads without a funnel" warning is suppressed in this mode: the page already exists, so that
+state is normal here, and a warning shown when nothing is wrong is one people learn to ignore.
+
+**Restyle is the non-destructive alternative, offered from inside that same warning.**
+`app/api/campaigns/[id]/restyle/route.ts` applies a `THEME_PRESETS` entry
+(`lib/engine/pageTheme.ts`) to `page_copy.theme` and re-renders. It carries `blocks` across by
+reference and never inspects them — the only key that changes is `theme`, which becomes CSS custom
+properties. No Anthropic call, so no credits. Verified directly across all six presets: the block
+array is byte-identical before and after, the hand-written headline/lead/bullets all survive into
+the rendered HTML, the theme genuinely changes the CSS, an unknown preset id is rejected, and a
+colour like `"#fff;} body{display:none}"` sanitizes away rather than closing the rule.
+
+**A theme preset is NOT a funnel style, and they must not be merged.** `FUNNEL_STYLES`
+(`lib/funnelStyles.ts`) decides which SECTIONS exist and in what order, so applying one to an
+existing page would drop the copy in the sections it omits. That stays a create-time choice.
+A theme only repaints what is already there, which is the entire reason it is safe to offer here.
+
 ## Bulk actions and quick edit (leads, blog posts)
 
 Two lists carry row selection with a bulk bar: Contacts → Leads and Blog → Posts. Both bulk

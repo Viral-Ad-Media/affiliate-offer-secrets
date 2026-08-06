@@ -146,6 +146,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .from("campaigns")
     .update({
       page_copy: tree,
+      // Stamped so Regenerate kit can warn by date before replacing hand-written copy (0076).
+      page_copy_edited_at: new Date().toISOString(),
       bridge_html: bridgeHtml,
       embedded_image_data_url: imageDataUrl,
       ...seoPatchFrom(body),

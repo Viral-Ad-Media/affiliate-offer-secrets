@@ -241,3 +241,91 @@ export function themeFromBrandColors(colors: string[]): PageTheme | undefined {
 
   return { colors: { primary, primaryHover: hover, onPrimary } };
 }
+
+/**
+ * Named designs, for the "don't rewrite my copy — just make it look different" case.
+ *
+ * A preset only ever sets THEME keys: colours, type, button and field shape. It cannot add, remove
+ * or reorder a block, so applying one to a page somebody has hand-written is non-destructive by
+ * construction — the words are untouched and only the CSS variables change. That is the whole
+ * reason this exists as a separate concept from `FUNNEL_STYLES` (lib/funnelStyles.ts), which picks
+ * which SECTIONS exist and therefore cannot be applied to an existing page without dropping copy.
+ *
+ * Every value here goes through `sanitizeTheme` on save like any other theme, so a preset is not a
+ * trusted path into the stylesheet — it is just a convenient starting set.
+ */
+export type ThemePreset = {
+  id: string;
+  label: string;
+  /** What this is FOR, not what colour it is — the picker should read as a decision, not a swatch. */
+  blurb: string;
+  theme: PageTheme;
+};
+
+export const THEME_PRESETS: ThemePreset[] = [
+  {
+    id: "default",
+    label: "Original",
+    blurb: "The stock look every page starts with. Green CTA, system type, plenty of air.",
+    theme: {},
+  },
+  {
+    id: "editorial",
+    label: "Editorial",
+    blurb: "Serif headlines on warm paper. Reads like an article rather than a pitch.",
+    theme: {
+      colors: { primary: "#1d4ed8", primaryHover: "#1e40af", onPrimary: "#ffffff", text: "#1c1917", muted: "#57534e", background: "#faf8f4", surface: "#ffffff", border: "#e7e2d8" },
+      typography: { headingFont: "serif", bodyFont: "serif", baseSize: 18, h1Size: 40, h2Size: 26, headingWeight: 700, lineHeight: 1.7 },
+      button: { shape: "square", fill: "solid", paddingY: 16, paddingX: 34, fontSize: 18, weight: 600 },
+      form: { radius: 2, fieldPadding: 15 },
+    },
+  },
+  {
+    id: "bold",
+    label: "Bold direct response",
+    blurb: "Big heavy headline, high-contrast CTA. Built to be skimmed on a phone.",
+    theme: {
+      colors: { primary: "#ea580c", primaryHover: "#c2410c", onPrimary: "#ffffff", text: "#111111", muted: "#555555", background: "#ffffff", surface: "#fff7ed", border: "#fed7aa" },
+      typography: { headingFont: "condensed", bodyFont: "system", baseSize: 17, h1Size: 46, h2Size: 28, headingWeight: 800, lineHeight: 1.5 },
+      button: { shape: "rounded", fill: "solid", paddingY: 20, paddingX: 40, fontSize: 20, weight: 800 },
+      form: { radius: 8, fieldPadding: 16 },
+    },
+  },
+  {
+    id: "calm",
+    label: "Calm / clinical",
+    blurb: "Muted blues and generous spacing. For claims that should feel measured.",
+    theme: {
+      colors: { primary: "#0f766e", primaryHover: "#115e59", onPrimary: "#ffffff", text: "#1f2937", muted: "#6b7280", background: "#f8fafc", surface: "#ffffff", border: "#e2e8f0" },
+      typography: { headingFont: "system", bodyFont: "system", baseSize: 17, h1Size: 34, h2Size: 23, headingWeight: 600, lineHeight: 1.75 },
+      button: { shape: "pill", fill: "solid", paddingY: 15, paddingX: 34, fontSize: 17, weight: 600 },
+      form: { radius: 10, fieldPadding: 14 },
+    },
+  },
+  {
+    id: "dark",
+    label: "Dark",
+    blurb: "Light type on near-black. Stands out in a feed of white landing pages.",
+    theme: {
+      colors: { primary: "#22c55e", primaryHover: "#16a34a", onPrimary: "#06210f", text: "#f4f4f5", muted: "#a1a1aa", background: "#0b0b0f", surface: "#17171d", border: "#2a2a33" },
+      typography: { headingFont: "system", bodyFont: "system", baseSize: 17, h1Size: 38, h2Size: 25, headingWeight: 700, lineHeight: 1.65 },
+      button: { shape: "rounded", fill: "solid", paddingY: 17, paddingX: 34, fontSize: 18, weight: 700 },
+      form: { radius: 8, borderColor: "#2a2a33", background: "#101017", fieldPadding: 15 },
+    },
+  },
+  {
+    id: "friendly",
+    label: "Friendly",
+    blurb: "Rounded type, soft edges, pill buttons. Warmer, less salesy.",
+    theme: {
+      colors: { primary: "#7c3aed", primaryHover: "#6d28d9", onPrimary: "#ffffff", text: "#2e1065", muted: "#6d6a80", background: "#faf7ff", surface: "#ffffff", border: "#e9e2f8" },
+      typography: { headingFont: "rounded", bodyFont: "rounded", baseSize: 17, h1Size: 36, h2Size: 24, headingWeight: 700, lineHeight: 1.7 },
+      button: { shape: "pill", fill: "solid", paddingY: 17, paddingX: 38, fontSize: 18, weight: 700 },
+      form: { radius: 16, fieldPadding: 15 },
+    },
+  },
+];
+
+export function themePresetById(id: unknown): ThemePreset | undefined {
+  return typeof id === "string" ? THEME_PRESETS.find((p) => p.id === id) : undefined;
+}

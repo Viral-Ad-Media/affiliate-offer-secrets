@@ -5,9 +5,13 @@ import HoplinkOverride from "@/components/HoplinkOverride";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { marked } from "marked";
-import { ArrowLeft, Copy, CheckCircle2, ExternalLink, Download, Layers } from "lucide-react";
+import { ArrowLeft, Copy, CheckCircle2, ExternalLink, Download, Layers, RefreshCw, Palette } from "lucide-react";
 import type { Campaign, Product } from "@/lib/shared";
 import ProductStatusSelect from "@/components/ProductStatusSelect";
+import PromoteKitDialog from "@/components/PromoteKitDialog";
+import RestyleDialog from "@/components/RestyleDialog";
+import BuildProgressDialog from "@/components/BuildProgressDialog";
+import { toast } from "@/lib/toast";
 import SendEmail from "@/components/SendEmail";
 import GenerateVideo from "@/components/GenerateVideo";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
@@ -38,6 +42,33 @@ export default function ProductPage({ params }: { params: { id: string } }) {
   const [product, setProduct] = useState<Product | null>(null);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>(initialTab);
+  // Regenerating from the kit page runs the SAME /api/promote the marketplace does — it is a build
+  // on a product that already has one — so entitlement, the credit charge and the rollback all stay
+  // in the one place that owns them.
+  const [regenOpen, setRegenOpen] = useState(false);
+  const [restyleOpen, setRestyleOpen] = useState(false);
+  const [regenBusy, setRegenBusy] = useState(false);
+  const [regenJob, setRegenJob] = useState<{ jobIds: string[]; titles: Record<string, string> } | null>(null);
+
+  async function runRegenerate(assets: string[]) {
+    if (!product) return;
+    setRegenBusy(true);
+    const res = await fetch("/api/promote", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ product_id: product.id, assets }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setRegenBusy(false);
+    if (!res.ok) {
+      toast.error(d.error ?? "Couldn't start that regeneration");
+      return;
+    }
+    setRegenOpen(false);
+    if (d.job_id) {
+      setRegenJob({ jobIds: [d.job_id], titles: { [d.job_id]: product.product_title ?? "Campaign kit" } });
+    }
+  }
   const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
@@ -109,7 +140,19 @@ export default function ProductPage({ params }: { params: { id: string } }) {
               {product.vendor_id} · {product.niche}
             </p>
           </div>
-          <ProductStatusSelect productId={product.id} status={product.status} onChanged={load} />
+          <div className="flex flex-wrap items-center gap-2">
+            {campaign && (
+              <>
+                <Button onClick={() => setRegenOpen(true)} variant="outline" className="text-xs">
+                  <RefreshCw className="h-3.5 w-3.5" /> Regenerate kit
+                </Button>
+                <Button onClick={() => setRestyleOpen(true)} variant="outline" className="text-xs">
+                  <Palette className="h-3.5 w-3.5" /> Change design
+                </Button>
+              </>
+            )}
+            <ProductStatusSelect productId={product.id} status={product.status} onChanged={load} />
+          </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
           <div>
@@ -292,6 +335,37 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           </>
         )}
       </Card>
+
+      {campaign && (
+        <>
+          <PromoteKitDialog
+            open={regenOpen}
+            onOpenChange={setRegenOpen}
+            count={1}
+            busy={regenBusy}
+            mode="regenerate"
+            funnelEditedAt={(campaign as { page_copy_edited_at?: string | null }).page_copy_edited_at ?? null}
+            onRestyle={() => {
+              setRegenOpen(false);
+              setRestyleOpen(true);
+            }}
+            onConfirm={runRegenerate}
+          />
+          <RestyleDialog
+            open={restyleOpen}
+            onOpenChange={setRestyleOpen}
+            campaignId={campaign.id}
+            onDone={load}
+          />
+          <BuildProgressDialog
+            open={regenJob !== null}
+            onOpenChange={(v) => !v && setRegenJob(null)}
+            jobIds={regenJob?.jobIds ?? []}
+            titleByJobId={regenJob?.titles ?? {}}
+            onAllDone={load}
+          />
+        </>
+      )}
     </main>
   );
 }

@@ -88,6 +88,9 @@ export default function ProductsPanel({
   const [bulkBusy, setBulkBusy] = useState(false);
   // Which products the promote dialog is about: one row, or the whole bulk selection.
   const [promoteIds, setPromoteIds] = useState<string[] | null>(null);
+  // Regenerate reuses the promote dialog and the promote endpoint — it IS a build on a product
+  // that already has a kit. Only the default asset selection and the wording differ.
+  const [regenerate, setRegenerate] = useState(false);
   // The jobs this run queued, so the progress dialog tracks exactly what you just started rather
   // than every build in the workspace.
   const [progress, setProgress] = useState<{ jobIds: string[]; titles: Record<string, string> } | null>(null);
@@ -173,7 +176,21 @@ export default function ProductsPanel({
       toast.error("Those products already have a kit or one in progress");
       return;
     }
+    setRegenerate(false);
     setPromoteIds(buildable);
+  }
+
+  // The exact inverse of openPromote: regenerating only makes sense where a kit already exists.
+  // Filtering here rather than letting /api/promote dedupe means the count in the dialog — and the
+  // credit total it quotes — describes what will actually run.
+  function openRegenerate(ids: string[]) {
+    const withKits = ids.filter((id) => products.find((p) => p.id === id)?.campaign_status);
+    if (withKits.length === 0) {
+      toast.error("None of those have a kit to regenerate yet — build one first");
+      return;
+    }
+    setRegenerate(true);
+    setPromoteIds(withKits);
   }
 
   // Calls the SAME /api/promote the single button always used, once per product, rather than a
@@ -272,6 +289,12 @@ export default function ProductsPanel({
               onClick={() => openPromote(Array.from(selected))}
               disabled={bulkBusy} variant="outline" className="text-xs">
               <Rocket className="h-3.5 w-3.5" /> Promote selected
+              <CostBadge jobType="build_campaign" />
+            </Button>
+            <Button
+              onClick={() => openRegenerate(Array.from(selected))}
+              disabled={bulkBusy} variant="outline" className="text-xs">
+              <RefreshCw className="h-3.5 w-3.5" /> Regenerate kit
               <CostBadge jobType="build_campaign" />
             </Button>
             {bulkBusy && <RefreshCw className="h-3.5 w-3.5 animate-spin text-zinc-400" />}
@@ -451,6 +474,7 @@ export default function ProductsPanel({
         onOpenChange={(o) => !o && setPromoteIds(null)}
         count={promoteIds?.length ?? 0}
         busy={bulkBusy}
+        mode={regenerate ? "regenerate" : "build"}
         onConfirm={(assets) => promoteIds && runPromote(promoteIds, assets)}
       />
     </>
