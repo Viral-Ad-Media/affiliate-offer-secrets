@@ -35,14 +35,35 @@ GitHub repo is `Viral-Ad-Media/affiliate-offer-secrets`, the local directory is
 migrations/0001_init.sql`'s header keeps the original name on purpose — a migration is a record
 of what was written at the time, not a live label.
 
-**`clickbank-studio.vercel.app` is gone.** Renaming the Vercel project releases that hostname
-(anyone can claim it), so every reference to it had to move to the custom domain in the same
-pass: `NEXT_PUBLIC_APP_URL`, the fallback origins in `app/layout.tsx`/`app/robots.ts`/
-`app/sitemap.ts`/`lib/blog.ts`, and all four Vault cron URLs (`engine_webhook_url`,
-`marketplace_refresh_url`, `domains_reverify_url`, `broadcast_sweep_url`). Externally registered
-callbacks pointing at the old host — Meta/TikTok/Google OAuth redirect URIs, Meta's deauthorize
-callback, the Stripe webhook endpoint, and Supabase Auth's Site URL/redirect allowlist — are the
-one class this codebase can't fix from inside itself and must be re-registered by hand.
+**Every internal reference to `clickbank-studio.vercel.app` moved to the custom domain** when the
+project was renamed: `NEXT_PUBLIC_APP_URL`, the fallback origins in `app/layout.tsx`/
+`app/robots.ts`/`app/sitemap.ts`/`lib/blog.ts`, and all four Vault cron URLs
+(`engine_webhook_url`, `marketplace_refresh_url`, `domains_reverify_url`, `broadcast_sweep_url` —
+verified 2026-08-06, all four canonical). Externally registered callbacks pointing at the old host
+— Meta/TikTok OAuth redirect URIs, Meta's deauthorize callback, the Stripe webhook endpoint, and
+Supabase Auth's Site URL/redirect allowlist — are the one class this codebase can't fix from
+inside itself and must be re-registered by hand.
+
+**This section used to claim the hostname "is gone." It is not, and that false claim was
+load-bearing** — it is why nobody re-checked the Stripe registration after the rename. Measured
+live 2026-08-06: `clickbank-studio.vercel.app` is still a production alias on the Vercel project,
+alongside `www.affiliateoffersecrets.com`, the apex, and `*.affiliateoffersecrets.com`.
+
+**What it actually serves matters, and it is not a second copy of the app.** `classifyHost()`
+(`lib/host.ts`) files it as a **custom** host, so middleware rewrites every path to `/d`, matches
+no `custom_domain_routes` row, and returns the generic 404 — confirmed for `/`, `/login` and
+`/dashboard`. So there is no duplicate site, no old-brand marketing page, nothing indexable. The
+one thing that DOES resolve is `/api/`, because `PUBLIC_API_PREFIXES` exempts it from that rewrite:
+`POST /api/billing/webhook` on the old host returns the real route's `400 missing signature/secret`.
+
+**So the alias is doing exactly two useful jobs, and removing it is not obviously the fix**:
+it blocks anyone else claiming a `.vercel.app` hostname that still carries this product's old
+name, and it keeps a Stripe webhook registered against the old host working. Removing it is
+irreversible in the sense that matters — the name goes back into Vercel's pool. **Before removing
+it, confirm in the Stripe dashboard that the endpoint names
+`https://www.affiliateoffersecrets.com/api/billing/webhook`**; `payments` has zero rows ever, so
+nothing has exercised that path yet and a mis-registration would first show up as a paying
+customer who never gets access.
 
 **`NEXT_PUBLIC_APP_URL` is load-bearing for the whole app, not just link generation.**
 `middleware.ts` rewrites any request whose `Host` doesn't match it to `/d${pathname}` (tenant
