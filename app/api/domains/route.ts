@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { addDomainToProject, isDomainFullyVerified, VercelApiError } from "@/lib/vercel/client";
 
@@ -21,6 +22,14 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
 
+  // Every OTHER domain route already scopes by workspace; this one didn't, and it is the one that
+  // creates the row. Because the insert below runs on the admin client (auth.uid() is null there),
+  // stamp_workspace_id()'s fallback would file the domain under this user's FIRST OWNED workspace
+  // — so someone in two workspaces adding a domain from workspace B got it filed under A, where
+  // their teammates in B could never see it. Same trap CLAUDE.md documents for Meta's callback.
+  const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
+
   const body = await req.json().catch(() => ({}));
   const domain = normalizeDomain(String(body.domain ?? ""));
   if (!domain) {
@@ -37,6 +46,8 @@ export async function POST(req: Request) {
       .from("custom_domains")
       .insert({
         user_id: user.id,
+        // Explicit, never left to the trigger — see the comment above.
+        workspace_id: ws,
         domain,
         status: verified ? "verified" : "pending",
       })

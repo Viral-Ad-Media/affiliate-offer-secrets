@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { currentWorkspaceId } from "@/lib/workspace";
 import DomainsPanel from "@/components/DomainsPanel";
 
 export default async function DomainsPage() {
@@ -9,14 +10,22 @@ export default async function DomainsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Explicit workspace filter on top of RLS, the standing belt-and-braces rule: the policy decides
+  // whether a row is visible AT ALL, this decides which of YOUR workspaces you're looking at.
+  // Without it a member of two workspaces saw both workspaces' domains merged into one list.
+  const ws = await currentWorkspaceId();
+  if (!ws) redirect("/login");
+
   const [{ data: domains }, { data: campaigns }] = await Promise.all([
     supabase
       .from("custom_domains")
       .select("*, custom_domain_routes(id, path, destination, campaign_id, created_at)")
+      .eq("workspace_id", ws)
       .order("created_at", { ascending: false }),
     supabase
       .from("campaigns")
       .select("id, product_id, products(product_title)")
+      .eq("workspace_id", ws)
       .eq("status", "ready"),
   ]);
 

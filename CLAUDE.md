@@ -1084,6 +1084,20 @@ Schema in `supabase/migrations/0009_page_domains.sql`; Vercel API wrapper in
   this), looks up `custom_domain_routes` joined to `custom_domains` (`status = 'verified'`), and
   on a hit calls the existing `servePublicCampaignPage()` (`lib/publicPage.ts`) completely
   unchanged — full reuse, zero duplicated serving logic, same generic 404 as the `/p/` route.
+- **A domain belongs to the WORKSPACE, and the create path was the one that forgot.**
+  `POST /api/domains` inserted `custom_domains` with `user_id` and no `workspace_id`, on the ADMIN
+  client — where `auth.uid()` is null, so `stamp_workspace_id()` fell through to "this user's first
+  owned workspace". Every other domain route (DELETE, PATCH, verify) was already
+  `.eq("workspace_id", ws)`; only the one that CREATES the row wasn't. A user in two workspaces
+  adding a domain from workspace B would have had it filed under A, invisible to their teammates in
+  B. Same trap as Meta's callback: any admin-client insert must stamp `workspace_id` itself.
+  Checked before fixing — the single existing row's owner belongs to exactly one workspace, so the
+  fallback happened to pick correctly and no backfill was needed. The bug was latent, not fired.
+  `app/(app)/settings/domains/page.tsx` had the matching read-side gap: no workspace filter at all,
+  so RLS kept tenants apart but a member of two workspaces saw both workspaces' domains AND
+  campaigns merged into one list. Both queries now filter explicitly — the standing belt-and-braces
+  rule, where the policy decides whether a row is visible at all and the filter decides which of
+  YOUR workspaces you are looking at.
 - **Two verification checks, not one**: Vercel's domain API distinguishes *ownership*
   verification (a TXT challenge, only needed for domains already tied to another Vercel
   project/account) from actual *DNS-pointing* config (whether A/CNAME records really resolve
