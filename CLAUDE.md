@@ -3281,9 +3281,25 @@ round trips every five seconds, almost always to learn that nothing changed.
 otherwise** — a sixth of the traffic when idle, which is most of the time. Deliberately not
 stopped the way the product page's is: this list has other people writing to it.
 
-The general lesson: `select("*")` on a polled endpoint is worth checking, but check WHICH cost is
-actually biting first. The product page was payload; marketplace was frequency. The two look
-identical from the outside.
+**Funnels was a third cause again — counting in the wrong place.** `/funnels` fetched every
+`contacts` row (capped at 1000), every `bridge_variants` row and every `funnel_steps` row for the
+workspace, then grouped them into Maps in JS to render three numbers per funnel. `funnel_stats`
+(0079, `security_invoker` like `audit_events`/`product_stats`) does it as one aggregate instead —
+1.06 ms, and verified to return counts identical to the old grouping across all 14 campaigns.
+
+**The `.limit(1000)` was the worse half of that bug**: past a thousand leads the numbers were
+silently WRONG, not merely slow, with nothing on screen saying so. An aggregate has no ceiling.
+CLAUDE.md already warned about exactly this for the Contacts page — leads accumulate from real paid
+traffic, unlike rows throttled by human cadence — and the warning applied here too.
+
+`/funnels` also had **no workspace filter on any of its five queries**, so a member of two
+workspaces saw both workspaces' funnels merged; `/funnels/[campaignId]` pulled the full 166 kB
+campaign row when the editor needs only `page_copy`, `bridge_html` and `tracking`, and its
+cross-sell dropdown queried `products` unfiltered and unbounded. All three fixed.
+
+The general lesson from these three: `select("*")` on a hot path is worth checking, but check
+WHICH cost is actually biting first. Product page was payload, Marketplace was frequency, Funnels
+was aggregation — and from the outside all three are "the page is slow".
 
 ## Product status, and where the jobs queue lives
 

@@ -56,9 +56,20 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
 
   const load = useCallback(async () => {
     const supabase = createClient();
+    // Explicit columns, not `*`. campaigns rows average 166 kB and reach 766 kB; this editor needs
+    // page_copy and bridge_html (it IS the page editor) but has no use for the ad/blog/email/social
+    // copy, the legacy presell_html/landing_md, or the video columns. tracking IS needed —
+    // TrackingPanel lives on the map view.
+    //
+    // A column missing here is invisible to tsc and shows up as an empty control, so this list has
+    // to grow when a consumer does.
     const { data: c } = await supabase
       .from("campaigns")
-      .select("*, products(product_title)")
+      .select(
+        "id, product_id, workspace_id, name, status, cta_url, bridge_published, bridge_html, " +
+          "page_copy, page_copy_edited_at, embedded_image_data_url, tracking, created_at, updated_at, " +
+          "products(product_title)"
+      )
       .eq("id", params.campaignId)
       .maybeSingle();
 
@@ -78,7 +89,16 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
         .select("*")
         .eq("campaign_id", params.campaignId)
         .order("step_index", { ascending: true }),
-      supabase.from("products").select("id, product_title").neq("id", (c as any).product_id),
+      // Cross-sell options for an upsell step. Scoped to this campaign's workspace and bounded:
+      // it was unfiltered and unlimited, so a member of two workspaces got both workspaces'
+      // products merged into one dropdown, and the list grew without limit as products accumulated.
+      supabase
+        .from("products")
+        .select("id, product_title")
+        .eq("workspace_id", (c as any).workspace_id)
+        .neq("id", (c as any).product_id)
+        .order("updated_at", { ascending: false })
+        .limit(200),
     ]);
 
     setSteps((stepRows ?? []) as FunnelStep[]);

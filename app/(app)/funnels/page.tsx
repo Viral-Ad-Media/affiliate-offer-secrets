@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { originFromHost } from "@/lib/host";
 import { createClient } from "@/lib/supabase/server";
+import { currentWorkspaceId } from "@/lib/workspace";
 import NewFunnelButton from "@/components/NewFunnelButton";
 import { Radio, ExternalLink, Inbox, Beaker, Layers } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -24,40 +25,38 @@ export default async function FunnelsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [
-    { data: campaigns },
-    { data: routes },
-    { data: contactRows },
-    { data: variantRows },
-    { data: stepRows },
-  ] = await Promise.all([
+  // Explicit workspace filter on top of RLS — the standing belt-and-braces rule. This page had
+  // none at all, so a member of two workspaces saw both workspaces' funnels merged into one list.
+  const ws = await currentWorkspaceId();
+  if (!ws) redirect("/login");
+
+  const [{ data: campaigns }, { data: routes }, { data: statRows }] = await Promise.all([
       supabase
         .from("campaigns")
         .select("id, product_id, name, bridge_published, updated_at, products(product_title)")
+        .eq("workspace_id", ws)
         .not("bridge_html", "is", null)
         .order("updated_at", { ascending: false }),
       supabase
         .from("custom_domain_routes")
         .select("campaign_id, path, custom_domains(domain, status)")
+        .eq("workspace_id", ws)
         .eq("destination", "bridge"),
-      supabase.from("contacts").select("campaign_id").not("campaign_id", "is", null).limit(1000),
-      supabase.from("bridge_variants").select("campaign_id"),
-      supabase.from("funnel_steps").select("campaign_id"),
+      // One aggregate instead of three fetch-alls grouped in JS (0079). The old version pulled
+      // every contact — capped at 1000 — plus every variant and step row for the whole workspace
+      // to render three numbers per row. Past a thousand leads that cap made the counts silently
+      // WRONG, not just slow, which is the worse half of the bug.
+      supabase.from("funnel_stats").select("campaign_id, leads, variants, steps").eq("workspace_id", ws),
     ]);
 
   const leadCounts = new Map<string, number>();
-  for (const c of contactRows ?? []) {
-    leadCounts.set(c.campaign_id as string, (leadCounts.get(c.campaign_id as string) ?? 0) + 1);
-  }
-
   const variantCounts = new Map<string, number>();
-  for (const v of variantRows ?? []) {
-    variantCounts.set(v.campaign_id as string, (variantCounts.get(v.campaign_id as string) ?? 0) + 1);
-  }
-
   const stepCounts = new Map<string, number>();
-  for (const s of stepRows ?? []) {
-    stepCounts.set(s.campaign_id as string, (stepCounts.get(s.campaign_id as string) ?? 0) + 1);
+  for (const r of statRows ?? []) {
+    const id = r.campaign_id as string;
+    leadCounts.set(id, Number(r.leads ?? 0));
+    variantCounts.set(id, Number(r.variants ?? 0));
+    stepCounts.set(id, Number(r.steps ?? 0));
   }
 
   // First verified custom-domain route wins if a campaign has more than one — same "just show one
