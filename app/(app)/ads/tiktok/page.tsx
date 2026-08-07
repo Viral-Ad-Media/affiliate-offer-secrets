@@ -1,0 +1,172 @@
+import { redirect } from "next/navigation";
+import { currentWorkspaceId } from "@/lib/workspace";
+import { createClient } from "@/lib/supabase/server";
+import { Music2, Link2, CircleAlert, ExternalLink } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import EmptyState from "@/components/EmptyState";
+import { tiktokAdsConfigured } from "@/lib/tiktok/adsConfig";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * TikTok Ads — the sibling of /ads (Meta), same read-only relationship to launching.
+ *
+ * The connection here is the MARKETING API one (tiktok_ad_accounts), which is a different TikTok
+ * app from the Login Kit connection on Settings → Integrations that posts organic videos. Someone
+ * can legitimately have one and not the other, so this page never infers one from the other.
+ */
+
+const CONNECT_MESSAGES: Record<string, { text: string; tone: "ok" | "warn" }> = {
+  ok: { text: "TikTok ad account connected.", tone: "ok" },
+  cancelled: { text: "Connection cancelled — nothing was changed.", tone: "warn" },
+  error: { text: "That connection attempt failed. Try again.", tone: "warn" },
+  no_advertisers: {
+    text: "That TikTok account authorised us, but has no ad accounts we can act on.",
+    tone: "warn",
+  },
+};
+
+export default async function TiktokAdsPage({
+  searchParams,
+}: {
+  searchParams: { connect?: string };
+}) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const ws = await currentWorkspaceId();
+  if (!ws) redirect("/login");
+
+  // Sanitized read — the RPC returns advertiser id/name/status and never the token.
+  const [{ data: accounts }, { data: launches }] = await Promise.all([
+    supabase.rpc("get_tiktok_ad_accounts", { p_workspace_id: ws }),
+    supabase
+      .from("tiktok_ad_launches")
+      .select("id, status, angle_index, budget_credits, country, headline, created_at, campaign_id")
+      .eq("workspace_id", ws)
+      .order("created_at", { ascending: false })
+      .limit(100),
+  ]);
+
+  const connected = (accounts ?? []) as {
+    advertiser_id: string;
+    advertiser_name: string | null;
+    is_active: boolean;
+    status: string;
+  }[];
+  const rows = (launches ?? []) as { id: string; status: string; headline: string | null }[];
+  const notice = searchParams.connect ? CONNECT_MESSAGES[searchParams.connect] : undefined;
+
+  return (
+    <main className="space-y-4">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-xl font-bold text-zinc-100">
+            <Music2 className="h-5 w-5 text-emerald-400" /> TikTok Ads
+          </h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            Ad accounts connected through TikTok for Business, and every launch made against them.
+          </p>
+        </div>
+        {tiktokAdsConfigured() && (
+          <a href="/api/tiktok-ads/connect" className={cn(buttonVariants({ variant: "outline" }), "text-sm")}>
+            <Link2 className="h-4 w-4" /> {connected.length > 0 ? "Connect another" : "Connect TikTok Ads"}
+          </a>
+        )}
+      </header>
+
+      {notice && (
+        <div
+          className={cn(
+            "rounded-lg border px-3 py-2 text-xs",
+            notice.tone === "ok"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+              : "border-amber-500/30 bg-amber-500/10 text-amber-300"
+          )}
+        >
+          {notice.text}
+        </div>
+      )}
+
+      {/* Configuration is a deployment fact, not a user error — say which variables are missing
+          rather than showing a Connect button that can only fail. */}
+      {!tiktokAdsConfigured() && (
+        <Card as="section" className="flex items-start gap-2 p-4">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <div className="text-sm text-zinc-300">
+            TikTok Ads isn&apos;t configured on this deployment.
+            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+              It needs a TikTok for Business app with Marketing API access, then{" "}
+              <code className="text-zinc-400">TIKTOK_ADS_APP_ID</code> and{" "}
+              <code className="text-zinc-400">TIKTOK_ADS_SECRET</code> set as environment variables.
+              This is a separate app from the TikTok connection on Settings → Integrations, which
+              posts organic videos and cannot run ads.
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {tiktokAdsConfigured() && connected.length > 0 && (
+        <Card as="section" className="overflow-hidden">
+          <div className="border-b border-ink-700 px-4 py-3">
+            <h2 className="text-sm font-semibold text-zinc-100">Ad accounts</h2>
+          </div>
+          <ul className="divide-y divide-ink-800">
+            {connected.map((a) => (
+              <li key={a.advertiser_id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <div className="min-w-0">
+                  <div className="truncate text-sm text-zinc-200">
+                    {a.advertiser_name ?? a.advertiser_id}
+                  </div>
+                  <div className="text-xs text-zinc-500">{a.advertiser_id}</div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {a.is_active && <Badge className="border-emerald-500/40 text-emerald-300">Active</Badge>}
+                  {a.status === "needs_reconnect" && (
+                    <Badge className="border-amber-500/40 text-amber-300">Reconnect</Badge>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <Card as="section" className="overflow-hidden">
+        <div className="border-b border-ink-700 px-4 py-3">
+          <h2 className="text-sm font-semibold text-zinc-100">Launches</h2>
+        </div>
+        {rows.length === 0 ? (
+          <EmptyState icon={Music2} title="No TikTok ads launched yet">
+            {connected.length === 0
+              ? "Connect a TikTok ad account above to get started."
+              : "Launching runs from an ad angle on the campaign page, the same as Meta — so the angle's copy and creative are in front of you when you commit budget."}
+            <a
+              href="https://ads.tiktok.com"
+              target="_blank"
+              rel="noreferrer"
+              className={cn(buttonVariants({ variant: "outline" }), "mt-3 text-sm")}
+            >
+              <ExternalLink className="h-4 w-4" /> Open TikTok Ads Manager
+            </a>
+          </EmptyState>
+        ) : (
+          <ul className="divide-y divide-ink-800">
+            {rows.map((l) => (
+              <li key={l.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <span className="truncate text-sm text-zinc-200">{l.headline ?? "Untitled launch"}</span>
+                <Badge className="shrink-0">{l.status}</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </main>
+  );
+}

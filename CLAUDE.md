@@ -2889,6 +2889,63 @@ Cross-tenant observability plus a handful of audited account actions, at `/admin
   it's the most sensitive thing this app could grow and would need its own audit trail and a much
   harder gate than a boolean column.
 
+## TikTok Ads (Marketing API) — connect shipped, launching NOT yet
+
+Ads Manager is now a submenu: **Meta** (`/ads`, unchanged) and **TikTok** (`/ads/tiktok`).
+
+**The API contract here was PROBED, not remembered** — the same rule that governed ClickBank's
+GraphQL, kie.ai, Gemini and Meta's video-ad endpoints, and that caused Digistore24 discovery to be
+parked rather than guessed. Verified live 2026-08-06 against `business-api.tiktok.com`:
+
+- Base `open_api/v1.3`. Auth is an **`Access-Token` header**, not `Authorization: Bearer` — Bearer
+  yields `40104 "you should set it in http header with key Access-Token"`.
+- Every response is `{code, message, request_id, data}` and **HTTP status is 200 even on failure**,
+  so `res.ok` means nothing; `code` is the only signal. Codes seen: 40002 bad params, 40104 no
+  token, 40105 bad/revoked token.
+- `oauth2/access_token/` POST needs `app_id` (an int64 — a non-numeric value comes back as a Go
+  `strconv.ParseInt` error), `secret`, `auth_code`, `grant_type`.
+- `oauth2/advertiser/get/` is GET. `campaign/create/`, `adgroup/create/`, `ad/create/` and
+  `file/video/ad/upload/` are **POST-only** (GET returns a bare 405 HTML page, not the envelope).
+- Bursting the probes gets you empty responses — same rate-limiting shape ClickBank's WAF showed.
+
+**This is a SECOND TikTok app, not the existing connection.** `tiktok_connections` (0010) is Login
+Kit: `user.info.basic` + `video.publish`, for organic posting. The Marketing API has its own
+numeric `app_id`/secret, its own OAuth endpoint, and an advertiser-scoped token. Reusing either
+credential would produce a token that works on one surface and 40105s on the other. Hence
+`TIKTOK_ADS_APP_ID`/`TIKTOK_ADS_SECRET`, `lib/tiktok/adsConfig.ts`, and its own state cookie
+(`tiktok_ads_oauth_state`) so two connect flows in two tabs can't clobber each other's CSRF check.
+
+`0077` adds `tiktok_ad_accounts` (default-deny + `revoke all`, token in Vault — verified to have
+ZERO client grants, matching `meta_connections`) and `tiktok_ad_launches` (owner-select, writes
+service_role only — grants verified byte-identical to `ad_launches`).
+
+**A build-only failure worth knowing**: `TIKTOK_ADS_STATE_COOKIE` originally lived in the connect
+route. A Next.js route module may only export its handlers and a fixed set of config keys, so
+exporting a constant from one fails `next build` — and **`tsc --noEmit` passes clean**. It lives in
+`adsConfig.ts` now. Any shared constant between two routes belongs in lib, not in a route.
+
+**NOT BUILT: actual ad launching.** `campaign/create/` and friends reject every unauthenticated
+probe with 40105, so their required fields and enum values (`objective_type`, `budget_mode`,
+`optimization_goal`, placements, targeting) could not be confirmed. Writing them from memory is
+exactly what this project's verification rule exists to prevent, and the failure mode is a call
+that looks right and spends money wrongly. `/ads/tiktok` therefore lists connections and launches
+and says plainly when the app isn't configured. Finishing it needs a real TikTok for Business
+advertiser account to probe against — then `lib/engine/tiktokadlaunch.ts` mirrors `adlaunch.ts`,
+including a stage-0 verify that re-checks ownership before any spend.
+
+## Socials
+
+`/socials` — every organic post across Facebook, Instagram, TikTok and YouTube, with a platform
+filter. Reads the **existing `audit_events` view** (0049) filtered to those four platforms rather
+than querying `meta_posts`/`instagram_posts`/`tiktok_posts` separately: the view is
+`security_invoker` so each table's own RLS still applies, and it already solves the ordering
+problem a hand-rolled union reintroduces — `created_at` alone isn't unique across six tables, and a
+non-deterministic sort makes rows appear twice or not at all while paging.
+
+Read-only, the same relationship `/ads` has to launching: posting runs from a campaign's Social
+tab, where the caption and its creative are in front of you. Until now this data existed but had
+nowhere to be seen except the Audit trail, mixed in with email and generation events.
+
 ## Ads Manager, Analytics, and the Contacts submenu
 
 Three read surfaces over data other code already writes — no new tables for the first two.

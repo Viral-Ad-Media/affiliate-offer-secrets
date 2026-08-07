@@ -9,6 +9,7 @@ import {
   Package,
   Filter,
   Target,
+  Share2,
   Users,
   BarChart3,
   Send,
@@ -59,7 +60,19 @@ const NAV: NavItem[] = [
   { href: "/funnels", label: "Funnels", icon: Filter, match: (p: string) => p.startsWith("/funnels") },
   // Read-only view over every ad_launches row. Launching/activating stays on the angle's own card
   // on the campaign page — see the comment at the top of app/(app)/ads/page.tsx.
-  { href: "/ads", label: "Ads Manager", icon: Target, match: (p: string) => p.startsWith("/ads") },
+  {
+    href: "/ads",
+    label: "Ads Manager",
+    icon: Target,
+    // The parent has to recognise BOTH children's paths or the submenu collapses while you're
+    // standing on one of them — the same rule Settings' entry already documents.
+    match: (p: string) => p.startsWith("/ads"),
+    children: [
+      { href: "/ads", label: "Meta", match: (p: string) => p === "/ads" },
+      { href: "/ads/tiktok", label: "TikTok", match: (p: string) => p.startsWith("/ads/tiktok") },
+    ],
+  },
+  { href: "/socials", label: "Socials", icon: Share2, match: (p: string) => p.startsWith("/socials") },
   {
     href: "/contacts",
     label: "Contacts",
