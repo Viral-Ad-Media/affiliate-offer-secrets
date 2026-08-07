@@ -415,6 +415,13 @@ function DomainRow({
                   resolves to; every connected domain keeps working. Only one domain at a time.
                 </span>
               </label>
+              {/* Says WHY the boxes are already ticked on a first domain. The trigger (0078) only
+                  ever fills a role nothing else holds, so this note is never shown as an excuse for
+                  overriding a choice — switching below always wins. */}
+              <p className="text-[11px] leading-snug text-zinc-500">
+                Your first verified domain takes both roles automatically. Tick another domain to
+                move either one — that choice is kept.
+              </p>
               {flagBusy && (
                 <p className="flex items-center gap-1 text-xs text-zinc-500">
                   <Loader2 className="h-3 w-3 animate-spin" /> Saving…

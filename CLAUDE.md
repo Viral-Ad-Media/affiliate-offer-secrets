@@ -1084,6 +1084,24 @@ Schema in `supabase/migrations/0009_page_domains.sql`; Vercel API wrapper in
   this), looks up `custom_domain_routes` joined to `custom_domains` (`status = 'verified'`), and
   on a hit calls the existing `servePublicCampaignPage()` (`lib/publicPage.ts`) completely
   unchanged — full reuse, zero duplicated serving logic, same generic 404 as the `/p/` route.
+- **A verified domain claims the vacant blog/primary role automatically (0078).** `serves_blog`
+  and `is_primary` existed since 0042 but were manual checkboxes, so a tenant's first domain did
+  nothing until they found and ticked two boxes. The trigger fires on the **status transition to
+  verified**, never on add: a pending domain's DNS doesn't point here, so making it the blog host
+  would publish links that 404 — and the setter route already refuses these flags on a non-verified
+  domain, so auto-setting at insert would contradict the app's own rule. Firing on the transition
+  also covers every path that can verify a domain rather than three call sites that must remember.
+  **It only ever fills a role nothing else holds**, so an explicit choice is never overridden and
+  the checkboxes remain authoritative for switching. The trigger is scoped to `update of status`
+  for the same reason — it must not re-evaluate when the setter route writes the flags directly.
+  Verified live against the real table: pending claims nothing; verifying claims both vacant roles;
+  a second verified domain claims neither; switching moves one role without disturbing the other.
+- **Those two indexes were keyed on `user_id` until 0078, and that was wrong after 0057.** 0042
+  predates the workspace migration and was missed by the connector re-keying in 0071/0072. The
+  setter route clears the flag across the whole WORKSPACE before setting it, so the constraint and
+  the code disagreed — two members of one workspace could each hold a `serves_blog` domain and the
+  blog would answer on two hosts, exactly the duplicate-content problem 0042 added the index to
+  prevent. Now keyed on `workspace_id`; confirmed a second one raises `unique_violation`.
 - **A domain belongs to the WORKSPACE, and the create path was the one that forgot.**
   `POST /api/domains` inserted `custom_domains` with `user_id` and no `workspace_id`, on the ADMIN
   client — where `auth.uid()` is null, so `stamp_workspace_id()` fell through to "this user's first
