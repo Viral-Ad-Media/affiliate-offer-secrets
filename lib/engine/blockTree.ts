@@ -551,7 +551,15 @@ export type RenderCtx = {
   nextStepUrl?: string | null;
   productTitle: string;
   /** Set by renderBlockTree from the tree itself — never passed in. See the CTA's reveal. */
-  hasLeadForm?: boolean;
+  /**
+   * Whether the page has ANY form — the locked opt-in one or a droppable `form` block, at any
+   * depth. Set by renderBlockTree from the tree itself, never passed in.
+   *
+   * Deliberately not "has a lead_capture_form": a standalone form nested in a section collects
+   * leads and has its own after-submit action just the same, so a page carrying one plus a
+   * primary_cta had the exact two-button problem this replaced.
+   */
+  hasForm?: boolean;
 };
 
 // Inline markdown for paragraph/bullet text: [text](https://url) links and **bold** only.
@@ -1015,6 +1023,25 @@ function renderFormField(f: FormInputBlock): string {
  * left blank) degrades to `message` — a form that saves and then appears to do nothing is the
  * worst outcome here, and it's the one the [object Object] bug actually produced.
  */
+/**
+ * Does this tree contain a form ANYWHERE — the locked opt-in one at root, or a droppable `form`
+ * block nested in a section, row or column?
+ *
+ * Recursive on purpose. The root-level `lead_capture_form` check this replaced missed a standalone
+ * form dropped into a section, so such a page kept its primary_cta and rendered two buttons — the
+ * exact duplicate this was supposed to remove, just one level down.
+ */
+export function treeHasForm(blocks: unknown[]): boolean {
+  for (const raw of blocks) {
+    const b = raw as { type?: string; locked?: string; children?: unknown[]; columns?: unknown[] } | null;
+    if (!b || typeof b !== "object") continue;
+    if (b.locked === "lead_capture_form" || b.type === "form") return true;
+    if (Array.isArray(b.children) && treeHasForm(b.children)) return true;
+    if (Array.isArray(b.columns) && treeHasForm(b.columns)) return true;
+  }
+  return false;
+}
+
 export function afterSubmitAttrs(
   action: FormSubmitAction | undefined,
   ctx: RenderCtx,
@@ -1065,7 +1092,7 @@ function renderLockedBlock(block: LockedBlock, ctx: RenderCtx): string {
       // afterSubmit action carries the destination, so a separate hidden-until-submit button was
       // a second button that only ever duplicated the first. Kept — and still the page's only
       // way out — when there is NO form, and on funnel steps, which have no form by design.
-      if (ctx.pageKind === "bridge" && ctx.hasLeadForm) return "";
+      if (ctx.pageKind === "bridge" && ctx.hasForm) return "";
       return `<a class="cta" href="${escapeHtml(ctx.primaryHref)}"${styleAttr(
         block.style,
         BUTTON_STYLE_KEYS
@@ -1096,7 +1123,7 @@ export function renderBlockTree(tree: PageBlockTree, ctx: RenderCtx): string {
   // caller passing it separately could disagree with what actually rendered.
   const ctxWithForm: RenderCtx = {
     ...ctx,
-    hasLeadForm: tree.blocks.some((b) => b.type === "lead_capture_form"),
+    hasForm: treeHasForm(tree.blocks),
   };
   return [...rest, ...disclosure]
     .map((b) => (b.type === "section" ? renderSection(b, ctxWithForm) : renderLockedBlock(b, ctxWithForm)))

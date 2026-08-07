@@ -25,6 +25,7 @@ import {
   type FunnelStepType,
   TESTIMONIAL_MEDIA_KINDS,
   contentWidthOf,
+  treeHasForm,
   type ButtonAction,
   type FormSubmitAction,
   type TestimonialMedia,
@@ -536,13 +537,24 @@ function validateFormSubmitAction(raw: unknown, fallback: FormSubmitAction): For
  */
 function reconcileBridgeCta(blocks: (SectionBlock | LockedBlock)[], opts: ValidatePageBlockTreeOptions): void {
   if (opts.pageKind !== "bridge") return;
-  const hasForm = blocks.some((b) => "locked" in b && (b as LockedBlock).locked === "lead_capture_form");
+  // Any form, at any depth — a standalone one dropped into a section collects leads and has its
+  // own after-submit action just like the locked opt-in form does.
+  const hasForm = treeHasForm(blocks);
 
   if (hasForm) {
+    let dropped = false;
     for (let i = blocks.length - 1; i >= 0; i--) {
       const b = blocks[i];
-      if ("locked" in b && (b as LockedBlock).locked === "primary_cta") blocks.splice(i, 1);
+      if ("locked" in b && (b as LockedBlock).locked === "primary_cta") {
+        blocks.splice(i, 1);
+        dropped = true;
+      }
     }
+    // The dropped button was this page's route to the offer. A standalone form defaults to
+    // "show a message", so removing the CTA without handing its job over would leave a page
+    // taking paid traffic with no way to the offer at all — worse than the duplicate button.
+    // Only promotes the default; a form already pointing somewhere specific is left alone.
+    if (dropped) inheritOfferAction(blocks);
     return;
   }
 
@@ -554,6 +566,30 @@ function reconcileBridgeCta(blocks: (SectionBlock | LockedBlock)[], opts: Valida
       style: {},
       content: { text: "Continue" },
     } as LockedBlock);
+  }
+}
+
+/**
+ * Point the page's LAST form at the offer, if it is still on the default "show a message".
+ *
+ * Last rather than first because that is the one furthest down the page — the one a reader
+ * reaches after the pitch, and the one a page's own CTA sat below.
+ */
+function inheritOfferAction(blocks: unknown[]): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let target: any = null;
+  const walk = (list: unknown[]) => {
+    for (const raw of list) {
+      const b = raw as any;
+      if (!b || typeof b !== "object") continue;
+      if (b.locked === "lead_capture_form" || b.type === "form") target = b;
+      if (Array.isArray(b.children)) walk(b.children);
+      if (Array.isArray(b.columns)) walk(b.columns);
+    }
+  };
+  walk(blocks);
+  if (target && target.content.afterSubmit?.kind === "message") {
+    target.content.afterSubmit = { kind: "offer" };
   }
 }
 

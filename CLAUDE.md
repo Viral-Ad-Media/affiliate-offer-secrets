@@ -2159,7 +2159,17 @@ a real `https` destination survives.
 **`primary_cta` is not gone from the schema — it is gone from opt-in pages that have a form.**
 `reconcileBridgeCta()` (validatePageBlockTree.ts) enforces "a form or a CTA, never both" on
 `pageKind: "bridge"`: with a form it drops the CTA so the stored tree matches what renders, and
-with NO form it appends one, because that button is then the page's only way out. **Funnel steps
+with NO form it appends one, because that button is then the page's only way out.
+
+**"Has a form" means ANY form, at any depth** — `treeHasForm()`, not a root-level
+`lead_capture_form` check. A standalone `form` block dropped into a section collects leads and has
+its own after-submit action just the same, so the narrower check left such a page (the YU SLEEP
+funnel was one) carrying both its form's submit button and a primary_cta — the same duplicate, one
+level down. **And dropping the CTA hands its destination over**: `inheritOfferAction()` promotes
+the page's last form from the default `message` to `offer`, because a standalone form defaults to
+"show a message" and removing the CTA without transferring its job would leave a page taking paid
+traffic with no route to the offer at all. A form already pointing somewhere specific is left
+alone — verified. **Funnel steps
 are untouched** — thank-you/upsell/order pages have no form by design, so `primary_cta` is still
 required and still carries `cta_action`/`redirect_url`/`decline_action`. The renderer applies the
 same condition independently, so a tree stored before this still renders correctly.
