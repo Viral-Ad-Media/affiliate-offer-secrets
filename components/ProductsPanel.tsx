@@ -128,11 +128,23 @@ export default function ProductsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, statusKey]);
 
+  // Poll fast only while work is actually in flight.
+  //
+  // Each tick is TWO requests (/api/products and /api/jobs), and each of those pays getUser() plus
+  // currentWorkspaceId() — both network round trips to Supabase — before it runs a query. That is
+  // roughly eight round trips every five seconds, and neither the queries nor the payload are the
+  // problem: products rows average 811 bytes and product_stats plans in 0.7 ms. The cost is purely
+  // how often we ask.
+  //
+  // 5s while a discovery or build job is open, because that is when someone is watching a row
+  // change. 30s otherwise — still picks up a teammate's changes, at a sixth of the traffic. Not
+  // stopped entirely: unlike the product page, this list has other people writing to it.
+  const hasOpenJobs = jobs.some((j) => j.status === "pending" || j.status === "running");
   useEffect(() => {
     load();
-    const t = setInterval(load, 5000);
+    const t = setInterval(load, hasOpenJobs ? 5000 : 30000);
     return () => clearInterval(t);
-  }, [load, refreshKey]);
+  }, [load, refreshKey, hasOpenJobs]);
 
   // Filtering is a server query, so changing it has to reset to page 1 — staying on page 4 of an
   // unfiltered list while filtering down to three rows would show an empty table.

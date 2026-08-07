@@ -3270,9 +3270,20 @@ Two fixes, both measured rather than assumed:
   progress already has its own cheaper poll (`BuildProgressDialog` against `/api/jobs`), so
   nothing is lost — the interval now only runs while there is genuinely something to wait for.
 
-The same shape is worth checking anywhere else `select("*")` meets a polled endpoint: it was
-`/api/products` (the list) that hit this first, and CLAUDE.md already records why that one is
-paged.
+**Marketplace was the same complaint with a different cause, and measuring said so.** Its payload
+is fine — `products` rows average **811 bytes** and `product_stats` plans in **0.7 ms** — so
+trimming columns there would have achieved nothing. The cost is round trips: each 5s tick fires
+TWO requests (`/api/products` and `/api/jobs`), and each pays `getUser()` plus
+`currentWorkspaceId()` — both network calls to Supabase — before running a query. Roughly eight
+round trips every five seconds, almost always to learn that nothing changed.
+
+`ProductsPanel` now polls at **5s only while a discovery or build job is open**, and **30s
+otherwise** — a sixth of the traffic when idle, which is most of the time. Deliberately not
+stopped the way the product page's is: this list has other people writing to it.
+
+The general lesson: `select("*")` on a polled endpoint is worth checking, but check WHICH cost is
+actually biting first. The product page was payload; marketplace was frequency. The two look
+identical from the outside.
 
 ## Product status, and where the jobs queue lives
 
