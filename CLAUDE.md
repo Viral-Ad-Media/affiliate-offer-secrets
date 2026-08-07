@@ -2130,6 +2130,48 @@ this reason, and their templates seed an empty video block above the copy (`VIDE
 since a VSL template without one is just a squeeze page with a different headline. Survey
 (`needs_branching`) and Book (`needs_payment`) are still correctly blocked.
 
+## The form's own button decides what happens next (primary_cta is gone from opt-in pages)
+
+An opt-in page used to carry TWO buttons: the form's submit, and a separate locked `primary_cta`
+holding the hoplink, hidden in `#step2` until the form was submitted. In the editor both render at
+once, so the second one read as a stray duplicate — and it was, once forms became droppable blocks
+with their own settings.
+
+`LeadCaptureFormBlock.content.afterSubmit` (and the same field on the standalone `FormBlock`) is
+now where the destination lives — a closed `FormSubmitAction` union, same discipline as
+`ButtonAction`:
+
+- **`offer`** — the default for an opt-in form, and where the old CTA pointed: the next funnel step
+  when the funnel has one, else the hoplink. **Resolved in `afterSubmitAttrs()` at RENDER time from
+  `RenderCtx`**, so the affiliate link is never something page content could carry or a tenant
+  could type. This is what replaced the old `data-next-step-url` attribute.
+- **`url`** — a destination the tenant types, through `isValidRedirectUrl`.
+- **`popup`** — open another form block on the page, by id.
+- **`message`** — stay put and show the success text. The default for a standalone form, i.e. its
+  behavior before this existed.
+
+**Anything unusable degrades to `message`; it never throws.** A form that refuses to SAVE because
+the block it pointed at was deleted would be a page you can't edit your way out of, and a form that
+saves the lead and then visibly does nothing is the exact failure the `[object Object]` bug
+produced. Verified: `javascript:` and a quote-injecting popup id both collapse to `message`, while
+a real `https` destination survives.
+
+**`primary_cta` is not gone from the schema — it is gone from opt-in pages that have a form.**
+`reconcileBridgeCta()` (validatePageBlockTree.ts) enforces "a form or a CTA, never both" on
+`pageKind: "bridge"`: with a form it drops the CTA so the stored tree matches what renders, and
+with NO form it appends one, because that button is then the page's only way out. **Funnel steps
+are untouched** — thank-you/upsell/order pages have no form by design, so `primary_cta` is still
+required and still carries `cta_action`/`redirect_url`/`decline_action`. The renderer applies the
+same condition independently, so a tree stored before this still renders correctly.
+
+**A real behavior change on live pages, deliberately**: submitting now goes straight to the offer
+instead of revealing a button to click. Same destination, one fewer click. Verified live on
+`1800mastercard.com/prodentim` — one visible CTA, no `#step2`, the lead saved, and the browser
+landed on the real `hop.clickbank.net/?affiliate=…&vendor=PRODENTIM&tid=page`.
+
+Settings live in `BlockSettingsPanel` (content settings, not style) — select the form, set its
+button label and its after-submit action there.
+
 ## Standalone forms and button actions
 
 **A `form` block can be dropped anywhere** — as many per page as you like, or none. Distinct from

@@ -26,6 +26,7 @@ import {
   TESTIMONIAL_MEDIA_KINDS,
   contentWidthOf,
   type ButtonAction,
+  type FormSubmitAction,
   type TestimonialMedia,
 } from "./blockTree";
 import { isValidImageDataUrl } from "@/lib/images/validate";
@@ -223,6 +224,8 @@ function validateElement(raw: unknown, count: { n: number }): ElementBlock {
           submitText: clampStr(content.submitText, MAX_CTA) || "Send",
           successText: clampStr(content.successText, MAX_TEXT_SHORT) || "Thanks.",
           popup: content.popup === true,
+          // Absent = message, which is exactly what this form did before actions existed.
+          afterSubmit: validateFormSubmitAction(content.afterSubmit, { kind: "message" }),
         },
         // Same cap and same per-field validation as the locked opt-in form — one definition of
         // what a form field may be, so a standalone form can't accept anything the other can't.
@@ -462,7 +465,13 @@ function validateLockedBlock(raw: unknown, count: { n: number }): LockedBlock {
         type: "lead_capture_form",
         locked: "lead_capture_form",
         style,
-        content: { ctaText: clampStr(content.ctaText, MAX_CTA) || "Get started" },
+        content: {
+          ctaText: clampStr(content.ctaText, MAX_CTA) || "Get started",
+          // Absent = offer, which is where the old separate primary_cta button pointed. Every
+          // page saved before this shipped therefore keeps its exact destination.
+          afterSubmit: validateFormSubmitAction(content.afterSubmit, { kind: "offer" }),
+          successText: clampStr(content.successText, MAX_TEXT_SHORT) || "Thanks — check your inbox.",
+        },
         children: validated,
       };
     }
@@ -483,6 +492,71 @@ function validateLockedBlock(raw: unknown, count: { n: number }): LockedBlock {
   }
 }
 
+/**
+ * A form's after-submit action. Same shape and same discipline as validateButtonAction above:
+ * `url` is the only kind that yields a destination and it goes through isValidRedirectUrl, and a
+ * popup target is an id, never a URL.
+ *
+ * Unlike a button's action this NEVER throws on a bad target — a form that refuses to save
+ * because the block it pointed at was deleted would be a page you can't edit your way out of.
+ * Anything unusable degrades to `message`, which the renderer treats as "show the thank-you".
+ */
+function validateFormSubmitAction(raw: unknown, fallback: FormSubmitAction): FormSubmitAction {
+  const a = raw as { kind?: unknown; href?: unknown; formId?: unknown } | null;
+  if (!a || typeof a !== "object" || typeof a.kind !== "string") return fallback;
+  switch (a.kind) {
+    case "offer":
+      return { kind: "offer" };
+    case "url": {
+      const href = clampStr(a.href, 2000);
+      return isValidRedirectUrl(href) ? { kind: "url", href } : { kind: "message" };
+    }
+    case "popup": {
+      const id = clampStr(a.formId, 100);
+      return ID_RE.test(id) ? { kind: "popup", formId: id } : { kind: "message" };
+    }
+    case "message":
+      return { kind: "message" };
+    default:
+      return fallback;
+  }
+}
+
+/**
+ * On an opt-in page: exactly one of a lead form or a primary_cta, never both.
+ *
+ * With a form, the form's submit button decides what happens next, so a separate CTA block is the
+ * duplicate button this replaced — it is dropped here so the stored tree matches what renders,
+ * and the editor can't show a block the page won't emit. Without a form the CTA is the page's
+ * only way out, so one is appended if it's missing rather than rejecting the save.
+ *
+ * Mutates in place, before the required/allowed checks read the locked kinds — deliberately the
+ * one spot where the validator normalizes structure instead of only clamping content, because
+ * "which of these two exists" is derived from the tree rather than chosen by the caller.
+ */
+function reconcileBridgeCta(blocks: (SectionBlock | LockedBlock)[], opts: ValidatePageBlockTreeOptions): void {
+  if (opts.pageKind !== "bridge") return;
+  const hasForm = blocks.some((b) => "locked" in b && (b as LockedBlock).locked === "lead_capture_form");
+
+  if (hasForm) {
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const b = blocks[i];
+      if ("locked" in b && (b as LockedBlock).locked === "primary_cta") blocks.splice(i, 1);
+    }
+    return;
+  }
+
+  if (!blocks.some((b) => "locked" in b && (b as LockedBlock).locked === "primary_cta")) {
+    blocks.push({
+      id: `cta-${blocks.length}`,
+      type: "primary_cta",
+      locked: "primary_cta",
+      style: {},
+      content: { text: "Continue" },
+    } as LockedBlock);
+  }
+}
+
 type LockedKind = LockedBlock["locked"];
 
 function requiredLockedKinds(opts: ValidatePageBlockTreeOptions): Set<LockedKind> {
@@ -491,7 +565,11 @@ function requiredLockedKinds(opts: ValidatePageBlockTreeOptions): Set<LockedKind
   // later step — and forcing one meant the editor could never express it. The disclosure stays
   // mandatory (content rule 3) and so does the CTA, because a page with neither a form nor a CTA
   // has no way out at all.
-  if (opts.pageKind === "bridge") return new Set<LockedKind>(["disclosure", "primary_cta"]);
+  // An opt-in page's CTA is no longer a required separate block: when the page has a lead form,
+  // the form's own afterSubmit action carries the destination and a primary_cta would just be a
+  // second button. It is still required when there is NO form — see reconcileBridgeCta below,
+  // which is where that "form or CTA, but never both" rule actually lives.
+  if (opts.pageKind === "bridge") return new Set<LockedKind>(["disclosure"]);
   // Blog posts carry affiliate links, so the disclosure stays locked-and-mandatory (content rule
   // 3) — but none of the campaign-shaped blocks (lead form, CTA, decline) exist on this page kind.
   if (opts.pageKind === "blog") return new Set<LockedKind>(["disclosure"]);
@@ -531,6 +609,8 @@ export function validatePageBlockTree(raw: unknown, opts: ValidatePageBlockTreeO
       if (seenIds.has(b.id)) return { ok: false, error: "duplicate block id" };
       seenIds.add(b.id);
     }
+
+    reconcileBridgeCta(blocks, opts);
 
     const lockedKinds = new Set(blocks.filter((b): b is LockedBlock => "locked" in b).map((b) => b.locked));
     const required = requiredLockedKinds(opts);

@@ -220,6 +220,23 @@ export type ButtonAction =
 
 export const BUTTON_ACTION_KINDS = ["link", "scroll", "popup", "submit"] as const;
 
+// What happens once a form has saved. Same closed-union discipline as ButtonAction, for the same
+// reason: only `url` yields a navigable destination and it goes through isValidRedirectUrl, while
+// the rest are data attributes a code-owned script reads. `offer` is resolved at RENDER time from
+// RenderCtx — the tenant never types the hoplink, so a form can point at the offer without the
+// affiliate link ever passing through page content.
+export type FormSubmitAction =
+  /** The campaign's offer: the next funnel step when the funnel has one, else the hoplink. */
+  | { kind: "offer" }
+  /** A destination the tenant types. */
+  | { kind: "url"; href: string }
+  /** Open another form block on this page as a modal. */
+  | { kind: "popup"; formId: string }
+  /** Stay on the page and swap the form for its success text. */
+  | { kind: "message" };
+
+export const FORM_SUBMIT_ACTION_KINDS = ["offer", "url", "popup", "message"] as const;
+
 export type ButtonBlock = Base & {
   type: "button";
   // `href` is kept for pages saved before actions existed — normalizePageCopy/validate promote it
@@ -239,6 +256,8 @@ export type FormBlock = Base & {
     successText: string;
     /** Rendered hidden, shown only by a button's popup action. */
     popup: boolean;
+    /** Same union the opt-in form uses. Absent = {kind:"message"} — this form's existing behavior. */
+    afterSubmit?: FormSubmitAction;
   };
   children: FormInputBlock[];
 };
@@ -424,7 +443,11 @@ export type DisclosureBlock = Base & { type: "disclosure"; locked: "disclosure";
 export type LeadCaptureFormBlock = Base & {
   type: "lead_capture_form";
   locked: "lead_capture_form";
-  content: { ctaText: string };
+  // afterSubmit is what replaced the separate primary_cta button on an opt-in page: the form's
+  // own submit decides where the lead goes next, so the page no longer carries a second button
+  // that only appears after submitting. Absent = {kind:"offer"}, which is exactly where the old
+  // reveal-then-click CTA pointed.
+  content: { ctaText: string; afterSubmit?: FormSubmitAction; successText?: string };
   children: FormInputBlock[];
 };
 export type PrimaryCtaBlock = Base & { type: "primary_cta"; locked: "primary_cta"; content: { text: string } };
@@ -784,7 +807,11 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       return `<div class="aos-form-wrap${popup ? " aos-form-popup" : ""}" id="${escapeHtml(block.id)}"${
         popup ? " hidden" : ""
       }${styleAttr(block.style, FORM_STYLE_KEYS)}>
-  <form class="aos-form" data-aos-form="1" data-campaign="${escapeHtml(ctx.campaignId)}">
+  <form class="aos-form" data-aos-form="1" data-campaign="${escapeHtml(ctx.campaignId)}"${afterSubmitAttrs(
+        block.content.afterSubmit,
+        ctx,
+        "message"
+      )}>
     ${popup ? '<button type="button" class="aos-form-close" data-close-form="1" aria-label="Close">&times;</button>' : ""}
     ${title.trim() ? `<h3>${escapeHtml(title)}</h3>` : ""}
     <input type="text" name="first_name" placeholder="First name" autocomplete="given-name" />
@@ -854,7 +881,19 @@ document.addEventListener("submit", function(e){
     if (el.name === "first_name") first = v; else if (el.name === "email") email = v; else extra[el.name] = v;
   });
   var done = form.querySelector(".aos-form-done");
-  function finish(){ form.querySelectorAll("input,select,textarea,button").forEach(function(el){ el.style.display="none"; }); if (done) done.hidden = false; }
+  // What happens next is decided by data-after, written by afterSubmitAttrs(). "url" is already a
+  // resolved, validated destination — the script never builds one. Anything it can't act on falls
+  // through to the in-place message, so a form always visibly does SOMETHING on submit.
+  function finish(){
+    var after = form.getAttribute("data-after");
+    if (after === "url") { var u = form.getAttribute("data-after-url"); if (u) { window.location.href = u; return; } }
+    if (after === "popup") {
+      var p = document.getElementById(form.getAttribute("data-after-id") || "");
+      if (p) { p.hidden = false; p.classList.add("is-open"); }
+    }
+    form.querySelectorAll("input,select,textarea,button").forEach(function(el){ el.style.display="none"; });
+    if (done) done.hidden = false;
+  }
   fetch("/api/public/leads", {
     method: "POST", headers: {"Content-Type":"application/json"},
     body: JSON.stringify({ campaign_id: form.getAttribute("data-campaign"), first_name: first, email: email, extra_fields: extra })
@@ -963,18 +1002,55 @@ function renderFormField(f: FormInputBlock): string {
   }
 }
 
+/**
+ * The `data-after-*` attributes both form renderers emit, and the single place a FormSubmitAction
+ * becomes markup.
+ *
+ * `offer` is resolved to a real URL HERE rather than in the browser: the funnel chain still wins
+ * when the funnel has steps (which is what the old data-next-step-url did), and otherwise it is
+ * the hoplink. Resolving server-side keeps the client script a dumb switch over attributes and
+ * means an offer link is never something page content could influence.
+ *
+ * A form whose action can't resolve to anything (an `offer` on a page with no campaign, a `url`
+ * left blank) degrades to `message` — a form that saves and then appears to do nothing is the
+ * worst outcome here, and it's the one the [object Object] bug actually produced.
+ */
+export function afterSubmitAttrs(
+  action: FormSubmitAction | undefined,
+  ctx: RenderCtx,
+  fallback: FormSubmitAction["kind"]
+): string {
+  const a: FormSubmitAction = action ?? ({ kind: fallback } as FormSubmitAction);
+  switch (a.kind) {
+    case "offer": {
+      const href = ctx.nextStepUrl || ctx.primaryHref || "";
+      return href ? ` data-after="url" data-after-url="${escapeHtml(href)}"` : ` data-after="message"`;
+    }
+    case "url":
+      return a.href ? ` data-after="url" data-after-url="${escapeHtml(a.href)}"` : ` data-after="message"`;
+    case "popup":
+      return a.formId ? ` data-after="popup" data-after-id="${escapeHtml(a.formId)}"` : ` data-after="message"`;
+    default:
+      return ` data-after="message"`;
+  }
+}
+
 function renderLeadCaptureForm(block: LeadCaptureFormBlock, ctx: RenderCtx): string {
   const extraInputs = (block.children ?? []).map(renderFormField).filter(Boolean).join("\n          ");
+  const done = escapeHtml(block.content.successText || "Thanks — check your inbox.");
   return `<div class="optin"${styleAttr(block.style, FORM_STYLE_KEYS)}>
-        <form id="leadForm" data-campaign-id="${escapeHtml(ctx.campaignId)}" data-next-step-url="${
-    ctx.nextStepUrl ? escapeHtml(ctx.nextStepUrl) : ""
-  }">
+        <form id="leadForm" data-campaign-id="${escapeHtml(ctx.campaignId)}"${afterSubmitAttrs(
+    block.content.afterSubmit,
+    ctx,
+    "offer"
+  )}>
           <input id="leadFirstName" name="first_name" type="text" placeholder="First name" required />
           <input id="leadEmail" name="email" type="email" placeholder="Email address" required />
           ${extraInputs}
           <button type="submit" class="cta">${escapeHtml(block.content.ctaText)}</button>
           <p class="disclosure">${ctx.leadConsentText}</p>
         </form>
+        <p class="aos-form-done reveal" hidden>${done}</p>
       </div>`;
 }
 
@@ -985,17 +1061,15 @@ function renderLockedBlock(block: LockedBlock, ctx: RenderCtx): string {
     case "lead_capture_form":
       return renderLeadCaptureForm(block, ctx);
     case "primary_cta": {
-      const inner = `<a class="cta" href="${escapeHtml(ctx.primaryHref)}"${styleAttr(
+      // An opt-in page that HAS a form doesn't render this at all any more: the form's own
+      // afterSubmit action carries the destination, so a separate hidden-until-submit button was
+      // a second button that only ever duplicated the first. Kept — and still the page's only
+      // way out — when there is NO form, and on funnel steps, which have no form by design.
+      if (ctx.pageKind === "bridge" && ctx.hasLeadForm) return "";
+      return `<a class="cta" href="${escapeHtml(ctx.primaryHref)}"${styleAttr(
         block.style,
         BUTTON_STYLE_KEYS
       )}>${escapeHtml(block.content.text)}</a>`;
-      // Hidden-until-submit ONLY when there's a form to do the submitting. The reveal is driven
-      // by the lead form's own handler, so on a page whose form was deleted this wrapper would
-      // hide the CTA forever — the page's only way out, invisible. Unlocking the form is what
-      // made that reachable.
-      return ctx.pageKind === "bridge" && ctx.hasLeadForm
-        ? `<div id="step2" class="hidden reveal">${inner}</div>`
-        : inner;
     }
     case "decline_link":
       if (!(ctx.pageKind === "funnel_step" && ctx.stepType === "upsell" && ctx.declineHref)) return "";

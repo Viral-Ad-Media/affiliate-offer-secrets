@@ -1873,16 +1873,11 @@ export default function WysiwygCanvas({
         );
       case "primary_cta":
         return (
-          // The canvas shows every block at once, so this sits directly under the opt-in form's
-          // own submit button looking like a duplicate of it — reported as "a second button that
-          // isn't linked to the form". On the published page it is hidden until someone opts in
-          // (renderBlockTree wraps it in #step2.hidden and the submit handler unhides it), and it
-          // is the only thing that sends a lead to the offer, so it can't be deleted — it's a
-          // locked block for that reason. Saying what it is beats leaving it looking like a bug.
+          // Only reachable now on a funnel step, or on an opt-in page with no form — the two
+          // cases where this button IS the page's way out. An opt-in page that has a form no
+          // longer carries this block at all (the form's own after-submit action replaced it),
+          // so the "shown after opt-in" caption that briefly lived here would now be a lie.
           <div className="mx-auto max-w-[420px] text-center">
-            <span className="mb-1.5 inline-block rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-500">
-              Shown after opt-in
-            </span>
             <EditableText
               as="span"
               value={block.content.text}

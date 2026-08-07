@@ -8,6 +8,7 @@ import {
   type ElementBlock,
   type FormInputBlock,
   type ButtonAction,
+  type FormSubmitAction,
   type FormFieldType,
 } from "@/lib/engine/renderPages";
 
@@ -29,8 +30,16 @@ const LABEL = "block text-[11px] font-medium text-zinc-400";
 
 export function hasContentSettings(block: Block | null): boolean {
   if (!block) return false;
-  return block.type === "form_input" || block.type === "button";
+  return (
+    block.type === "form_input" ||
+    block.type === "button" ||
+    block.type === "form" ||
+    block.type === "lead_capture_form"
+  );
 }
+
+const INPUT =
+  "mt-1 w-full rounded-lg border border-ink-700 bg-ink-950 px-2 py-1.5 text-xs text-zinc-200";
 
 export default function BlockSettingsPanel({
   block,
@@ -45,6 +54,113 @@ export default function BlockSettingsPanel({
   forms: { id: string; label: string }[];
 }) {
   const set = (patch: Record<string, unknown>) => onChange(block.id, patch);
+
+  // The form's own submit button: its label, and what happens once the lead is saved. This is
+  // what replaced the separate primary_cta block on an opt-in page — the destination belongs to
+  // the button someone actually clicks, not to a second button revealed afterwards.
+  if (block.type === "lead_capture_form" || block.type === "form") {
+    const isOptIn = block.type === "lead_capture_form";
+    const c = block.content as {
+      ctaText?: string;
+      submitText?: string;
+      successText?: string;
+      afterSubmit?: FormSubmitAction;
+    };
+    const action: FormSubmitAction = c.afterSubmit ?? { kind: isOptIn ? "offer" : "message" };
+    // Never offer this form as its own popup target — opening yourself on submit does nothing
+    // visible and reads as a broken setting.
+    const popupTargets = forms.filter((f) => f.id !== block.id);
+
+    return (
+      <div className="space-y-3">
+        <label className="block">
+          <span className={LABEL}>Button label</span>
+          <input
+            className={INPUT}
+            value={(isOptIn ? c.ctaText : c.submitText) ?? ""}
+            maxLength={60}
+            onChange={(e) => set(isOptIn ? { ctaText: e.target.value } : { submitText: e.target.value })}
+          />
+        </label>
+
+        <label className="block">
+          <span className={LABEL}>When someone submits</span>
+          <select
+            className={SELECT}
+            value={action.kind}
+            onChange={(e) => {
+              const kind = e.target.value as FormSubmitAction["kind"];
+              // Switching kind writes a COMPLETE action rather than patching one field, so a
+              // half-set action (popup with no target) can never reach the validator.
+              if (kind === "url") set({ afterSubmit: { kind: "url", href: "" } });
+              else if (kind === "popup")
+                set({ afterSubmit: { kind: "popup", formId: popupTargets[0]?.id ?? "" } });
+              else set({ afterSubmit: { kind } });
+            }}
+          >
+            {/* Only meaningful where there IS an offer to send them to. */}
+            {isOptIn && <option value="offer">Send them to the offer</option>}
+            <option value="url">Send them to a link</option>
+            {popupTargets.length > 0 && <option value="popup">Open another form</option>}
+            <option value="message">Stay here and show a message</option>
+          </select>
+        </label>
+
+        {action.kind === "url" && (
+          <label className="block">
+            <span className={LABEL}>Link</span>
+            <input
+              className={INPUT}
+              value={action.href}
+              placeholder="https://..."
+              onChange={(e) => set({ afterSubmit: { kind: "url", href: e.target.value } })}
+            />
+            <span className="mt-1 block text-[11px] text-zinc-500">
+              Must start with http:// or https://. Anything else is dropped on save and the form
+              shows its message instead.
+            </span>
+          </label>
+        )}
+
+        {action.kind === "popup" && (
+          <label className="block">
+            <span className={LABEL}>Form to open</span>
+            <select
+              className={SELECT}
+              value={action.formId}
+              onChange={(e) => set({ afterSubmit: { kind: "popup", formId: e.target.value } })}
+            >
+              {popupTargets.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {(action.kind === "message" || action.kind === "popup") && (
+          <label className="block">
+            <span className={LABEL}>Message shown after submitting</span>
+            <input
+              className={INPUT}
+              value={c.successText ?? ""}
+              maxLength={120}
+              onChange={(e) => set({ successText: e.target.value })}
+            />
+          </label>
+        )}
+
+        {isOptIn && action.kind === "offer" && (
+          <p className="text-[11px] text-zinc-500">
+            Goes to the next step of this funnel if it has one, otherwise your offer link. You never
+            paste the affiliate link here — it&apos;s built from your network connection at publish
+            time.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   if (block.type === "form_input") {
     const c = (block as FormInputBlock).content;

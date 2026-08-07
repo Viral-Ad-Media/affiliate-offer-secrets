@@ -207,16 +207,20 @@ export function normalizePageCopy(
     // funnel step — no lead-capture form, just the primary CTA
     blocks.push({ id: legacyId(), type: "primary_cta", locked: "primary_cta", style: {}, content: { text: cta } });
   } else {
-    // bridge page — lead-capture form, then the reveal CTA
+    // Bridge page — the lead-capture form only. There is deliberately no separate primary_cta
+    // block any more: the form's own afterSubmit action sends the lead to the offer, so a second
+    // button that appeared only after submitting was a duplicate of the one already on screen.
+    // `offer` resolves at render time to the next funnel step when one exists, else the hoplink —
+    // exactly where the old reveal-and-click CTA pointed, so this changes the number of clicks,
+    // not the destination.
     blocks.push({
       id: legacyId(),
       type: "lead_capture_form",
       locked: "lead_capture_form",
       style: {},
-      content: { ctaText: cta },
+      content: { ctaText: cta, afterSubmit: { kind: "offer" }, successText: "Thanks — check your inbox." },
       children: [] as FormInputBlock[],
     });
-    blocks.push({ id: legacyId(), type: "primary_cta", locked: "primary_cta", style: {}, content: { text: cta } });
   }
 
   blocks.push({ id: legacyId(), type: "disclosure", locked: "disclosure", style: {}, content: {} });
@@ -377,12 +381,27 @@ ${t.bodyStart}
       // Meta Pixel Lead event — only fires when the funnel's tracking settings installed the
       // pixel (window.fbq exists); a harmless no-op check otherwise.
       if (window.fbq) { try { window.fbq('track', 'Lead'); } catch (err) {} }
+      // Where the lead goes next is the FORM's setting now (data-after, written by
+      // afterSubmitAttrs) rather than a separate reveal-then-click CTA block. "url" is already
+      // resolved and validated server-side — the funnel's next step when it has one, else the
+      // offer link, else whatever the tenant typed; this script never builds a destination.
+      // Anything unrecognised falls through to the in-place thank-you, so submitting always does
+      // something visible. A page saved before this shipped still carries #step2, so that reveal
+      // is kept as the last fallback.
       function advance() {
-        if (form.dataset.nextStepUrl) {
-          window.location.href = form.dataset.nextStepUrl;
-          return;
+        var after = form.getAttribute('data-after');
+        if (after === 'url') {
+          var u = form.getAttribute('data-after-url');
+          if (u) { window.location.href = u; return; }
         }
-        if (form.parentElement) form.parentElement.classList.add('hidden');
+        if (after === 'popup') {
+          var p = document.getElementById(form.getAttribute('data-after-id') || '');
+          if (p) { p.hidden = false; p.classList.add('is-open'); }
+        }
+        if (form.dataset.nextStepUrl) { window.location.href = form.dataset.nextStepUrl; return; }
+        form.style.display = 'none';
+        var msg = form.parentElement ? form.parentElement.querySelector('.aos-form-done') : null;
+        if (msg) msg.hidden = false;
         var reveal = document.getElementById('step2');
         if (reveal) reveal.classList.remove('hidden');
       }
