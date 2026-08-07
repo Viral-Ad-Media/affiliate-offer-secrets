@@ -23,9 +23,26 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .single();
   if (error || !product) return NextResponse.json({ error: "not found" }, { status: 404 });
 
+  // Explicit columns, NOT select("*"). campaigns rows average 166 kB and reach 766 kB — the bulk
+  // of it being page_copy (~47 kB), the legacy presell_html/landing_md, and the base64 image — and
+  // the product page re-fetches this on an interval, so `*` meant re-sending a page-sized payload
+  // over and over. page_copy in particular is pure waste here: the funnel editor lives on
+  // /funnels/[campaignId] and reads it there; this page only ever renders bridge_html.
+  //
+  // Anything a child component on that page needs must be listed here — dropping a column is
+  // invisible to tsc and shows up as an empty tab.
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("*")
+    .select(
+      [
+        "id", "product_id", "status", "created_at", "updated_at",
+        "bridge_published", "bridge_html", "page_copy_edited_at",
+        "fb_ads_md", "fb_ad_angles", "tiktok_md", "blog_md",
+        "social_md", "social_posts", "email_md", "hoplinks_txt",
+        "embedded_image_data_url", "ad_creative_image_data_url", "images_json",
+        "video_path", "video_status", "cta_url", "name",
+      ].join(", ")
+    )
     .eq("product_id", params.id)
     .eq("workspace_id", ws)
     .maybeSingle();

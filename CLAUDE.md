@@ -3251,6 +3251,29 @@ are unchanged.
   Both are `SECURITY DEFINER` + `auth.uid()`-scoped, granted to `authenticated` — the narrow hole in
   a table with no client write policy, same shape as `start_trial()`/`update_profile()`.
 
+## The product page was re-fetching a page-sized payload on a timer
+
+`campaigns` rows average **166 kB and reach 766 kB** — `page_copy` (~47 kB), `bridge_html`
+(~55 kB), the base64 `embedded_image_data_url` (~47 kB), plus the legacy `presell_html`/
+`landing_md`. `app/api/products/[id]/route.ts` selected `*`, and the product page polled it every
+8 seconds unconditionally. So a fully-rendered page kept pulling ~166 kB forever.
+
+Two fixes, both measured rather than assumed:
+
+- **Explicit column list instead of `select("*")`.** Dropping `page_copy`, `presell_html`,
+  `landing_md` and `tracking` takes the average from **166 kB → 108 kB (−35%)** and the worst case
+  from 766 kB → 515 kB. `page_copy` is the big pointless one here: the funnel editor lives on
+  `/funnels/[campaignId]` and reads it there, while this page only ever renders `bridge_html`.
+  **Anything a child component needs must be in that list** — dropping a column is invisible to
+  `tsc` and surfaces as an empty tab, so add to the list when you add a consumer.
+- **Stop polling once `status === 'ready'`.** A finished campaign never changes again. Build
+  progress already has its own cheaper poll (`BuildProgressDialog` against `/api/jobs`), so
+  nothing is lost — the interval now only runs while there is genuinely something to wait for.
+
+The same shape is worth checking anywhere else `select("*")` meets a polled endpoint: it was
+`/api/products` (the list) that hit this first, and CLAUDE.md already records why that one is
+paged.
+
 ## Product status, and where the jobs queue lives
 
 - **`products.status` is now settable by hand** (`components/ProductStatusSelect.tsx` — the status

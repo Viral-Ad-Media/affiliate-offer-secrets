@@ -79,11 +79,17 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     setCampaign(data.campaign);
   }, [params.id]);
 
+  // Poll only while there is something to wait for. A campaign that has finished building never
+  // changes again, so the old unconditional 8s interval re-fetched a ~166 kB payload forever on a
+  // page that was already fully rendered. Build progress has its own, cheaper poll
+  // (BuildProgressDialog against /api/jobs), so nothing is lost by stopping here.
+  const settled = campaign?.status === "ready";
   useEffect(() => {
     load();
+    if (settled) return;
     const t = setInterval(load, 8000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, settled]);
 
   if (!product) return <p className="text-sm text-zinc-500">Loading…</p>;
 
