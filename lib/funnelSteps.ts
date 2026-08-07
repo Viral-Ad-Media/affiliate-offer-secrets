@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { slugify } from "@/lib/blog";
 import {
   renderBridgeHtml,
   renderFunnelStepHtml,
@@ -237,4 +238,20 @@ export async function rerenderFunnelSequence(
       await admin.from("funnel_steps").update({ html }).eq("id", step.id);
     }
   }
+}
+
+/**
+ * A short, brandable path segment for a funnel on a tenant's own domain.
+ *
+ * Deliberately NOT just slugify(title). Marketplace product titles are written to sell inside a
+ * marketplace listing, not to be a URL — "TedsWoodworking - Highest Converting Woodworking Site On
+ * The Internet!" slugifies to 62 characters of keyword stuffing that nobody would paste into an ad.
+ * The part before the first separator is almost always the product's actual name, so that is what
+ * a branded link should be. Capped to a handful of words for the titles that have no separator at
+ * all, and never empty — the caller de-duplicates, so a collapse to "funnel" is still usable.
+ */
+export function funnelPathSlug(title: string): string {
+  const head = title.split(/\s+[-–—|:]\s+|[-–—|:]\s+/)[0] ?? title;
+  const words = slugify(head).split("-").filter(Boolean).slice(0, 5);
+  return words.join("-") || slugify(title).slice(0, 40).replace(/-+$/, "") || "funnel";
 }

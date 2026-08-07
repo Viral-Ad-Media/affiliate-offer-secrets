@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { currentWorkspaceId } from "@/lib/workspace";
+import { funnelPathSlug } from "@/lib/funnelSteps";
 import { normalizePageCopy } from "@/lib/engine/renderPages";
 import { funnelPageChecklist, funnelStepChecklist, type ChecklistItem } from "@/lib/pageChecklist";
 import { STEP_TYPE_LABELS } from "@/lib/funnelTypes";
@@ -94,5 +96,92 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: "failed to save" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, published });
+  const mappedUrl = published ? await autoMapToPrimaryDomain(supabase, admin, campaignId) : null;
+
+  return NextResponse.json({ ok: true, published, mappedUrl });
+}
+
+/**
+ * Put a newly-published funnel on the workspace's default domain, automatically.
+ *
+ * `custom_domains.is_primary` has been claimed automatically by the first verified domain since
+ * 0078 — but nothing ever consumed it for funnels. A funnel's public URL comes from a
+ * `custom_domain_routes` row and nothing else (see /funnels and PublishBridge), and the only way
+ * to create one was to find the Domains page and fill in a path by hand. So "the domain you added
+ * is the default for blog and funnels" was only half true: the blog really did start serving on it
+ * (serves_blog), while every funnel stayed on /p/{id}/bridge.
+ *
+ * Best-effort by construction: the publish itself has already succeeded and been reported, and a
+ * funnel that is live on the default URL but not yet branded is a much better outcome than a
+ * publish that fails because a domain lookup did.
+ */
+async function autoMapToPrimaryDomain(
+  supabase: ReturnType<typeof createClient>,
+  admin: ReturnType<typeof createAdminClient>,
+  campaignId: string
+): Promise<string | null> {
+  try {
+    // Never a second mapping. If this funnel already has a route — placed by hand or by an earlier
+    // publish — that is the operator's choice, and re-adding on every republish would quietly
+    // accumulate duplicate URLs for the same page.
+    const { data: existing } = await admin
+      .from("custom_domain_routes")
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .limit(1)
+      .maybeSingle();
+    if (existing) return null;
+
+    const ws = await currentWorkspaceId();
+    if (!ws) return null;
+
+    // Only a VERIFIED primary: a pending domain's DNS doesn't point here yet, so mapping onto it
+    // would hand back a branded link that 404s — the same reason 0078's trigger fires on the
+    // transition to verified rather than on add.
+    const { data: domain } = await admin
+      .from("custom_domains")
+      .select("id, domain")
+      .eq("workspace_id", ws)
+      .eq("status", "verified")
+      .eq("is_primary", true)
+      .limit(1)
+      .maybeSingle();
+    if (!domain) return null;
+
+    const { data: campaign } = await admin
+      .from("campaigns")
+      .select("name, products(product_title)")
+      .eq("id", campaignId)
+      .single();
+    const title =
+      ((campaign as any)?.products?.product_title as string | undefined) ??
+      ((campaign as any)?.name as string | null) ??
+      "funnel";
+
+    // Never the bare root. That path belongs to the blog when this domain also serves it
+    // (custom_domains.serves_blog), and taking it silently would displace the blog index.
+    const base = funnelPathSlug(title);
+    const { data: taken } = await admin
+      .from("custom_domain_routes")
+      .select("path")
+      .eq("domain_id", domain.id);
+    const used = new Set((taken ?? []).map((r: any) => String(r.path)));
+    let path = base;
+    for (let n = 2; used.has(path); n++) path = `${base}-${n}`;
+
+    // Through the RPC, on the USER's client — so the domain-membership and campaign-ownership
+    // checks both really run. A direct admin insert here would be the one write path in this
+    // feature that skips them.
+    const { error } = await supabase.rpc("add_domain_route", {
+      p_domain_id: domain.id,
+      p_path: path,
+      p_campaign_id: campaignId,
+      p_destination: "bridge",
+    });
+    if (error) return null;
+
+    return `https://${domain.domain}/${path}`;
+  } catch {
+    return null;
+  }
 }
