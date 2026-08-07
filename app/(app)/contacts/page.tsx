@@ -8,57 +8,92 @@ import Pager, { PAGE_SIZE, pageFromParam, pageRange } from "@/components/Pager";
 
 // Real paid traffic accumulates leads fast — this list was capped at 1000 with no way to reach
 // anything past it. Now paged, so the whole table is reachable and each page is one bounded query.
+//
+// It is also down to TWO sequential Supabase round trips (count/campaigns/tags in parallel, then
+// the page of rows), from five. That was the actual cost here — the payload is tiny (a contact row
+// averages 293 bytes) and every query plans in under a millisecond, so this page was never slow
+// because of the database; it was slow because it talked to it five times in a row before
+// rendering anything. Two of those five were pure duplication of work the (app) layout had already
+// done on the same request.
 export default async function ContactsPage({
   searchParams,
 }: {
   searchParams: { page?: string; tag?: string };
 }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
+  // No getUser() here on purpose. The (app) layout above already redirected if there is no
+  // session, and getUser() is a real round trip to the auth server every time it's called — this
+  // page's copy answered a question that had been answered moments earlier. currentWorkspaceId()
+  // is React-cache()d per request, so the layout's call already paid for this one.
+  //
+  // A null workspace means the session behind this request is no longer valid; it is NOT a filter
+  // value. `.eq("workspace_id", null)` sends PostgREST `eq.null`, which Postgres refuses to cast
+  // to uuid — a 500 where a redirect was meant.
   const ws = await currentWorkspaceId();
+  if (!ws) redirect("/login");
+
   const tagFilter = searchParams.tag || null;
 
   // Filtering by tag uses an inner join on the link table rather than fetching ids and passing
   // them to .in() — that shape would silently cap the filter at whatever the id query returned,
   // so a tag with more leads than the cap would quietly show a subset. The join keeps count and
-  // range honest for any size.
+  // range honest for any size. Aliased `f` so the row query below can embed the SAME table a
+  // second time, unfiltered, for the chips (see rowSelect).
   const withTagFilter = <T,>(q: T): T => {
     if (!tagFilter) return q;
-    return (q as any).eq("contact_tag_links.tag_id", tagFilter) as T;
+    return (q as any).eq("f.tag_id", tagFilter) as T;
   };
 
-  const countSelect = tagFilter ? "id, contact_tag_links!inner(tag_id)" : "id";
-  const { count } = await withTagFilter(
-    supabase.from("contacts").select(countSelect, { count: "exact", head: true }).eq("workspace_id", ws)
-  );
-  const total = count ?? 0;
-  const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
-  const [from, to] = pageRange(page);
+  const countSelect = tagFilter ? "id, f:contact_tag_links!inner(tag_id)" : "id";
 
-  const rowSelect = tagFilter
-    ? "id, campaign_id, first_name, email, extra_fields, created_at, unsubscribed_at, contact_tag_links!inner(tag_id)"
-    : "id, campaign_id, first_name, email, extra_fields, created_at, unsubscribed_at";
-
-  const [{ data: rows }, { data: campaigns }, { data: allTags }] = await Promise.all([
+  // The campaign titles and the tag list don't depend on which page you're on, so they no longer
+  // wait behind the count — only the row query genuinely does (the page number is clamped against
+  // the total, and an out-of-range .range() is a 416 from PostgREST, not an empty list).
+  const [{ count }, { data: campaigns }, { data: allTags }] = await Promise.all([
     withTagFilter(
-      supabase
-        .from("contacts")
-        .select(rowSelect)
-        .eq("workspace_id", ws)
-        .order("created_at", { ascending: false })
-        .range(from, to)
+      supabase.from("contacts").select(countSelect, { count: "exact", head: true }).eq("workspace_id", ws)
     ),
-    supabase.from("campaigns").select("id, products(product_title)"),
+    // Scoped and bounded. It was neither: no workspace filter meant a member of two workspaces got
+    // both workspaces' campaigns merged into the title map and the edit dialog's picker, and no
+    // limit meant this grew forever behind a page that only ever needs titles for 50 rows.
+    supabase
+      .from("campaigns")
+      .select("id, products(product_title)")
+      .eq("workspace_id", ws)
+      .order("created_at", { ascending: false })
+      .limit(500),
     supabase
       .from("contact_tags")
       .select("id, name, color, description")
       .eq("workspace_id", ws)
       .order("name"),
   ]);
+
+  const total = count ?? 0;
+  const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
+  const [from, to] = pageRange(page);
+
+  // Two embeds of the same table, which is what removes the fourth round trip. `f` is the inner
+  // join that does the filtering and returns ONLY the matching link; `tag_links` is a plain embed
+  // returning every tag on the row, which is what the chips need — a lead carrying three tags
+  // would otherwise render showing the one it was filtered by. Verified live against PostgREST:
+  // with both embeds present and a filter active, `f` came back with one tag, `tag_links` with
+  // both, and the exact count header was still correct.
+  const tagEmbed = "tag_links:contact_tag_links(tag_id)";
+  const baseCols = "id, campaign_id, first_name, email, extra_fields, created_at, unsubscribed_at";
+  const rowSelect = tagFilter
+    ? `${baseCols}, f:contact_tag_links!inner(tag_id), ${tagEmbed}`
+    : `${baseCols}, ${tagEmbed}`;
+
+  const { data: rows } = await withTagFilter(
+    supabase
+      .from("contacts")
+      .select(rowSelect)
+      .eq("workspace_id", ws)
+      .order("created_at", { ascending: false })
+      .range(from, to)
+  );
 
   const titleByCampaign = new Map<string, string>();
   for (const c of campaigns ?? []) {
@@ -74,26 +109,6 @@ export default async function ContactsPage({
   const tags: ContactTag[] = (allTags ?? []) as ContactTag[];
   const tagById = new Map(tags.map((t) => [t.id, t]));
 
-  // Tags are fetched for THIS page's rows only. The inner-join select above can't double as the
-  // tag list, because when a filter is active it returns only the matching link — a lead carrying
-  // three tags would render showing one.
-  const pageIds = (rows ?? []).map((r: any) => r.id);
-  const tagsByContact = new Map<string, ContactTag[]>();
-  if (pageIds.length > 0) {
-    const { data: links } = await supabase
-      .from("contact_tag_links")
-      .select("contact_id, tag_id")
-      .eq("workspace_id", ws)
-      .in("contact_id", pageIds);
-    for (const l of links ?? []) {
-      const tag = tagById.get(l.tag_id);
-      if (!tag) continue;
-      const list = tagsByContact.get(l.contact_id) ?? [];
-      list.push(tag);
-      tagsByContact.set(l.contact_id, list);
-    }
-  }
-
   const contacts: Contact[] = (rows ?? []).map((r: any) => ({
     id: r.id,
     campaign_id: r.campaign_id,
@@ -103,7 +118,9 @@ export default async function ContactsPage({
     extra_fields: (r.extra_fields as Record<string, string>) ?? {},
     created_at: r.created_at,
     unsubscribed_at: r.unsubscribed_at ?? null,
-    tags: tagsByContact.get(r.id) ?? [],
+    tags: ((r.tag_links ?? []) as { tag_id: string }[])
+      .map((l) => tagById.get(l.tag_id))
+      .filter((t): t is ContactTag => !!t),
   }));
 
   return (
