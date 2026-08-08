@@ -2700,6 +2700,26 @@ validator, or renderer changes; purely how the existing capabilities are surface
   targeting via `paletteTargetRef()`: the selected Section, else the container holding the
   selected block, else the **last** Section; rows only ever insert into Sections (falling back to
   the last Section when the selection is inside a Column).
+- **A palette item is DRAGGABLE as well as clickable**, so you can put a block where you want it
+  instead of always appending at the end and dragging it back. `PaletteDraggable` wraps each
+  row/element button in `useDraggable` with an id that encodes what to create
+  (`palette-el:{type}` / `palette-row:{layout}`) — there is no block to move yet, so `handleDragEnd`
+  branches on that prefix BEFORE its root/nested branches and calls `insertElement`/`insertFormInput`/
+  `insertRow` at the drop index instead of `moveBlockToContainer`. The click handler stays: the
+  shared `PointerSensor`'s `activationConstraint: {distance: 4}` is what lets one element be both.
+  **This is why `<DndContext>` moved out to wrap the whole three-zone layout** — it used to sit
+  inside the canvas column, and dnd-kit only tracks draggables mounted under the same context as
+  their droppables, so a palette rail outside it could not be dragged from at all.
+  `paletteDropTarget()` resolves the drop the same way the nested branch does, with one addition:
+  root can never hold an element or a row, so a drop onto a Section resolves to *inside* that
+  section rather than beside it — otherwise the most obvious target on the page would do nothing.
+  **Standing caveat, unchanged**: this session's tooling cannot simulate a real dnd-kit pointer
+  drag, so the insert logic and the build are verified but the gesture itself needs a manual pass.
+- **Save & Republish + Preview render at BOTH ends of the canvas** in `PageEditor` and
+  `FunnelStepEditor` — one `actions` JSX value rendered twice, never two copies, so they cannot
+  disagree about disabled state or the "Saved" indicator. The canvas is a full-screen editing
+  surface; whichever end you have scrolled to, the actions should be there. (`BlogPostEditor` keeps
+  its single sticky top bar — sticky means always reachable, so a second copy would be noise.)
 - **Hover-revealed controls at the block's side, never below**: `RootBlockWrapper`'s top-right
   hover cluster gained a `Settings2` button (`title="Block settings"`, calls `onSelect`) beside
   the drag grip; `NestedItemWrapper`'s left-edge cluster is now grip + `Settings2` + delete. All

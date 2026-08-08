@@ -31,7 +31,7 @@ import {
   Columns2,
   Lock,
 } from "lucide-react";
-import { DndContext, closestCenter, useDroppable, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, closestCenter, useDroppable, useDraggable, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -583,6 +583,33 @@ function AddBlockMenu({ onPick, onPickRow }: { onPick: (type: PaletteType) => vo
 // Clicking a palette item appends to wherever the current selection points (the selected
 // section/column, or the container holding the selected element), falling back to the last
 // section. Collapse state persists in localStorage, same pattern as the app sidebar.
+// A palette entry is BOTH draggable and clickable, and the existing PointerSensor
+// (activationConstraint: {distance: 4}) is what makes that work: a press that never moves stays a
+// click, so click-to-append keeps behaving exactly as before while a drag past 4px starts an
+// insert-at-drop-point instead.
+//
+// The id encodes what to create ("palette-el:heading", "palette-row:2col"). handleDragEnd reads it
+// rather than carrying a data payload, so there is one place that decides what a drag id means.
+function PaletteDraggable({
+  id,
+  children,
+  ...rest
+}: { id: string; children: React.ReactNode } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      {...rest}
+      {...listeners}
+      {...attributes}
+      className={`${rest.className ?? ""} ${isDragging ? "opacity-40" : ""} cursor-grab active:cursor-grabbing`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function EditorPalette({
   onPick,
   onPickRow,
@@ -623,11 +650,11 @@ function EditorPalette({
       {!collapsed && <div className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Rows</div>}
       <div className={collapsed ? "flex flex-col gap-0.5" : "mb-2 flex gap-1 px-1"}>
         {(["1col", "2col", "3col"] as const).map((layout) => (
-          <button
+          <PaletteDraggable
             key={layout}
-            type="button"
+            id={`palette-row:${layout}`}
             onClick={() => onPickRow(layout)}
-            title={`Insert ${layout === "1col" ? "1-column" : layout === "2col" ? "2-column" : "3-column"} row`}
+            title={`Drag onto the page, or click to add a ${layout === "1col" ? "1-column" : layout === "2col" ? "2-column" : "3-column"} row at the end`}
             className={
               collapsed
                 ? "flex items-center justify-center rounded p-1.5 text-zinc-400 hover:bg-ink-800 hover:text-emerald-300"
@@ -635,25 +662,25 @@ function EditorPalette({
             }
           >
             {collapsed ? <Columns2 className="h-4 w-4" /> : layout === "1col" ? "1 col" : layout === "2col" ? "2 col" : "3 col"}
-          </button>
+          </PaletteDraggable>
         ))}
       </div>
 
       {!collapsed && <div className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Elements</div>}
       <div className="flex flex-col gap-0.5">
         {ELEMENT_PALETTE.map(({ type, label, icon: Icon }) => (
-          <button
+          <PaletteDraggable
             key={type}
-            type="button"
+            id={`palette-el:${type}`}
             onClick={() => onPick(type)}
-            title={label}
+            title={`${label} — drag onto the page, or click to add it at the end`}
             className={`flex items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] text-zinc-300 hover:bg-ink-800 hover:text-emerald-300 ${
               collapsed ? "justify-center px-1" : ""
             }`}
           >
             <Icon className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
             {!collapsed && label}
-          </button>
+          </PaletteDraggable>
         ))}
       </div>
     </aside>
@@ -900,6 +927,35 @@ export default function WysiwygCanvas({
     const overId = String(over.id);
     if (activeId === overId) return;
 
+    // Dropped FROM the palette. The active id carries what to create, not an existing block, so
+    // there is nothing to move — resolve where it landed and insert there. Same drop-target
+    // resolution as the nested branch below (a block id means "before this one", a container's own
+    // droppable id means "the empty space in this container").
+    if (activeId.startsWith("palette-")) {
+      const dropped = paletteDropTarget(overId);
+      if (!dropped) return;
+      const { ref, index } = dropped;
+      if (activeId.startsWith("palette-el:")) {
+        const type = activeId.slice("palette-el:".length) as PaletteType;
+        // Input is the palette item; the form is implied — same rule as clicking it.
+        onChange(
+          type === "form_input"
+            ? insertFormInput(tree, ref, index)
+            : insertElement(tree, ref, index, type),
+        );
+        return;
+      }
+      if (activeId.startsWith("palette-row:")) {
+        // Rows live only in sections. Dropping one into a column resolves to that column's own
+        // section rather than refusing the drop — refusing would read as a broken drag target.
+        const sectionId = sectionIdForRef(ref);
+        if (!sectionId) return;
+        const layout = activeId.slice("palette-row:".length) as RowBlock["layout"];
+        onChange(insertRow(tree, sectionId, ref.kind === "section" ? index : Number.MAX_SAFE_INTEGER, layout));
+      }
+      return;
+    }
+
     // Root-level (Sections + locked blocks) — unchanged from Phase O.2, reorder within root only.
     const rootIds = tree.blocks.map((b) => b.id);
     if (rootIds.includes(activeId)) {
@@ -926,6 +982,36 @@ export default function WysiwygCanvas({
       targetIndex = overLoc.index;
     }
     onChange(moveBlockToContainer(tree, activeId, targetRef, targetIndex));
+  }
+
+  // Where a palette item dropped on `overId` should land. Root is never a valid home for an
+  // element or a row, so dropping onto a Section resolves to "inside that section" rather than
+  // "beside it at root" — otherwise the most obvious drop target on the page would do nothing.
+  function paletteDropTarget(overId: string): { ref: ContainerRef; index: number } | null {
+    const container = parseContainerKey(overId);
+    if (container) return { ref: container, index: Number.MAX_SAFE_INTEGER };
+    const loc = findBlockLocation(tree, overId);
+    if (!loc) return null;
+    if (loc.ref.kind === "root") {
+      if (loc.block.type === "section") {
+        return { ref: { kind: "section", sectionId: loc.block.id }, index: Number.MAX_SAFE_INTEGER };
+      }
+      const fallback = paletteTargetRef();
+      return fallback ? { ref: fallback, index: Number.MAX_SAFE_INTEGER } : null;
+    }
+    return { ref: loc.ref, index: loc.index };
+  }
+
+  function sectionIdForRef(ref: ContainerRef): string | null {
+    if (ref.kind === "section") return ref.sectionId;
+    if (ref.kind === "column") {
+      for (const b of tree.blocks) {
+        if (b.type !== "section") continue;
+        if (b.children.some((c) => c.type === "row" && c.id === ref.rowId)) return b.id;
+      }
+    }
+    const last = [...tree.blocks].reverse().find((b) => b.type === "section");
+    return last ? last.id : null;
   }
 
   function commit(blockId: string, patch: Record<string, unknown>) {
@@ -1911,6 +1997,9 @@ export default function WysiwygCanvas({
   // Below lg the palette hides (the inline "+ Add block" menus cover insertion) and the settings
   // panel falls back to rendering under the canvas.
   return (
+    // The palette lives INSIDE the DndContext: a palette item is a draggable, and dnd-kit
+    // only tracks draggables mounted under the same context as the droppables they target.
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
       <EditorPalette onPick={paletteAddElement} onPickRow={paletteAddRow} />
 
@@ -1967,7 +2056,6 @@ export default function WysiwygCanvas({
             maxWidth: device === "desktop" ? `min(100%, ${contentWidthOf(tree)}px)` : DEVICE_WIDTHS[device],
           }}
         >
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={tree.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
               {tree.blocks.map((b) => (
                 <RootBlockWrapper
@@ -2018,7 +2106,6 @@ export default function WysiwygCanvas({
                 </RootBlockWrapper>
               ))}
             </SortableContext>
-          </DndContext>
 
           {appendix && (
             <StaticBlockWrapper
@@ -2073,5 +2160,6 @@ export default function WysiwygCanvas({
         </div>
       )}
     </div>
+    </DndContext>
   );
 }

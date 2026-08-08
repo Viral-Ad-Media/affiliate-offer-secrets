@@ -106,12 +106,47 @@ export default function FunnelStepEditor({
     }
   }
 
+  // One definition, rendered both above and below the canvas — the canvas is tall enough that
+  // whichever end you are at, the actions should be there, and two copies of one JSX value can't
+  // drift into disagreeing about disabled state or the saved indicator.
+  const actions = (
+    <div className="flex items-center gap-3">
+      <EditorPreviewButton
+        title={`Preview — ${productTitle}`}
+        render={() =>
+          renderFunnelStepHtml(
+            { product_title: productTitle },
+            tree,
+            stepType,
+            // The real CTA href is resolved server-side from cta_action/redirect_url at save
+            // time; "#" keeps the preview inert rather than inventing a hoplink that isn't what
+            // will actually ship.
+            "#",
+            firstImageDataUrl(tree)
+          )
+        }
+      />
+      <Button onClick={save} disabled={saving || !!imageBusyBlockId}>
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        Save &amp; Republish
+      </Button>
+      {savedAt && Date.now() - savedAt < 4000 && (
+        <span className="flex items-center gap-1 text-xs text-emerald-300">
+          <CheckCircle2 className="h-3.5 w-3.5" /> Saved
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      <p className="text-xs text-zinc-500">
-        Click any text below to edit it in place, drag <span className="text-zinc-400">⠿</span> to
-        reorder a block.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-zinc-500">
+          Click any text below to edit it in place, drag <span className="text-zinc-400">⠿</span> to
+          reorder a block.
+        </p>
+        {actions}
+      </div>
 
       <PageChecklist items={funnelStepChecklist(stepType, tree)} subtitle={STEP_TYPE_LABELS[stepType]} />
 
@@ -253,32 +288,7 @@ export default function FunnelStepEditor({
 
       {error && <p className="text-sm text-red-300">{error}</p>}
 
-      <div className="flex items-center gap-3">
-        <EditorPreviewButton
-          title={`Preview — ${productTitle}`}
-          render={() =>
-            renderFunnelStepHtml(
-              { product_title: productTitle },
-              tree,
-              stepType,
-              // The real CTA href is resolved server-side from cta_action/redirect_url at save
-              // time; "#" keeps the preview inert rather than inventing a hoplink that isn't what
-              // will actually ship.
-              "#",
-              firstImageDataUrl(tree)
-            )
-          }
-        />
-        <Button onClick={save} disabled={saving || !!imageBusyBlockId}>
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          Save &amp; Republish
-        </Button>
-        {savedAt && Date.now() - savedAt < 4000 && (
-          <span className="flex items-center gap-1 text-xs text-emerald-300">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Saved
-          </span>
-        )}
-      </div>
+      {actions}
     </div>
   );
 }

@@ -100,13 +100,48 @@ export default function PageEditor({
     );
   }
 
+  // One definition, rendered both above and below the canvas. The canvas is tall enough that
+  // whichever end you happen to be at, the actions had better be there — and two copies of one
+  // JSX value can't drift into disagreeing about disabled state or the saved indicator.
+  const actions = (
+    <div className="flex items-center gap-3">
+      <EditorPreviewButton
+        title={`Preview — ${productTitle}`}
+        render={() =>
+          renderBridgeHtml(
+            { product_title: productTitle },
+            tree,
+            // Inert placeholder: the real hoplink is built server-side from the tenant's own
+            // affiliate id at save time, so inventing one here would preview a link that isn't
+            // what ships.
+            "#",
+            firstImageDataUrl(tree),
+            campaignId
+          )
+        }
+      />
+      <Button onClick={save} disabled={saving || !!imageBusyBlockId}>
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        Save &amp; Republish
+      </Button>
+      {savedAt && Date.now() - savedAt < 4000 && (
+        <span className="flex items-center gap-1 text-xs text-emerald-300">
+          <CheckCircle2 className="h-3.5 w-3.5" /> Saved
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      <p className="text-xs text-zinc-500">
-        Click any text below to edit it in place, drag <span className="text-zinc-400">⠿</span> to
-        reorder a block. The lead-capture form and disclosure are locked — they can't be edited
-        or removed here.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-zinc-500">
+          Click any text below to edit it in place, drag <span className="text-zinc-400">⠿</span> to
+          reorder a block. The lead-capture form and disclosure are locked — they can't be edited
+          or removed here.
+        </p>
+        {actions}
+      </div>
 
       {/* Recomputed from the live tree on every edit, so ticking an item is immediate feedback
           rather than something you find out about after saving. */}
@@ -164,32 +199,7 @@ export default function PageEditor({
 
       {error && <p className="text-sm text-red-300">{error}</p>}
 
-      <div className="flex items-center gap-3">
-        <EditorPreviewButton
-          title={`Preview — ${productTitle}`}
-          render={() =>
-            renderBridgeHtml(
-              { product_title: productTitle },
-              tree,
-              // Inert placeholder: the real hoplink is built server-side from the tenant's own
-              // affiliate id at save time, so inventing one here would preview a link that isn't
-              // what ships.
-              "#",
-              firstImageDataUrl(tree),
-              campaignId
-            )
-          }
-        />
-        <Button onClick={save} disabled={saving || !!imageBusyBlockId}>
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          Save &amp; Republish
-        </Button>
-        {savedAt && Date.now() - savedAt < 4000 && (
-          <span className="flex items-center gap-1 text-xs text-emerald-300">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Saved
-          </span>
-        )}
-      </div>
+      {actions}
     </div>
   );
 }
