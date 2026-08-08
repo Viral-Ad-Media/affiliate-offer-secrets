@@ -114,6 +114,7 @@ export default function FunnelMap({
                   step.step_type === "upsell" ? "Accept/decline cross-sell" : "Shown after the previous page"
                 }
                 previewHtml={step.html}
+                previewHref={`/preview/step/${step.id}`}
                 onEdit={() => onSelectStep(step.id)}
                 extra={
                   <>
@@ -173,6 +174,7 @@ function MapNode({
   label,
   sublabel,
   previewHtml,
+  previewHref,
   onEdit,
   extra,
 }: {
@@ -181,6 +183,8 @@ function MapNode({
   sublabel: string;
   /** The page's currently-STORED html. Null for a step that's never been saved. */
   previewHtml: string | null;
+  /** Its own /preview URL — a real link, available from generation rather than from publish. */
+  previewHref?: string | null;
   onEdit: () => void;
   extra?: React.ReactNode;
 }) {
@@ -196,7 +200,7 @@ function MapNode({
         </div>
       </div>
       <div className="flex items-center gap-1.5">
-        <PreviewIconButton html={previewHtml} title={label} />
+        <PreviewIconButton html={previewHtml} title={label} href={previewHref} />
         <Button onClick={onEdit}  title="Edit" variant="outline" className="!px-2 !py-1">
           <Pencil className="h-3.5 w-3.5" />
         </Button>

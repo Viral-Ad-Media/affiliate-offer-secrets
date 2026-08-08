@@ -153,7 +153,20 @@ export default async function FunnelsPage() {
                           <ExternalLink className="h-3 w-3 shrink-0" />
                         </a>
                       ) : (
-                        <span>Not publicly reachable until published</span>
+                        // A draft has a link from the moment it's generated — it just isn't the
+                        // PUBLIC one. /preview is signed-in only and workspace-scoped, so this
+                        // shows the real page without making an unfinished funnel reachable by ad
+                        // traffic or a crawler. The public URL appears here once it's published.
+                        <a
+                          href={`/preview/funnel/${f.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 truncate hover:text-emerald-400"
+                          title="Private preview — only people signed in to this workspace can open it"
+                        >
+                          <span className="truncate">Preview draft</span>
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </a>
                       )}
                     </td>
                     <td className="px-2 py-2.5 text-right tabular-nums text-zinc-400">

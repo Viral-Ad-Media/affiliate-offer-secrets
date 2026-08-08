@@ -49,7 +49,7 @@ export default function SplitTestBranch({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <PreviewIconButton html={bridgeHtml} title="Opt-in page" />
+          <PreviewIconButton html={bridgeHtml} title="Opt-in page" href={`/preview/funnel/${campaignId}`} />
           <Button onClick={onEditControl}  title="Edit" variant="outline" className="!px-2 !py-1">
             <Pencil className="h-3.5 w-3.5" />
           </Button>

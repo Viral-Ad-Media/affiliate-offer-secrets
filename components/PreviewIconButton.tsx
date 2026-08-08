@@ -1,5 +1,6 @@
 "use client";
 
+import { Eye } from "lucide-react";
 import EditorPreviewButton from "@/components/EditorPreview";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,10 +24,36 @@ const EMPTY = `<!doctype html><meta charset="utf-8"><body style="font-family:sys
 export default function PreviewIconButton({
   html,
   title,
+  href,
 }: {
   html: string | null;
   title: string;
+  /**
+   * A real preview URL (`/preview/{kind}/{id}`) when the thing has one. Preferred over the blob:
+   * render because it's a link — bookmarkable, shareable with a teammate, and it exists from the
+   * moment the page is generated rather than from the moment it's published.
+   *
+   * It shows the SAME saved HTML this component would have rendered locally, served inside the
+   * same empty sandbox, so nothing about what you see (or what it can't fire) changes. `html` is
+   * still required as the fallback for anything with no id to address yet.
+   */
+  href?: string | null;
 }) {
+  if (href && html) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Preview"
+        aria-label={`Preview ${title}`}
+        className={cn(buttonVariants({ variant: "outline" }), "!px-2 !py-1")}
+      >
+        <Eye className="h-3.5 w-3.5" />
+      </a>
+    );
+  }
+
   return (
     <EditorPreviewButton
       render={() => html || EMPTY}

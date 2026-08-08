@@ -239,6 +239,26 @@ export default function BlogPostEditor({
         </div>
       )}
 
+      {/* A draft has a link too — just a private one. /preview is signed-in only and
+          workspace-scoped, so a post can be looked at as a real rendered page from the moment it
+          exists, without publishing it to the blog index and the sitemap. Rendered by the SAME
+          function the public route uses, so this is not an approximation of the published page. */}
+      {status !== "published" && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-xs text-zinc-400">
+          <span className="font-medium text-zinc-300">Draft:</span>
+          <a
+            href={`/api/blog/preview/post/${post.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1 underline decoration-ink-600 hover:text-emerald-300"
+            title="Private preview — only people signed in to this workspace can open it"
+          >
+            Preview this post <ExternalLink className="h-3 w-3" />
+          </a>
+          <span className="text-zinc-600">· publishes to {publicUrl}</span>
+        </div>
+      )}
+
       {error && <p className="text-sm text-red-300">{error}</p>}
 
       <div className="flex flex-wrap items-center gap-3">
