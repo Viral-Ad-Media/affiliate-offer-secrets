@@ -13,6 +13,7 @@ import RestyleDialog from "@/components/RestyleDialog";
 import BuildProgressDialog from "@/components/BuildProgressDialog";
 import { toast } from "@/lib/toast";
 import SendEmail from "@/components/SendEmail";
+import BlogPostLink from "@/components/BlogPostLink";
 import GenerateVideo from "@/components/GenerateVideo";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
 import SocialPostsPanel from "@/components/SocialPostsPanel";
@@ -321,6 +322,13 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                     className="prose-dark"
                     dangerouslySetInnerHTML={{ __html: marked.parse(content) as string }}
                   />
+                  {/* The build already turned this article into a draft blog post — this is the
+                      way to it. Without these the post existed but was invisible from here. */}
+                  {tab === "blog_md" && (
+                    <div className="mt-4 border-t border-ink-700 pt-4">
+                      <BlogPostLink campaignId={campaign!.id} />
+                    </div>
+                  )}
                   {tab === "email_md" && (
                     <div className="mt-4">
                       <SendEmail campaignId={campaign!.id} defaultBody={content} />
