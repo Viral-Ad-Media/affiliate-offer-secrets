@@ -3,6 +3,7 @@ import { currentWorkspaceId } from "@/lib/workspace";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SetupChecklist, { type SetupStep } from "@/components/SetupChecklist";
+import MarketplaceHighlights from "@/components/MarketplaceHighlights";
 import {
   Megaphone,
   Link2,
@@ -173,6 +174,14 @@ export default async function Overview() {
           value={activeSequencesCount ?? 0}
         />
       </section>
+
+      {/* Moved here from Marketplace. It answers "what should I even look at", which is an
+          Overview question — Marketplace answers "find me products in X", and having both on one
+          page put the browse-the-catalog panel above the discovery form's own results. No
+          `onAdded` callback: this is a server component, and there's no products table on this
+          page to refresh — the panel marks the row added and toasts on its own. The tile counts
+          above go stale until the next load, which is the honest trade for putting it here. */}
+      <MarketplaceHighlights />
 
       <section>
         <h2 className="mb-3 text-sm font-semibold text-zinc-100">Get started</h2>

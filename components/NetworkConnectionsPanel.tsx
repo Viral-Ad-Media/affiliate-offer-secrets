@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Link2, Loader2, CheckCircle2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import type { Network } from "@/lib/engine/renderPages";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -63,6 +62,7 @@ function NetworkCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
+  const [rerendered, setRerendered] = useState(0);
 
   async function save() {
     const trimmed = value.trim();
@@ -76,27 +76,32 @@ function NetworkCard({
     }
     setBusy(true);
     setError(null);
-    const supabase = createClient();
-    const { error: upsertErr } = await supabase
-      .from("network_connections")
-      .upsert(
-        {
-          user_id: userId,
-          workspace_id: workspaceId,
-          network: config.network,
-          affiliate_id: trimmed,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "workspace_id,network" }
-      );
+    // Through the route, not a direct upsert. Saving the id is only half the job: hoplinks are
+    // baked into each page's stored HTML at render time, so without the re-render this route does,
+    // changing a nickname updated the row and left every existing funnel crediting the old one —
+    // with the UI saying "Connected" the whole time.
+    let res: Response;
+    try {
+      res = await fetch("/api/network-connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ network: config.network, affiliate_id: trimmed }),
+      });
+    } catch {
+      setBusy(false);
+      setError("Couldn't save — check your connection and try again");
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
     setBusy(false);
-    if (upsertErr) {
-      setError("Couldn't save — check the format and try again");
+    if (!res.ok) {
+      setError(data.error ?? "Couldn't save — check the format and try again");
       return;
     }
     setSaved(trimmed);
+    setRerendered(typeof data.rerendered === "number" ? data.rerendered : 0);
     setJustSaved(true);
-    setTimeout(() => setJustSaved(false), 2000);
+    setTimeout(() => setJustSaved(false), 4000);
   }
 
   return (
@@ -124,6 +129,14 @@ function NetworkCard({
         </Button>
       </div>
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+      {/* Says what the save actually DID. Changing this id rewrites the hoplink baked into every
+          funnel's stored HTML, and that is the part worth confirming — "Connected" alone was what
+          made a no-op look like a success. */}
+      {justSaved && !error && (
+        <p className="mt-2 text-xs text-emerald-300">
+          Saved{rerendered > 0 ? ` — ${rerendered} funnel${rerendered === 1 ? "" : "s"} updated with the new link` : ""}.
+        </p>
+      )}
     </Card>
   );
 }

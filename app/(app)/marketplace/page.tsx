@@ -10,7 +10,6 @@ import CostBadge from "@/components/CostBadge";
 import Link from "next/link";
 import { Rocket, Search, CheckCircle2, Package, Flame, Hourglass } from "lucide-react";
 import type { Job } from "@/lib/shared";
-import MarketplaceHighlights from "@/components/MarketplaceHighlights";
 import ProductsPanel, { type ProductStats } from "@/components/ProductsPanel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -229,10 +228,6 @@ export default function Marketplace() {
           />
         </button>
       </section>
-
-      {/* What the marketplace looks like today, before you've queued anything — the discovery form
-          above answers "find me products in X", this answers "what should I even look at". */}
-      <MarketplaceHighlights onAdded={load} />
 
       <ProductsPanel
         basePath="/marketplace"

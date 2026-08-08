@@ -26,7 +26,12 @@ export default function Toaster() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2">
+    // Top centre. `left-1/2 -translate-x-1/2` rather than `inset-x-0 mx-auto`, so the strip is
+    // only as wide as the toasts themselves — a full-width container would sit invisibly over the
+    // top bar, and `pointer-events-none` protects clicks but not hover states underneath it.
+    // Newest is still first in the array, which now reads correctly: the newest toast is the one
+    // nearest the top of the screen, where the eye already is.
+    <div className="pointer-events-none fixed left-1/2 top-4 z-[100] flex w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-2">
       {toasts.map((t) => {
         const { cls, Icon } = STYLE[t.kind];
         return (
