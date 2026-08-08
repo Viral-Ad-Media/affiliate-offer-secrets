@@ -746,6 +746,36 @@ into the bridge page; see content rule 8.)
 - Campaigns generated before this shipped have `page_copy = null` and can't be edited until
   regenerated — `PageEditor` shows a clear message rather than a broken form in that case.
 
+## A funnel has a URL from generation, not from publish
+
+`/preview/funnel/{campaignId}` and `/preview/step/{stepId}` (`app/preview/[kind]/[id]/route.ts`).
+A funnel page previously had no URL at all until it was published — the public route gates on
+`bridge_published` — and Preview was a `blob:` document built client-side, so the one thing you
+want right after generating a kit had no link you could open, bookmark or send to a teammate.
+
+**Signed-in only, and the gate is by omission.** `/preview` is in NEITHER `PUBLIC_EXACT_PATHS` nor
+`PUBLIC_PREFIX_PATHS`, so middleware's auth gate turns an anonymous request away before the
+handler runs — everything unlisted is gated by default. **Do not add `/preview` to either list.**
+It also reads through the RLS-scoped client AND filters `workspace_id`, so a signed-in member of
+another workspace gets the same 404 as a stranger.
+
+**The `sandbox=""` wrapper is the point, not an implementation detail.** These pages carry the
+tenant's Meta Pixel and a lead form posting to the real `/api/public/leads` on this same origin —
+served as an ordinary document, looking at your own draft would fire live pixels and could write a
+real contact row. An empty sandbox runs no scripts and submits no forms. Same guarantee the blob:
+preview gave, now addressable. Trade, unchanged from that one: a countdown block sits still.
+
+**Blog posts deliberately do NOT route through here.** `/api/blog/preview/post/[id]` already did
+exactly this, with `page_copy`/`seo_index` handling and a `previewBase` that keeps internal links
+inside the preview. A branch for posts was written here and then removed on finding it; the blog
+editor's draft link points at the existing route. **The editors' own Preview button still renders
+locally** — it previews UNSAVED edits, which no URL can.
+
+**Verified live, signed in**: anonymous → 307 to `/login`; own unpublished funnel → renders as a
+real page; `sandbox=""` present and `contentDocument` opaque (so scripts genuinely cannot run); a
+funnel step → renders; the same campaign's PUBLIC `/p/` URL → still 404, publish gate untouched;
+and another workspace's funnel id → "Not found".
+
 ## Bridge page publish/draft state
 
 Building (or editing) a campaign's bridge page no longer makes it publicly reachable by itself.
