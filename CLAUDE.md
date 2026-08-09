@@ -1060,6 +1060,49 @@ lookup, nothing else changes.
   (including real ad click-throughs, since it's the same URL) keeps seeing the same variant, and
   `views` increments via a `service_role`-only atomic RPC (`increment_bridge_variant_views`) rather
   than a read-modify-write from the app.
+- **`views` counts VISITORS, not requests** — the increment is guarded on the same condition that
+  sets the sticky cookie, so a refresh, a back button or a re-open from history doesn't count
+  again. It used to fire on every request, which was wrong twice over: the rate beside it
+  (leads ÷ views) was really leads-per-pageview and read lower than the true opt-in rate, and the
+  confidence figure below treats each view as an independent trial — which repeat views by one
+  person are not. Feeding them in makes the test ANTI-conservative, overstating certainty in
+  exactly the direction that gets a test called early. Rows written before this keep their
+  inflated counts, so a test already running steps UP at that deploy rather than being restated.
+
+### "% to beat control", and the gate in front of it
+
+`lib/splitTestStats.ts` (pure, no I/O — same shape as `lib/bridgeVariants.ts`) computes
+**P(variant's true opt-in rate > control's)** under a Beta-Binomial model with a uniform prior,
+rendered by `components/VariantConfidence.tsx` on BOTH split-test views (the funnel-map branch and
+the detailed panel) so the two can't disagree about who is winning — same reason `useSplitTest`
+is shared.
+
+- **It is a probability, not a p-value, and that is the point.** A p-value answers "how surprising
+  would this data be if the two pages were identical", which is not the question anyone here is
+  asking, and it gets read as "chance the variant wins" so reliably that showing it under that
+  label would be worse than showing nothing. The Bayesian quantity IS what people already think a
+  confidence score means. It's also how ClickFunnels describes theirs ("the chance of the
+  variation outperforming the control").
+- **The gate matters more than the number.** Below `MIN_VISITORS_PER_ARM` (100, on the THINNER
+  arm) or `MIN_CONVERSIONS_TOTAL` (10 across both), no percentage is shown at all — the card says
+  what's still needed instead. A page reading "97%" off three conversions is the specific failure
+  this exists to prevent; before this, 60% from 5 visitors and 60% from 500 rendered identically.
+  Both constants are judgement calls, not derived — there is no sample size that makes a test
+  "valid", only ones that make the answer less noisy.
+- **Nothing says "significant" and nothing declares a winner.** `describeProbability` tops out at
+  "Clearly ahead"; promoting a variant stays the operator's explicit action through
+  `end_bridge_split_test`.
+- **Multiple variants get a caveat, not a correction.** Each P(beats control) is individually
+  correct; what goes wrong is reading the best of five as if it were the only one tried. That's a
+  judgement about how hard to lean on a maximum, not arithmetic, so `MultipleVariantsNote` says so
+  in words rather than silently adjusting the numbers.
+- **Exact closed form** (Σ over the variant's conversions, summed in log space — the individual
+  Beta terms underflow to zero in double precision long before the sum does), swapping to a normal
+  approximation past 2000 conversions purely for speed; verified the two agree where they meet.
+  **Checked against an independent seeded Monte Carlo** (200k draws) across six scenarios
+  including lopsided traffic and zero-conversion arms — agreement within 0.001 — plus symmetry
+  (`P(B>A) + P(A>B) = 1`), monotonicity, and NaN-freedom on conversions-exceeding-visitors, which
+  is reachable in real data because views and leads are written by different paths.
 - **Lead attribution never trusts client input**: `app/api/public/leads/route.ts` independently
   reads the same sticky cookie (the browser sends it automatically — confirmed working for both
   the default `/p/` URL and a custom domain) and re-validates the variant id actually belongs to

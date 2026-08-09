@@ -6,6 +6,7 @@ import { useSplitTest } from "@/lib/useSplitTest";
 import { NodeCard } from "@/components/FunnelNodeCard";
 import EditorPreviewButton from "@/components/EditorPreview";
 import { Button } from "@/components/ui/button";
+import VariantConfidence, { MultipleVariantsNote } from "@/components/VariantConfidence";
 
 // The opt-in page's position in the funnel map (components/FunnelMap.tsx) — either one card (no
 // test running, the ~100% common case) or, once a split test is started, a real fork: parallel
@@ -136,10 +137,17 @@ export default function SplitTestBranch({
                     />
                     wt
                   </label>
-                  <span>{v.views} views</span>
+                  {/* "visitors", not "views": the counter is incremented once per sticky
+                      assignment rather than once per request, so a refresh doesn't count again. */}
+                  <span>{v.views} visitors</span>
                   <span>{leads} leads</span>
                   <span className={v.status === "paused" ? "text-zinc-600" : "text-emerald-300"}>
                     {v.status === "paused" ? "paused" : rate}
+                  </span>
+                  {/* Its own line — `stats` wraps, and the chip is a sentence rather than a
+                      figure. basis-full forces the break instead of relying on the card width. */}
+                  <span className="basis-full">
+                    <VariantConfidence variant={v} variants={variants} leadCounts={leadCounts} />
                   </span>
                 </>
               }
@@ -203,6 +211,10 @@ export default function SplitTestBranch({
             />
           );
         })}
+      </div>
+
+      <div className="mx-auto max-w-lg text-center">
+        <MultipleVariantsNote variants={variants} />
       </div>
 
       <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">

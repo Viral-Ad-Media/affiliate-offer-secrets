@@ -95,13 +95,27 @@ export async function servePublicCampaignPage(
 
     html = chosen.is_control ? (campaign.bridge_html as string) : ((chosen.bridge_html as string) ?? html);
 
+    // Counted once per VISITOR, not once per request — hence the `setCookie` guard, which is only
+    // set on the visit that assigns the variant. A refresh, a back button, or someone re-opening
+    // the page from their history keeps the same sticky variant and must not count again.
+    //
+    // This changed: it used to increment unconditionally. Two things were wrong with that. The
+    // rate shown beside it (leads ÷ views) was really leads-per-pageview and read lower than the
+    // real opt-in rate; and the split test's confidence figure treats each view as an independent
+    // trial, which repeat views of one page by one person are not — feeding them in makes the
+    // test anti-conservative, overstating certainty in the exact direction that gets a test
+    // called early. Historical rows carry the old inflated counts, so rates on a test that was
+    // already running will step UP at this deploy rather than being restated.
+    //
     // Best-effort, deliberately awaited (not fire-and-forget) — a Vercel serverless function can
     // drop an unawaited promise once the response is sent. A views-counter hiccup must never
     // break serving the actual page, hence the try/catch swallowing any error.
-    try {
-      await admin.rpc("increment_bridge_variant_views", { p_variant_id: chosen.id });
-    } catch {
-      // ignore — stats are secondary to serving the page
+    if (setCookie) {
+      try {
+        await admin.rpc("increment_bridge_variant_views", { p_variant_id: chosen.id });
+      } catch {
+        // ignore — stats are secondary to serving the page
+      }
     }
   }
 

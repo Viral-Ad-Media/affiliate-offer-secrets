@@ -6,6 +6,7 @@ import { useSplitTest } from "@/lib/useSplitTest";
 import PageEditor from "@/components/PageEditor";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import VariantConfidence, { MultipleVariantsNote } from "@/components/VariantConfidence";
 
 export default function SplitTestPanel({
   campaignId,
@@ -140,12 +141,13 @@ export default function SplitTestPanel({
                     )}
                   </div>
                 </div>
-                <div className="mt-1.5 flex items-center gap-4 text-xs text-zinc-500">
+                <div className="mt-1.5 flex flex-wrap items-center gap-4 text-xs text-zinc-500">
                   <span className="flex items-center gap-1">
-                    <Eye className="h-3 w-3" /> {v.views} views
+                    <Eye className="h-3 w-3" /> {v.views} visitors
                   </span>
                   <span>{leads} leads</span>
                   <span>{rate === "—" ? rate : `${rate}%`} rate</span>
+                  <VariantConfidence variant={v} variants={variants} leadCounts={leadCounts} />
                   {v.is_control && (
                     <span className="text-zinc-600">Edit via the section above</span>
                   )}
@@ -153,6 +155,8 @@ export default function SplitTestPanel({
               </div>
             );
           })}
+
+          <MultipleVariantsNote variants={variants} />
 
           {editingVariant && (
             <div className="rounded-lg border border-ink-700 p-3">
