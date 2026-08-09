@@ -65,13 +65,28 @@ export type CampaignPostResult =
  * failure here returns null and the post is simply created uncategorised, exactly as before. A
  * category is an organising nicety and must never be the reason an article isn't saved.
  */
+/**
+ * A marketplace niche is a TAXONOMY PATH ("Health & Fitness > Beauty"); a blog category is a name.
+ *
+ * Take the root segment. Splitting only on ">" — never on "/" — because ClickBank has a category
+ * literally named "Computers / Internet", so treating a slash as a separator would invent a
+ * category called "Computers" that does not exist upstream.
+ *
+ * Root rather than leaf on purpose: a small blog is better served by a few full categories than by
+ * many holding one post each, and the index only lists categories that actually contain a
+ * published post — a one-post category is close to a dead end.
+ */
+export function categoryNameFromNiche(niche: string | null | undefined): string {
+  return (niche ?? "").split(">")[0].trim();
+}
+
 async function categoryForNiche(
   admin: AdminClient,
   workspaceId: string,
   userId: string,
   niche: string | null | undefined
 ): Promise<string | null> {
-  const name = (niche ?? "").trim();
+  const name = categoryNameFromNiche(niche);
   if (!name) return null;
   try {
     const { data: existing } = await admin
