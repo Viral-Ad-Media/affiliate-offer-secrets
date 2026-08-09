@@ -2361,6 +2361,61 @@ isn't, which is the deceptive-urgency pattern content rule 2 already rules out a
 regulators actually act on. The evergreen window is capped at 7 days for the same reason. `date`
 mode counts to a real instant and renders nothing until one is set.
 
+## Nav bar, progress bar and icon blocks
+
+Three more element types, all zero-JS on the published page unless a nav link actually needs a
+handler.
+
+**Navigation** carries a brand (text or an uploaded logo) and up to `MAX_NAV_LINKS` links, each a
+full `ButtonAction` rather than a bare href. That is the point: the nav on a landing page usually
+points at a SECTION of the same page, so `scroll` has to be first-class, and once it is, `popup`
+(open the opt-in form) comes free from the union the button block already uses. `submit` is never
+offered — a nav sits outside every form. `sticky` is pure CSS.
+
+**A nav link is DROPPED when its action can't be resolved; a button's is a hard reject.** Same
+checks either way — `softButtonAction()` in the validator shares them with the button case, so the
+two can't drift — only the failure mode differs, and deliberately: a button is usually the page's
+one way onward and a broken one should fail loudly, while a nav has several and being unable to
+save the page because one of six rows is half-typed is the worse failure. Same call the footer's
+links already made.
+
+**This surfaced a real, pre-existing bug: `scroll` never worked.** Sections rendered no `id`, so
+`getElementById` found nothing, and a "scroll to this section" button — offered by the settings
+panel since actions shipped — did nothing at all on the published page. Sections now render
+`id="{block.id}"` (ID_RE-validated, visually inert, safe on pages already taking traffic). The
+second half: `FORM_ACTION_SCRIPT` was emitted only by the FORM block, so a scroll/popup control on
+a page with no form had no handler either. The button and nav cases emit it too; the script
+self-guards on `window.__aosForms`, so emitting it from three places costs nothing.
+
+The editor offers scroll/popup targets as a PICKER built from the live tree (`navTargetsOf`), not
+a typed id — an id that names nothing renders a control that silently does nothing, and there is
+no way to tell by looking at it.
+
+**Progress** is a static bar; the fill width is baked into the style attribute at render time, so
+it costs a blog post nothing and works with JS disabled — same reasoning as the carousel being
+CSS-only. The percentage is clamped in BOTH the validator and the renderer, because the one place
+a stored number reaches a `style` attribute is the place to be certain about it.
+
+**The number is whatever the operator types and it is shown to paid traffic as a fact.** A bar
+reading "82% claimed" that isn't measuring anything is the fabricated-scarcity pattern content
+rule 2 rules out and the one regulators act on — the same trap the countdown block's evergreen cap
+exists to avoid. The editor says so at the point of entry; the renderer can't know, so it doesn't
+pretend to.
+
+**Icon** is a single icon at a chosen size — the decorative sibling of `icon_list`, drawing from
+the same `ICON_SVG_PATHS` allowlist. An unknown name renders nothing rather than being
+interpolated anywhere, and the size is clamped to `MIN_ICON_SIZE`..`MAX_ICON_SIZE` before it
+reaches the attribute.
+
+Verified directly against the validator and renderer (18 assertions): a `javascript:` nav href, a
+quote-injecting scroll target and a `submit` link are all dropped while the two legitimate links
+survive; `percent: 999` clamps to 100 in both the CSS width and `aria-valuenow`; a script tag in a
+progress label is escaped; an unknown icon name falls back to a known one and never appears in the
+output; and sections really do render the id a scroll action needs.
+
+CSS for all three lives in BOTH `PAGE_STYLE` (renderPages.ts) and `PUBLIC_CSS` (lib/blog.ts) —
+**those two stylesheets must not drift**, as the comment in each says.
+
 ## Page theme (palette / typography / buttons / form)
 
 `PageBlockTree.theme` — same slot as `contentWidth`, for the same reason: one setting covers the
@@ -3351,6 +3406,19 @@ endpoint. The panel owns its 5s poll and URL-driven pager; the host page passes 
 the pager and filter-reset navigate) and can read the stats the panel already fetched via
 `onData`. Marketplace nudges it with `refreshKey` after queueing a discovery run. Product detail
 pages highlight My Products in the nav.
+
+### Two small ProductsPanel fixes
+
+**"No products yet" was being claimed before the first fetch returned.** Nothing distinguished an
+empty list from one that hadn't been asked for, so every visit flashed the empty state — on an
+account with 59 tracked products, which reads as data loss for the second it is up. A `loaded`
+flag now gates it, set even when the first load FAILS: we have still asked by then, and the stale
+banner explains that case better than a permanent skeleton would. The empty state is a claim about
+the data and must not be made before there is data to claim anything about.
+
+**Add product manually is a dialog, not an unfolding panel.** The form is six fields tall, and
+expanding it in place pushed the products table — the thing the page is for — off the screen.
+Closing keeps whatever was typed; only a successful add resets it.
 
 ## Marketplace: Top products and Trending
 

@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Inbox,
   ListChecks,
+  Loader2,
   RefreshCw,
   Rocket,
 } from "lucide-react";
@@ -82,6 +83,11 @@ export default function ProductsPanel({
   // The last poll failed. Almost always an expired session; the banner links to a reload rather
   // than guessing, since a transient 500 recovers on the next tick without anyone doing anything.
   const [stale, setStale] = useState(false);
+  // Nothing distinguished "no products" from "haven't asked yet", so every visit flashed the
+  // empty state — including on an account with 59 tracked products, which reads as data loss for
+  // the second it is up. The empty state is a claim about the data; it must not be made before
+  // the first response lands.
+  const [loaded, setLoaded] = useState(false);
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -111,6 +117,9 @@ export default function ProductsPanel({
       fetch("/api/jobs").then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
     setStale(!p || !j);
+    // Set before the early return: a failed first load still means we have asked, and the stale
+    // banner explains that case better than a permanent skeleton would.
+    setLoaded(true);
     if (!p && !j) return;
 
     const jobRows: Job[] = Array.isArray(j) ? j : [];
@@ -448,7 +457,15 @@ export default function ProductsPanel({
                   </td>
                 </TableRow>
               ))}
-              {products.length === 0 && (
+              {products.length === 0 && !loaded && (
+                <TableRow>
+                  <td colSpan={9} className="px-4 py-14 text-center">
+                    <Loader2 className="mx-auto mb-2.5 h-6 w-6 animate-spin text-zinc-600" />
+                    <p className="text-sm text-zinc-500">Loading products…</p>
+                  </td>
+                </TableRow>
+              )}
+              {products.length === 0 && loaded && (
                 <TableRow>
                   <td colSpan={9} className="px-4 py-14 text-center">
                     <Inbox className="mx-auto mb-2.5 h-7 w-7 text-zinc-600" />
