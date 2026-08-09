@@ -1016,8 +1016,30 @@ feature existed.
   component fetching campaign + steps via `createClient()`, same pattern as `/broadcast/[id]/page.tsx`).
   The product page's Bridge tab is now preview-only (the existing read-only iframe) with a "Manage &
   publish this funnel" link there.
-- **The management page defaults to a map, not one long inline scroll.** `components/FunnelMap.tsx`
-  renders the opt-in page and every step as a sequence of nodes (icon + label + a connecting arrow),
+- **The map is a horizontal canvas of page THUMBNAILS, not a list of rows.** It reads left to
+  right, one card per page, each showing a live miniature of that page's stored html
+  (`components/FunnelNodeCard.tsx` — `PageThumb` + `NodeCard`, shared with `SplitTestBranch` so the
+  branch's variant cards and the ordinary step cards can't drift into two visual languages). It was
+  a stack of full-width rows, which told you the order and nothing else: you could not tell an
+  opt-in from a thank-you page without reading the label.
+  - **Horizontal because a funnel is a sequence in time** — and because a split test then draws as
+    what it actually is: one column that forks into stacked parallel cards and merges back into the
+    next connector. Vertically stacked rows cannot show that without the branch reading as two
+    consecutive steps.
+  - **`sandbox=""` on every thumbnail is load-bearing, not tidiness.** These pages carry the
+    tenant's Meta Pixel and a lead form posting to the real `/api/public/leads` on this same
+    origin — rendered as ordinary documents, a map with six thumbnails would fire six live pixel
+    loads every time someone opened the page they edit from. Same guarantee `/preview` relies on.
+    `pointer-events-none` on top of it means a click always reaches the card, never the iframe.
+  - The thumbnail renders a 1120px logical page scaled by exactly 1/5 into the 224px card
+    (`NODE_WIDTH`), so the numbers have to move together if either changes.
+  - Actions (preview / edit / more) are hover- and focus-revealed over the thumbnail rather than
+    always drawn, so a funnel at rest reads as a row of pages instead of a row of toolbars.
+  - `components/PreviewIconButton.tsx` was deleted with this — the map was its only consumer. Steps
+    and the opt-in control use their real `/preview/...` link directly; a non-control VARIANT has no
+    route of its own, so it uses `EditorPreviewButton`'s blob preview, which is the same sandboxed
+    document either way.
+- **What each node shows** (icon + label + a connecting arrow),
   each with a **Preview** action (opens a shadcn `Dialog` with an `iframe srcDoc={html}` of that
   page's currently-*stored* HTML — `campaign.bridge_html` for the opt-in node, `step.html` per step
   — not a fresh render, so it can go stale relative to unsaved in-progress edits until the next

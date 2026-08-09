@@ -1,22 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { Beaker, Pencil, Pause, Play, Plus, Trash2, LogIn, Loader2 } from "lucide-react";
+import { Beaker, Pencil, Pause, Play, Plus, Trash2, LogIn, Loader2, Eye } from "lucide-react";
 import { useSplitTest } from "@/lib/useSplitTest";
+import { NodeCard } from "@/components/FunnelNodeCard";
+import EditorPreviewButton from "@/components/EditorPreview";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import PreviewIconButton from "@/components/PreviewIconButton";
 
-// Renders the opt-in page's position in the funnel map (components/FunnelMap.tsx) — either as a
-// single plain node (no test running, the ~100% common case) or, once a split test is started, as
-// a visual branch: parallel variant cards that represent the real weighted-random split a visitor
-// actually experiences (lib/bridgeVariants.ts's pickWeightedVariant), merging back into the same
-// single funnel path below. This is the map-integrated counterpart to components/SplitTestPanel.tsx
-// (the detailed vertical list shown on the opt-in page's own focused editor view) — both share
-// lib/useSplitTest.ts so neither can drift on data/mutation behavior; this component only differs
-// in layout (compact horizontal cards, no inline per-variant editor — editing routes back to the
-// parent page's own view-switching via onEditVariant/onEditControl) and in owning the "no test yet"
-// empty state itself, so FunnelMap never needs its own awareness of whether a test is running.
+// The opt-in page's position in the funnel map (components/FunnelMap.tsx) — either one card (no
+// test running, the ~100% common case) or, once a split test is started, a real fork: parallel
+// variant cards stacked in the same column, which is what the weighted-random split
+// (lib/bridgeVariants.ts's pickWeightedVariant) actually does to a visitor. They merge back into
+// the single connector on the right, because that is also true — every variant leads to the same
+// next step.
+//
+// This is the map-integrated counterpart to components/SplitTestPanel.tsx (the detailed list on
+// the opt-in page's own editor view). Both share lib/useSplitTest.ts, so neither can drift on data
+// or mutation behaviour; this one differs only in layout and in owning the "no test yet" state, so
+// FunnelMap never needs its own awareness of whether a test is running.
 export default function SplitTestBranch({
   campaignId,
   bridgeHtml,
@@ -28,37 +29,66 @@ export default function SplitTestBranch({
   onEditControl: () => void;
   onEditVariant: (variantId: string) => void;
 }) {
-  const { variants, leadCounts, weights, setWeights, busy, error, startTest, addVariant, commitWeight, toggleStatus, deleteVariant, endTest } =
-    useSplitTest(campaignId);
+  const {
+    variants,
+    leadCounts,
+    weights,
+    setWeights,
+    busy,
+    error,
+    startTest,
+    addVariant,
+    commitWeight,
+    toggleStatus,
+    deleteVariant,
+    endTest,
+  } = useSplitTest(campaignId);
   const [promoteId, setPromoteId] = useState<string>("");
 
   if (variants === null) return null;
 
+  const action =
+    "flex h-7 w-7 items-center justify-center rounded-md bg-ink-900/90 text-zinc-200 ring-1 ring-white/10 hover:bg-ink-800 hover:text-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-400";
+
   if (variants.length === 0) {
-    // No test running — the plain single-node look, matching every other MapNode in the funnel,
-    // plus a "Start split test" affordance so starting one doesn't require leaving the map first.
     return (
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-ink-700 bg-ink-800/60 p-3">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-ink-600 bg-ink-900 text-emerald-400">
-            <LogIn className="h-4 w-4" />
-          </span>
-          <div>
-            <div className="text-sm font-medium text-zinc-100">Opt-in page</div>
-            <div className="text-xs text-zinc-500">Every funnel's entry point — lead capture</div>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <PreviewIconButton html={bridgeHtml} title="Opt-in page" href={`/preview/funnel/${campaignId}`} />
-          <Button onClick={onEditControl}  title="Edit" variant="outline" className="!px-2 !py-1">
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button onClick={startTest} disabled={busy === "start"}  title="Start a split test" variant="outline" className="!px-2 !py-1 text-xs">
-            {busy === "start" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Beaker className="h-3.5 w-3.5" />}
-            Split test
-          </Button>
-        </div>
-        {error && <p className="w-full text-xs text-red-300">{error}</p>}
+      <div className="shrink-0">
+        <NodeCard
+          icon={LogIn}
+          badge="Entry"
+          title="Opt-in page"
+          subtitle="Where the funnel captures a lead"
+          html={bridgeHtml}
+          onOpen={onEditControl}
+          actions={
+            <>
+              <a
+                href={`/preview/funnel/${campaignId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Preview in a new tab"
+                aria-label="Preview the opt-in page"
+                className={action}
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </a>
+              <button type="button" onClick={onEditControl} title="Edit this page" aria-label="Edit the opt-in page" className={action}>
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={startTest}
+                disabled={busy === "start"}
+                title="Start a split test"
+                aria-label="Start a split test"
+                className={action}
+              >
+                {busy === "start" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Beaker className="h-3.5 w-3.5" />}
+              </button>
+            </>
+          }
+        />
+        {error && <p className="mt-1 w-56 text-xs text-red-300">{error}</p>}
       </div>
     );
   }
@@ -66,101 +96,139 @@ export default function SplitTestBranch({
   const nonControl = variants.filter((v) => !v.is_control);
 
   return (
-    <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.03] p-3">
-      <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-300">
-        <Beaker className="h-3.5 w-3.5" /> Split test running — traffic is split across {variants.length} variants
+    <div className="shrink-0 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-500/[0.04] p-2.5">
+      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+        <Beaker className="h-3.5 w-3.5" /> Split test · {variants.length} variants
       </div>
-      {error && <p className="mb-2 text-xs text-red-300">{error}</p>}
+      {error && <p className="mb-2 w-56 text-xs text-red-300">{error}</p>}
 
-      <div className="flex flex-wrap gap-2">
+      {/* Stacked, not side by side: the fork happens at ONE point in the funnel, so the variants
+          have to share a column for the connector on the right to mean "and then all of them
+          continue here". Laying them out horizontally would read as consecutive steps. */}
+      <div className="flex flex-col gap-2">
         {variants.map((v) => {
           const leads = leadCounts[v.id] ?? 0;
-          const rate = v.views > 0 ? ((leads / v.views) * 100).toFixed(1) : "—";
+          const rate = v.views > 0 ? `${((leads / v.views) * 100).toFixed(1)}%` : "—";
           return (
-            <div key={v.id} className="min-w-[180px] flex-1 rounded-lg border border-ink-700 bg-ink-900 p-2.5">
-              <div className="flex items-center justify-between gap-1.5">
-                <span className="text-sm font-medium text-zinc-100">
-                  {v.label}
-                  {v.is_control && <span className="ml-1 text-xs text-zinc-500">(control)</span>}
-                </span>
-                <Badge
-                  className={`!px-1.5 !py-0.5 ${
-                    v.status === "active" ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" : "border-ink-600 bg-ink-800 text-zinc-400"
-                  }`}>
-                  {v.status}
-                </Badge>
-              </div>
-              <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
-                <label className="flex items-center gap-1">
-                  Wt
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={weights[v.id] ?? v.weight}
-                    onChange={(e) => setWeights((w) => ({ ...w, [v.id]: Number(e.target.value) || 1 }))}
-                    onBlur={() => weights[v.id] !== v.weight && commitWeight(v.id)}
-                    className="w-12 rounded border border-ink-600 bg-ink-800 px-1 py-0.5 text-xs text-zinc-100"
-                  />
-                </label>
-                <span>{v.views} views</span>
-                <span>{leads} leads</span>
-                <span>{rate === "—" ? rate : `${rate}%`}</span>
-              </div>
-              <div className="mt-1.5 flex items-center gap-1">
-                {/* The control's own content lives on the campaign row, never on its variant row
-                    (bridge_variants_control_no_content) — so its preview reads bridgeHtml. */}
-                <PreviewIconButton html={v.is_control ? bridgeHtml : v.bridge_html} title={v.label} />
-                <Button
-                  onClick={() => (v.is_control ? onEditControl() : onEditVariant(v.id))}
-                  
-                  title="Edit copy" variant="outline" className="!px-1.5 !py-1">
-                  <Pencil className="h-3 w-3" />
-                </Button>
-                <Button
-                  onClick={() => toggleStatus(v)}
-                  disabled={busy === v.id}
-                  title={v.status === "active" ? "Pause" : "Resume"} variant="outline" className="!px-1.5 !py-1">
-                  {v.status === "active" ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                </Button>
-                {!v.is_control && (
-                  <Button
-                    onClick={() => deleteVariant(v.id)}
+            <NodeCard
+              key={v.id}
+              icon={LogIn}
+              badge={v.is_control ? `${v.label} · control` : v.label}
+              title="Opt-in page"
+              selectedTone="branch"
+              // The control's own content lives on the campaign row, never on its variant row
+              // (bridge_variants_control_no_content) — so its thumbnail reads bridgeHtml.
+              html={v.is_control ? bridgeHtml : v.bridge_html}
+              onOpen={() => (v.is_control ? onEditControl() : onEditVariant(v.id))}
+              stats={
+                <>
+                  <label className="flex items-center gap-1" title="Share of traffic">
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={weights[v.id] ?? v.weight}
+                      onChange={(e) => setWeights((w) => ({ ...w, [v.id]: Number(e.target.value) || 1 }))}
+                      onBlur={() => weights[v.id] !== v.weight && commitWeight(v.id)}
+                      className="w-11 rounded border border-ink-600 bg-ink-900 px-1 py-0.5 text-[11px] text-zinc-100"
+                    />
+                    wt
+                  </label>
+                  <span>{v.views} views</span>
+                  <span>{leads} leads</span>
+                  <span className={v.status === "paused" ? "text-zinc-600" : "text-emerald-300"}>
+                    {v.status === "paused" ? "paused" : rate}
+                  </span>
+                </>
+              }
+              actions={
+                <>
+                  {/* The control has a real, shareable /preview URL; a variant has no route of its
+                      own, so it falls back to the blob preview — same sandboxed document either
+                      way, so what you see (and what it can't fire) is identical. */}
+                  {v.is_control ? (
+                    <a
+                      href={`/preview/funnel/${campaignId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Preview in a new tab"
+                      aria-label={`Preview ${v.label}`}
+                      className={action}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </a>
+                  ) : (
+                    <EditorPreviewButton
+                      render={() => v.bridge_html || ""}
+                      title={`Opt-in page — ${v.label}`}
+                      label=""
+                      className={action}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => (v.is_control ? onEditControl() : onEditVariant(v.id))}
+                    title="Edit this variant"
+                    aria-label={`Edit ${v.label}`}
+                    className={action}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleStatus(v)}
                     disabled={busy === v.id}
-                    
-                    title="Delete variant" variant="outline" className="!px-1.5 !py-1 hover:text-red-300">
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                )}
-              </div>
-            </div>
+                    title={v.status === "active" ? "Pause this variant" : "Resume this variant"}
+                    aria-label={v.status === "active" ? `Pause ${v.label}` : `Resume ${v.label}`}
+                    className={action}
+                  >
+                    {v.status === "active" ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                  </button>
+                  {!v.is_control && (
+                    <button
+                      type="button"
+                      onClick={() => deleteVariant(v.id)}
+                      disabled={busy === v.id}
+                      title="Delete this variant"
+                      aria-label={`Delete ${v.label}`}
+                      className={`${action} hover:text-red-300`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </>
+              }
+            />
           );
         })}
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <Button onClick={addVariant} disabled={busy === "add" || variants.length >= 5} variant="outline" className="!py-1 text-xs">
+      <div className="mt-2 w-56 space-y-1.5">
+        <Button
+          onClick={addVariant}
+          disabled={busy === "add" || variants.length >= 5}
+          variant="outline"
+          className="w-full !py-1 text-xs"
+        >
           {busy === "add" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
           Add variant
         </Button>
-        <div className="ml-auto flex items-center gap-2">
-          <select
-            value={promoteId}
-            onChange={(e) => setPromoteId(e.target.value)}
-            className="rounded-lg border border-ink-600 bg-ink-800 px-2 py-1.5 text-xs text-zinc-100"
-          >
-            <option value="">Don't promote a winner</option>
-            {nonControl.map((v) => (
-              <option key={v.id} value={v.id}>
-                Promote {v.label} to control
-              </option>
-            ))}
-          </select>
-          <Button onClick={() => endTest(promoteId || null)} disabled={busy === "end"} variant="outline" className="!py-1 text-xs">
-            {busy === "end" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            End test
-          </Button>
-        </div>
+        <select
+          value={promoteId}
+          onChange={(e) => setPromoteId(e.target.value)}
+          className="w-full rounded-lg border border-ink-600 bg-ink-800 px-2 py-1.5 text-xs text-zinc-100"
+        >
+          <option value="">Don&apos;t promote a winner</option>
+          {nonControl.map((v) => (
+            <option key={v.id} value={v.id}>
+              Promote {v.label} to control
+            </option>
+          ))}
+        </select>
+        <Button onClick={() => endTest(promoteId || null)} disabled={busy === "end"} variant="outline" className="w-full !py-1 text-xs">
+          {busy === "end" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          End test
+        </Button>
       </div>
     </div>
   );
