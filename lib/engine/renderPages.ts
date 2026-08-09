@@ -314,6 +314,12 @@ const PAGE_STYLE = `
   .aos-form-popup.is-open { display:flex; }
   .aos-form-popup .aos-form { position:relative; width:100%; }
   .aos-form-close { position:absolute; top:8px; right:10px; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; color:var(--t-muted,#888); }
+  /* Page footer block. DUPLICATED in the other stylesheet; change both. */
+  .page-footer { margin-top:32px; padding-top:16px; border-top:1px solid var(--t-field-border,#e5e5e5);
+    font-size:13px; color:#666; text-align:center; }
+  .page-footer p { margin:0 0 6px; }
+  .page-footer-links { display:flex; flex-wrap:wrap; gap:14px; justify-content:center; }
+  .page-footer-links a { color:inherit; text-decoration:underline; }
   /* Accordion. Native <details>, so no script — see the faq_item case in blockTree.ts.
      DUPLICATED in the other stylesheet; change both. */
   .faq-item { margin-bottom:10px; border:1px solid var(--t-field-border,#e5e5e5); border-radius:8px; }

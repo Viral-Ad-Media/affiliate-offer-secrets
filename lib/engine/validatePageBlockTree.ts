@@ -53,6 +53,7 @@ const MAX_DEPTH = 4; // root(section) -> row -> column -> element
 const MAX_SECTION_CHILDREN = 60;
 const MAX_COLUMN_CHILDREN = 20;
 const MAX_FORM_CHILDREN = 10;
+const MAX_FOOTER_LINKS = 6;
 const MAX_FIELD_OPTIONS = 12; // radio/select choices — a lead form asking for more than this is a survey
 const MAX_ROOT_BLOCKS = 40;
 
@@ -180,6 +181,31 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
             const icon = typeof it.icon === "string" && ALLOWED_ICON_NAMES.includes(it.icon) ? it.icon : ALLOWED_ICON_NAMES[0];
             return { icon, text: clampStr(it.text, MAX_TEXT_MEDIUM) };
           }),
+        },
+      };
+    }
+    case "footer": {
+      const rawLinks = Array.isArray(content.links) ? content.links : [];
+      return {
+        id,
+        type: "footer",
+        style,
+        content: {
+          text: clampStr(content.text, MAX_TEXT_MEDIUM),
+          // A link with no label or an unusable href is DROPPED, not rejected. Same call as every
+          // other soft failure here: someone clearing a footer href mid-edit must not be unable to
+          // save the page. isValidRedirectUrl is the same check a button's href goes through, so
+          // there is no looser second path from typed text to a navigable URL.
+          links: rawLinks
+            .slice(0, MAX_FOOTER_LINKS)
+            .map((l) => {
+              const link = (l ?? {}) as Record<string, unknown>;
+              return {
+                label: clampStr(link.label, MAX_TEXT_SHORT),
+                href: typeof link.href === "string" && isValidRedirectUrl(link.href) ? link.href : "",
+              };
+            })
+            .filter((l) => l.label !== ""),
         },
       };
     }

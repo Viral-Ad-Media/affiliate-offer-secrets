@@ -1,4 +1,8 @@
 import { embedUrl, type VideoSource } from "./videoEmbed";
+// Isomorphic and I/O-free, so importing it keeps this module's no-server-imports rule intact.
+// The renderer re-checks each href defensively; validatePageBlockTree is still the boundary — same
+// belt-and-braces the video block already applies by re-parsing its stored source.
+import { isValidRedirectUrl } from "@/lib/validate";
 import type { PageTheme } from "./pageTheme";
 
 // The freeform block-tree page model (Phase O) — sections/rows/columns/elements, each stylable.
@@ -394,7 +398,8 @@ export type ElementBlock =
   | TestimonialBlock
   | CarouselBlock
   | CountdownBlock
-  | FormBlock;
+  | FormBlock
+  | FooterBlock;
 
 /**
  * What a form field COLLECTS, as a named list rather than an input type.
@@ -444,6 +449,7 @@ export const ELEMENT_BLOCK_TYPES = [
   "carousel",
   "countdown",
   "form",
+  "footer",
 ] as const;
 
 // Only ever a child of a lead_capture_form block — never part of ElementBlock, so a Column's
@@ -506,6 +512,22 @@ export type FieldCondition = {
   op: FieldConditionOp;
   /** Ignored by `filled`/`empty`, which test presence rather than a value. */
   value?: string;
+};
+
+/**
+ * The page's closing line: a business/legal footer, not a general text block.
+ *
+ * It exists as its own type rather than "a paragraph you put at the bottom" because it renders a
+ * real <footer> landmark and carries LINKS — the privacy/terms/contact row a page taking paid
+ * traffic is repeatedly asked for. Each href goes through the same isValidRedirectUrl a button's
+ * does, so there is no second, looser path from typed text to a navigable URL.
+ *
+ * Distinct from the locked `disclosure` block, which is the mandatory affiliate notice and is
+ * hoisted last by the renderer regardless. A footer never replaces it.
+ */
+export type FooterBlock = Base & {
+  type: "footer";
+  content: { text: string; links: { label: string; href: string }[] };
 };
 
 export type ColumnBlock = Base & { type: "column"; children: ElementBlock[] };
@@ -736,6 +758,7 @@ export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readon
   carousel: BOX_STYLE_KEYS,
   countdown: TEXT_STYLE_KEYS,
   form: FORM_STYLE_KEYS,
+  footer: TEXT_STYLE_KEYS,
   button: BUTTON_PANEL_STYLE_KEYS,
   video: BOX_STYLE_KEYS,
   faq_item: TEXT_STYLE_KEYS,
@@ -825,6 +848,19 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       return `<div class="video-wrap"${styleAttr(block.style, BOX_STYLE_KEYS)}><iframe src="${escapeHtml(
         embedUrl(src)
       )}" title="${label}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+    }
+    case "footer": {
+      const { text, links } = block.content;
+      const linkHtml = (links ?? [])
+        .filter((l) => l.label.trim() && isValidRedirectUrl(l.href))
+        .map((l) => `<a href="${escapeHtml(l.href)}">${escapeHtml(l.label)}</a>`)
+        .join("");
+      // A footer with neither a line of text nor a usable link renders nothing, like an empty
+      // testimonial — an empty grey bar at the end of the page is worse than no bar.
+      if (!text.trim() && !linkHtml) return "";
+      return `<footer class="page-footer"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${
+        text.trim() ? `<p>${escapeHtml(text)}</p>` : ""
+      }${linkHtml ? `<nav class="page-footer-links">${linkHtml}</nav>` : ""}</footer>`;
     }
     case "faq_item":
       // An accordion via native <details>/<summary> — NO script. That is what lets an FAQ sit on a
@@ -1534,6 +1570,17 @@ export function moveBlockToContainer(tree: PageBlockTree, blockId: string, toRef
 // Default seed content per element type — used when the palette inserts a brand-new instance.
 function defaultElementContent(type: (typeof ELEMENT_BLOCK_TYPES)[number]): ElementBlock["content"] {
   switch (type) {
+    case "footer":
+      // Seeded with the two links a page taking paid traffic is most often asked for, left EMPTY
+      // rather than pointing at invented URLs — a footer link to a page that doesn't exist is
+      // worse than no link, and the empty href is filtered out at render until it's filled in.
+      return {
+        text: `© ${new Date().getFullYear()} Your business name. All rights reserved.`,
+        links: [
+          { label: "Privacy policy", href: "" },
+          { label: "Terms", href: "" },
+        ],
+      };
     case "heading":
       return { text: "New heading" };
     case "subheading":

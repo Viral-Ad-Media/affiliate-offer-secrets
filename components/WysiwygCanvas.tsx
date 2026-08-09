@@ -30,6 +30,7 @@ import {
   PanelLeftOpen,
   Columns2,
   Rows3,
+  PanelBottom,
   EyeOff,
   Lock,
 } from "lucide-react";
@@ -196,6 +197,7 @@ const ELEMENT_PALETTE: { type: PaletteType; label: string; icon: any }[] = [
   { type: "carousel", label: "Carousel", icon: GalleryHorizontal },
   { type: "countdown", label: "Countdown", icon: Timer },
   { type: "form_input", label: "Input", icon: TextCursorInput },
+  { type: "footer", label: "Footer", icon: PanelBottom },
 ];
 
 /**
@@ -1551,6 +1553,69 @@ export default function WysiwygCanvas({
               className="mt-1.5 block w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
             />
           </div>
+        );
+      }
+      case "footer": {
+        const links = el.content.links ?? [];
+        return (
+          <footer className="mt-6 border-t border-gray-200 pt-4 text-center text-[13px] text-gray-500" style={blockInlineStyle(el)}>
+            <EditableText
+              as="p"
+              value={el.content.text}
+              onCommit={(v) => commit(el.id, { text: v })}
+              maxLength={1000}
+              placeholder="© Your business name"
+              className="mb-1.5 block"
+            />
+            <div className="flex flex-wrap justify-center gap-3">
+              {links.map((l, i) => (
+                <span key={i} className="inline-flex items-center gap-1">
+                  <EditableText
+                    as="span"
+                    value={l.label}
+                    onCommit={(v) => {
+                      const next = links.map((x, j) => (j === i ? { ...x, label: v } : x));
+                      commit(el.id, { links: next });
+                    }}
+                    maxLength={200}
+                    placeholder="Link text"
+                    className="underline decoration-gray-300"
+                  />
+                  {/* The href is typed here rather than in the settings panel because a footer's
+                      links are its content — three of them behind a gear would mean opening the
+                      panel three times to fill in one row. An empty one renders nothing. */}
+                  <input
+                    value={l.href}
+                    onChange={(e) => {
+                      const next = links.map((x, j) => (j === i ? { ...x, href: e.target.value } : x));
+                      commit(el.id, { links: next });
+                    }}
+                    placeholder="https://…"
+                    className={`w-32 rounded border px-1 py-0.5 text-[11px] ${
+                      l.href ? "border-gray-200 text-gray-500" : "border-amber-300 text-amber-700"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => commit(el.id, { links: links.filter((_, j) => j !== i) })}
+                    title="Remove link"
+                    className="text-gray-400 hover:text-red-500"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              {links.length < 6 && (
+                <button
+                  type="button"
+                  onClick={() => commit(el.id, { links: [...links, { label: "New link", href: "" }] })}
+                  className="text-[11px] text-emerald-600 underline"
+                >
+                  + link
+                </button>
+              )}
+            </div>
+          </footer>
         );
       }
       case "faq_item":
