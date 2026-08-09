@@ -143,13 +143,6 @@ export default function PageEditor({
         {actions}
       </div>
 
-      {/* Recomputed from the live tree on every edit, so ticking an item is immediate feedback
-          rather than something you find out about after saving. */}
-      <PageChecklist
-        items={funnelPageChecklist(funnelType, tree)}
-        subtitle={funnelType ? (funnelTypeLabel(funnelType) ?? undefined) : undefined}
-      />
-
       <WysiwygCanvas
         tree={tree}
         onChange={setTree}
@@ -162,6 +155,15 @@ export default function PageEditor({
           title: "Page settings",
           panel: (
             <div className="space-y-4">
+              {/* Recomputed from the live tree on every edit, so ticking an item is immediate
+                  feedback rather than something you learn after saving. It lives behind the ⚙ with
+                  the other page-level settings: it describes the PAGE, not any block on it, and
+                  above the canvas it pushed the actual editing surface down the screen — the same
+                  reasoning that moved the blog editor's SEO fields here. */}
+              <PageChecklist
+                items={funnelPageChecklist(funnelType, tree)}
+                subtitle={funnelType ? (funnelTypeLabel(funnelType) ?? undefined) : undefined}
+              />
               <ContentWidthField tree={tree} onChange={setTree} />
               <PageThemePanel tree={tree} onChange={setTree} />
               {/* SEO lives behind the ⚙ with the other page-level settings, the way the blog post

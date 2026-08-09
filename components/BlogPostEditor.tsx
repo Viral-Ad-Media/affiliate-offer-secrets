@@ -286,23 +286,8 @@ export default function BlogPostEditor({
         Click any text below to edit it in place, drag <span className="text-zinc-400">⠿</span> to
         reorder a block. Links inside text use markdown syntax: [link text](https://…). The
         affiliate disclosure is locked — it can&apos;t be edited or removed. Everything about the
-        post itself — image, excerpt, URL, SEO, score — is behind the ⚙ above the canvas.
+        post itself — image, excerpt, URL, SEO, score and the checklist — is behind the ⚙ above the canvas.
       </p>
-
-      {/* Spans the tree AND the fields behind the ⚙ (featured image, excerpt, category), because
-          half of what a post needs isn't in the canvas — and those are exactly the ones easiest to
-          forget now that they're behind a gear. */}
-      <PageChecklist
-        title="Post checklist"
-        items={blogPostChecklist({
-          tree,
-          title,
-          excerpt,
-          seoDescription: seo.seo_description,
-          featuredImageUrl: featuredImage,
-          categoryId: categoryId || null,
-        })}
-      />
 
       <WysiwygCanvas
         settings={{
@@ -312,6 +297,22 @@ export default function BlogPostEditor({
           // the same components with the same state — nothing here is a second copy.
           panel: (
             <div className="space-y-4">
+              {/* The checklist moved in HERE rather than being deleted. It used to sit above the
+                  canvas precisely because half of what it checks — featured image, excerpt,
+                  category — lives behind this ⚙; putting it beside those very fields answers that
+                  concern better than keeping it outside did, since ticking an item and fixing it
+                  are now the same place. */}
+              <PageChecklist
+                title="Post checklist"
+                items={blogPostChecklist({
+                  tree,
+                  title,
+                  excerpt,
+                  seoDescription: seo.seo_description,
+                  featuredImageUrl: featuredImage,
+                  categoryId: categoryId || null,
+                })}
+              />
               <ContentWidthField tree={tree} onChange={setTree} />
               <PageThemePanel tree={tree} onChange={setTree} />
       <Card as="section" className="space-y-4 p-4">

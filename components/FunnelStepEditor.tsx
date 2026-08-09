@@ -148,8 +148,6 @@ export default function FunnelStepEditor({
         {actions}
       </div>
 
-      <PageChecklist items={funnelStepChecklist(stepType, tree)} subtitle={STEP_TYPE_LABELS[stepType]} />
-
       <WysiwygCanvas
         tree={tree}
         onChange={setTree}
@@ -162,6 +160,8 @@ export default function FunnelStepEditor({
           title: "Step settings",
           panel: (
             <div className="space-y-4">
+              {/* Behind the ⚙ with the other page-level settings — see PageEditor. */}
+              <PageChecklist items={funnelStepChecklist(stepType, tree)} subtitle={STEP_TYPE_LABELS[stepType]} />
               <ContentWidthField tree={tree} onChange={setTree} />
               <PageThemePanel tree={tree} onChange={setTree} />
               {/* Behind the ⚙ with the other page-level settings, matching the blog post editor
