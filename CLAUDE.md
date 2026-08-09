@@ -2178,7 +2178,8 @@ block `Base`, set from the three toggles at the top of the block settings panel.
 - Verified directly against the renderer and validator: a class-less tag (`<h1>`) gains one, a
   tag with its own class (`icon-list`, `block-btn`) has it merged, a block with no `hidden` is
   byte-identical to before, nested elements and rows round-trip, and the disclosure's `hidden` is
-  stripped on save.
+  stripped on save. **Also confirmed end to end by hand on 2026-08-08** — toggling a width and
+  switching the device preview behaves as described.
 
 **The palette also offers Section now, and lists elements as a grid.** A Section is the only thing
 rows and elements can live in, so reaching one only by already having one was a gap;
@@ -2786,8 +2787,10 @@ validator, or renderer changes; purely how the existing capabilities are surface
   `paletteDropTarget()` resolves the drop the same way the nested branch does, with one addition:
   root can never hold an element or a row, so a drop onto a Section resolves to *inside* that
   section rather than beside it — otherwise the most obvious target on the page would do nothing.
-  **Standing caveat, unchanged**: this session's tooling cannot simulate a real dnd-kit pointer
-  drag, so the insert logic and the build are verified but the gesture itself needs a manual pass.
+  **Confirmed working by a real manual drag on 2026-08-08.** That matters because it retires the
+  standing caveat this file carried since O.3: agent tooling here cannot simulate a dnd-kit pointer
+  drag, so every drag feature had been verified only at the data layer. It has now been exercised
+  by hand — do not re-open it as unverified work.
 - **Save & Republish + Preview render at BOTH ends of the canvas** in `PageEditor` and
   `FunnelStepEditor` — one `actions` JSX value rendered twice, never two copies, so they cannot
   disagree about disabled state or the "Saved" indicator. The canvas is a full-screen editing
