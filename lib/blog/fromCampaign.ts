@@ -50,6 +50,49 @@ export type CampaignPostResult =
 // Idempotent on campaign_id — a rebuilt campaign updates its own kit rather than accumulating a
 // second post each time. (campaign_id is `on delete set null`, so a post whose campaign was
 // deleted stops blocking, which is right: the old post is now unrelated history.)
+
+/**
+ * Find-or-create the category for a kit's niche, so a generated post lands filed instead of
+ * uncategorised.
+ *
+ * Categories are the blog index's only filter, and a post with none is invisible to it — every kit
+ * post used to arrive that way and had to be filed by hand. The product's own `niche` is the
+ * obvious grouping: it is what the operator already browsed the marketplace by.
+ *
+ * Matched case-insensitively on the name, because "Weight Loss" and "weight loss" are one category
+ * to a person — the same reasoning contact_tags' unique index encodes. Best-effort throughout: a
+ * failure here returns null and the post is simply created uncategorised, exactly as before. A
+ * category is an organising nicety and must never be the reason an article isn't saved.
+ */
+async function categoryForNiche(
+  admin: AdminClient,
+  workspaceId: string,
+  userId: string,
+  niche: string | null | undefined
+): Promise<string | null> {
+  const name = (niche ?? "").trim();
+  if (!name) return null;
+  try {
+    const { data: existing } = await admin
+      .from("blog_categories")
+      .select("id, name")
+      .eq("workspace_id", workspaceId);
+    const hit = (existing ?? []).find(
+      (c: { name: string }) => c.name.trim().toLowerCase() === name.toLowerCase()
+    ) as { id: string } | undefined;
+    if (hit) return hit.id;
+
+    const { data: created } = await admin
+      .from("blog_categories")
+      .insert({ workspace_id: workspaceId, user_id: userId, name, slug: slugify(name) || null })
+      .select("id")
+      .single();
+    return (created?.id as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createPostFromCampaign(
   admin: AdminClient,
   workspaceId: string,
@@ -65,7 +108,7 @@ export async function createPostFromCampaign(
 
   const { data: campaign } = await admin
     .from("campaigns")
-    .select("id, user_id, blog_md, embedded_image_data_url, products(product_title)")
+    .select("id, user_id, blog_md, embedded_image_data_url, products(product_title, niche)")
     .eq("id", campaignId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -82,6 +125,9 @@ export async function createPostFromCampaign(
   const img = campaign.embedded_image_data_url as string | null;
   const featuredImage = img && isValidImageDataUrl(img, MAX_FEATURED_IMAGE_CHARS) ? img : null;
 
+  const product = campaign.products as unknown as { product_title: string; niche: string | null } | null;
+  const categoryId = await categoryForNiche(admin, workspaceId, campaign.user_id as string, product?.niche);
+
   const tree = markdownToBlockTree(contentMd, { dropFirstH1: true });
   const html = renderBlockTree(tree, blogRenderCtx());
 
@@ -95,6 +141,7 @@ export async function createPostFromCampaign(
       // attribution rather than whoever happened to trigger the import.
       user_id: campaign.user_id as string,
       campaign_id: campaign.id as string,
+      ...(categoryId ? { category_id: categoryId } : {}),
       title,
       slug: await uniquePostSlug(admin, workspaceId, slugify(title) || "post"),
       content_md: contentMd,
