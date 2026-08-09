@@ -7,6 +7,7 @@ import { Image as ImageIcon, Video, Loader2, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { CreativeKind, CreativeSource, CreativeStatus } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
+import GenerationProgress from "@/components/GenerationProgress";
 
 type CreativeState = {
   status: CreativeStatus;
@@ -112,9 +113,18 @@ export default function CreativeItemCard({
           <ImageIcon className="h-3.5 w-3.5" /> Image creative
         </div>
         {image.status === "generating" ? (
-          <div className="flex items-center gap-1.5 text-xs text-sky-300">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…
-          </div>
+          imageCreativeId ? (
+            <GenerationProgress
+              jobType="generate_creative_image"
+              matchKey="campaign_creative_id"
+              matchValue={imageCreativeId}
+            />
+          ) : (
+            // The claim row exists before the poll has read its id back — one tick, then the bar.
+            <div className="flex items-center gap-1.5 text-xs text-sky-300">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Starting…
+            </div>
+          )
         ) : image.status === "ready" && image.image_data_url ? (
           <div className="space-y-1.5">
             <img src={image.image_data_url} alt="" className="h-24 w-24 rounded-lg border border-ink-700 object-cover" />
@@ -142,9 +152,17 @@ export default function CreativeItemCard({
           <Video className="h-3.5 w-3.5" /> Video creative
         </div>
         {video.status === "generating" ? (
-          <div className="flex items-center gap-1.5 text-xs text-sky-300">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating — can take a few minutes…
-          </div>
+          videoCreativeId ? (
+            <GenerationProgress
+              jobType="generate_creative_video"
+              matchKey="campaign_creative_id"
+              matchValue={videoCreativeId}
+            />
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs text-sky-300">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Starting…
+            </div>
+          )
         ) : video.status === "ready" ? (
           <div className="space-y-1.5">
             {videoPreviewUrl && (

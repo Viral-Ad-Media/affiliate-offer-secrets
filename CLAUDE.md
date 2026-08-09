@@ -1450,6 +1450,39 @@ builds; old rows keep their legacy flat text, unread by the new UI — same prec
   reference the single campaign-level `embedded_image_data_url`/`video_path`) is explicitly
   deferred, not built here.
 
+## Image and video generation shows a real percentage
+
+Every generation surface polled its ENTITY — a `campaign_creatives` row, `campaigns.video_status`,
+`blog_posts.featured_image_status` — and those only ever say none/generating/ready/failed. So a Veo
+render looked identical at second 5 and at minute 4, and the only honest thing the UI could say was
+"Generating…". `components/GenerationProgress.tsx` finds the JOB behind that entity and shows how
+far it has got.
+
+- **The number comes from `jobs.stage`, exactly as `lib/buildProgress.ts` derives the build
+  checklist** — the worker advances that column only once a stage's output is committed, so the bar
+  can never claim progress the job hasn't made. No progress column to keep in sync, and nothing
+  written from a stage handler (which re-runs on every retry).
+- **`lib/generationStages.ts` is the isomorphic home of all five stage lists**, and each engine
+  module now re-exports its own from there. Same rule `BUILD_CAMPAIGN_STAGES`/`lib/buildStages.ts`
+  already established: importing one of these from `videogen.ts`/`creativeimage.ts` drags the
+  Gemini/kie.ai/Storage clients — and `node:*` — into a client bundle, which `tsc --noEmit` passes
+  and `next build` fails.
+- **The bar deliberately does NOT creep on a timer.** `poll` is one stage but most of the wall
+  clock, so it sits still while the label says "Generating" and a line underneath says the step can
+  take minutes. A bar animating toward 100% during a render would be inventing progress at exactly
+  the moment nobody knows how far along it is — and `generationProgress()` marks that stage `slow`
+  rather than leaving a still bar to read as a stall.
+- The component finds its job itself (`type` + `payload->>{key}` + `status in (pending,running)`,
+  newest first) through the browser client against `jobs`' workspace RLS — verified live that the
+  policy is `is_workspace_member(workspace_id)` and that the payload keys really are
+  `campaign_creative_id` / `post_id` / `campaign_id`. No new route: `/api/jobs` returns the whole
+  queue, and this is one row.
+- Wired into `CreativeItemCard` (per-angle/post image AND video), `GenerateVideo` (campaign-level)
+  and `FeaturedImageField` (blog featured image). **`generate_ad_image` has no UI surface left** —
+  the per-angle flow replaced the campaign-level button, and nothing in `components/` or `app/`
+  calls that route anymore; its stage list is in the table anyway so the fallback route keeps
+  working if it is ever surfaced again.
+
 ## Per-angle ad launches, including real video ads (Phase J)
 
 `ad_launches` used to be one row per campaign (`unique(campaign_id)`), always an image creative

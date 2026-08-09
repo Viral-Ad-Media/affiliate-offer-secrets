@@ -5,6 +5,7 @@ import { useCredits } from "@/components/CreditsProvider";
 import CostBadge from "@/components/CostBadge";
 import { ImagePlus, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import GenerationProgress from "@/components/GenerationProgress";
 
 // Featured image control for the post editor: upload your own, or generate one from the post's
 // title/content via the kie.ai pipeline (generate_blog_image job). Polls while a generation is
@@ -132,6 +133,14 @@ export default function FeaturedImageField({
               </Button>
             )}
           </div>
+          {generating && (
+            <GenerationProgress
+              jobType="generate_blog_image"
+              matchKey="post_id"
+              matchValue={postId}
+              className="max-w-xs"
+            />
+          )}
           <p className="text-[12px] text-zinc-500">
             Shown as the hero on the post and the thumbnail on your blog index. Wide (16:9) works best.
           </p>

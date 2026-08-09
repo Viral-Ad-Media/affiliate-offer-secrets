@@ -8,7 +8,8 @@ import { MAX_FEATURED_IMAGE_CHARS } from "@/lib/blog";
 // from the post's own title/content and writing back to blog_posts instead of campaign_creatives.
 // 16:9 (not the ad creative's 1:1) because this renders as a full-width hero on the post page and
 // as the card thumbnail on the blog index.
-export const GENERATE_BLOG_IMAGE_STAGES = ["verify", "prompt", "submit", "poll", "finalize"] as const;
+export { GENERATE_BLOG_IMAGE_STAGES } from "@/lib/generationStages";
+import { GENERATE_BLOG_IMAGE_STAGES } from "@/lib/generationStages";
 export type GenerateBlogImageStage = (typeof GENERATE_BLOG_IMAGE_STAGES)[number];
 
 export type GenerateBlogImagePayload = { post_id: string };

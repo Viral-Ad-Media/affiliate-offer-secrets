@@ -9,14 +9,8 @@ import type { FbAdAngle, SocialPost } from "@/lib/shared";
 // post's own copy instead of the whole tiktok_md blob. Aspect ratio is picked from the row's own
 // `source`: 16:9 for fb_ad_angle (Feed-ad-shaped), 9:16 for social_post (Reels/Stories-shaped) —
 // matches the existing single-campaign generator's 9:16 default for that latter case.
-export const GENERATE_CREATIVE_VIDEO_STAGES = [
-  "verify",
-  "script",
-  "submit",
-  "poll",
-  "download",
-  "finalize",
-] as const;
+export { GENERATE_CREATIVE_VIDEO_STAGES } from "@/lib/generationStages";
+import { GENERATE_CREATIVE_VIDEO_STAGES } from "@/lib/generationStages";
 export type GenerateCreativeVideoStage = (typeof GENERATE_CREATIVE_VIDEO_STAGES)[number];
 
 export type GenerateCreativeVideoPayload = {

@@ -3,7 +3,10 @@ import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic"
 import { createKieTask, getKieTaskStatus, downloadKieResult } from "@/lib/kieai/client";
 import { isValidImageDataUrl, MAX_AD_IMAGE_DATA_URL_CHARS } from "@/lib/images/validate";
 
-export const GENERATE_AD_IMAGE_STAGES = ["verify", "prompt", "submit", "poll", "finalize"] as const;
+// Re-exported from the isomorphic list so a client component can read it without pulling this
+// module (and the kie.ai client) into the browser bundle — see lib/generationStages.ts.
+export { GENERATE_AD_IMAGE_STAGES } from "@/lib/generationStages";
+import { GENERATE_AD_IMAGE_STAGES } from "@/lib/generationStages";
 export type GenerateAdImageStage = (typeof GENERATE_AD_IMAGE_STAGES)[number];
 
 export type GenerateAdImagePayload = {

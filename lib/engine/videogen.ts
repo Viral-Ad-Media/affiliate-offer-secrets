@@ -3,14 +3,8 @@ import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic"
 import { startVeoGeneration, getVeoOperation, downloadVeoVideo } from "@/lib/gemini/client";
 import { uploadCampaignVideo } from "@/lib/supabase/storage";
 
-export const GENERATE_VIDEO_STAGES = [
-  "verify",
-  "script",
-  "submit",
-  "poll",
-  "download",
-  "finalize",
-] as const;
+export { GENERATE_VIDEO_STAGES } from "@/lib/generationStages";
+import { GENERATE_VIDEO_STAGES } from "@/lib/generationStages";
 export type GenerateVideoStage = (typeof GENERATE_VIDEO_STAGES)[number];
 
 export type GenerateVideoPayload = {

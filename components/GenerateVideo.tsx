@@ -6,6 +6,7 @@ import CostBadge from "@/components/CostBadge";
 import { Video, Loader2, Instagram, Music2, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import GenerationProgress from "@/components/GenerationProgress";
 
 type VideoStatus = "none" | "generating" | "ready" | "failed";
 
@@ -147,8 +148,8 @@ export default function GenerateVideo({
           </Button>
         </>
       ) : status === "generating" ? (
-        <div className="flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-300">
-          <Loader2 className="h-4 w-4 animate-spin" /> Generating — this can take a few minutes…
+        <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3">
+          <GenerationProgress jobType="generate_video" matchKey="campaign_id" matchValue={campaignId} />
         </div>
       ) : (
         <div className="space-y-3">

@@ -7,7 +7,8 @@ import type { FbAdAngle, SocialPost } from "@/lib/shared";
 // Per-item generalization of adimage.ts — same stage shape, but reads/writes one
 // campaign_creatives row instead of a single campaigns column, seeded from that one angle's/
 // post's own copy instead of the whole fb_ads_md blob.
-export const GENERATE_CREATIVE_IMAGE_STAGES = ["verify", "prompt", "submit", "poll", "finalize"] as const;
+export { GENERATE_CREATIVE_IMAGE_STAGES } from "@/lib/generationStages";
+import { GENERATE_CREATIVE_IMAGE_STAGES } from "@/lib/generationStages";
 export type GenerateCreativeImageStage = (typeof GENERATE_CREATIVE_IMAGE_STAGES)[number];
 
 export type GenerateCreativeImagePayload = {
