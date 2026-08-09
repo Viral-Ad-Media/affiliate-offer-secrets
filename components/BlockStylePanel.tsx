@@ -1,7 +1,21 @@
 "use client";
 
-import { X } from "lucide-react";
-import { STYLE_KEYS_BY_TYPE, type Block, type BlockStyle, type FontFamily } from "@/lib/engine/renderPages";
+import { X, Monitor, Tablet, Smartphone, EyeOff } from "lucide-react";
+import {
+  STYLE_KEYS_BY_TYPE,
+  VIEWPORTS,
+  type Viewport,
+  type Block,
+  type BlockStyle,
+  type FontFamily,
+} from "@/lib/engine/renderPages";
+
+/** Same three widths as the canvas's own device toggle, so the control matches the preview. */
+const VIEWPORT_ICONS: Record<Viewport, typeof Monitor> = {
+  desktop: Monitor,
+  tablet: Tablet,
+  mobile: Smartphone,
+};
 
 // The panel only ever renders controls for keys present in STYLE_KEYS_BY_TYPE[block.type]
 // (lib/engine/blockTree.ts) — the same table the renderer itself consults via styleToInlineCss's
@@ -116,13 +130,15 @@ function ColorField({ label, value, onChange }: { label: string; value: string |
 export type BlockStylePanelProps = {
   block: Block | null;
   onChange: (blockId: string, patch: BlockStyle) => void;
+  /** Responsive visibility is not a style key — it becomes a CLASS, so it has its own setter. */
+  onVisibilityChange: (blockId: string, hidden: Viewport[]) => void;
   onClose: () => void;
 };
 
 // Selected via WysiwygCanvas.tsx (Phase O.4) — clicking any Section/Row/Element/locked block
 // selects it here (columns are not independently selectable in this pass, a deliberate v1 scope
 // cut; a column's own Row already covers the common "give this area a background" need).
-export default function BlockStylePanel({ block, onChange, onClose }: BlockStylePanelProps) {
+export default function BlockStylePanel({ block, onChange, onVisibilityChange, onClose }: BlockStylePanelProps) {
   if (!block) return null;
 
   const allowedKeys = (STYLE_KEYS_BY_TYPE as Record<string, readonly (keyof BlockStyle)[]>)[block.type] ?? [];
@@ -144,7 +160,18 @@ export default function BlockStylePanel({ block, onChange, onClose }: BlockStyle
     has("fieldBackgroundColor") || has("fieldTextColor") || has("fieldBorderColor") ||
     has("fieldBorderWidth") || has("fieldBorderRadius") || has("fieldGap");
 
-  if (!showTypography && !showBackground && !showSpacing && !showBorder && !showLayout && !showFields) return null;
+  // The disclosure is the one block that can't be hidden — content rule 3 makes it mandatory on
+  // every page, and "hidden on mobile" would put an undisclosed affiliate page in front of most of
+  // the real traffic. The validator drops `hidden` on it independently; this just doesn't offer it.
+  const showVisibility = block.type !== "disclosure";
+  const hidden = ((block as { hidden?: Viewport[] }).hidden ?? []) as Viewport[];
+  function toggleViewport(v: Viewport) {
+    const next = hidden.includes(v) ? hidden.filter((x) => x !== v) : [...hidden, v];
+    onVisibilityChange(block!.id, VIEWPORTS.filter((x) => next.includes(x)));
+  }
+
+  if (!showTypography && !showBackground && !showSpacing && !showBorder && !showLayout && !showFields && !showVisibility)
+    return null;
 
   return (
     <div className="mt-4 rounded-lg border border-ink-700 bg-ink-900 p-4 lg:mt-0">
@@ -161,6 +188,42 @@ export default function BlockStylePanel({ block, onChange, onClose }: BlockStyle
           three-zone layout); each group's own internal 2-col grid fits that width. Below lg it
           renders under the canvas where a single column also reads fine. */}
       <div className="grid gap-4">
+        {showVisibility && (
+          <div className="space-y-2 sm:col-span-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Visibility</div>
+            <div className="flex gap-1.5">
+              {VIEWPORTS.map((v) => {
+                const Icon = VIEWPORT_ICONS[v];
+                const isHidden = hidden.includes(v);
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => toggleViewport(v)}
+                    aria-pressed={!isHidden}
+                    title={isHidden ? `Hidden on ${v} — click to show` : `Shown on ${v} — click to hide`}
+                    className={`flex flex-1 flex-col items-center gap-1 rounded-lg border px-2 py-2 text-[11px] capitalize transition-colors ${
+                      isHidden
+                        ? "border-ink-700 bg-ink-800 text-zinc-600"
+                        : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                    }`}
+                  >
+                    <span className="relative">
+                      <Icon className="h-4 w-4" />
+                      {isHidden && <EyeOff className="absolute -right-2 -top-1.5 h-3 w-3" />}
+                    </span>
+                    {v}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-zinc-500">
+              Click a width to hide this block there. It still shows in the editor, marked, so you can
+              bring it back.
+            </p>
+          </div>
+        )}
+
         {showTypography && (
           <div className="space-y-2 sm:col-span-2">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Typography</div>

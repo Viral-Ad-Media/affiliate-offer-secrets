@@ -2147,6 +2147,46 @@ The blog is a real published site, not just per-post links.
   well-formed XML with the entities escaped.
 - **Still deferred**: no paginated sitemap index (irrelevant under 1000 posts).
 
+## Per-block responsive visibility
+
+Any block can be hidden on desktop, tablet or mobile independently — `hidden?: Viewport[]` on the
+block `Base`, set from the three toggles at the top of the block settings panel.
+
+- **It is a CLASS, never an inline style.** `styleToInlineCss` builds a `style="..."` attribute and
+  a media query cannot live in one, so the renderer emits `hide-desktop`/`hide-tablet`/`hide-mobile`
+  and the three rules live in `PAGE_STYLE` (renderPages.ts) and `PUBLIC_CSS` (lib/blog.ts).
+  **Those two stylesheets must not drift** — the comment in each says so. Breakpoints match the
+  editor's own device toggle: mobile below 640, tablet 640-1023, desktop 1024 up.
+- **`withVisibility()` merges the class into the block's existing root tag** rather than being
+  threaded through `styleAttr`. Most element cases already write their own `class="..."`, and two
+  class attributes on one tag is invalid HTML where the browser silently keeps the first. Parsing
+  the tag by hand is safe here for a specific reason: `escapeHtml` turns `>` into `&gt;`, so no
+  attribute value can contain the delimiter it scans for.
+- **The disclosure can never be hidden.** Content rule 3 makes it mandatory, and "hidden on mobile"
+  would put an undisclosed affiliate page in front of most of the real traffic. Enforced in the
+  validator (`withHidden` returns the disclosure untouched), not only by leaving it out of the panel.
+- **The validator has to carry `hidden` through** — it returns a freshly-built tree, so anything not
+  copied is dropped on every save. Same trap `contentWidth` hit. Unknown viewport names are filtered
+  out rather than rejected: refusing to save a page over one stray string is the worse failure.
+- **In the editor a hidden block is dimmed and badged, never removed.** A block you cannot see is a
+  block you cannot select to unhide — that is how a page ends up with something invisible on mobile
+  and no way to find it. Only the CONTENT dims (`opacity-40` on an inner div); the hover controls
+  stay at full strength, since they are exactly what you reach for to bring it back. The wrappers
+  learn the previewed width from a `DeviceContext` rather than a prop threaded through
+  `SectionBody`/`RowEditor`/`ColumnEditor` — those are module-scope components whose stable identity
+  is load-bearing for `EditableText`'s mount-once pattern.
+- Verified directly against the renderer and validator: a class-less tag (`<h1>`) gains one, a
+  tag with its own class (`icon-list`, `block-btn`) has it merged, a block with no `hidden` is
+  byte-identical to before, nested elements and rows round-trip, and the disclosure's `hidden` is
+  stripped on save.
+
+**The palette also offers Section now, and lists elements as a grid.** A Section is the only thing
+rows and elements can live in, so reaching one only by already having one was a gap;
+`insertSection` is root-only, matching `moveBlockToContainer`'s own rule that a Section never nests,
+and a new one is empty on purpose (what goes in it is the next decision). The element list became a
+two-column grid of icon-over-label tiles: with ~20 types a single column ran past the fold, and a
+tile is a bigger drag target. The collapsed rail is still one icon column — there is no room for two.
+
 ## Page settings (the canvas ⚙)
 
 `WysiwygCanvas` takes an optional `settings={{ title, panel }}` and renders a ⚙ in its device

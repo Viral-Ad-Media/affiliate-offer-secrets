@@ -193,7 +193,53 @@ function styleAttr(style: BlockStyle | undefined, allowed: readonly (keyof Block
 // Block types
 // ---------------------------------------------------------------------------------------------
 
-type Base = { id: string; style: BlockStyle };
+/**
+ * Responsive visibility. A block can be hidden on any combination of the three widths the editor's
+ * own device toggle previews.
+ *
+ * This is a CLASS, never an inline style — `styleToInlineCss` builds a `style="..."` attribute and
+ * a media query cannot live in one. The three rules are defined once in `PAGE_STYLE`
+ * (renderPages.ts) and once in `PUBLIC_CSS` (lib/blog.ts); those two stylesheets must not drift.
+ */
+export const VIEWPORTS = ["desktop", "tablet", "mobile"] as const;
+export type Viewport = (typeof VIEWPORTS)[number];
+
+type Base = { id: string; style: BlockStyle; hidden?: Viewport[] };
+
+/** "hide-mobile hide-tablet", or "" when the block shows everywhere. */
+export function visibilityClasses(block: { hidden?: readonly Viewport[] }): string {
+  const set = block.hidden ?? [];
+  return VIEWPORTS.filter((v) => set.includes(v))
+    .map((v) => `hide-${v}`)
+    .join(" ");
+}
+
+/**
+ * Adds the visibility classes to a block's OWN root tag.
+ *
+ * Done here rather than threaded through `styleAttr` because most element cases already write
+ * their own `class="..."` — two class attributes on one tag is invalid and the browser keeps only
+ * the first, so the classes have to be merged into whichever attribute is already there. Safe to
+ * parse by hand: `escapeHtml` turns `>` into `&gt;`, so no attribute value can contain the `>`
+ * this looks for, and every render case returns either "" or a single root tag.
+ */
+function withVisibility(html: string, block: { hidden?: readonly Viewport[] }): string {
+  const cls = visibilityClasses(block);
+  if (!cls || !html.startsWith("<")) return html;
+  const tagEnd = html.indexOf(">");
+  if (tagEnd < 0) return html;
+  const tag = html.slice(0, tagEnd);
+  const existing = /\sclass="([^"]*)"/.exec(tag);
+  if (existing) {
+    return (
+      tag.slice(0, existing.index) +
+      ` class="${existing[1]} ${cls}"` +
+      tag.slice(existing.index + existing[0].length) +
+      html.slice(tagEnd)
+    );
+  }
+  return `${tag} class="${cls}"${html.slice(tagEnd)}`;
+}
 
 export type HeadingBlock = Base & { type: "heading"; content: { text: string } };
 export type SubheadingBlock = Base & { type: "subheading"; content: { text: string } };
@@ -939,19 +985,19 @@ document.querySelectorAll(".countdown").forEach(start);
 
 function renderColumn(col: ColumnBlock, ctx: RenderCtx): string {
   return `<div class="col"${styleAttr(col.style, BOX_STYLE_KEYS)}>${col.children
-    .map((c) => renderElement(c, ctx))
+    .map((c) => withVisibility(renderElement(c, ctx), c))
     .join("\n")}</div>`;
 }
 
 function renderRow(row: RowBlock, ctx: RenderCtx): string {
   return `<div class="row"${styleAttr(row.style, BOX_STYLE_KEYS)}>${row.columns
-    .map((c) => renderColumn(c, ctx))
+    .map((c) => withVisibility(renderColumn(c, ctx), c))
     .join("\n")}</div>`;
 }
 
 function renderSection(section: SectionBlock, ctx: RenderCtx): string {
   return `<div class="section"${styleAttr(section.style, BOX_STYLE_KEYS)}>${section.children
-    .map((c) => (c.type === "row" ? renderRow(c, ctx) : renderElement(c, ctx)))
+    .map((c) => withVisibility(c.type === "row" ? renderRow(c, ctx) : renderElement(c, ctx), c))
     .join("\n")}</div>`;
 }
 
@@ -1126,7 +1172,9 @@ export function renderBlockTree(tree: PageBlockTree, ctx: RenderCtx): string {
     hasForm: treeHasForm(tree.blocks),
   };
   return [...rest, ...disclosure]
-    .map((b) => (b.type === "section" ? renderSection(b, ctxWithForm) : renderLockedBlock(b, ctxWithForm)))
+    .map((b) =>
+      withVisibility(b.type === "section" ? renderSection(b, ctxWithForm) : renderLockedBlock(b, ctxWithForm), b)
+    )
     .join("\n");
 }
 
@@ -1180,6 +1228,28 @@ export function updateBlockStyle(tree: PageBlockTree, blockId: string, stylePatc
   return {
     ...tree,
     blocks: tree.blocks.map((b) => walkAndUpdate(b, blockId, (node) => ({ ...node, style: { ...node.style, ...stylePatch } }))),
+  } as PageBlockTree;
+}
+
+/**
+ * Sets a block's responsive visibility. Mirrors updateBlockStyle rather than routing through it —
+ * `hidden` is not a style key (it becomes a class, not an inline declaration) and giving it its
+ * own setter keeps that distinction visible at every call site.
+ *
+ * An empty list removes the key entirely instead of storing `[]`, so a block that shows everywhere
+ * looks in the stored JSON exactly like one saved before this existed.
+ */
+export function updateBlockHidden(tree: PageBlockTree, blockId: string, hidden: Viewport[]): PageBlockTree {
+  return {
+    ...tree,
+    blocks: tree.blocks.map((b) =>
+      walkAndUpdate(b, blockId, (node) => {
+        const next: any = { ...node };
+        if (hidden.length) next.hidden = hidden;
+        else delete next.hidden;
+        return next;
+      })
+    ),
   } as PageBlockTree;
 }
 
@@ -1482,6 +1552,21 @@ export function insertRow(tree: PageBlockTree, sectionId: string, index: number,
   if (!items) return tree;
   const clamped = Math.max(0, Math.min(index, items.length));
   return withContainer(tree, ref, [...items.slice(0, clamped), row, ...items.slice(clamped)]);
+}
+
+/**
+ * Inserts a new, empty Section at a root position.
+ *
+ * Empty on purpose rather than pre-filled with a heading: a Section is a band of the page, and
+ * what goes in it is the next decision, not one this helper should make. `SectionBody` renders a
+ * drop zone and its own "+ Add block" menu for an empty one, so it is immediately usable.
+ *
+ * Root-only, matching `moveBlockToContainer`'s own rule that a Section can never nest.
+ */
+export function insertSection(tree: PageBlockTree, index: number): PageBlockTree {
+  const section: SectionBlock = { id: newBlockId(), type: "section", style: {}, children: [] };
+  const clamped = Math.max(0, Math.min(index, tree.blocks.length));
+  return { ...tree, blocks: [...tree.blocks.slice(0, clamped), section, ...tree.blocks.slice(clamped)] };
 }
 
 // The "hero" image shown for Instagram posting / ad-creative fallback / servePublicCampaignImage

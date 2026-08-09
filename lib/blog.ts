@@ -408,6 +408,14 @@ const PUBLIC_CSS = `
   .carousel .slide figcaption { margin-top:8px; font-size:14px; color:#666; text-align:center; }
   .carousel:focus-visible { outline:2px solid #16a34a; outline-offset:4px; }
   @media (min-width:700px) { .carousel .slide { flex-basis:60%; } }
+  /* Responsive visibility — set per block in the editor's own settings panel. Breakpoints match
+     the editor's device toggle: mobile below 640, tablet 640-1023, desktop 1024 and up.
+     !important so a future inline display value from a style key cannot silently defeat it.
+     THIS BLOCK IS DUPLICATED in lib/blog.ts's PUBLIC_CSS — change both or a block hidden on a
+     funnel page starts showing on a blog post. */
+  @media (max-width:639px) { .hide-mobile { display:none !important; } }
+  @media (min-width:640px) and (max-width:1023px) { .hide-tablet { display:none !important; } }
+  @media (min-width:1024px) { .hide-desktop { display:none !important; } }
   .countdown { margin:24px 0; text-align:center; }
   .countdown .cd-label { font-size:14px; color:#666; margin-bottom:4px; }
   .countdown .cd-clock { font-size:34px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:1px; }

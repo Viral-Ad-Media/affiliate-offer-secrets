@@ -29,6 +29,8 @@ import {
   type ButtonAction,
   type FormSubmitAction,
   type TestimonialMedia,
+  VIEWPORTS,
+  type Viewport,
 } from "./blockTree";
 import { isValidImageDataUrl } from "@/lib/images/validate";
 import { parseVideoUrl, sourceToDisplayUrl } from "@/lib/engine/videoEmbed";
@@ -125,7 +127,7 @@ function sanitizeStyle(raw: unknown): BlockStyle {
   return style;
 }
 
-function validateElement(raw: unknown, count: { n: number }): ElementBlock {
+function validateElementInner(raw: unknown, count: { n: number }): ElementBlock {
   if (++count.n > MAX_TOTAL_BLOCKS) throw new BlockCountLimit("too many blocks");
   const b = (raw ?? {}) as Record<string, unknown>;
   if (!isValidId(b.id)) throw new Error("invalid block id");
@@ -388,6 +390,38 @@ function validateFormInput(raw: unknown, count: { n: number }): FormInputBlock {
   };
 }
 
+/**
+ * Per-block responsive visibility, carried through the rebuild.
+ *
+ * The validator returns a freshly-built tree rather than the caller's input, so anything not
+ * copied here is silently dropped on every save — the same trap `contentWidth` hit. Unknown
+ * viewport names are filtered out rather than rejected: a page that won't save because of one
+ * stray string in an array is worse than a block that shows everywhere.
+ */
+function sanitizeHidden(raw: unknown): Viewport[] {
+  if (!Array.isArray(raw)) return [];
+  const set = new Set<Viewport>();
+  for (const v of raw) if ((VIEWPORTS as readonly string[]).includes(v as string)) set.add(v as Viewport);
+  return VIEWPORTS.filter((v) => set.has(v));
+}
+
+function withHidden<T extends { type: string }>(block: T, raw: unknown): T {
+  // The affiliate disclosure is mandatory on every page (content rule 3), so it is the one block
+  // that must never be hideable — "hidden on mobile" would put an undisclosed affiliate page in
+  // front of most of the real traffic. Enforced here, not only by leaving it out of the panel.
+  if (block.type === "disclosure") return block;
+  const hidden = sanitizeHidden((raw as Record<string, unknown> | null)?.hidden);
+  return hidden.length ? ({ ...block, hidden } as T) : block;
+}
+
+function validateElement(raw: unknown, count: { n: number }): ElementBlock {
+  return withHidden(validateElementInner(raw, count), raw);
+}
+
+function validateLockedBlock(raw: unknown, count: { n: number }): LockedBlock {
+  return withHidden(validateLockedBlockInner(raw, count), raw);
+}
+
 function validateColumn(raw: unknown, count: { n: number }): ColumnBlock {
   if (++count.n > MAX_TOTAL_BLOCKS) throw new BlockCountLimit("too many blocks");
   const b = (raw ?? {}) as Record<string, unknown>;
@@ -395,12 +429,12 @@ function validateColumn(raw: unknown, count: { n: number }): ColumnBlock {
   if (b.type !== "column") throw new Error("expected column block");
   const children = Array.isArray(b.children) ? b.children : [];
   if (children.length > MAX_COLUMN_CHILDREN) throw new Error("too many elements in column");
-  return {
+  return withHidden({
     id: b.id as string,
     type: "column",
     style: sanitizeStyle(b.style),
     children: children.map((c) => validateElement(c, count)),
-  };
+  }, b);
 }
 
 function validateRow(raw: unknown, count: { n: number }): RowBlock {
@@ -412,13 +446,13 @@ function validateRow(raw: unknown, count: { n: number }): RowBlock {
   const expectedCols = layout === "3col" ? 3 : layout === "2col" ? 2 : 1;
   const columns = Array.isArray(b.columns) ? b.columns : [];
   if (columns.length !== expectedCols) throw new Error("column count doesn't match row layout");
-  return {
+  return withHidden({
     id: b.id as string,
     type: "row",
     layout,
     style: sanitizeStyle(b.style),
     columns: columns.map((c) => validateColumn(c, count)),
-  };
+  }, b);
 }
 
 function validateSection(raw: unknown, count: { n: number }): SectionBlock {
@@ -428,7 +462,7 @@ function validateSection(raw: unknown, count: { n: number }): SectionBlock {
   if (b.type !== "section") throw new Error("expected section block");
   const children = Array.isArray(b.children) ? b.children : [];
   if (children.length > MAX_SECTION_CHILDREN) throw new Error("too many blocks in section");
-  return {
+  return withHidden({
     id: b.id as string,
     type: "section",
     style: sanitizeStyle(b.style),
@@ -436,10 +470,10 @@ function validateSection(raw: unknown, count: { n: number }): SectionBlock {
       const ct = (c as Record<string, unknown> | null)?.type;
       return ct === "row" ? validateRow(c, count) : validateElement(c, count);
     }),
-  };
+  }, b);
 }
 
-function validateLockedBlock(raw: unknown, count: { n: number }): LockedBlock {
+function validateLockedBlockInner(raw: unknown, count: { n: number }): LockedBlock {
   if (++count.n > MAX_TOTAL_BLOCKS) throw new BlockCountLimit("too many blocks");
   const b = (raw ?? {}) as Record<string, unknown>;
   if (!isValidId(b.id)) throw new Error("invalid block id");

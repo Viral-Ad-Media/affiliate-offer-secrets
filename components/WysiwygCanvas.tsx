@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   GripVertical,
   ImagePlus,
@@ -29,6 +29,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Columns2,
+  Rows3,
+  EyeOff,
   Lock,
 } from "lucide-react";
 import { DndContext, closestCenter, useDroppable, useDraggable, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
@@ -38,12 +40,14 @@ import {
   newBlockId,
   updateBlockContent,
   updateBlockStyle,
+  updateBlockHidden,
   removeChildBlock,
   addChildBlock,
   findBlockLocation,
   moveBlockToContainer,
   insertElement,
   insertRow,
+  insertSection,
   insertFormInput,
   FORM_FIELD_PRESETS,
   containerKey,
@@ -53,6 +57,8 @@ import {
   styleToInlineCss,
   contentWidthOf,
   STYLE_KEYS_BY_TYPE,
+  type Viewport,
+  VIEWPORTS,
   type PageBlockTree,
   type SectionBlock,
   type RowBlock,
@@ -164,6 +170,10 @@ const PAGE_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ari
 // Fidelity note: the PUBLISHED page still renders inside its own max-width container
 // (lib/engine/renderPages.ts), so a very wide monitor shows longer lines here than a visitor
 // gets — switch to Tablet to check real line lengths.
+/** The canvas's own preview widths. Same three names as the block-level Viewport, on purpose:
+ *  the toggle you preview with is the toggle the visibility setting talks about. */
+type Device = Viewport;
+
 const DEVICE_WIDTHS: Record<"desktop" | "tablet" | "mobile", number | string> = {
   desktop: "100%",
   tablet: 480,
@@ -303,12 +313,39 @@ function EditableText({
   );
 }
 
+/**
+ * The width currently being previewed, read by the block wrappers so they can mark a block that is
+ * hidden there. A context rather than a prop threaded through SectionBody/RowEditor/ColumnEditor:
+ * those are module-scope components (stable identity is load-bearing for EditableText's mount-once
+ * pattern) and this is one value every level needs but none of them act on.
+ */
+const DeviceContext = createContext<Device>("desktop");
+
+/** The label for a block hidden at the width being previewed, else null. */
+function hiddenHereLabel(block: { hidden?: readonly Viewport[] } | null | undefined, device: Device): string | null {
+  return block?.hidden?.includes(device as Viewport) ? device : null;
+}
+
+/**
+ * A block hidden at this width is DIMMED and badged, never actually removed from the canvas —
+ * a block you can't see is a block you can't select to unhide, which is how a page ends up with
+ * something invisible on mobile and no way to find it.
+ */
+function HiddenHereBadge({ device }: { device: string }) {
+  return (
+    <span className="pointer-events-none absolute right-1 top-1 z-10 flex items-center gap-1 rounded bg-gray-900/80 px-1.5 py-0.5 text-[10px] font-medium capitalize text-white">
+      <EyeOff className="h-3 w-3" /> hidden on {device}
+    </span>
+  );
+}
+
 function RootBlockWrapper({
   id,
   isSelected,
   onSelect,
   onDelete,
   lockedReason,
+  hiddenHere,
   children,
 }: {
   id: string;
@@ -323,6 +360,8 @@ function RootBlockWrapper({
    * it is what made that feel broken.
    */
   lockedReason?: string;
+  /** Set when this block is hidden at the width currently previewed — dims it and badges it. */
+  hiddenHere?: string | null;
   children: React.ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -346,6 +385,7 @@ function RootBlockWrapper({
         isSelected ? "border-emerald-400" : "border-transparent"
       }`}
     >
+      {hiddenHere && <HiddenHereBadge device={hiddenHere} />}
       {/* Hover-revealed controls, at the block's side (top-right edge) — never below it. */}
       <div className="absolute -top-3 right-1 z-10 hidden gap-0.5 group-hover:flex">
         {onSelect && (
@@ -391,7 +431,7 @@ function RootBlockWrapper({
           </span>
         ) : null}
       </div>
-      {children}
+      <div className={hiddenHere ? "opacity-40" : undefined}>{children}</div>
     </div>
   );
 }
@@ -447,6 +487,7 @@ function NestedItemWrapper({
   deleteTitle,
   isSelected,
   onSelect,
+  block,
   children,
 }: {
   id: string;
@@ -454,9 +495,12 @@ function NestedItemWrapper({
   deleteTitle?: string;
   isSelected?: boolean;
   onSelect?: () => void;
+  /** The block itself, only so the wrapper can read its responsive visibility. */
+  block?: { hidden?: readonly Viewport[] };
   children: React.ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const hiddenHere = hiddenHereLabel(block, useContext(DeviceContext));
   const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
   return (
     <div
@@ -473,6 +517,7 @@ function NestedItemWrapper({
         isSelected ? "border-emerald-400" : "border-transparent"
       }`}
     >
+      {hiddenHere && <HiddenHereBadge device={hiddenHere} />}
       {/* Hover-revealed controls at the block's side (top-left edge) — never below it. */}
       <div className="absolute -left-1 -top-1 z-10 flex gap-0.5 opacity-0 transition-opacity group-hover/nested:opacity-100">
         <button
@@ -511,7 +556,7 @@ function NestedItemWrapper({
           </button>
         )}
       </div>
-      {children}
+      <div className={hiddenHere ? "opacity-40" : undefined}>{children}</div>
     </div>
   );
 }
@@ -613,9 +658,11 @@ function PaletteDraggable({
 function EditorPalette({
   onPick,
   onPickRow,
+  onPickSection,
 }: {
   onPick: (type: PaletteType) => void;
   onPickRow: (layout: RowBlock["layout"]) => void;
+  onPickSection: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -647,7 +694,25 @@ function EditorPalette({
         </button>
       </div>
 
-      {!collapsed && <div className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Rows</div>}
+      {!collapsed && <div className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Layout</div>}
+      <div className={collapsed ? "flex flex-col gap-0.5" : "mb-1.5 px-1"}>
+        {/* A Section is a band of the page and the only thing rows and elements can live in, so it
+            belongs in the palette next to them rather than being reachable only by having one
+            already. Root-only — insertSection and moveBlockToContainer both enforce that. */}
+        <PaletteDraggable
+          id="palette-section"
+          onClick={onPickSection}
+          title="Section — drag onto the page, or click to add one at the end"
+          className={
+            collapsed
+              ? "flex items-center justify-center rounded p-1.5 text-zinc-400 hover:bg-ink-800 hover:text-emerald-300"
+              : "flex w-full items-center gap-2 rounded border border-ink-600 px-2 py-1.5 text-[11px] text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+          }
+        >
+          <Rows3 className="h-4 w-4 shrink-0 text-zinc-500" />
+          {!collapsed && "Section"}
+        </PaletteDraggable>
+      </div>
       <div className={collapsed ? "flex flex-col gap-0.5" : "mb-2 flex gap-1 px-1"}>
         {(["1col", "2col", "3col"] as const).map((layout) => (
           <PaletteDraggable
@@ -667,18 +732,23 @@ function EditorPalette({
       </div>
 
       {!collapsed && <div className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Elements</div>}
-      <div className="flex flex-col gap-0.5">
+      {/* A grid, not a list: with ~20 element types a single column ran past the fold, and an
+          icon-over-label tile is both a bigger drag handle and the shape every other page builder
+          uses here. The collapsed rail stays a single icon column — there is no room for two. */}
+      <div className={collapsed ? "flex flex-col gap-0.5" : "grid grid-cols-2 gap-1 px-1"}>
         {ELEMENT_PALETTE.map(({ type, label, icon: Icon }) => (
           <PaletteDraggable
             key={type}
             id={`palette-el:${type}`}
             onClick={() => onPick(type)}
             title={`${label} — drag onto the page, or click to add it at the end`}
-            className={`flex items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] text-zinc-300 hover:bg-ink-800 hover:text-emerald-300 ${
-              collapsed ? "justify-center px-1" : ""
-            }`}
+            className={
+              collapsed
+                ? "flex items-center justify-center rounded px-1 py-1.5 text-zinc-300 hover:bg-ink-800 hover:text-emerald-300"
+                : "flex flex-col items-center gap-1 rounded border border-ink-700 px-1 py-2 text-center text-[10px] leading-tight text-zinc-300 hover:border-emerald-500/60 hover:bg-ink-800 hover:text-emerald-300"
+            }
           >
-            <Icon className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+            <Icon className="h-4 w-4 shrink-0 text-zinc-500" />
             {!collapsed && label}
           </PaletteDraggable>
         ))}
@@ -724,6 +794,7 @@ function ColumnEditor({
           <NestedItemWrapper
             key={el.id}
             id={el.id}
+            block={el}
             onDelete={() => onDeleteElement(col.id, el.id)}
             isSelected={selectedBlockId === el.id}
             onSelect={() => onSelectBlock(el.id)}
@@ -802,6 +873,7 @@ function SectionBody({
             <NestedItemWrapper
               key={child.id}
               id={child.id}
+              block={child}
               onDelete={() => onDeleteChild(section.id, child.id)}
               deleteTitle="Delete row"
               isSelected={selectedBlockId === child.id}
@@ -820,6 +892,7 @@ function SectionBody({
             <NestedItemWrapper
               key={child.id}
               id={child.id}
+              block={child}
               onDelete={() => onDeleteChild(section.id, child.id)}
               isSelected={selectedBlockId === child.id}
               onSelect={() => onSelectBlock(child.id)}
@@ -920,6 +993,19 @@ export default function WysiwygCanvas({
     onChange(updateBlockStyle(tree, blockId, patch));
   }
 
+  function updateHidden(blockId: string, hidden: Viewport[]) {
+    onChange(updateBlockHidden(tree, blockId, hidden));
+  }
+
+  // A new Section always goes at root, after the section the selection is in (so it lands where
+  // you were looking) or at the end.
+  function paletteAddSection() {
+    const loc = selectedBlockId ? findBlockLocation(tree, selectedBlockId) : null;
+    const anchorId = loc?.ref.kind === "section" ? loc.ref.sectionId : loc?.block.id;
+    const at = anchorId ? tree.blocks.findIndex((b) => b.id === anchorId) : -1;
+    onChange(insertSection(tree, at >= 0 ? at + 1 : tree.blocks.length));
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
@@ -943,6 +1029,18 @@ export default function WysiwygCanvas({
             ? insertFormInput(tree, ref, index)
             : insertElement(tree, ref, index, type),
         );
+        return;
+      }
+      if (activeId === "palette-section") {
+        // Root-only. Dropping onto anything nested resolves to the section that contains it.
+        const rootIndex = tree.blocks.findIndex((b) => b.id === overId);
+        if (rootIndex >= 0) {
+          onChange(insertSection(tree, rootIndex));
+          return;
+        }
+        const sectionId = sectionIdForRef(ref);
+        const at = sectionId ? tree.blocks.findIndex((b) => b.id === sectionId) : -1;
+        onChange(insertSection(tree, at >= 0 ? at + 1 : tree.blocks.length));
         return;
       }
       if (activeId.startsWith("palette-row:")) {
@@ -2000,8 +2098,9 @@ export default function WysiwygCanvas({
     // The palette lives INSIDE the DndContext: a palette item is a draggable, and dnd-kit
     // only tracks draggables mounted under the same context as the droppables they target.
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DeviceContext.Provider value={device}>
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-      <EditorPalette onPick={paletteAddElement} onPickRow={paletteAddRow} />
+      <EditorPalette onPick={paletteAddElement} onPickRow={paletteAddRow} onPickSection={paletteAddSection} />
 
       <div className="min-w-0 flex-1">
         <div className="mb-3 flex items-center justify-center gap-1">
@@ -2068,6 +2167,7 @@ export default function WysiwygCanvas({
                   // having no control.
                   onDelete={b.type === "section" ? () => deleteRootBlock(b.id) : undefined}
                   lockedReason={b.type === "section" ? undefined : LOCKED_REASONS[(b as LockedBlock).locked]}
+                  hiddenHere={hiddenHereLabel(b, device)}
                 >
                   {b.type === "section" ? (
                     <SectionBody
@@ -2151,6 +2251,7 @@ export default function WysiwygCanvas({
                   <BlockStylePanel
                     block={selectedBlock}
                     onChange={updateStyle}
+                    onVisibilityChange={updateHidden}
                     onClose={() => setSelectedBlockId(null)}
                   />
                 )}
@@ -2160,6 +2261,7 @@ export default function WysiwygCanvas({
         </div>
       )}
     </div>
+    </DeviceContext.Provider>
     </DndContext>
   );
 }
