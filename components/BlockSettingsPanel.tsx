@@ -35,7 +35,8 @@ export function hasContentSettings(block: Block | null): boolean {
     block.type === "form_input" ||
     block.type === "button" ||
     block.type === "form" ||
-    block.type === "lead_capture_form"
+    block.type === "lead_capture_form" ||
+    block.type === "custom_html"
   );
 }
 
@@ -436,6 +437,36 @@ export default function BlockSettingsPanel({
         <p className="text-[11px] leading-snug text-zinc-500">
           Saved as <code className="text-zinc-400">{c.fieldKey}</code> — the CSV column header and
           the key on the contact.
+        </p>
+      </div>
+    );
+  }
+
+  if (block.type === "custom_html") {
+    const c = (block as ElementBlock).content as { code: string };
+    return (
+      <div className="space-y-3">
+        <label className="block">
+          <span className={LABEL}>HTML / CSS / JavaScript</span>
+          {/* Uncontrolled + commit on blur, like every other field in this panel — and doubly right
+              here: committing per keystroke would re-key the canvas preview frame and reload the
+              snippet on every character typed. */}
+          <textarea
+            className={`${SELECT} h-64 resize-y font-mono leading-relaxed`}
+            defaultValue={c.code}
+            spellCheck={false}
+            placeholder={'<div class="my-widget">…</div>\n<script>…</script>'}
+            onBlur={(e) => set({ code: e.target.value })}
+          />
+        </label>
+        <p className="text-[11px] leading-snug text-zinc-500">
+          Runs exactly as written, as part of the page — no rewriting, no escaping. Click outside the
+          box to apply it to the preview.
+        </p>
+        <p className="text-[11px] leading-snug text-amber-300/90">
+          Only paste code you wrote or trust. On the default page URL it runs on the same domain as
+          your dashboard, so a hostile snippet can reach anything a signed-in visitor&apos;s browser
+          can.
         </p>
       </div>
     );

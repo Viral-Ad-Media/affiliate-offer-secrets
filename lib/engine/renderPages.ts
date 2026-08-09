@@ -293,6 +293,11 @@ const PAGE_STYLE = `
   .countdown .cd-label { font-size:14px; color:#666; margin-bottom:4px; }
   .countdown .cd-clock { font-size:34px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:1px; }
   .countdown .cd-expired { font-size:16px; font-weight:600; }
+  /* Deliberately almost nothing: this wrapper holds markup the app didn't write, so every rule
+     here is one the pasted code has to fight. Just the vertical rhythm the other blocks have, and
+     a guard so an oversized embed widens the page instead of overflowing it sideways. */
+  .custom-html { margin:24px 0; max-width:100%; }
+  .custom-html img, .custom-html iframe { max-width:100%; }
   .aos-consent { position:fixed; left:0; right:0; bottom:0; z-index:2147483000; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:12px 20px; padding:14px 20px; background:#1a1a1a; color:#f5f5f5; font-size:14px; line-height:1.5; box-shadow:0 -2px 12px rgba(0,0,0,.2); }
   .aos-consent p { margin:0; max-width:60ch; }
   .aos-consent a { color:#9ae6b4; }

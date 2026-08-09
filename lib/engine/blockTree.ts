@@ -383,6 +383,29 @@ export type CountdownBlock = Base & {
   };
 };
 
+/**
+ * Raw HTML/CSS/JS, injected into the published page verbatim.
+ *
+ * This block is the deliberate exception to the rule the rest of this file exists to enforce —
+ * `styleToInlineCss`'s fixed key table, `parseVideoUrl` rebuilding embed URLs from a template,
+ * `ICON_SVG_PATHS` as an allowlist, `extractTrackingId` throwing away pasted markup. Every one of
+ * those is here so no tenant-typed string can become executable output. `custom_html` is that path,
+ * on purpose, because a page builder without an embed widget can't host a booking widget, a chat
+ * bubble, or a third-party pixel someone's affiliate network handed them.
+ *
+ * What that costs, stated plainly because it is not recoverable by being careful elsewhere: funnel
+ * and blog pages serve on the app's own origin (`/p/…`, `/b/…`, and workspace subdomains) and the
+ * session cookie is domain-wide (lib/supabase/cookieOptions.ts), so code pasted here runs
+ * same-origin with the app. `httpOnly` does not help — a same-origin `fetch` carries the session
+ * anyway. A signed-in visitor loading a page that carries someone else's snippet is exposed to it.
+ * On a tenant's own verified custom domain that is just "my site, my script"; on the default URL it
+ * is not. Chosen knowingly (see CLAUDE.md) — the escape hatch is what the block is for.
+ *
+ * So: never escape this, never "sanitize" it into something half-working, and never let a template
+ * or an AI stage emit one. It is insertable only by a human, from the palette.
+ */
+export type CustomHtmlBlock = Base & { type: "custom_html"; content: { code: string } };
+
 export type ElementBlock =
   | HeadingBlock
   | SubheadingBlock
@@ -398,6 +421,7 @@ export type ElementBlock =
   | TestimonialBlock
   | CarouselBlock
   | CountdownBlock
+  | CustomHtmlBlock
   | FormBlock
   | FooterBlock
   | ProgressBlock
@@ -451,6 +475,7 @@ export const ELEMENT_BLOCK_TYPES = [
   "testimonial",
   "carousel",
   "countdown",
+  "custom_html",
   "form",
   "footer",
   "progress",
@@ -858,6 +883,10 @@ export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readon
   testimonial: TEXT_STYLE_KEYS,
   carousel: BOX_STYLE_KEYS,
   countdown: TEXT_STYLE_KEYS,
+  // BOX only: the code decides its own typography. Offering a font size here would set it on a
+  // wrapper the pasted markup is free to override, so the control would work or not depending on
+  // what was pasted — worse than not offering it.
+  custom_html: BOX_STYLE_KEYS,
   form: FORM_STYLE_KEYS,
   footer: TEXT_STYLE_KEYS,
   progress: TEXT_STYLE_KEYS,
@@ -1121,6 +1150,15 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
 </div>${FORM_ACTION_SCRIPT}${
         block.children.some((f) => f.content.visibleWhen) ? FORM_CONDITION_SCRIPT : ""
       }`;
+    }
+    case "custom_html": {
+      const code = block.content.code;
+      // Empty renders nothing — same call as a video with no source. An empty wrapper with the
+      // block's padding on it would show as an unexplained gap on a live page.
+      if (!code.trim()) return "";
+      // Verbatim. The `id` is safe to interpolate (ID_RE-checked by the validator, same as every
+      // other block's) and is what lets a button scroll to this block.
+      return `<div class="custom-html" id="${escapeHtml(block.id)}"${styleAttr(block.style, BOX_STYLE_KEYS)}>${code}</div>`;
     }
     case "countdown": {
       const { mode, deadline, minutes, label, expiredText } = block.content;
@@ -1788,6 +1826,10 @@ function defaultElementContent(type: (typeof ELEMENT_BLOCK_TYPES)[number]): Elem
       // Evergreen by default: a date-mode block with no deadline yet would render nothing, and a
       // block that vanishes the moment you insert it reads as broken.
       return { mode: "evergreen", deadline: null, minutes: 15, label: "This offer ends in", expiredText: "This offer has ended." };
+    case "custom_html":
+      // Empty, not a sample snippet: seeded markup would publish on a page whose author only meant
+      // to try the block, and this is the one block whose default content actually runs.
+      return { code: "" };
     case "testimonial":
       // Defaults to the text variant: it is the only one that is complete the moment you insert
       // it, so the block never starts life looking broken while you go find an image.

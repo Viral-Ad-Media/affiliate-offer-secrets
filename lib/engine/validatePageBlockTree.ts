@@ -59,6 +59,7 @@ const MAX_COLUMN_CHILDREN = 20;
 const MAX_FORM_CHILDREN = 10;
 const MAX_FOOTER_LINKS = 6;
 const MAX_FIELD_OPTIONS = 12; // radio/select choices — a lead form asking for more than this is a survey
+const MAX_CUSTOM_CODE = 20000; // one embed snippet, generously — see the custom_html case below
 const MAX_ROOT_BLOCKS = 40;
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
@@ -401,6 +402,22 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
           }),
         },
       };
+    }
+    case "custom_html": {
+      const code = typeof content.code === "string" ? content.code : "";
+      // The one place this file REFUSES over-length input instead of clamping it, and the reason is
+      // specific to code rather than a stricter mood: `clampStr` slices at a character count, and
+      // slicing markup mid-tag is not a shorter version of the same thing. A cut that lands inside
+      // an unclosed `<script>` swallows the rest of the document, so the truncation would silently
+      // take out every block below this one. Refusing gives the author an error on the block they
+      // just pasted into; clamping gives them a blank page and no idea why.
+      if (code.length > MAX_CUSTOM_CODE) {
+        throw new Error(`custom code block is too long (${code.length} of ${MAX_CUSTOM_CODE} characters)`);
+      }
+      // Stored exactly as typed. No escaping, no tag filtering, no rewriting — a half-sanitized
+      // snippet is a snippet that fails in a way nobody can debug, and the block's whole purpose
+      // is to run what was pasted. The trade-off this accepts is documented on CustomHtmlBlock.
+      return { id, type: "custom_html", style, content: { code } };
     }
     case "countdown": {
       const mode = content.mode === "date" ? "date" : "evergreen";

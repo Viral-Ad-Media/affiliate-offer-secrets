@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   GripVertical,
   ImagePlus,
@@ -25,6 +25,7 @@ import {
   GalleryHorizontal,
   Timer,
   TextCursorInput,
+  Code2,
   Settings2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -203,6 +204,7 @@ const ELEMENT_PALETTE: { type: PaletteType; label: string; icon: any }[] = [
   { type: "testimonial", label: "Testimonial", icon: Quote },
   { type: "carousel", label: "Carousel", icon: GalleryHorizontal },
   { type: "countdown", label: "Countdown", icon: Timer },
+  { type: "custom_html", label: "Custom code", icon: Code2 },
   { type: "form_input", label: "Input", icon: TextCursorInput },
   { type: "navigation", label: "Nav bar", icon: PanelTop },
   { type: "progress", label: "Progress bar", icon: BarChart3 },
@@ -221,6 +223,75 @@ const LOCKED_REASONS: Record<string, string> = {
   primary_cta: "This is the button that sends visitors to the offer.",
   decline_link: "An upsell has to offer a visible way to decline.",
 };
+
+/**
+ * Reports its own height to the editor so the preview frame can size itself. Code-owned and
+ * constant — it reads nothing from the block and interpolates nothing, so it is the same string
+ * for every custom-code block on every page.
+ */
+const PREVIEW_RESIZE_REPORTER = `<script>(function(){
+  function post(){ try { parent.postMessage({ __aosPreviewHeight: document.documentElement.scrollHeight }, '*'); } catch (e) {} }
+  if (window.ResizeObserver) new ResizeObserver(post).observe(document.documentElement);
+  window.addEventListener('load', post);
+  setTimeout(post, 60); setTimeout(post, 600);
+  post();
+})();<\/script>`;
+
+/**
+ * The canvas preview of a custom-code block.
+ *
+ * The PUBLISHED page runs this code inline in the page body (that is what the block is), but the
+ * editor runs it inside a sandboxed frame — and that is a STABILITY decision, not a security one.
+ * The editor is a React tree that re-renders on every keystroke elsewhere on the page; a snippet
+ * containing `document.write`, a global that collides with the app's, or a script that walks the
+ * DOM looking for its own mount point does not just render wrong, it can take the editor down
+ * while someone is mid-edit. It is also the author's own code, so there is nothing to protect them
+ * from — only something to keep out of the app's own DOM.
+ *
+ * The consequence to know: this preview is a close approximation, not a guarantee. Code that
+ * depends on the surrounding page — a selector reaching for another block, a style overriding the
+ * page's own CSS, anything reading the real URL — behaves differently here than when published.
+ * Use the page's Preview button to see the real thing.
+ */
+function CustomCodePreview({ code }: { code: string }) {
+  const frame = useRef<HTMLIFrameElement | null>(null);
+  const [height, setHeight] = useState(60);
+
+  const srcDoc = useMemo(
+    () =>
+      `<!doctype html><html><head><meta charset="utf-8"><base target="_blank">` +
+      `<style>html,body{margin:0;padding:0;font:16px/1.6 ${PAGE_FONT};color:#1a1a1a;}</style>` +
+      `</head><body>${code}${PREVIEW_RESIZE_REPORTER}</body></html>`,
+    [code]
+  );
+
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      // Identity, not origin: a frame sandboxed without `allow-same-origin` has an opaque origin,
+      // so e.origin is the string "null" for every such frame on the page and cannot tell them
+      // apart. Comparing against this frame's own contentWindow can.
+      if (!frame.current || e.source !== frame.current.contentWindow) return;
+      const h = (e.data as { __aosPreviewHeight?: unknown } | null)?.__aosPreviewHeight;
+      if (typeof h === "number" && Number.isFinite(h)) setHeight(Math.min(2000, Math.max(40, Math.ceil(h))));
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  return (
+    <iframe
+      ref={frame}
+      srcDoc={srcDoc}
+      // No allow-same-origin, deliberately: with allow-scripts it would be equivalent to no
+      // sandbox at all, since the frame could then reach into this document and unset the
+      // attribute on its own element.
+      sandbox="allow-scripts allow-popups allow-forms"
+      title="Custom code preview"
+      className="w-full border-0"
+      style={{ height }}
+    />
+  );
+}
 
 // A human-readable name for one block, for the button-action target dropdowns. Prefers the block's
 // own text so a page with four headings doesn't offer four entries called "Heading".
@@ -2193,6 +2264,32 @@ export default function WysiwygCanvas({
                 ? "Each visitor gets their own countdown, remembered across refreshes — it won't restart."
                 : "Counts to a real date. Hidden entirely until you set one."}
             </p>
+          </div>
+        );
+      }
+      case "custom_html": {
+        const code = el.content.code;
+        // No inline editor here on purpose. The canvas shows the PAGE; the code that produces it
+        // lives behind the ⚙, same as a button's action — and a textarea sitting on the canvas
+        // would be chrome the published page doesn't have, in the one block whose height is
+        // whatever its own output happens to be.
+        if (!code.trim()) {
+          return (
+            <div
+              className="my-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center"
+              style={blockInlineStyle(el)}
+            >
+              <Code2 className="mx-auto mb-1.5 h-5 w-5 text-gray-400" />
+              <p className="text-[13px] font-medium text-gray-600">Custom code</p>
+              <p className="mt-0.5 text-[11px] text-gray-400">
+                Open settings (⚙) to paste HTML, CSS or JavaScript. This block renders nothing until you do.
+              </p>
+            </div>
+          );
+        }
+        return (
+          <div className="my-3" style={blockInlineStyle(el)}>
+            <CustomCodePreview code={code} />
           </div>
         );
       }
