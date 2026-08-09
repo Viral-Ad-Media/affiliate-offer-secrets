@@ -28,9 +28,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid request" }, { status: 400 });
   }
 
+  // Where to put it. Omitted = append, which is what every caller did before the funnel map grew
+  // insert-between-steps affordances (0083) — so an older client keeps its exact behaviour.
+  // Anything non-numeric is treated as "append" rather than rejected: a bad position is a UI bug,
+  // and refusing to add the step at all would be a worse answer than adding it at the end.
+  const rawAfter = (body as Record<string, unknown>).after_index;
+  const afterIndex = Number.isFinite(rawAfter) ? Math.max(0, Math.trunc(rawAfter as number)) : null;
+
   const { data: step, error: rpcErr } = await supabase.rpc("add_funnel_step", {
     p_campaign_id: campaignId,
     p_step_type: stepType,
+    p_after_index: afterIndex,
   });
   if (rpcErr || !step) {
     return NextResponse.json({ error: rpcErr?.message ?? "failed to add step" }, { status: 400 });
