@@ -11,7 +11,7 @@ import PageEditor from "@/components/PageEditor";
 import SplitTestPanel from "@/components/SplitTestPanel";
 import FunnelMap from "@/components/FunnelMap";
 import FunnelStepEditor from "@/components/FunnelStepEditor";
-import TrackingPanel from "@/components/TrackingPanel";
+import FunnelSettingsDialog from "@/components/FunnelSettingsDialog";
 import type { TrackingSettings } from "@/lib/engine/renderPages";
 import { Card } from "@/components/ui/card";
 
@@ -59,7 +59,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
     // Explicit columns, not `*`. campaigns rows average 166 kB and reach 766 kB; this editor needs
     // page_copy and bridge_html (it IS the page editor) but has no use for the ad/blog/email/social
     // copy, the legacy presell_html/landing_md, or the video columns. tracking IS needed —
-    // TrackingPanel lives on the map view.
+    // Tracking lives behind the map view's ⚙ (FunnelSettingsDialog).
     //
     // A column missing here is invisible to tsc and shows up as an empty control, so this list has
     // to grow when a consumer does.
@@ -240,12 +240,21 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
         <ArrowLeft className="h-4 w-4" /> Back to Funnels
       </Link>
 
-      <header>
-        <h1 className="text-2xl font-bold text-zinc-100">{productTitle}</h1>
-        <p className="text-sm text-zinc-400">
-          Publishing is one switch for the whole funnel — the opt-in page and every step below go
-          live (or offline) together.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">{productTitle}</h1>
+          <p className="text-sm text-zinc-400">
+            Publishing is one switch for the whole funnel — the opt-in page and every step below go
+            live (or offline) together.
+          </p>
+        </div>
+        {campaign.page_copy && (
+          <FunnelSettingsDialog
+            campaignId={campaign.id}
+            tracking={(campaign as unknown as { tracking?: TrackingSettings | null }).tracking ?? null}
+            onSaved={load}
+          />
+        )}
       </header>
 
       {!campaign.page_copy ? (
@@ -279,11 +288,6 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
             onSelectVariant={(variantId) => setView({ kind: "variant", variantId })}
             onSelectStep={(stepId) => setView({ kind: "step", stepId })}
             onChanged={load}
-          />
-
-          <TrackingPanel
-            campaignId={campaign.id}
-            initialTracking={((campaign as unknown as { tracking?: TrackingSettings | null }).tracking ?? null)}
           />
         </>
       )}

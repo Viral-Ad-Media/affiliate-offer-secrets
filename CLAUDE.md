@@ -972,6 +972,22 @@ panel (`components/TrackingPanel.tsx`) on the funnel map view; saved through
 `app/api/campaigns/[id]/tracking/route.ts`, which re-renders everything the funnel serves (page
 HTML is baked at write time in this codebase, never templated at serve time).
 
+- **Tracking and its consent gate live behind a ⚙ on the funnel map**
+  (`components/FunnelSettingsDialog.tsx`), not stacked under the map as a permanent form. They
+  describe the WHOLE funnel — installed on the opt-in page, every split-test variant and every
+  step — so they belong beside the funnel; and below a map with several pages on it, a tall panel
+  of IDs you set once was the last thing on screen and the first thing in the way. Same idea as
+  the canvas ⚙ the page editors already have, one level up: that one is settings for the PAGE,
+  this one for the FUNNEL. **`PublishBridge` deliberately stays on the page** — it is an action
+  with a live consequence, not a setting, and burying "is this funnel public" behind a gear is how
+  someone ships a page they meant to keep private.
+  - `TrackingPanel` takes `bare` (drop the Card chrome — a card inside a dialog is a border inside
+    a border) and `onSaved`. **`onSaved` is load-bearing, not a nicety**: Radix unmounts dialog
+    content on close, so the panel remounts from `initialTracking` every time it opens, and
+    without refreshing the campaign row the second open would show the value from before the last
+    save. The `bare` switch is a plain conditional around a shared element tree, NOT a wrapper
+    component declared in the render body — that would get a new identity every render and remount
+    the controlled inputs mid-typing, the same trap `WysiwygCanvas` documents for its own wrappers.
 - **`lib/engine/tracking.ts` is the security boundary, and pasted snippets are never stored or
   rendered.** Each field accepts a bare ID or the full "paste before </head>" install snippet the
   platform hands out — `extractTrackingId()` pulls the ID out via provider-specific contextual

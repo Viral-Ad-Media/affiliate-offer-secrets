@@ -23,9 +23,23 @@ const FIELDS: { key: keyof TrackingSettings; label: string; placeholder: string 
 export default function TrackingPanel({
   campaignId,
   initialTracking,
+  bare = false,
+  onSaved,
 }: {
   campaignId: string;
   initialTracking: TrackingSettings | null;
+  /**
+   * Drop the Card chrome. Set when this renders inside the funnel settings dialog, which already
+   * provides the surface — a card inside a dialog is a border inside a border. The heading stays
+   * either way: in the dialog it is what separates this section from the next one.
+   */
+  bare?: boolean;
+  /**
+   * Tell the parent the row changed. Load-bearing inside the settings dialog: Radix unmounts
+   * dialog content on close, so this component remounts from `initialTracking` every time it
+   * opens — without a refresh the second open would show the value from before the last save.
+   */
+  onSaved?: () => void;
 }) {
   const [fields, setFields] = useState<Record<string, string>>({
     ga4_id: initialTracking?.ga4_id ?? "",
@@ -74,10 +88,15 @@ export default function TrackingPanel({
       meta_pixel_id: data.tracking?.meta_pixel_id ?? "",
     });
     setSavedAt(Date.now());
+    onSaved?.();
   }
 
-  return (
-    <Card as="section" className="p-4">
+  // A plain conditional around a shared element tree, NOT a component defined in this body — a
+  // wrapper component declared inside the render gets a new identity every render, which unmounts
+  // and remounts everything under it, and everything under it here is a controlled input someone
+  // is typing into. Same trap WysiwygCanvas documents for its own wrappers.
+  const body = (
+    <>
       <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-zinc-100">
         <BarChart3 className="h-4 w-4 text-emerald-400" /> Tracking
       </div>
@@ -177,6 +196,14 @@ export default function TrackingPanel({
           </span>
         )}
       </div>
+    </>
+  );
+
+  return bare ? (
+    <section>{body}</section>
+  ) : (
+    <Card as="section" className="p-4">
+      {body}
     </Card>
   );
 }
