@@ -225,15 +225,65 @@ async function stagePages(
   };
 }
 
+/**
+ * The affiliate link in a blog article is CODE-OWNED, exactly like the funnel page's hoplink.
+ *
+ * The model is asked to place `{{OFFER_LINK}}` as the link target and is told never to write a
+ * real URL — then this substitutes the tracked link. Letting an LLM type the hoplink itself is how
+ * you ship an article whose links 404, point at the vendor with no affiliate id, or carry a
+ * hallucinated tid; content rule 4 already says hoplinks are built by buildHoplink and nothing
+ * else, and "nothing else" includes the model.
+ *
+ * **`blog_md` was shipping with no offer link at all** until this existed — the prompt mentioned
+ * the "tid=blog" channel but the link was never passed in and nothing post-processed the markdown,
+ * so all 13 articles generated before this were unmonetized. Measured, not assumed.
+ */
+export const OFFER_LINK_TOKEN = "{{OFFER_LINK}}";
+
+export function withOfferLinks(markdown: string, hoplink: string | null): string {
+  const body = typeof markdown === "string" ? markdown : "";
+
+  // No product (a standalone funnel has none) means no link to substitute. Strip the placeholder
+  // rather than publishing "{{OFFER_LINK}}" to readers, and drop the now-targetless markdown link
+  // back to plain text so the sentence still reads.
+  if (!hoplink) {
+    return body
+      .replace(new RegExp(`\\[([^\\]]*)\\]\\(\\s*${escapeRegExp(OFFER_LINK_TOKEN)}\\s*\\)`, "g"), "$1")
+      .split(OFFER_LINK_TOKEN)
+      .join("");
+  }
+
+  const substituted = body.split(OFFER_LINK_TOKEN).join(hoplink);
+
+  // The model ignoring the instruction is the failure this whole function exists to prevent, so
+  // don't just hope: if nothing was substituted, append a code-owned CTA. A plain line at the end
+  // is worse placement than an in-body link but infinitely better than an article that earns
+  // nothing, and it is the same "guarantee the compliance-critical bit" habit as DISCLOSURE.
+  if (substituted === body) {
+    const cta = `\n\n[Check the official page for current pricing and availability](${hoplink})\n`;
+    return `${body.trimEnd()}\n${cta}`;
+  }
+  return substituted;
+}
+
+function escapeRegExp(v: string): string {
+  return v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function stageContent(
   product: ProductRow,
   prior: Record<string, unknown>,
   usage: UsageContext
 ): Promise<StageOutput> {
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
+  const byChannel = (prior.hoplink_by_channel ?? {}) as Record<string, string>;
+  const blogHoplink = typeof byChannel.blog === "string" && byChannel.blog ? byChannel.blog : null;
+
   const result = await completeJSON<{ blog_md: string }>({
     system: COMPLIANCE_SYSTEM,
-    prompt: `${ctx}\n\nWrite a 1200-1800 word SEO-style blog article about this niche/product for the "tid=blog" traffic channel, in Markdown, with a clear intro/body/conclusion, natural keyword usage, and an affiliate disclosure line near the top or bottom.`,
+    prompt: `${ctx}\n\nWrite a 1200-1800 word SEO-style blog article about this niche/product for the "tid=blog" traffic channel, in Markdown, with a clear intro/body/conclusion, natural keyword usage, and an affiliate disclosure line near the top or bottom.
+
+Link to the offer 2-3 times where it reads naturally — once early, once in the body, once in the conclusion — as Markdown links whose target is exactly the placeholder ${OFFER_LINK_TOKEN}, e.g. "[see the full programme](${OFFER_LINK_TOKEN})". Never write a real URL, a domain, or any other link target: the placeholder is substituted for the reader's tracked affiliate link afterwards, and anything else you invent would not track and may not resolve.`,
     schema: {
       type: "object",
       properties: { blog_md: { type: "string" } },
@@ -242,7 +292,8 @@ async function stageContent(
     maxTokens: 6000,
     usage,
   });
-  return { stageData: prior, campaignPatch: result };
+
+  return { stageData: prior, campaignPatch: { blog_md: withOfferLinks(result.blog_md, blogHoplink) } };
 }
 
 async function stageSocial(
