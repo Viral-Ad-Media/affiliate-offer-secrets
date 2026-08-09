@@ -29,6 +29,8 @@ import {
   type ButtonAction,
   type FormSubmitAction,
   type TestimonialMedia,
+  FIELD_CONDITION_OPS,
+  type FieldConditionOp,
   VIEWPORTS,
   type Viewport,
 } from "./blockTree";
@@ -124,6 +126,13 @@ function sanitizeStyle(raw: unknown): BlockStyle {
   if (fbr !== undefined) style.fieldBorderRadius = fbr;
   const fg = num(s.fieldGap, 0, 40);
   if (fg !== undefined) style.fieldGap = fg;
+  // The focused state. Easy to forget here, and forgetting is silent: sanitizeStyle REBUILDS the
+  // style object, so a key it doesn't copy is dropped on every save while the editor keeps showing
+  // it until reload. Same trap contentWidth hit.
+  const ffbc = hex(s.fieldFocusBorderColor);
+  if (ffbc) style.fieldFocusBorderColor = ffbc;
+  const ffbg = hex(s.fieldFocusBackgroundColor);
+  if (ffbg) style.fieldFocusBackgroundColor = ffbg;
   return style;
 }
 
@@ -232,7 +241,13 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
         },
         // Same cap and same per-field validation as the locked opt-in form — one definition of
         // what a form field may be, so a standalone form can't accept anything the other can't.
-        children: kids.slice(0, MAX_FORM_CHILDREN).map((f) => validateFormInput(f, count)),
+        // Conditions get pruned here too: a standalone form's fields reference each other exactly
+        // the same way, and skipping it would leave the rule enforced on one form and not the other.
+        children: (() => {
+          const fields = kids.slice(0, MAX_FORM_CHILDREN).map((f) => validateFormInput(f, count));
+          pruneFieldConditions(fields);
+          return fields;
+        })(),
       };
     }
     case "video": {
@@ -374,6 +389,29 @@ function validateFormInput(raw: unknown, count: { n: number }): FormInputBlock {
         .filter((o) => o !== "")
     : undefined;
 
+  // "none" is the default and is omitted above, so a field saved before label placement existed
+  // is byte-identical after a round trip.
+  const labelPosition =
+    content.labelPosition === "above" || content.labelPosition === "border" ? content.labelPosition : "none";
+
+  // Shape-checked here; whether it points at a REAL sibling field can only be known once the whole
+  // form is assembled, so reconcileFieldConditions (below) prunes dangling ones after the fact.
+  const rawWhen = (content.visibleWhen ?? null) as Record<string, unknown> | null;
+  const whenKey = typeof rawWhen?.fieldKey === "string" && FIELD_KEY_RE.test(rawWhen.fieldKey) ? rawWhen.fieldKey : "";
+  const whenOp = (FIELD_CONDITION_OPS as readonly string[]).includes(rawWhen?.op as string)
+    ? (rawWhen!.op as FieldConditionOp)
+    : null;
+  const visibleWhen =
+    whenKey && whenOp
+      ? {
+          fieldKey: whenKey,
+          op: whenOp,
+          ...(whenOp === "equals" || whenOp === "not_equals"
+            ? { value: clampStr(rawWhen?.value, MAX_TEXT_SHORT) }
+            : {}),
+        }
+      : null;
+
   return {
     id: b.id as string,
     type: "form_input",
@@ -386,6 +424,8 @@ function validateFormInput(raw: unknown, count: { n: number }): FormInputBlock {
       required: content.required === true,
       ...(width ? { width } : {}),
       ...(options ? { options } : {}),
+      ...(labelPosition !== "none" ? { labelPosition } : {}),
+      ...(visibleWhen ? { visibleWhen } : {}),
     },
   };
 }
@@ -420,6 +460,27 @@ function validateElement(raw: unknown, count: { n: number }): ElementBlock {
 
 function validateLockedBlock(raw: unknown, count: { n: number }): LockedBlock {
   return withHidden(validateLockedBlockInner(raw, count), raw);
+}
+
+/**
+ * Drops a condition that names a field which is not on this form, and one that names ITSELF.
+ *
+ * Mutates in place, after the whole form is assembled — a single field can't know its siblings.
+ * A DROP rather than a rejected save, deliberately, matching how a broken FormSubmitAction
+ * degrades to `message`: deleting the field a condition pointed at would otherwise produce a page
+ * that refuses to save, which is a page you cannot edit your way out of. And a self-reference
+ * ("show this when this is filled") is unsatisfiable — it would hide the field permanently, which
+ * looks exactly like data loss.
+ */
+function pruneFieldConditions(fields: FormInputBlock[]): void {
+  const keys = new Set(fields.map((f) => f.content.fieldKey));
+  for (const f of fields) {
+    const when = f.content.visibleWhen;
+    if (!when) continue;
+    if (!keys.has(when.fieldKey) || when.fieldKey === f.content.fieldKey) {
+      delete f.content.visibleWhen;
+    }
+  }
 }
 
 function validateColumn(raw: unknown, count: { n: number }): ColumnBlock {
@@ -495,6 +556,7 @@ function validateLockedBlockInner(raw: unknown, count: { n: number }): LockedBlo
         if (seen.has(f.content.fieldKey)) throw new Error("duplicate form field key");
         seen.add(f.content.fieldKey);
       }
+      pruneFieldConditions(validated);
       return {
         id: b.id as string,
         type: "lead_capture_form",

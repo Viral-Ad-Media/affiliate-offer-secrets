@@ -80,6 +80,14 @@ export type BlockStyle = {
   fieldBorderWidth?: number; // px, 0-8
   fieldBorderRadius?: number; // px, 0-40
   fieldGap?: number; // px, 0-40 — vertical space between fields
+  /**
+   * The FOCUSED state. ClickFunnels styles inputs in three states (Default / Focused / Value); a
+   * focus ring is the one that carries real usability weight, so it is the one modelled here. It
+   * has to be a CSS variable read by a `:focus` rule rather than an inline style — an inline
+   * declaration cannot express a pseudo-class.
+   */
+  fieldFocusBorderColor?: HexColor;
+  fieldFocusBackgroundColor?: HexColor;
 };
 
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
@@ -175,6 +183,8 @@ export function styleToInlineCss(style: BlockStyle | undefined, allowed: readonl
     ["fieldBackgroundColor", "--f-bg"],
     ["fieldTextColor", "--f-fg"],
     ["fieldBorderColor", "--f-bc"],
+    ["fieldFocusBorderColor", "--f-focus-bc"],
+    ["fieldFocusBackgroundColor", "--f-focus-bg"],
   ] as const) {
     if (has(key)) {
       const v = hex(style[key]);
@@ -471,7 +481,31 @@ export type FormInputBlock = Base & {
     options?: string[];
     /** "half" lets two consecutive fields share a row. Defaults to full width. */
     width?: "full" | "half";
+    /**
+     * Where the field's label sits. ClickFunnels' Label Position, plus a third value they don't
+     * have: "none" is the DEFAULT and is what every field rendered before this existed
+     * (placeholder only), so no stored page changes appearance until someone opts in.
+     */
+    labelPosition?: "none" | "above" | "border";
+    /** Show this field only when another field on the same form holds a given value. */
+    visibleWhen?: FieldCondition;
   };
+};
+
+/**
+ * Conditional logic, as a closed union — same discipline as ButtonAction and FormSubmitAction.
+ *
+ * `fieldKey` names a SIBLING field on the same form; the validator drops the rule if it names
+ * nothing, rather than failing the save. A page you cannot save because you deleted the field a
+ * condition pointed at would be a page you cannot edit your way out of.
+ */
+export const FIELD_CONDITION_OPS = ["equals", "not_equals", "filled", "empty"] as const;
+export type FieldConditionOp = (typeof FIELD_CONDITION_OPS)[number];
+export type FieldCondition = {
+  fieldKey: string;
+  op: FieldConditionOp;
+  /** Ignored by `filled`/`empty`, which test presence rather than a value. */
+  value?: string;
 };
 
 export type ColumnBlock = Base & { type: "column"; children: ElementBlock[] };
@@ -682,6 +716,8 @@ export const FORM_STYLE_KEYS = [
   "fieldBorderWidth",
   "fieldBorderRadius",
   "fieldGap",
+  "fieldFocusBorderColor",
+  "fieldFocusBackgroundColor",
 ] as const;
 
 // form_input has no entry here — it's never independently selectable/stylable in the editor (it
@@ -875,7 +911,9 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
     <button type="submit" class="cta">${escapeHtml(submitText || "Send")}</button>
     <p class="aos-form-done" hidden>${escapeHtml(successText || "Thanks.")}</p>
   </form>
-</div>${FORM_ACTION_SCRIPT}`;
+</div>${FORM_ACTION_SCRIPT}${
+        block.children.some((f) => f.content.visibleWhen) ? FORM_CONDITION_SCRIPT : ""
+      }`;
     }
     case "countdown": {
       const { mode, deadline, minutes, label, expiredText } = block.content;
@@ -911,6 +949,59 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
 // once (guarded) alongside the first form/action button, so a page using none of this still ships
 // no script. Reads only data attributes and matches them against elements that actually exist —
 // a stored id that names nothing simply does nothing.
+/**
+ * Conditional-logic runtime. Emitted only next to a form that actually has a condition, so a page
+ * without one still ships no extra script — the same rule the countdown block follows.
+ *
+ * **A hidden field is DISABLED, not merely hidden.** `display:none` still submits its value, so a
+ * question the visitor never saw would arrive as an answer. Disabling is what makes "this field
+ * does not apply" true in the data as well as on screen — and the leads route validates against
+ * the page's field list, so a stale value there would look legitimate.
+ *
+ * Nothing from the page reaches this as code: it reads three data attributes as strings and
+ * compares them.
+ */
+const FORM_CONDITION_SCRIPT = `<script>(function(){
+function val(form, key){
+  var els = form.querySelectorAll('[name="' + CSS.escape(key) + '"]');
+  if (!els.length) return null;
+  var first = els[0];
+  if (first.type === 'checkbox') return first.checked ? (first.value || 'yes') : '';
+  if (first.type === 'radio') {
+    for (var i = 0; i < els.length; i++) if (els[i].checked) return els[i].value;
+    return '';
+  }
+  return first.value;
+}
+function apply(form){
+  form.querySelectorAll('[data-when-field]').forEach(function(wrap){
+    var v = val(form, wrap.getAttribute('data-when-field'));
+    // A condition naming a field that is not on the page shows the dependent field rather than
+    // hiding it forever — losing a question outright is the worse failure.
+    var show = true;
+    if (v !== null) {
+      var op = wrap.getAttribute('data-when-op');
+      var want = wrap.getAttribute('data-when-value') || '';
+      if (op === 'equals') show = v === want;
+      else if (op === 'not_equals') show = v !== want;
+      else if (op === 'filled') show = v !== '';
+      else if (op === 'empty') show = v === '';
+    }
+    wrap.hidden = !show;
+    wrap.querySelectorAll('input,select,textarea').forEach(function(el){ el.disabled = !show; });
+  });
+}
+// Bind by CONTENT, not by class. The standalone form block is <form class="aos-form"> while the
+// locked opt-in form is <form id="leadForm"> — selecting on either class alone would silently skip
+// the other, and the opt-in form is the one every funnel actually uses.
+document.querySelectorAll('form').forEach(function(form){
+  if (!form.querySelector('[data-when-field]')) return;
+  form.addEventListener('input', function(){ apply(form); });
+  form.addEventListener('change', function(){ apply(form); });
+  apply(form);
+});
+})();</script>`;
+
 const FORM_ACTION_SCRIPT = `<script>(function(){
 if (window.__aosForms) return; window.__aosForms = 1;
 document.addEventListener("click", function(e){
@@ -1007,6 +1098,35 @@ function renderSection(section: SectionBlock, ctx: RenderCtx): string {
 // One tenant-added field. Every branch emits a `name` matching the block's fieldKey, because that
 // is what the submit handler collects and what the leads route validates against the page's
 // current field list — a field rendered without it silently never reaches the database.
+/**
+ * The wrapper a field needs once it can carry a label or a condition.
+ *
+ * Emitted ONLY when one of those is set. A plain field still renders as a bare input exactly as
+ * before, so no stored page gains a wrapper div (and the CSS that targets `.aos-form input` as a
+ * direct child keeps matching) until someone opts in.
+ */
+function wrapField(f: FormInputBlock, inner: string, halfClass: boolean): string {
+  const pos = f.content.labelPosition ?? "none";
+  const cond = f.content.visibleWhen;
+  if (pos === "none" && !cond) return inner;
+
+  const label = escapeHtml(f.content.label);
+  const cls = ["fld", halfClass ? "fld-half" : "", pos === "border" ? "fld-lbl-border" : "", pos === "above" ? "fld-lbl-above" : ""]
+    .filter(Boolean)
+    .join(" ");
+
+  // Only the three parts of a condition, each escaped, ever reach the DOM — the page's own script
+  // reads them as data, never as code. Same rule the countdown block follows.
+  const condAttrs = cond
+    ? ` data-when-field="${escapeHtml(cond.fieldKey)}" data-when-op="${escapeHtml(cond.op)}"${
+        cond.value !== undefined ? ` data-when-value="${escapeHtml(cond.value)}"` : ""
+      }`
+    : "";
+
+  const labelHtml = pos === "none" ? "" : `<span class="fld-label">${label}</span>`;
+  return `<div class="${cls}"${condAttrs}>${labelHtml}${inner}</div>`;
+}
+
 function renderFormField(f: FormInputBlock): string {
   const name = escapeHtml(f.content.fieldKey);
   const label = escapeHtml(f.content.label);
@@ -1015,16 +1135,21 @@ function renderFormField(f: FormInputBlock): string {
   const options = (f.content.options ?? []).filter((o) => o.trim() !== "");
   // Half-width fields sit side by side (two consecutive halves make a row) — the layout control
   // people actually want on a form, without a nested row/column model inside the form itself.
-  const half = f.content.width === "half" ? ' class="fld-half"' : "";
+  // When the field gains a wrapper the class moves OUT to it, or the grid would size the input
+  // rather than the labelled group.
+  const wrapped = (f.content.labelPosition ?? "none") !== "none" || !!f.content.visibleWhen;
+  const half = f.content.width === "half" && !wrapped ? ' class="fld-half"' : "";
+
+  const out = (inner: string) => wrapField(f, inner, f.content.width === "half");
 
   switch (f.content.fieldType) {
     case "textarea":
-      return `<textarea name="${name}"${half} placeholder="${placeholder}" rows="4"${required}></textarea>`;
+      return out(`<textarea name="${name}"${half} placeholder="${placeholder}" rows="4"${required}></textarea>`);
 
     case "checkbox":
       // Value is only submitted when ticked, which is exactly the semantics a checkbox should
       // have — an unticked box sends nothing rather than "false".
-      return `<label class="field-check"><input type="checkbox" name="${name}" value="yes"${required} /> <span>${label}</span></label>`;
+      return out(`<label class="field-check"><input type="checkbox" name="${name}" value="yes"${required} /> <span>${label}</span></label>`);
 
     case "radio": {
       if (options.length === 0) return "";
@@ -1038,7 +1163,7 @@ function renderFormField(f: FormInputBlock): string {
         .join("");
       // required goes on the FIRST radio only: HTML treats a required radio group as satisfied by
       // any member, and repeating it just makes the browser's own message noisier.
-      return `<fieldset class="field-group"><legend>${label}</legend>${inputs}</fieldset>`;
+      return out(`<fieldset class="field-group"><legend>${label}</legend>${inputs}</fieldset>`);
     }
 
     case "select": {
@@ -1048,11 +1173,11 @@ function renderFormField(f: FormInputBlock): string {
         .join("");
       // The placeholder option carries no value, so "nothing chosen" fails a required check
       // instead of submitting the prompt text as an answer.
-      return `<select name="${name}"${half}${required}><option value="">${placeholder}</option>${opts}</select>`;
+      return out(`<select name="${name}"${half}${required}><option value="">${placeholder}</option>${opts}</select>`);
     }
 
     default:
-      return `<input name="${name}"${half} type="${f.content.fieldType}" placeholder="${placeholder}"${required} />`;
+      return out(`<input name="${name}"${half} type="${f.content.fieldType}" placeholder="${placeholder}"${required} />`);
   }
 }
 
@@ -1124,7 +1249,7 @@ function renderLeadCaptureForm(block: LeadCaptureFormBlock, ctx: RenderCtx): str
           <p class="disclosure">${ctx.leadConsentText}</p>
         </form>
         <p class="aos-form-done reveal" hidden>${done}</p>
-      </div>`;
+      </div>${block.children.some((f) => f.content.visibleWhen) ? FORM_CONDITION_SCRIPT : ""}`;
 }
 
 function renderLockedBlock(block: LockedBlock, ctx: RenderCtx): string {

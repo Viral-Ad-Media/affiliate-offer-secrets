@@ -269,6 +269,23 @@ const PAGE_STYLE = `
      !important so a future inline display value from a style key cannot silently defeat it.
      THIS BLOCK IS DUPLICATED in lib/blog.ts's PUBLIC_CSS — change both or a block hidden on a
      funnel page starts showing on a blog post. */
+  /* Field label placement + focused state — set per field / per form in the editor.
+     DUPLICATED in the other stylesheet (renderPages.ts PAGE_STYLE / lib/blog.ts PUBLIC_CSS);
+     change both or a form looks different on a funnel page than on a blog post. */
+  .fld { margin:var(--f-gap,6px) 0; }
+  .fld > input, .fld > textarea, .fld > select { margin:0; }
+  .fld-lbl-above .fld-label { display:block; margin-bottom:4px; font-size:14px; font-weight:600; }
+  /* "On border" sits the label across the input's top edge, so it needs the wrapper positioned
+     and a background chip to break the border line behind the text. */
+  .fld-lbl-border { position:relative; }
+  .fld-lbl-border .fld-label { position:absolute; top:-8px; left:10px; padding:0 4px; font-size:12px;
+    background:var(--f-bg,var(--t-field-bg,#fff)); color:inherit; }
+  .aos-form input:focus, .aos-form textarea:focus, .aos-form select:focus,
+  .optin input:focus, .optin textarea:focus, .optin select:focus {
+    border-color:var(--f-focus-bc,var(--f-bc,var(--t-field-border,#ccc)));
+    background:var(--f-focus-bg,var(--f-bg,var(--t-field-bg,#fff)));
+    outline:none;
+  }
   @media (max-width:639px) { .hide-mobile { display:none !important; } }
   @media (min-width:640px) and (max-width:1023px) { .hide-tablet { display:none !important; } }
   @media (min-width:1024px) { .hide-desktop { display:none !important; } }
