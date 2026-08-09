@@ -569,7 +569,42 @@ export type PageBlockTree = {
   contentWidth?: number;
   /** Palette / typography / button / form styling. See lib/engine/pageTheme.ts. */
   theme?: PageTheme;
+  /**
+   * What query this page is written FOR. Planned by the build kit and editable per page.
+   *
+   * On the TREE for the same reason contentWidth and theme are: `page_copy` is the one field a
+   * funnel opt-in, a split-test variant, a funnel step and a blog post all already have, so one
+   * slot covers four page kinds with no migration and no per-table column to keep in step.
+   *
+   * It intentionally renders NOTHING. Stuffing the primary keyword into a meta tag is the 2009
+   * move — Google dropped `meta keywords` as a ranking signal long ago and it now mostly tells
+   * competitors what you are targeting. This exists to steer generation and to be visible while
+   * editing, not to be emitted.
+   */
+  keywords?: PageKeywords;
 };
+
+export type PageKeywords = {
+  primary: string;
+  secondary: string[];
+  /** Informational / commercial / transactional — what the searcher is trying to DO. */
+  intent?: string;
+};
+
+export const MAX_SECONDARY_KEYWORDS = 8;
+
+/** Defensive read: a hand-edited or legacy row may carry anything in this slot. */
+export function keywordsOf(tree: PageBlockTree | null | undefined): PageKeywords | null {
+  const k = tree?.keywords;
+  if (!k || typeof k.primary !== "string" || !k.primary.trim()) return null;
+  return {
+    primary: k.primary.trim(),
+    secondary: Array.isArray(k.secondary)
+      ? k.secondary.filter((x): x is string => typeof x === "string" && x.trim() !== "").slice(0, MAX_SECONDARY_KEYWORDS)
+      : [],
+    ...(typeof k.intent === "string" && k.intent.trim() ? { intent: k.intent.trim() } : {}),
+  };
+}
 
 // The content column is `width:90%; max-width:<contentWidth>px` — a percentage so narrow screens
 // get a gutter without a media query, and a px cap so a wide monitor doesn't stretch a line of

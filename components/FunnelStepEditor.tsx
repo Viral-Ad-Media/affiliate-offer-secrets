@@ -15,6 +15,7 @@ import EditorPreviewButton from "@/components/EditorPreview";
 import type { FunnelStepCtaAction } from "@/lib/shared";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import ContentWidthField from "@/components/ContentWidthField";
+import KeywordsField from "@/components/KeywordsField";
 import PageThemePanel from "@/components/PageThemePanel";
 import PostSeoPanel from "@/components/PostSeoPanel";
 import SeoFields, { type SeoValues } from "@/components/SeoFields";
@@ -162,6 +163,7 @@ export default function FunnelStepEditor({
             <div className="space-y-4">
               {/* Behind the ⚙ with the other page-level settings — see PageEditor. */}
               <PageChecklist items={funnelStepChecklist(stepType, tree)} subtitle={STEP_TYPE_LABELS[stepType]} />
+              <KeywordsField tree={tree} onChange={setTree} />
               <ContentWidthField tree={tree} onChange={setTree} />
               <PageThemePanel tree={tree} onChange={setTree} />
               {/* Behind the ⚙ with the other page-level settings, matching the blog post editor

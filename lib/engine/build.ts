@@ -1,7 +1,7 @@
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { fetchSalesPage, type ImageCandidate } from "./salespage";
 import { pickProductImage, fetchImageAsDataUrl } from "./images";
-import { renderBridgeHtml, buildHoplink, normalizePageCopy, type PageCopy, type Network, type TrackingSettings } from "./renderPages";
+import { renderBridgeHtml, buildHoplink, normalizePageCopy, keywordsOf, type PageBlockTree, type PageCopy, type Network, type TrackingSettings } from "./renderPages";
 import { themeFromBrandColors } from "./pageTheme";
 import { db } from "./core";
 import type { FbAdAngle, SocialPost } from "@/lib/shared";
@@ -170,11 +170,22 @@ async function stagePages(
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
   const copy = await completeJSON<PageCopy>({
     system: COMPLIANCE_SYSTEM,
-    prompt: `${ctx}\n\nWrite bridge (landing) page copy: a headline, a lead paragraph, a "mechanism" explanation (why/how it works), 3-5 benefit bullets, a short proof/credibility paragraph, 3-4 FAQ pairs, and a short CTA button label.`,
+    prompt: `${ctx}\n\nWrite bridge (landing) page copy: a headline, a lead paragraph, a "mechanism" explanation (why/how it works), 3-5 benefit bullets, a short proof/credibility paragraph, 3-4 FAQ pairs, and a short CTA button label.
+
+Also plan the search targeting for this offer: one primary keyword a real buyer would type, 3-6 secondary/semantic keywords, and the search intent (informational, commercial or transactional). Base them on the sales page's own language — do not invent volume figures or difficulty scores, which you cannot know.`,
     schema: {
       type: "object",
       properties: {
         headline: { type: "string" },
+        keywords: {
+          type: "object",
+          properties: {
+            primary: { type: "string" },
+            secondary: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 6 },
+            intent: { type: "string" },
+          },
+          required: ["primary", "secondary", "intent"],
+        },
         lead: { type: "string" },
         mechanism: { type: "string" },
         benefits: { type: "array", items: { type: "string" } },
@@ -203,6 +214,10 @@ async function stagePages(
   // every newly-built campaign persists version-2 page_copy going forward, rather than relying on
   // renderBridgeHtml's own internal (idempotent) normalization at every future read.
   const tree = normalizePageCopy(copy, imageDataUrl);
+  // The plan rides on the tree, like contentWidth and theme — the funnel page, its variants, its
+  // steps and the blog post derived from it all read page_copy, so one write covers them.
+  const planned = keywordsOf({ keywords: (copy as unknown as { keywords?: unknown }).keywords } as PageBlockTree);
+  if (planned) tree.keywords = planned;
   // Theme the page from the colours on the product's OWN sales page (stage 0 collected them).
   // Only the accent is taken — see themeFromBrandColors for why the reading surface is left
   // alone. A rebuild re-derives it; a tenant's own edits live on the saved tree and are only
@@ -216,7 +231,9 @@ async function stagePages(
   const bridgeHtml = renderBridgeHtml(product, tree, hoplink, imageDataUrl, campaignId, null, tracking);
 
   return {
-    stageData: prior,
+    // Carried forward so the blog stage can write TO the plan rather than inventing its own
+    // targeting — planning first and then writing is the whole point of doing it in this order.
+    stageData: { ...prior, keywords: planned },
     campaignPatch: {
       bridge_html: bridgeHtml,
       page_copy: tree,
@@ -276,12 +293,18 @@ async function stageContent(
   usage: UsageContext
 ): Promise<StageOutput> {
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
+  const planned = (prior.keywords ?? null) as { primary: string; secondary: string[]; intent?: string } | null;
+  const keywordBrief = planned
+    ? `\n\nWrite this article to rank for the primary keyword "${planned.primary}"${
+        planned.intent ? ` (search intent: ${planned.intent})` : ""
+      }. Work these related terms in where they read naturally: ${planned.secondary.join(", ")}. Use them like a writer, not a keyword tool — the primary phrase belongs in the title and once early in the body, and anything that reads like padding is worse than omitting it.`
+    : "";
   const byChannel = (prior.hoplink_by_channel ?? {}) as Record<string, string>;
   const blogHoplink = typeof byChannel.blog === "string" && byChannel.blog ? byChannel.blog : null;
 
   const result = await completeJSON<{ blog_md: string }>({
     system: COMPLIANCE_SYSTEM,
-    prompt: `${ctx}\n\nWrite a 1200-1800 word SEO-style blog article about this niche/product for the "tid=blog" traffic channel, in Markdown, with a clear intro/body/conclusion, natural keyword usage, and an affiliate disclosure line near the top or bottom.
+    prompt: `${ctx}${keywordBrief}\n\nWrite a 1200-1800 word SEO-style blog article about this niche/product for the "tid=blog" traffic channel, in Markdown, with a clear intro/body/conclusion, natural keyword usage, and an affiliate disclosure line near the top or bottom.
 
 Link to the offer 2-3 times where it reads naturally — once early, once in the body, once in the conclusion — as Markdown links whose target is exactly the placeholder ${OFFER_LINK_TOKEN}, e.g. "[see the full programme](${OFFER_LINK_TOKEN})". Never write a real URL, a domain, or any other link target: the placeholder is substituted for the reader's tracked affiliate link afterwards, and anything else you invent would not track and may not resolve.`,
     schema: {

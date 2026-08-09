@@ -5,6 +5,7 @@ import { Loader2, CheckCircle2, Lock } from "lucide-react";
 import { DISCLOSURE, normalizePageCopy, firstImageDataUrl, renderBlockTree, type PageBlockTree , renderBridgeHtml} from "@/lib/engine/renderPages";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import ContentWidthField from "@/components/ContentWidthField";
+import KeywordsField from "@/components/KeywordsField";
 import PageThemePanel from "@/components/PageThemePanel";
 import PostSeoPanel from "@/components/PostSeoPanel";
 import EditorPreviewButton from "@/components/EditorPreview";
@@ -164,6 +165,7 @@ export default function PageEditor({
                 items={funnelPageChecklist(funnelType, tree)}
                 subtitle={funnelType ? (funnelTypeLabel(funnelType) ?? undefined) : undefined}
               />
+              <KeywordsField tree={tree} onChange={setTree} />
               <ContentWidthField tree={tree} onChange={setTree} />
               <PageThemePanel tree={tree} onChange={setTree} />
               {/* SEO lives behind the ⚙ with the other page-level settings, the way the blog post

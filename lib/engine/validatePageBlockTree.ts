@@ -25,6 +25,7 @@ import {
   type FunnelStepType,
   TESTIMONIAL_MEDIA_KINDS,
   contentWidthOf,
+  keywordsOf,
   treeHasForm,
   type ButtonAction,
   type FormSubmitAction,
@@ -791,7 +792,28 @@ export function validatePageBlockTree(raw: unknown, opts: ValidatePageBlockTreeO
 
     // contentWidth rides on the tree, so it has to survive validation like anything else —
     // dropping it here would silently reset every page to the default on its next save.
-    return { ok: true, tree: { version: 2, blocks, contentWidth: contentWidthOf(body), theme: sanitizeTheme(body.theme) } };
+    // Same rule as contentWidth: anything not copied here is silently dropped on every save.
+    // Clamped, never rejected — a keyword list is metadata for the operator, and refusing to save
+    // a whole page over a stray value in it would be badly out of proportion.
+    const keywords = keywordsOf({ keywords: (body as { keywords?: unknown }).keywords } as PageBlockTree);
+    return {
+      ok: true,
+      tree: {
+        version: 2,
+        blocks,
+        contentWidth: contentWidthOf(body),
+        theme: sanitizeTheme(body.theme),
+        ...(keywords
+          ? {
+              keywords: {
+                primary: clampStr(keywords.primary, MAX_TEXT_SHORT),
+                secondary: keywords.secondary.map((k) => clampStr(k, MAX_TEXT_SHORT)).filter(Boolean),
+                ...(keywords.intent ? { intent: clampStr(keywords.intent, MAX_TEXT_SHORT) } : {}),
+              },
+            }
+          : {}),
+      },
+    };
   } catch (err) {
     if (err instanceof BlockCountLimit) return { ok: false, error: err.message };
     return { ok: false, error: err instanceof Error ? err.message : "invalid page content" };

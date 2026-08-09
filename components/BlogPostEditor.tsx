@@ -16,6 +16,7 @@ import { blogPostChecklist } from "@/lib/pageChecklist";
 import PostSeoPanel from "@/components/PostSeoPanel";
 import PostRevisionControls from "@/components/PostRevisionControls";
 import ContentWidthField from "@/components/ContentWidthField";
+import KeywordsField from "@/components/KeywordsField";
 import PageThemePanel from "@/components/PageThemePanel";
 import FeaturedImageField from "@/components/FeaturedImageField";
 import { resizeImageFile } from "@/lib/images/resizeClient";
@@ -313,6 +314,7 @@ export default function BlogPostEditor({
                   categoryId: categoryId || null,
                 })}
               />
+              <KeywordsField tree={tree} onChange={setTree} />
               <ContentWidthField tree={tree} onChange={setTree} />
               <PageThemePanel tree={tree} onChange={setTree} />
       <Card as="section" className="space-y-4 p-4">

@@ -16,6 +16,7 @@ import {
   slugify,
 } from "@/lib/blog";
 import { isValidImageDataUrl } from "@/lib/images/validate";
+import { keywordsOf, type PageBlockTree } from "@/lib/engine/renderPages";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -108,7 +109,7 @@ export async function createPostFromCampaign(
 
   const { data: campaign } = await admin
     .from("campaigns")
-    .select("id, user_id, blog_md, embedded_image_data_url, products(product_title, niche)")
+    .select("id, user_id, blog_md, page_copy, embedded_image_data_url, products(product_title, niche)")
     .eq("id", campaignId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -129,6 +130,11 @@ export async function createPostFromCampaign(
   const categoryId = await categoryForNiche(admin, workspaceId, campaign.user_id as string, product?.niche);
 
   const tree = markdownToBlockTree(contentMd, { dropFirstH1: true });
+  // The article was WRITTEN to the funnel's keyword plan (stageContent reads it), so the post it
+  // becomes should carry that plan rather than arriving untargeted. Copied, not shared: editing
+  // the post's keywords must not silently retarget the funnel page.
+  const planned = keywordsOf(campaign.page_copy as PageBlockTree | null);
+  if (planned) tree.keywords = planned;
   const html = renderBlockTree(tree, blogRenderCtx());
 
   const { data, error } = await admin
