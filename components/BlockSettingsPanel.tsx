@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   FORM_FIELD_PRESETS,
   FORM_FIELD_TYPES,
@@ -41,19 +42,89 @@ export function hasContentSettings(block: Block | null): boolean {
 const INPUT =
   "mt-1 w-full rounded-lg border border-ink-700 bg-ink-950 px-2 py-1.5 text-xs text-zinc-200";
 
+
+type SavedAttribute = {
+  key: string;
+  label: string;
+  field_type: FormFieldType;
+  options?: string[] | null;
+};
+
+/**
+ * The workspace's reusable field library (0082), fetched once per panel mount.
+ *
+ * Read through the route rather than the browser Supabase client so the workspace scoping lives
+ * in one place — `contact_attributes` is workspace-scoped and the route already resolves that from
+ * the request host. A failed load is silent and simply leaves the saved-fields group out: the
+ * preset list still works, so a registry hiccup must not block editing a form.
+ */
+function useContactAttributes() {
+  const [savedAttributes, setSavedAttributes] = useState<SavedAttribute[]>([]);
+  const [savingAttribute, setSavingAttribute] = useState(false);
+  const [attributeError, setAttributeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/contact-attributes")
+      .then((r) => (r.ok ? r.json() : { attributes: [] }))
+      .then((d) => {
+        if (!cancelled) setSavedAttributes(Array.isArray(d.attributes) ? d.attributes : []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function saveAsAttribute(fields: {
+    key: string;
+    label: string;
+    field_type: FormFieldType;
+    options?: string[];
+  }) {
+    setSavingAttribute(true);
+    setAttributeError(null);
+    const res = await fetch("/api/contact-attributes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    });
+    const data = await res.json().catch(() => ({}));
+    setSavingAttribute(false);
+    if (!res.ok) {
+      setAttributeError(data.error ?? "Couldn't save that field");
+      return;
+    }
+    setSavedAttributes((prev) => [...prev, data.attribute]);
+  }
+
+  return { savedAttributes, savingAttribute, attributeError, saveAsAttribute };
+}
+
 export default function BlockSettingsPanel({
   block,
   onChange,
   targets,
   forms,
+  siblingFields = [],
 }: {
   block: Block;
   onChange: (blockId: string, patch: Record<string, unknown>) => void;
   /** Blocks a button could scroll to — `{id,label}`, resolved by the canvas. */
   targets: { id: string; label: string; isForm: boolean }[];
   forms: { id: string; label: string }[];
+  /**
+   * The OTHER fields on the same form as the selected input — what a condition may point at.
+   * Resolved by the canvas, which is the only thing that knows which form a field sits in.
+   * A condition naming anything outside this list is pruned by the validator, so offering a
+   * dropdown rather than a text box is what keeps the two in step.
+   */
+  siblingFields?: { fieldKey: string; label: string }[];
 }) {
   const set = (patch: Record<string, unknown>) => onChange(block.id, patch);
+  // Called unconditionally: this component returns early for other block types, and a hook behind
+  // a conditional return is the classic rules-of-hooks crash when the selection changes type.
+  const { savedAttributes, savingAttribute, attributeError, saveAsAttribute } = useContactAttributes();
 
   // The form's own submit button: its label, and what happens once the lead is saved. This is
   // what replaced the separate primary_cta block on an opt-in page — the destination belongs to
@@ -176,8 +247,23 @@ export default function BlockSettingsPanel({
           <span className={LABEL}>What this collects</span>
           <select
             className={SELECT}
-            value={current?.id ?? "custom"}
+            value={savedAttributes.some((a) => a.key === c.fieldKey) ? `attr:${c.fieldKey}` : current?.id ?? "custom"}
             onChange={(e) => {
+              // A saved attribute sets key + type + label together for exactly the same reason a
+              // preset does — one decision, not three — but the key comes from the library, so two
+              // forms asking the same question land in the same column.
+              if (e.target.value.startsWith("attr:")) {
+                const a = savedAttributes.find((x) => x.key === e.target.value.slice(5));
+                if (!a) return;
+                set({
+                  fieldKey: a.key,
+                  fieldType: a.field_type,
+                  label: a.label,
+                  placeholder: a.label,
+                  ...(CHOICE_FIELD_TYPES.includes(a.field_type) && a.options?.length ? { options: a.options } : {}),
+                });
+                return;
+              }
               const p = FORM_FIELD_PRESETS.find((x) => x.id === e.target.value);
               if (!p) return;
               // Picking a preset sets the key, the input type AND the label together — they are
@@ -194,13 +280,39 @@ export default function BlockSettingsPanel({
               });
             }}
           >
-            {FORM_FIELD_PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
+            {savedAttributes.length > 0 && (
+              <optgroup label="Your saved fields">
+                {savedAttributes.map((a) => (
+                  <option key={`attr:${a.key}`} value={`attr:${a.key}`}>
+                    {a.label}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label="Common fields">
+              {FORM_FIELD_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </label>
+
+        {/* Promote this field into the workspace's library so the next form can pick it by name
+            and every lead lands under the same key. The key is what makes reporting across funnels
+            add up; without this, two forms asking the same question invent two different keys. */}
+        {!savedAttributes.some((a) => a.key === c.fieldKey) && (
+          <button
+            type="button"
+            onClick={() => saveAsAttribute({ key: c.fieldKey, label: c.label, field_type: c.fieldType, options: c.options })}
+            disabled={savingAttribute}
+            className="text-[11px] text-emerald-400 underline decoration-emerald-700 hover:text-emerald-300 disabled:opacity-50"
+          >
+            {savingAttribute ? "Saving…" : "Save as a reusable field"}
+          </button>
+        )}
+        {attributeError && <p className="text-[11px] text-red-300">{attributeError}</p>}
 
         <label className="block">
           <span className={LABEL}>Label</span>
@@ -251,6 +363,75 @@ export default function BlockSettingsPanel({
           <input type="checkbox" checked={c.required} onChange={(e) => set({ required: e.target.checked })} />
           Required
         </label>
+
+        <label className="block">
+          <span className={LABEL}>Label position</span>
+          <select
+            className={SELECT}
+            value={c.labelPosition ?? "none"}
+            onChange={(e) => set({ labelPosition: e.target.value })}
+          >
+            <option value="none">None — placeholder only</option>
+            <option value="above">Above the field</option>
+            <option value="border">On the border</option>
+          </select>
+        </label>
+
+        <div className="space-y-2 rounded-lg border border-ink-700 p-2.5">
+          <span className={LABEL}>Only show this field when…</span>
+          {siblingFields.length === 0 ? (
+            <p className="text-[11px] text-zinc-500">
+              Add another field to this form first — a condition has to watch something.
+            </p>
+          ) : (
+            <>
+              <select
+                className={SELECT}
+                value={c.visibleWhen?.fieldKey ?? ""}
+                onChange={(e) =>
+                  set({
+                    visibleWhen: e.target.value
+                      ? { fieldKey: e.target.value, op: c.visibleWhen?.op ?? "filled", value: c.visibleWhen?.value ?? "" }
+                      : undefined,
+                  })
+                }
+              >
+                <option value="">Always show it</option>
+                {siblingFields.map((f) => (
+                  <option key={f.fieldKey} value={f.fieldKey}>
+                    {f.label || f.fieldKey}
+                  </option>
+                ))}
+              </select>
+              {c.visibleWhen && (
+                <>
+                  <select
+                    className={SELECT}
+                    value={c.visibleWhen.op}
+                    onChange={(e) => set({ visibleWhen: { ...c.visibleWhen!, op: e.target.value } })}
+                  >
+                    <option value="filled">has any answer</option>
+                    <option value="empty">is left blank</option>
+                    <option value="equals">is exactly…</option>
+                    <option value="not_equals">is anything except…</option>
+                  </select>
+                  {(c.visibleWhen.op === "equals" || c.visibleWhen.op === "not_equals") && (
+                    <input
+                      className={SELECT}
+                      placeholder="Value to match"
+                      defaultValue={c.visibleWhen.value ?? ""}
+                      onBlur={(e) => set({ visibleWhen: { ...c.visibleWhen!, value: e.target.value } })}
+                    />
+                  )}
+                  <p className="text-[11px] leading-snug text-zinc-500">
+                    Hidden fields are switched off, not just hidden — a question nobody saw never
+                    arrives as an answer.
+                  </p>
+                </>
+              )}
+            </>
+          )}
+        </div>
 
         <p className="text-[11px] leading-snug text-zinc-500">
           Saved as <code className="text-zinc-400">{c.fieldKey}</code> — the CSV column header and

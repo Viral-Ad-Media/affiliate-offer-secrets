@@ -218,6 +218,34 @@ const LOCKED_REASONS: Record<string, string> = {
  * resolve one. Its settings panel does, hence a second, narrower lookup rather than widening the
  * shared locator and changing what every drag/move call site sees.
  */
+/**
+ * The OTHER fields on whichever form holds `id` — what a conditional rule may point at.
+ *
+ * Only the canvas can answer this: a field knows nothing about its siblings, and the validator
+ * prunes any condition naming a key outside this set. Offering exactly this list as a dropdown is
+ * what keeps the editor and the validator from disagreeing about what is a legal condition.
+ */
+function siblingFieldsOf(tree: PageBlockTree, id: string): { fieldKey: string; label: string }[] {
+  let out: { fieldKey: string; label: string }[] = [];
+  const visit = (b: any) => {
+    const kids = b?.children;
+    if (Array.isArray(kids) && (b.type === "form" || b.locked === "lead_capture_form")) {
+      if (kids.some((k: any) => k?.id === id)) {
+        out = kids
+          .filter((k: any) => k?.id !== id && k?.type === "form_input")
+          .map((k: any) => ({ fieldKey: k.content.fieldKey as string, label: k.content.label as string }));
+        return;
+      }
+    }
+    for (const key of ["children", "columns"]) {
+      const arr = b?.[key];
+      if (Array.isArray(arr)) arr.forEach(visit);
+    }
+  };
+  tree.blocks.forEach(visit);
+  return out;
+}
+
 function findFormInputBlock(tree: PageBlockTree, id: string): FormInputBlock | null {
   const inForm = (b: Block): FormInputBlock | null => {
     const kids = (b as { children?: FormInputBlock[] }).children;
@@ -2262,6 +2290,7 @@ export default function WysiwygCanvas({
                       onChange={commit}
                       targets={actionTargets()}
                       forms={actionTargets().filter((t) => t.isForm)}
+                      siblingFields={siblingFieldsOf(tree, selectedBlock.id)}
                     />
                   </EditorSidePanel>
                 )}
