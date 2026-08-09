@@ -31,6 +31,9 @@ import {
   Columns2,
   Rows3,
   PanelBottom,
+  PanelTop,
+  BarChart3,
+  Sparkle,
   EyeOff,
   Lock,
 } from "lucide-react";
@@ -54,6 +57,10 @@ import {
   containerKey,
   parseContainerKey,
   ALLOWED_ICON_NAMES,
+  ICON_SVG_PATHS,
+  MIN_ICON_SIZE,
+  MAX_ICON_SIZE,
+  MAX_NAV_LINKS,
   ELEMENT_BLOCK_TYPES,
   styleToInlineCss,
   contentWidthOf,
@@ -197,6 +204,9 @@ const ELEMENT_PALETTE: { type: PaletteType; label: string; icon: any }[] = [
   { type: "carousel", label: "Carousel", icon: GalleryHorizontal },
   { type: "countdown", label: "Countdown", icon: Timer },
   { type: "form_input", label: "Input", icon: TextCursorInput },
+  { type: "navigation", label: "Nav bar", icon: PanelTop },
+  { type: "progress", label: "Progress bar", icon: BarChart3 },
+  { type: "icon", label: "Icon", icon: Sparkle },
   { type: "footer", label: "Footer", icon: PanelBottom },
 ];
 
@@ -227,6 +237,43 @@ const LOCKED_REASONS: Record<string, string> = {
  * prunes any condition naming a key outside this set. Offering exactly this list as a dropdown is
  * what keeps the editor and the validator from disagreeing about what is a legal condition.
  */
+/**
+ * What a nav link (or a button) can point AT on this page: sections to scroll to, forms to open.
+ *
+ * Offered as a picker rather than a typed id for the same reason the form's after-submit action
+ * is a union — an id typed by hand that names nothing renders a control that silently does
+ * nothing, and there is no way to tell from looking at it.
+ */
+function navTargetsOf(tree: PageBlockTree): { scroll: { id: string; label: string }[]; forms: { id: string; label: string }[] } {
+  const scroll: { id: string; label: string }[] = [];
+  const forms: { id: string; label: string }[] = [];
+  const firstText = (b: any): string => {
+    if (typeof b?.content?.text === "string" && b.content.text.trim()) return b.content.text.trim().slice(0, 40);
+    for (const key of ["children", "columns"]) {
+      const arr = b?.[key];
+      if (Array.isArray(arr)) {
+        for (const k of arr) {
+          const t = firstText(k);
+          if (t) return t;
+        }
+      }
+    }
+    return "";
+  };
+  const visit = (b: any) => {
+    if (b?.type === "section") scroll.push({ id: b.id, label: firstText(b) || "Section" });
+    if (b?.type === "form" || b?.locked === "lead_capture_form") {
+      forms.push({ id: b.id, label: (b.content?.title as string)?.trim() || "Form" });
+    }
+    for (const key of ["children", "columns"]) {
+      const arr = b?.[key];
+      if (Array.isArray(arr)) arr.forEach(visit);
+    }
+  };
+  tree.blocks.forEach(visit);
+  return { scroll, forms };
+}
+
 function siblingFieldsOf(tree: PageBlockTree, id: string): { fieldKey: string; label: string }[] {
   let out: { fieldKey: string; label: string }[] = [];
   const visit = (b: any) => {
@@ -1553,6 +1600,241 @@ export default function WysiwygCanvas({
               className="mt-1.5 block w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
             />
           </div>
+        );
+      }
+      case "progress": {
+        const pct = Math.max(0, Math.min(100, Math.round(el.content.percent) || 0));
+        return (
+          <div className="mb-4" style={blockInlineStyle(el)}>
+            <div className="mb-1.5 flex items-center justify-between gap-3 text-[13px] font-semibold text-gray-700">
+              <EditableText
+                as="span"
+                value={el.content.label}
+                onCommit={(v) => commit(el.id, { label: v })}
+                maxLength={200}
+                placeholder="Label (optional)"
+              />
+              <span className="flex items-center gap-1 text-gray-500">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={pct}
+                  onChange={(e) => commit(el.id, { percent: Number(e.target.value) })}
+                  className="w-14 rounded border border-gray-300 px-1 py-0.5 text-right text-[11px]"
+                />
+                %
+              </span>
+            </div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-gray-200">
+              <div className="h-full rounded-full bg-emerald-600" style={{ width: `${pct}%` }} />
+            </div>
+            <EditableText
+              as="p"
+              value={el.content.caption}
+              onCommit={(v) => commit(el.id, { caption: v })}
+              maxLength={500}
+              placeholder="Caption (optional)"
+              className="mt-1.5 block text-[12px] text-gray-500"
+            />
+            {/* Content rule 2, at the point of entry. This number is presented to paid traffic as
+                a fact, and a bar that isn't measuring anything is fabricated scarcity — the same
+                thing the countdown block's evergreen cap exists to prevent. */}
+            <p className="mt-1 text-[11px] text-amber-700">
+              Shown to visitors as a real figure — only use a number you can stand behind.
+            </p>
+          </div>
+        );
+      }
+      case "icon": {
+        const svg = ICON_SVG_PATHS[el.content.name] ?? "";
+        return (
+          <div className="mb-3 flex items-center gap-3" style={blockInlineStyle(el)}>
+            <svg
+              width={el.content.size}
+              height={el.content.size}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0 text-emerald-600"
+              // Same closed set the renderer draws from, so the canvas and the published page
+              // can't show different icons for one stored name.
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              <select
+                value={el.content.name}
+                onChange={(e) => commit(el.id, { name: e.target.value })}
+                className="rounded border border-gray-300 bg-white px-1.5 py-1 text-xs"
+              >
+                {ALLOWED_ICON_NAMES.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min={MIN_ICON_SIZE}
+                max={MAX_ICON_SIZE}
+                value={el.content.size}
+                onChange={(e) => commit(el.id, { size: Number(e.target.value) })}
+                title="Size in pixels"
+                className="w-16 rounded border border-gray-300 px-1 py-0.5 text-[11px]"
+              />
+              <EditableText
+                as="span"
+                value={el.content.label}
+                onCommit={(v) => commit(el.id, { label: v })}
+                maxLength={200}
+                placeholder="Label (optional)"
+                className="text-[14px] text-gray-700"
+              />
+            </div>
+          </div>
+        );
+      }
+      case "navigation": {
+        const navLinks = el.content.links ?? [];
+        const { scroll: navScrollTargets, forms: navFormTargets } = navTargetsOf(tree);
+        const setLink = (i: number, patch: Partial<(typeof navLinks)[number]>) =>
+          commit(el.id, { links: navLinks.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+        return (
+          <nav className="mb-5 border-b border-gray-200 pb-3" style={blockInlineStyle(el)}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {el.content.brandImageDataUrl ? (
+                <span className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={el.content.brandImageDataUrl} alt="" className="max-h-8 w-auto" />
+                  <button
+                    type="button"
+                    onClick={() => commit(el.id, { brandImageDataUrl: null })}
+                    title="Remove logo"
+                    className="text-gray-400 hover:text-red-500"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <EditableText
+                    as="span"
+                    value={el.content.brand}
+                    onCommit={(v) => commit(el.id, { brand: v })}
+                    maxLength={200}
+                    placeholder="Brand name"
+                    className="text-[16px] font-bold text-gray-900"
+                  />
+                  <label className="cursor-pointer text-[11px] text-emerald-600 underline">
+                    logo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) pickImage(el.id, f, (dataUrl) => ({ brandImageDataUrl: dataUrl }));
+                      }}
+                    />
+                  </label>
+                </span>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {navLinks.map((l, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 rounded bg-gray-50 px-1.5 py-1">
+                    <EditableText
+                      as="span"
+                      value={l.label}
+                      onCommit={(v) => setLink(i, { label: v })}
+                      maxLength={200}
+                      placeholder="Link text"
+                      className="text-[13px] text-gray-700"
+                    />
+                    {/* A nav on a landing page usually points at a section of the SAME page, so
+                        the kind is chosen here rather than assumed to be a URL. */}
+                    <select
+                      value={l.action.kind}
+                      onChange={(e) =>
+                        setLink(i, {
+                          action:
+                            e.target.value === "scroll"
+                              ? { kind: "scroll", targetId: "" }
+                              : e.target.value === "popup"
+                                ? { kind: "popup", formId: "" }
+                                : { kind: "link", href: "" },
+                        })
+                      }
+                      className="rounded border border-gray-300 bg-white px-1 py-0.5 text-[11px]"
+                    >
+                      <option value="link">URL</option>
+                      <option value="scroll">Section</option>
+                      <option value="popup">Form</option>
+                    </select>
+                    {l.action.kind === "link" ? (
+                      <input
+                        value={l.action.href}
+                        onChange={(e) => setLink(i, { action: { kind: "link", href: e.target.value } })}
+                        placeholder="https://…"
+                        className={`w-28 rounded border px-1 py-0.5 text-[11px] ${
+                          l.action.href ? "border-gray-200 text-gray-500" : "border-amber-300 text-amber-700"
+                        }`}
+                      />
+                    ) : (
+                      <select
+                        value={l.action.kind === "scroll" ? l.action.targetId : l.action.kind === "popup" ? l.action.formId : ""}
+                        onChange={(e) =>
+                          setLink(i, {
+                            action:
+                              l.action.kind === "scroll"
+                                ? { kind: "scroll", targetId: e.target.value }
+                                : { kind: "popup", formId: e.target.value },
+                          })
+                        }
+                        className="w-32 rounded border border-gray-300 bg-white px-1 py-0.5 text-[11px]"
+                      >
+                        <option value="">Pick one…</option>
+                        {(l.action.kind === "scroll" ? navScrollTargets : navFormTargets).map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => commit(el.id, { links: navLinks.filter((_, j) => j !== i) })}
+                      title="Remove link"
+                      className="text-gray-400 hover:text-red-500"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+                {navLinks.length < MAX_NAV_LINKS && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      commit(el.id, { links: [...navLinks, { label: "New link", action: { kind: "link", href: "" } }] })
+                    }
+                    className="text-[11px] text-emerald-600 underline"
+                  >
+                    + link
+                  </button>
+                )}
+              </div>
+            </div>
+            <label className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-500">
+              <input
+                type="checkbox"
+                checked={el.content.sticky}
+                onChange={(e) => commit(el.id, { sticky: e.target.checked })}
+              />
+              Stick to the top while scrolling
+            </label>
+          </nav>
         );
       }
       case "footer": {

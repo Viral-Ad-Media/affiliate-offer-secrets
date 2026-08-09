@@ -399,7 +399,10 @@ export type ElementBlock =
   | CarouselBlock
   | CountdownBlock
   | FormBlock
-  | FooterBlock;
+  | FooterBlock
+  | ProgressBlock
+  | NavigationBlock
+  | IconBlock;
 
 /**
  * What a form field COLLECTS, as a named list rather than an input type.
@@ -450,6 +453,9 @@ export const ELEMENT_BLOCK_TYPES = [
   "countdown",
   "form",
   "footer",
+  "progress",
+  "navigation",
+  "icon",
 ] as const;
 
 // Only ever a child of a lead_capture_form block — never part of ElementBlock, so a Column's
@@ -528,6 +534,63 @@ export type FieldCondition = {
 export type FooterBlock = Base & {
   type: "footer";
   content: { text: string; links: { label: string; href: string }[] };
+};
+
+/** A nav bar can hold at most this many links. Past ~6 it wraps and stops being a nav. */
+export const MAX_NAV_LINKS = 6;
+
+/**
+ * The page's top bar: a brand mark plus a short row of links.
+ *
+ * Links carry a full `ButtonAction`, not a bare href, because the overwhelmingly common nav on a
+ * landing page points at sections of the SAME page — so `scroll` has to be first-class here, and
+ * once it is, `popup` (open the opt-in form) comes free from the union the button block already
+ * uses. There is no second, looser path from typed text to a navigable URL: `link` goes through
+ * the same isValidRedirectUrl, and the other kinds are ids a code-owned script resolves.
+ *
+ * `submit` is deliberately not offered — a nav sits outside any form, so it would do nothing.
+ */
+export type NavigationBlock = Base & {
+  type: "navigation";
+  content: {
+    brand: string;
+    brandImageDataUrl: string | null;
+    links: { label: string; action: ButtonAction }[];
+    /** Pins the bar to the top as the page scrolls. Pure CSS — no script either way. */
+    sticky: boolean;
+  };
+};
+
+/**
+ * A single icon, at a size you choose — the decorative sibling of `icon_list`.
+ *
+ * `name` is a key into ICON_SVG_PATHS and nothing else: an unknown value renders nothing rather
+ * than being interpolated anywhere, which is the same closed-set rule that makes the icon list
+ * safe. Nothing here is fetched, so an icon costs a page no request.
+ */
+export type IconBlock = Base & {
+  type: "icon";
+  content: { name: string; size: number; label: string };
+};
+
+export const MIN_ICON_SIZE = 16;
+export const MAX_ICON_SIZE = 160;
+
+/**
+ * A static progress/completion bar — "Step 2 of 3", "68% of the guide covered".
+ *
+ * No script: the fill width is baked into the style attribute at render time, so it costs a blog
+ * post nothing and works with JS disabled. Same reasoning as the carousel being CSS-only.
+ *
+ * **The number is whatever the operator types, and it is presented as a fact to paid traffic.** A
+ * bar reading "82% claimed" that isn't measuring anything is the fabricated-scarcity pattern
+ * content rule 2 rules out and the one regulators actually act on — the same trap the countdown
+ * block's evergreen cap exists to avoid. The editor says so at the point of entry; the renderer
+ * cannot know, so it does not pretend to.
+ */
+export type ProgressBlock = Base & {
+  type: "progress";
+  content: { label: string; percent: number; caption: string };
 };
 
 export type ColumnBlock = Base & { type: "column"; children: ElementBlock[] };
@@ -662,10 +725,13 @@ export const ICON_SVG_PATHS: Record<string, string> = {
 
 export const ALLOWED_ICON_NAMES: string[] = Object.keys(ICON_SVG_PATHS);
 
-function renderIcon(name: string): string {
+function renderIcon(name: string, size = 20): string {
   const inner = ICON_SVG_PATHS[name];
   if (!inner) return "";
-  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+  // Only a clamped integer reaches the attribute — the same rule contentWidth follows, for the
+  // same reason: this is a stored value on its way into rendered markup.
+  const px = Math.max(MIN_ICON_SIZE, Math.min(MAX_ICON_SIZE, Math.round(Number(size) || 20)));
+  return `<svg width="${px}" height="${px}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -794,6 +860,9 @@ export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readon
   countdown: TEXT_STYLE_KEYS,
   form: FORM_STYLE_KEYS,
   footer: TEXT_STYLE_KEYS,
+  progress: TEXT_STYLE_KEYS,
+  navigation: TEXT_STYLE_KEYS,
+  icon: TEXT_STYLE_KEYS,
   button: BUTTON_PANEL_STYLE_KEYS,
   video: BOX_STYLE_KEYS,
   faq_item: TEXT_STYLE_KEYS,
@@ -867,7 +936,11 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       // itself centres its LABEL, not the button. Only emitted when an alignment is actually set,
       // so an untouched button's markup is unchanged.
       const wrap = styleAttr(block.style, BUTTON_WRAP_STYLE_KEYS);
-      return wrap ? `<div${wrap}>${el}</div>` : el;
+      // A scroll/popup button needs the click handler, and until now only the FORM block emitted
+      // it — so one of these on a page with no form was a button that visibly did nothing. The
+      // script self-guards on `window.__aosForms`, so emitting it from both places costs nothing.
+      const script = action.kind === "scroll" || action.kind === "popup" ? FORM_ACTION_SCRIPT : "";
+      return (wrap ? `<div${wrap}>${el}</div>` : el) + script;
     }
     case "video": {
       const src = block.content.source;
@@ -883,6 +956,61 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       return `<div class="video-wrap"${styleAttr(block.style, BOX_STYLE_KEYS)}><iframe src="${escapeHtml(
         embedUrl(src)
       )}" title="${label}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+    }
+    case "progress": {
+      const { label, caption } = block.content;
+      // Clamped here as well as in the validator: this number becomes a CSS width, and the one
+      // place a stored value reaches a style attribute is the place to be certain about it.
+      const pct = Math.max(0, Math.min(100, Math.round(Number(block.content.percent) || 0)));
+      return `<div class="progress-block"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${
+        label.trim() ? `<div class="progress-label"><span>${escapeHtml(label)}</span><span>${pct}%</span></div>` : ""
+      }<div class="progress-track" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"${
+        label.trim() ? ` aria-label="${escapeHtml(label)}"` : ""
+      }><div class="progress-fill" style="width:${pct}%"></div></div>${
+        caption.trim() ? `<p class="progress-caption">${escapeHtml(caption)}</p>` : ""
+      }</div>`;
+    }
+    case "navigation": {
+      const { brand, brandImageDataUrl, links, sticky } = block.content;
+      const linkHtml = (links ?? [])
+        .filter((l) => l.label.trim())
+        .map((l) => {
+          const label = escapeHtml(l.label);
+          switch (l.action.kind) {
+            case "link":
+              return `<a href="${escapeHtml(l.action.href)}">${label}</a>`;
+            case "scroll":
+              return `<button type="button" data-scroll-to="${escapeHtml(l.action.targetId)}">${label}</button>`;
+            case "popup":
+              return `<button type="button" data-open-form="${escapeHtml(l.action.formId)}">${label}</button>`;
+            // A nav sits outside every form, so a submit link would be a button that does nothing.
+            case "submit":
+              return "";
+          }
+        })
+        .join("");
+      const brandHtml = brandImageDataUrl
+        ? `<img class="page-nav-logo" src="${escapeHtml(brandImageDataUrl)}" alt="${escapeHtml(brand)}" />`
+        : brand.trim()
+          ? `<span class="page-nav-brand">${escapeHtml(brand)}</span>`
+          : "";
+      // Nothing to show is nothing to render, like an empty footer — an empty bar at the top of a
+      // page taking paid traffic is worse than no bar.
+      if (!brandHtml && !linkHtml) return "";
+      // Only a nav that actually has a scroll/popup link needs the shared click handler. It is
+      // idempotent (`window.__aosForms`), so emitting it here as well as beside a form is free.
+      const needsScript = (links ?? []).some((l) => l.action.kind === "scroll" || l.action.kind === "popup");
+      return `<nav class="page-nav${sticky ? " is-sticky" : ""}"${styleAttr(block.style, TEXT_STYLE_KEYS)}><div class="page-nav-inner">${brandHtml}${
+        linkHtml ? `<div class="page-nav-links">${linkHtml}</div>` : ""
+      }</div></nav>${needsScript ? FORM_ACTION_SCRIPT : ""}`;
+    }
+    case "icon": {
+      const svg = renderIcon(block.content.name, block.content.size);
+      if (!svg) return "";
+      const label = block.content.label.trim();
+      return `<div class="icon-block"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${svg}${
+        label ? `<span>${escapeHtml(label)}</span>` : ""
+      }</div>`;
     }
     case "footer": {
       const { text, links } = block.content;
@@ -1166,7 +1294,11 @@ function renderRow(row: RowBlock, ctx: RenderCtx): string {
 }
 
 function renderSection(section: SectionBlock, ctx: RenderCtx): string {
-  return `<div class="section"${styleAttr(section.style, BOX_STYLE_KEYS)}>${section.children
+  // The id is what a scroll action lands on. Without it `getElementById` found nothing, so a
+  // "scroll to this section" button — offered by the settings panel since actions shipped — did
+  // nothing at all on the published page. Ids are ID_RE-validated, and an id attribute changes
+  // nothing visually, so this is safe to add to pages already serving traffic.
+  return `<div class="section" id="${escapeHtml(section.id)}"${styleAttr(section.style, BOX_STYLE_KEYS)}>${section.children
     .map((c) => withVisibility(c.type === "row" ? renderRow(c, ctx) : renderElement(c, ctx), c))
     .join("\n")}</div>`;
 }
@@ -1605,6 +1737,14 @@ export function moveBlockToContainer(tree: PageBlockTree, blockId: string, toRef
 // Default seed content per element type — used when the palette inserts a brand-new instance.
 function defaultElementContent(type: (typeof ELEMENT_BLOCK_TYPES)[number]): ElementBlock["content"] {
   switch (type) {
+    case "progress":
+      return { label: "Your progress", percent: 60, caption: "" };
+    case "navigation":
+      // Seeded with the brand line and no links: which sections exist is the next decision, and a
+      // nav pointing at ids that aren't on the page yet would render dead buttons.
+      return { brand: "Your brand", brandImageDataUrl: null, links: [], sticky: false };
+    case "icon":
+      return { name: ALLOWED_ICON_NAMES[0], size: 40, label: "" };
     case "footer":
       // Seeded with the two links a page taking paid traffic is most often asked for, left EMPTY
       // rather than pointing at invented URLs — a footer link to a page that doesn't exist is

@@ -10,6 +10,9 @@
 import {
   ELEMENT_BLOCK_TYPES,
   ALLOWED_ICON_NAMES,
+  MAX_NAV_LINKS,
+  MIN_ICON_SIZE,
+  MAX_ICON_SIZE,
   FORM_FIELD_TYPES,
   CHOICE_FIELD_TYPES,
   type FormFieldType,
@@ -72,6 +75,15 @@ function clampStr(v: unknown, max: number): string {
   return v.slice(0, max).trim();
 }
 
+// Clamp rather than reject, everywhere it's used: a stored number out of range is a slider that
+// was dragged too far, not tampering, and refusing to save the page over one is the worse failure.
+// Module-scope because both sanitizeStyle and the content validators need it — it lived inside
+// sanitizeStyle until a second caller appeared.
+function num(v: unknown, min: number, max: number): number | undefined {
+  const n = typeof v === "number" ? v : NaN;
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : undefined;
+}
+
 function isValidId(v: unknown): v is string {
   return typeof v === "string" && ID_RE.test(v);
 }
@@ -83,10 +95,6 @@ function isValidId(v: unknown): v is string {
 function sanitizeStyle(raw: unknown): BlockStyle {
   const s = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>;
   const style: BlockStyle = {};
-  const num = (v: unknown, min: number, max: number): number | undefined => {
-    const n = typeof v === "number" ? v : NaN;
-    return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : undefined;
-  };
   const hex = (v: unknown): string | undefined => (typeof v === "string" && HEX_RE.test(v) ? v.toLowerCase() : undefined);
 
   if (typeof s.fontFamily === "string" && FONT_FAMILIES.has(s.fontFamily)) style.fontFamily = s.fontFamily as BlockStyle["fontFamily"];
@@ -138,6 +146,27 @@ function sanitizeStyle(raw: unknown): BlockStyle {
   return style;
 }
 
+/**
+ * A ButtonAction that returns null instead of throwing when it can't be resolved.
+ *
+ * The button block hard-rejects a bad action on purpose (see its case below) — it is usually the
+ * page's only way onward. Nav links are a list, so they follow the footer's rule instead: drop the
+ * bad row, save the rest. The CHECKS are identical either way; only the failure mode differs, and
+ * that is the point of having one function rather than two hand-copied validations that drift.
+ */
+function softButtonAction(raw: unknown): ButtonAction | null {
+  const a = (raw ?? null) as { kind?: unknown; href?: unknown; targetId?: unknown; formId?: unknown } | null;
+  const kind = a && typeof a === "object" && typeof a.kind === "string" ? a.kind : "link";
+  if (kind === "scroll" || kind === "popup") {
+    const target = clampStr(kind === "scroll" ? a?.targetId : a?.formId, 100);
+    if (!ID_RE.test(target)) return null;
+    return kind === "scroll" ? { kind: "scroll", targetId: target } : { kind: "popup", formId: target };
+  }
+  if (kind === "submit") return null; // meaningless outside a form; never offered in a nav
+  const href = clampStr(a?.href, 2000);
+  return isValidRedirectUrl(href) ? { kind: "link", href } : null;
+}
+
 function validateElementInner(raw: unknown, count: { n: number }): ElementBlock {
   if (++count.n > MAX_TOTAL_BLOCKS) throw new BlockCountLimit("too many blocks");
   const b = (raw ?? {}) as Record<string, unknown>;
@@ -182,6 +211,64 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
             const icon = typeof it.icon === "string" && ALLOWED_ICON_NAMES.includes(it.icon) ? it.icon : ALLOWED_ICON_NAMES[0];
             return { icon, text: clampStr(it.text, MAX_TEXT_MEDIUM) };
           }),
+        },
+      };
+    }
+    case "progress": {
+      return {
+        id,
+        type: "progress",
+        style,
+        content: {
+          label: clampStr(content.label, MAX_TEXT_SHORT),
+          // Clamped, not rejected: this number ends up as a CSS width, and a page shouldn't
+          // refuse to save because someone typed 120 into a percentage field.
+          percent: num(content.percent, 0, 100) ?? 0,
+          caption: clampStr(content.caption, MAX_TEXT_MEDIUM),
+        },
+      };
+    }
+    case "navigation": {
+      const rawNavLinks = Array.isArray(content.links) ? content.links : [];
+      return {
+        id,
+        type: "navigation",
+        style,
+        content: {
+          brand: clampStr(content.brand, MAX_TEXT_SHORT),
+          brandImageDataUrl: (() => {
+            const u = typeof content.brandImageDataUrl === "string" && content.brandImageDataUrl ? content.brandImageDataUrl : null;
+            if (u && !isValidImageDataUrl(u)) throw new Error("invalid nav logo data url");
+            return u;
+          })(),
+          // A link whose action can't be resolved is DROPPED, like a footer link with no href —
+          // not a hard reject the way a BUTTON's is. A button is the page's one way onward and a
+          // broken one deserves to fail loudly; a nav has several, and being unable to save the
+          // page because one of six rows is half-typed is the worse failure.
+          links: rawNavLinks
+            .slice(0, MAX_NAV_LINKS)
+            .map((l) => {
+              const link = (l ?? {}) as Record<string, unknown>;
+              return { label: clampStr(link.label, MAX_TEXT_SHORT), action: softButtonAction(link.action) };
+            })
+            .filter((l): l is { label: string; action: ButtonAction } => l.label !== "" && l.action !== null),
+          sticky: content.sticky === true,
+        },
+      };
+    }
+    case "icon": {
+      // Same closed-set rule as icon_list: an unknown name becomes a known one rather than being
+      // stored and looked up later.
+      const name =
+        typeof content.name === "string" && ALLOWED_ICON_NAMES.includes(content.name) ? content.name : ALLOWED_ICON_NAMES[0];
+      return {
+        id,
+        type: "icon",
+        style,
+        content: {
+          name,
+          size: num(content.size, MIN_ICON_SIZE, MAX_ICON_SIZE) ?? 40,
+          label: clampStr(content.label, MAX_TEXT_SHORT),
         },
       };
     }
