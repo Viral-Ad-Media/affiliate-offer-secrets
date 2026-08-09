@@ -1526,16 +1526,34 @@ export default function WysiwygCanvas({
         );
       }
       case "faq_item":
+        // Drawn as an accordion row to match what publishes, but deliberately NOT a real
+        // <details>: clicking a <summary> toggles it, which would fight the contentEditable
+        // question underneath. Always-expanded in the editor is the honest trade — you are here to
+        // write the answer, and an answer you have to open before you can edit it is worse.
         return (
-          <div className="mb-1 pr-2" style={blockInlineStyle(el)}>
+          <div className="mb-2.5 rounded-lg border border-gray-200 pr-2" style={blockInlineStyle(el)}>
+            <div className="flex items-center justify-between gap-3 px-3.5 py-3">
+              <EditableText
+                as="h3"
+                value={el.content.question}
+                onCommit={(v) => commit(el.id, { question: v })}
+                maxLength={200}
+                className="block flex-1 text-[16px] font-semibold"
+              />
+              <span
+                aria-hidden
+                title="Collapsible on the published page"
+                className="h-2 w-2 shrink-0 rotate-[-135deg] border-b-2 border-r-2 border-gray-400"
+              />
+            </div>
             <EditableText
-              as="h3"
-              value={el.content.question}
-              onCommit={(v) => commit(el.id, { question: v })}
-              maxLength={200}
-              className="mb-1 block text-[16px] font-semibold"
+              as="p"
+              value={el.content.answer}
+              onCommit={(v) => commit(el.id, { answer: v })}
+              maxLength={1000}
+              multiline
+              className="block px-3.5 pb-3"
             />
-            <EditableText as="p" value={el.content.answer} onCommit={(v) => commit(el.id, { answer: v })} maxLength={1000} multiline />
           </div>
         );
       case "testimonial": {

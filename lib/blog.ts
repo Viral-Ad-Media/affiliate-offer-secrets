@@ -458,8 +458,18 @@ const PUBLIC_CSS = `
   .aos-form-popup.is-open { display:flex; }
   .aos-form-popup .aos-form { position:relative; width:100%; }
   .aos-form-close { position:absolute; top:8px; right:10px; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; color:var(--t-muted,#888); }
-  .faq-item { margin-bottom: 16px; }
-  .faq-item h3 { font-size:16px; margin-bottom:4px; }
+  /* Accordion. Native <details>, so no script — see the faq_item case in blockTree.ts.
+     DUPLICATED in the other stylesheet; change both. */
+  .faq-item { margin-bottom:10px; border:1px solid var(--t-field-border,#e5e5e5); border-radius:8px; }
+  .faq-item > summary { font-size:16px; font-weight:600; padding:12px 14px; cursor:pointer;
+    list-style:none; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .faq-item > summary::-webkit-details-marker { display:none; }
+  /* A chevron built from a rotated border, so there is no icon font or inline SVG to ship. */
+  .faq-item > summary::after { content:""; width:8px; height:8px; flex:0 0 auto;
+    border-right:2px solid currentColor; border-bottom:2px solid currentColor;
+    transform:rotate(45deg) translateY(-2px); transition:transform .15s ease; opacity:.55; }
+  .faq-item[open] > summary::after { transform:rotate(-135deg) translateY(-2px); }
+  .faq-item > p { margin:0; padding:0 14px 12px; }
   .row { display:flex; gap:24px; flex-wrap:wrap; }
   .row .col { flex:1; min-width:200px; }
   .icon-list-item, .image-list-item { display:flex; align-items:center; gap:12px; margin-bottom:12px; }

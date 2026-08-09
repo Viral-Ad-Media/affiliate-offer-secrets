@@ -827,9 +827,17 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       )}" title="${label}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
     }
     case "faq_item":
-      return `<div class="faq-item"${styleAttr(block.style, TEXT_STYLE_KEYS)}><h3>${escapeHtml(
+      // An accordion via native <details>/<summary> — NO script. That is what lets an FAQ sit on a
+      // blog post without breaking that page's zero-JS property, the same reasoning that made the
+      // carousel CSS-only. It is also keyboard- and screen-reader-accessible for free, and it
+      // still prints and still finds text via Ctrl+F in modern browsers.
+      //
+      // The stored shape is UNCHANGED — same question/answer content — so every existing faq_item
+      // becomes collapsible on its next render with no migration. That IS a visible change to live
+      // pages: answers now start closed.
+      return `<details class="faq-item"${styleAttr(block.style, TEXT_STYLE_KEYS)}><summary>${escapeHtml(
         block.content.question
-      )}</h3><p>${escapeHtml(block.content.answer)}</p></div>`;
+      )}</summary><p>${escapeHtml(block.content.answer)}</p></details>`;
     case "testimonial": {
       const { quote, name, role, media } = block.content;
       // An empty testimonial renders nothing rather than an attributed-to-nobody quote box — same
