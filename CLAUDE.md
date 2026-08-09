@@ -3526,10 +3526,67 @@ them separate is deliberate — style keys are a uniform table driving generic c
 settings are a per-type union editor.
 
 A kind with nothing to point at is never offered (scroll needs another block, popup needs a form),
-because an unresolvable target is a **hard reject in the validator — it fails the whole page save,
-not just that block**. Verified directly: a valid scroll target round-trips, a `javascript:` href
-and a quote-injecting scroll target are both refused at save, and a pre-actions bare `href` still
-works through the same promote-to-`{kind:"link"}` adapter.
+so the dropdown can't produce an action with an empty target. **What the validator checks is that
+the target is ID-SHAPED, not that it resolves** — this paragraph used to claim an unresolvable
+target was a hard reject, and that was wrong; `validatePageBlockTree.ts` says so explicitly at the
+`button` case, and deliberately: a block can be deleted after a button was pointed at it, and that
+must not block saving the page. A target naming nothing is a no-op at runtime. What IS refused is a
+target that isn't id-shaped. Verified directly: a valid scroll target round-trips, an id naming no
+block still saves, a `javascript:` href and a quote-injecting scroll target are both refused at
+save, and a pre-actions bare `href` still works through the same promote-to-`{kind:"link"}` adapter.
+
+## The custom code block is the one deliberate hole in "no tenant string becomes output"
+
+`custom_html` (palette: **Custom code**) injects raw HTML/CSS/JS into the published page verbatim.
+Everything else in `blockTree.ts` exists to make that impossible — `styleToInlineCss`'s fixed key
+table, `parseVideoUrl` rebuilding embed URLs from a template rather than interpolating a pasted
+one, `ICON_SVG_PATHS` as an allowlist, `extractTrackingId` throwing away the markup around an ID.
+This block is the escape hatch, because a page builder with no embed widget can't host a booking
+widget, a chat bubble, or a pixel an affiliate network handed someone.
+
+**The cost is real and was accepted knowingly, not missed.** Funnel and blog pages serve on the
+app's own origin (`/p/…`, `/b/…`, and workspace subdomains) and the session cookie is domain-wide
+(`lib/supabase/cookieOptions.ts`), and there is no CSP on those routes. So a snippet here runs
+same-origin with the app: `httpOnly` buys nothing, because a same-origin `fetch` carries the
+session anyway. A signed-in visitor opening a page that carries someone else's snippet is exposed
+to it. On a tenant's own verified custom domain it's the ordinary "my site, my script" situation;
+on the default URL it is not. A sandboxed-iframe version was offered and declined in favour of
+Elementor-style compatibility — if that is ever revisited, `sandbox="allow-scripts"` WITHOUT
+`allow-same-origin` is the shape (with it, the frame can reach into this document and unset the
+attribute on its own element, which is no sandbox at all). The settings panel states the risk at
+the point of entry rather than leaving it to be discovered.
+
+Consequences worth keeping:
+- **Never escape, filter or "sanitize" the stored code.** Half-sanitized markup fails in ways
+  nobody can debug, and running what was pasted is the entire feature. No template and no AI stage
+  emits one of these — it is insertable only by a human, from the palette.
+- **Over-length is REFUSED, and it is the only place this validator refuses instead of clamping.**
+  `clampStr` slices at a character count; slicing markup mid-tag is not a shorter version of the
+  same thing. A cut landing inside an unclosed `<script>` swallows the rest of the document, so a
+  clamp would silently delete every block below this one. `MAX_CUSTOM_CODE` is 20000.
+- **Empty renders nothing**, like a video with no source — an empty wrapper carrying the block's
+  padding is an unexplained gap on a live page.
+- **The canvas preview runs in a sandboxed frame that reports its height by `postMessage`, and
+  that is a STABILITY decision, not a security one.** The editor is a React tree that re-renders
+  constantly; a snippet calling `document.write`, colliding with a global, or hunting the DOM for
+  its own mount point can take the editor down mid-edit. The consequence to know: the preview is an
+  approximation — code that reaches for the surrounding page behaves differently there than when
+  published. Height messages are matched by `e.source === iframe.contentWindow`, never by origin: a
+  frame sandboxed without `allow-same-origin` has an opaque origin, so `e.origin` is the string
+  `"null"` for every such frame and cannot tell them apart.
+- The wrapper keeps structured styling (BOX keys only — the code owns its own typography) and
+  carries the block id, so a button can scroll to it.
+- `.custom-html` is deliberately almost no CSS: every rule there is one the pasted markup has to
+  fight. It sets the vertical rhythm the other blocks have and caps image/iframe width so an
+  oversized embed widens the column instead of overflowing sideways. **Duplicated in both
+  stylesheets** (`renderPages.ts` and `lib/blog.ts`) like every other block rule — change both.
+
+**Verified in a browser against real `renderBridgeHtml` output**, not just unit-tested: the script
+runs on load, its click handler runs, blocks after it still render (the snippet didn't swallow the
+page), and the disclosure still renders last. Found while doing it, unrelated and pre-existing: a
+bridge page with NO `lead_capture_form` — a state `requiredLockedKinds` explicitly permits — still
+emits the opt-in submit handler unconditionally, so `getElementById('leadForm')` is null and the
+page throws on every load.
 
 ## A failed poll must not be stored where an array belongs
 
