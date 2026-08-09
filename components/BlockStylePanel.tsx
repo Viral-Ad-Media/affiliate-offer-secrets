@@ -4,11 +4,37 @@ import { X, Monitor, Tablet, Smartphone, EyeOff } from "lucide-react";
 import {
   STYLE_KEYS_BY_TYPE,
   VIEWPORTS,
+  ASPECT_RATIO_NAMES,
+  type AspectRatio,
   type Viewport,
   type Block,
   type BlockStyle,
   type FontFamily,
 } from "@/lib/engine/renderPages";
+
+/** Plain-language names for the crop frames — "4:5" means nothing to most people on its own. */
+const ASPECT_RATIO_LABELS: Record<AspectRatio, string> = {
+  original: "Original (no crop)",
+  "1:1": "Square — 1:1",
+  "4:3": "Landscape — 4:3",
+  "3:2": "Landscape — 3:2",
+  "16:9": "Wide — 16:9",
+  "4:5": "Portrait — 4:5",
+  "9:16": "Tall — 9:16",
+};
+
+/** The nine focal presets, in reading order so the grid maps 1:1 onto the buttons. */
+const FOCAL_POINTS: { x: number; y: number; title: string }[] = [
+  { x: 0, y: 0, title: "Top left" },
+  { x: 50, y: 0, title: "Top" },
+  { x: 100, y: 0, title: "Top right" },
+  { x: 0, y: 50, title: "Left" },
+  { x: 50, y: 50, title: "Centre" },
+  { x: 100, y: 50, title: "Right" },
+  { x: 0, y: 100, title: "Bottom left" },
+  { x: 50, y: 100, title: "Bottom" },
+  { x: 100, y: 100, title: "Bottom right" },
+];
 
 /** Same three widths as the canvas's own device toggle, so the control matches the preview. */
 const VIEWPORT_ICONS: Record<Viewport, typeof Monitor> = {
@@ -159,6 +185,7 @@ export default function BlockStylePanel({ block, onChange, onVisibilityChange, o
   const showFields =
     has("fieldBackgroundColor") || has("fieldTextColor") || has("fieldBorderColor") ||
     has("fieldBorderWidth") || has("fieldBorderRadius") || has("fieldGap");
+  const showImage = has("imageWidth") || has("aspectRatio");
 
   // The disclosure is the one block that can't be hidden — content rule 3 makes it mandatory on
   // every page, and "hidden on mobile" would put an undisclosed affiliate page in front of most of
@@ -170,7 +197,10 @@ export default function BlockStylePanel({ block, onChange, onVisibilityChange, o
     onVisibilityChange(block!.id, VIEWPORTS.filter((x) => next.includes(x)));
   }
 
-  if (!showTypography && !showBackground && !showSpacing && !showBorder && !showLayout && !showFields && !showVisibility)
+  if (
+    !showTypography && !showBackground && !showSpacing && !showBorder && !showLayout && !showFields &&
+    !showImage && !showVisibility
+  )
     return null;
 
   return (
@@ -374,6 +404,93 @@ export default function BlockStylePanel({ block, onChange, onVisibilityChange, o
                   <option value="right">Right</option>
                 </select>
               </label>
+            )}
+          </div>
+        )}
+
+        {showImage && (
+          <div className="space-y-2 sm:col-span-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Size &amp; crop</div>
+
+            <label className="block">
+              <span className={fieldLabelClass()}>Width</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min={10}
+                  max={100}
+                  step={5}
+                  value={style.imageWidth ?? 100}
+                  onChange={(e) => set({ imageWidth: Number(e.target.value) })}
+                  className="h-1 flex-1 cursor-pointer appearance-none rounded bg-ink-700 accent-emerald-500"
+                />
+                <span className="w-10 text-right text-[12px] tabular-nums text-zinc-400">
+                  {style.imageWidth ?? 100}%
+                </span>
+              </div>
+            </label>
+
+            <label className="block">
+              <span className={fieldLabelClass()}>Crop to shape</span>
+              <select
+                value={style.aspectRatio ?? "original"}
+                onChange={(e) => set({ aspectRatio: e.target.value as AspectRatio })}
+                className={fieldInputClass()}
+              >
+                {ASPECT_RATIO_NAMES.map((r) => (
+                  <option key={r} value={r}>
+                    {r === "original" ? "Original (no crop)" : ASPECT_RATIO_LABELS[r]}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {/* Everything below only does something under a crop — a fit mode and a focal point
+                have nothing to act on while the image is at its own shape. Hidden rather than
+                disabled: a control that can't do anything yet is noise in a 320px rail. */}
+            {(style.aspectRatio ?? "original") !== "original" && (
+              <>
+                <label className="block">
+                  <span className={fieldLabelClass()}>How it fills the shape</span>
+                  <select
+                    value={style.objectFit ?? "cover"}
+                    onChange={(e) => set({ objectFit: e.target.value as "cover" | "contain" })}
+                    className={fieldInputClass()}
+                  >
+                    <option value="cover">Fill the frame (crops the edges)</option>
+                    <option value="contain">Fit inside (shows all of it)</option>
+                  </select>
+                </label>
+
+                {(style.objectFit ?? "cover") === "cover" && (
+                  <div>
+                    <span className={fieldLabelClass()}>Keep this part in frame</span>
+                    {/* Nine presets rather than two sliders: cropping is a "keep the face, lose the
+                        floor" decision, and a grid says that at a glance in a narrow rail. The
+                        stored value is a plain percentage, so a finer one set elsewhere survives. */}
+                    <div className="grid w-[84px] grid-cols-3 gap-0.5">
+                      {FOCAL_POINTS.map(({ x, y, title }) => {
+                        const active = (style.focalX ?? 50) === x && (style.focalY ?? 50) === y;
+                        return (
+                          <button
+                            key={`${x}-${y}`}
+                            type="button"
+                            title={title}
+                            aria-label={title}
+                            aria-pressed={active}
+                            onClick={() => set({ focalX: x, focalY: y })}
+                            className={`h-6 w-6 rounded border ${
+                              active
+                                ? "border-emerald-500 bg-emerald-500/30"
+                                : "border-ink-600 bg-ink-800 hover:border-ink-500"
+                            }`}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

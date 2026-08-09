@@ -9,6 +9,7 @@
 
 import {
   ELEMENT_BLOCK_TYPES,
+  ASPECT_RATIOS,
   ALLOWED_ICON_NAMES,
   MAX_NAV_LINKS,
   MIN_ICON_SIZE,
@@ -137,6 +138,20 @@ function sanitizeStyle(raw: unknown): BlockStyle {
   if (fbr !== undefined) style.fieldBorderRadius = fbr;
   const fg = num(s.fieldGap, 0, 40);
   if (fg !== undefined) style.fieldGap = fg;
+
+  // Image resize/crop. Same rebuild-not-filter trap as everything above: a key missing here is
+  // dropped on every save, so the control would appear to work in the editor and forget itself
+  // the moment the page was saved.
+  const iw = num(s.imageWidth, 10, 100);
+  if (iw !== undefined) style.imageWidth = iw;
+  if (typeof s.aspectRatio === "string" && s.aspectRatio in ASPECT_RATIOS) {
+    style.aspectRatio = s.aspectRatio as BlockStyle["aspectRatio"];
+  }
+  if (s.objectFit === "cover" || s.objectFit === "contain") style.objectFit = s.objectFit;
+  const fx = num(s.focalX, 0, 100);
+  if (fx !== undefined) style.focalX = fx;
+  const fy = num(s.focalY, 0, 100);
+  if (fy !== undefined) style.focalY = fy;
   // The focused state. Easy to forget here, and forgetting is silent: sanitizeStyle REBUILDS the
   // style object, so a key it doesn't copy is dropped on every save while the editor keeps showing
   // it until reload. Same trap contentWidth hit.

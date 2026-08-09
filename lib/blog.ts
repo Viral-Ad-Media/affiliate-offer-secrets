@@ -390,6 +390,9 @@ const PUBLIC_CSS = `
   .empty { color: var(--muted); padding: 60px 0; text-align: center; }
   /* Block-tree markup (mirrors the funnel pages' stylesheet) */
   .block-img { max-width:100%; border-radius:12px; margin:24px 0; display:block; }
+  /* Must stay identical to the same rules in lib/engine/renderPages.ts. */
+  .img-wrap-center > .block-img { margin-left:auto; margin-right:auto; }
+  .img-wrap-right > .block-img { margin-left:auto; margin-right:0; }
   /* 16:9 responsive frame — the wrapper owns the ratio so an iframe (which has no intrinsic
      size) and a <video> (which does) lay out identically. */
   .video-wrap { position:relative; width:100%; margin:24px 0; padding-top:56.25%; border-radius:12px; overflow:hidden; background:#000; }

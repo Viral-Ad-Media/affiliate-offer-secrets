@@ -246,6 +246,10 @@ const PAGE_STYLE = `
   ul { padding-left: 20px; }
   hr { border: none; border-top: 1px solid var(--t-border,#e5e5e5); margin: 24px 0; }
   .block-img { max-width:100%; border-radius:12px; margin:24px 0; display:block; }
+  /* Placing a narrowed image. Auto margins, because .block-img is display:block and text-align
+     cannot move it. DUPLICATED in the other stylesheet; change both. */
+  .img-wrap-center > .block-img { margin-left:auto; margin-right:auto; }
+  .img-wrap-right > .block-img { margin-left:auto; margin-right:0; }
   /* 16:9 responsive frame — the wrapper owns the ratio so an iframe (which has no intrinsic
      size) and a <video> (which does) lay out identically. */
   .video-wrap { position:relative; width:100%; margin:24px 0; padding-top:56.25%; border-radius:12px; overflow:hidden; background:#000; }

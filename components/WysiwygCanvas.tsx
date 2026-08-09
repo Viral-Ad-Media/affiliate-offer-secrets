@@ -154,6 +154,13 @@ function cssStringToReactStyle(css: string): React.CSSProperties {
   return style as React.CSSProperties;
 }
 
+/** The canvas-side equivalent of the published `.img-wrap-center`/`-right` rules. */
+function imageAlignStyle(align: BlockStyle["align"]): React.CSSProperties {
+  if (align === "center") return { marginLeft: "auto", marginRight: "auto" };
+  if (align === "right") return { marginLeft: "auto", marginRight: 0 };
+  return {};
+}
+
 function blockInlineStyle(block: { type: string; style: BlockStyle }): React.CSSProperties {
   const allowed = (STYLE_KEYS_BY_TYPE as Record<string, readonly (keyof BlockStyle)[]>)[block.type] ?? [];
   return cssStringToReactStyle(styleToInlineCss(block.style, allowed));
@@ -1406,7 +1413,11 @@ export default function WysiwygCanvas({
                 src={el.content.dataUrl}
                 alt={el.content.alt || productTitle}
                 className="max-w-full rounded-xl"
-                style={blockInlineStyle(el)}
+                // Alignment is a CLASS on the published page (.img-wrap-*, see the image case in
+                // blockTree.ts — text-align can't move a display:block image), so it isn't in
+                // styleToInlineCss's output and has to be mirrored here or a narrowed image would
+                // sit left in the editor and centred on the real page.
+                style={{ ...blockInlineStyle(el), ...imageAlignStyle(el.style?.align) }}
               />
             ) : (
               <button

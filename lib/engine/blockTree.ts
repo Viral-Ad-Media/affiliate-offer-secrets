@@ -92,7 +92,45 @@ export type BlockStyle = {
    */
   fieldFocusBorderColor?: HexColor;
   fieldFocusBackgroundColor?: HexColor;
+
+  /**
+   * Image sizing and framing — resize and crop, done in CSS rather than by re-encoding the file.
+   *
+   * Non-destructive on purpose. `resizeImageFile` (lib/images/resizeClient.ts) already downscales
+   * every upload to 1000px and compresses it under the data-URL cap, so the bytes are handled at
+   * the door; what's left is a display decision, and a display decision should be reversible. A
+   * canvas re-crop would shrink the payload slightly and permanently throw away the pixels outside
+   * the frame — the wrong trade for a control someone will nudge repeatedly while eyeballing a
+   * page. Same instinct as `products.hoplink_override`: change the presentation, keep the source.
+   *
+   * `aspectRatio` is the crop. `objectFit: cover` (the default when a ratio is set) fills the frame
+   * and clips the overflow; `contain` letterboxes instead, which is what you want for a logo or a
+   * screenshot where losing an edge is worse than empty space. `focalX`/`focalY` decide WHICH part
+   * survives a cover crop — the reason a portrait cropped to 16:9 doesn't have to lose the face.
+   */
+  imageWidth?: number; // %, 10-100 — display width of the image within its column
+  aspectRatio?: AspectRatio;
+  objectFit?: "cover" | "contain";
+  focalX?: number; // %, 0-100 — object-position, only meaningful under a cover crop
+  focalY?: number; // %, 0-100
 };
+
+/**
+ * Crop frames, as a closed set mapped to real CSS values — never a tenant-typed ratio string.
+ * "original" means no crop at all and emits nothing, so an image that never touches these controls
+ * renders exactly the markup it did before they existed.
+ */
+export const ASPECT_RATIOS = {
+  original: null,
+  "1:1": "1 / 1",
+  "4:3": "4 / 3",
+  "3:2": "3 / 2",
+  "16:9": "16 / 9",
+  "4:5": "4 / 5",
+  "9:16": "9 / 16",
+} as const;
+export type AspectRatio = keyof typeof ASPECT_RATIOS;
+export const ASPECT_RATIO_NAMES = Object.keys(ASPECT_RATIOS) as AspectRatio[];
 
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 const FONT_WEIGHTS = new Set([400, 500, 600, 700, 800]);
@@ -170,6 +208,32 @@ export function styleToInlineCss(style: BlockStyle | undefined, allowed: readonl
   }
   if (has("align") && typeof style.align === "string" && TEXT_ALIGNS.has(style.align)) {
     parts.push(`text-align:${style.align}`);
+  }
+  // Image sizing/framing. Order matters for the reader, not the parser: width first, then the
+  // frame the width feeds, then which part of the picture survives it.
+  const ratio =
+    has("aspectRatio") && typeof style.aspectRatio === "string" && style.aspectRatio in ASPECT_RATIOS
+      ? ASPECT_RATIOS[style.aspectRatio as AspectRatio]
+      : null;
+  if (has("imageWidth") || ratio) {
+    const w = px(style.imageWidth, 10, 100);
+    // A ratio without a width does nothing visible: `aspect-ratio` on a replaced element only
+    // takes over once one axis is auto, and an untouched <img> is sized by its own pixels. So a
+    // crop implies a width, defaulting to the full column.
+    if (w !== null) parts.push(`width:${w}%`);
+    else if (ratio) parts.push("width:100%");
+  }
+  if (ratio) {
+    parts.push(`aspect-ratio:${ratio}`);
+    // cover is the default because it is what "crop" means — contain letterboxes instead, for a
+    // logo or screenshot where losing an edge is worse than empty space.
+    const fit = style.objectFit === "contain" ? "contain" : "cover";
+    parts.push(`object-fit:${fit}`);
+    if (fit === "cover") {
+      const fx = px(style.focalX, 0, 100);
+      const fy = px(style.focalY, 0, 100);
+      if (fx !== null || fy !== null) parts.push(`object-position:${fx ?? 50}% ${fy ?? 50}%`);
+    }
   }
   // Custom properties, not declarations: the stylesheet's own rules consume these with their
   // pre-theme values as fallbacks, so unset keys change nothing.
@@ -851,6 +915,23 @@ export const BUTTON_STYLE_KEYS = [
 ] as const;
 /** Placement of the button box itself — emitted on its wrapper, not on the button. */
 export const BUTTON_WRAP_STYLE_KEYS = ["align"] as const;
+/** Resize and crop, on the <img> itself. See the BlockStyle comment for why this is CSS, not a re-encode. */
+export const IMAGE_STYLE_KEYS = [
+  ...BOX_STYLE_KEYS,
+  "imageWidth",
+  "aspectRatio",
+  "objectFit",
+  "focalX",
+  "focalY",
+] as const;
+/**
+ * Where a narrowed image sits. Same wrapper trick as the button, and for the same reason: the
+ * image is `display:block`, so `text-align` on it does nothing — only auto margins move it, and
+ * those belong to a containing box. Emitted only when an alignment is actually set, so an
+ * untouched image's markup is byte-for-byte what it was before these keys existed.
+ */
+export const IMAGE_WRAP_STYLE_KEYS = ["align"] as const;
+export const IMAGE_PANEL_STYLE_KEYS = [...IMAGE_STYLE_KEYS, ...IMAGE_WRAP_STYLE_KEYS] as const;
 /** What the style PANEL offers for a button — the element's own keys plus its wrapper's. */
 export const BUTTON_PANEL_STYLE_KEYS = [...BUTTON_STYLE_KEYS, ...BUTTON_WRAP_STYLE_KEYS] as const;
 export const DIVIDER_STYLE_KEYS = ["borderColor", "borderWidth", "marginTop", "marginBottom"] as const;
@@ -875,7 +956,7 @@ export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readon
   heading: TEXT_STYLE_KEYS,
   subheading: TEXT_STYLE_KEYS,
   paragraph: TEXT_STYLE_KEYS,
-  image: BOX_STYLE_KEYS,
+  image: IMAGE_PANEL_STYLE_KEYS,
   bullet_list: TEXT_STYLE_KEYS,
   icon_list: TEXT_STYLE_KEYS,
   divider: DIVIDER_STYLE_KEYS,
@@ -912,13 +993,19 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       return `<h2${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(block.content.text)}</h2>`;
     case "paragraph":
       return `<p${styleAttr(block.style, TEXT_STYLE_KEYS)}>${renderInline(block.content.text)}</p>`;
-    case "image":
-      return block.content.dataUrl
-        ? `<img src="${escapeHtml(block.content.dataUrl)}" alt="${escapeHtml(block.content.alt || ctx.productTitle)}"${styleAttr(
-            block.style,
-            BOX_STYLE_KEYS
-          )} class="block-img" />`
-        : "";
+    case "image": {
+      if (!block.content.dataUrl) return "";
+      const img = `<img src="${escapeHtml(block.content.dataUrl)}" alt="${escapeHtml(
+        block.content.alt || ctx.productTitle
+      )}"${styleAttr(block.style, IMAGE_STYLE_KEYS)} class="block-img" />`;
+      // A CLASS, not an inline text-align: the image is display:block, so text-align on a parent
+      // does nothing to it — only auto margins move it, and no stylesheet can derive those from an
+      // alignment value. The class name comes from a literal in a closed comparison, never from
+      // interpolating the stored value. Emitted only when alignment is set, so an untouched
+      // image's markup is what it was before these keys existed.
+      const a = block.style?.align;
+      return a === "center" || a === "right" ? `<div class="img-wrap-${a}">${img}</div>` : img;
+    }
     case "bullet_list":
       return `<ul${styleAttr(block.style, TEXT_STYLE_KEYS)}>${block.content.items
         .map((i) => `<li>${renderInline(i)}</li>`)
