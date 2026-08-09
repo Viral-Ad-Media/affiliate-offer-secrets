@@ -50,7 +50,7 @@ export default async function ContactsPage({
   // The campaign titles and the tag list don't depend on which page you're on, so they no longer
   // wait behind the count — only the row query genuinely does (the page number is clamped against
   // the total, and an out-of-range .range() is a 416 from PostgREST, not an empty list).
-  const [{ count }, { data: campaigns }, { data: allTags }] = await Promise.all([
+  const [{ count }, { data: campaigns }, { data: allTags }, { data: attributes }] = await Promise.all([
     withTagFilter(
       supabase.from("contacts").select(countSelect, { count: "exact", head: true }).eq("workspace_id", ws)
     ),
@@ -68,7 +68,17 @@ export default async function ContactsPage({
       .select("id, name, color, description")
       .eq("workspace_id", ws)
       .order("name"),
+    // The custom-field library (0082) — only key+label, purely so the Extra column can show
+    // "Budget range" where the row stores "budget_range". Joins this Promise.all rather than
+    // adding a fifth round trip, same reason the tag embeds were folded into the row query.
+    supabase.from("contact_attributes").select("key, label").eq("workspace_id", ws),
   ]);
+
+  // fieldKey -> label. A key with no definition keeps showing its raw key downstream: that is the
+  // normal state for anything captured before the registry existed, and the value is still real.
+  const attributeLabels = Object.fromEntries(
+    ((attributes ?? []) as { key: string; label: string }[]).map((a) => [a.key, a.label])
+  );
 
   const total = count ?? 0;
   const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
@@ -137,6 +147,7 @@ export default async function ContactsPage({
         activeTag={tagFilter}
         total={total}
         campaigns={campaignOptions}
+        attributeLabels={attributeLabels}
       />
       <Pager
         page={page}

@@ -34,9 +34,24 @@ import EmptyState from "@/components/EmptyState";
 // Flattens a lead's user-added form fields (Phase O.5) into one "key: value; key: value" string —
 // deliberate v1 scope cut, matching the plan's own call: no dynamic per-field columns, since the
 // field set varies per campaign/variant and even changes over time as a tenant edits their form.
-function flattenExtraFields(extraFields: Record<string, string>): string {
+/**
+ * "Budget range: 5k-10k", not "budget_range: 5k-10k".
+ *
+ * `extra_fields` is keyed by the stable fieldKey — that is deliberate and does not change here.
+ * The workspace's `contact_attributes` library (0082) is what turns a key into a human label at
+ * READ time, which is the whole point of separating the two: the label can be renamed freely
+ * without touching a single stored value.
+ *
+ * A key with no matching attribute falls back to the raw key rather than being hidden. That is the
+ * normal state for anything collected before the registry existed, and for a field whose
+ * definition was deleted — the value is still real data and must stay visible.
+ */
+function flattenExtraFields(
+  extraFields: Record<string, string>,
+  labels?: Record<string, string>
+): string {
   return Object.entries(extraFields)
-    .map(([k, v]) => `${k}: ${v}`)
+    .map(([k, v]) => `${labels?.[k] ?? k}: ${v}`)
     .join("; ");
 }
 
@@ -64,12 +79,15 @@ export default function ContactsTable({
   activeTag,
   total,
   campaigns,
+  attributeLabels = {},
 }: {
   contacts: Contact[];
   allTags: ContactTag[];
   activeTag: string | null;
   total: number;
   campaigns: { id: string; title: string }[];
+  /** fieldKey -> human label, from the workspace's contact_attributes library (0082). */
+  attributeLabels?: Record<string, string>;
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
@@ -339,9 +357,11 @@ export default function ContactsTable({
                     <td className="px-2 py-2 text-zinc-400">{c.campaign_title ?? "—"}</td>
                     <td
                       className="max-w-[14rem] truncate px-2 py-2 text-xs text-zinc-500"
-                      title={flattenExtraFields(c.extra_fields)}
+                      title={flattenExtraFields(c.extra_fields, attributeLabels)}
                     >
-                      {Object.keys(c.extra_fields).length > 0 ? flattenExtraFields(c.extra_fields) : "—"}
+                      {Object.keys(c.extra_fields).length > 0
+                        ? flattenExtraFields(c.extra_fields, attributeLabels)
+                        : "—"}
                     </td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex items-center justify-end gap-1">
