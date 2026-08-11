@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { queueChargedJob } from "@/lib/credits";
-import { normalizeKitAssets } from "@/lib/kitAssets";
+import { normalizeKitAssets, normalizeKitCounts } from "@/lib/kitAssets";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 
@@ -21,6 +21,10 @@ export async function POST(req: Request) {
   // Which kit pieces to generate. Absent means everything, so an older client or a direct API call
   // keeps the previous behaviour rather than silently queueing a build that produces nothing.
   const assets = normalizeKitAssets(body.assets);
+  // How many of each. Clamped to each asset's own range here as well as in the worker — the
+  // route is reachable directly, so the range is enforced where the value is stored, not only
+  // where the dialog offers it.
+  const counts = normalizeKitCounts(body.counts);
 
   const { data: product, error: productError } = await supabase
     .from("products")
@@ -68,7 +72,7 @@ export async function POST(req: Request) {
     {
       workspace_id: ws,
       type: "build_campaign",
-      payload: { product_id: productId, vendor_id: product.vendor_id, assets },
+      payload: { product_id: productId, vendor_id: product.vendor_id, assets, counts },
     },
     {
       // Preserve the pre-existing claim rollback: if the atomic queue/debit is declined, the

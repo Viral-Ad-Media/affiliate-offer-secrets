@@ -5,7 +5,7 @@ import { renderBridgeHtml, buildHoplink, normalizePageCopy, keywordsOf, type Pag
 import { themeFromBrandColors } from "./pageTheme";
 import { db } from "./core";
 import type { FbAdAngle, SocialPost } from "@/lib/shared";
-import { wants, type KitAssetKey } from "@/lib/kitAssets";
+import { wants, type KitAssetKey, type CountableKitAssetKey } from "@/lib/kitAssets";
 
 // Re-exported so every existing server-side importer keeps working; the list itself is
 // isomorphic (see lib/buildStages.ts) because the progress checklist reads it in the browser.
@@ -97,11 +97,31 @@ async function stageImage(
   };
 }
 
+/**
+ * Output budget for one stage, from what it was actually asked for.
+ *
+ * This used to be a flat 3000, which was fine while the counts were constants. It is not fine now
+ * that someone can ask for ten of something: the whole stage is a single call returning one JSON
+ * object, and running out of output tokens truncates that object mid-string. The result isn't a
+ * short kit, it's unparseable JSON — the stage throws, burns its retries, and the job ends as a
+ * terminal error having generated nothing. So the budget has to follow the request.
+ *
+ * The per-item figures are deliberately generous measurements of the existing prompts' output, not
+ * tight fits, and the floor keeps small requests behaving exactly as they did before.
+ */
+function maxTokensFor(items: { perItem: number; count: number }[]): number {
+  const BASE = 800; // preamble, JSON structure, and slack
+  const CEILING = 8000; // comfortably inside the model's output limit
+  const needed = items.reduce((sum, i) => sum + i.perItem * i.count, BASE);
+  return Math.min(CEILING, Math.max(3000, needed));
+}
+
 async function stageAds(
   product: ProductRow,
   prior: Record<string, unknown>,
   usage: UsageContext,
-  assets: KitAssetKey[]
+  assets: KitAssetKey[],
+  counts: Record<CountableKitAssetKey, number>
 ): Promise<StageOutput> {
   // One Anthropic call produced BOTH Facebook angles and TikTok scripts, which is why dropping one
   // of them needs the schema and prompt built from the selection rather than the whole stage
@@ -116,11 +136,12 @@ async function stageAds(
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
   const asks: string[] = [];
+  const budget: { perItem: number; count: number }[] = [];
   if (wantFb) {
     properties.fb_ad_angles = {
       type: "array",
-      minItems: 3,
-      maxItems: 3,
+      minItems: counts.fb_ads,
+      maxItems: counts.fb_ads,
       items: {
         type: "object",
         properties: {
@@ -134,29 +155,33 @@ async function stageAds(
     };
     required.push("fb_ad_angles");
     asks.push(
-      "fb_ad_angles — exactly 3 distinct Meta-compliant ad angles for this product, each as a structured object with a headline, primary_text, description, and cta."
+      `fb_ad_angles — exactly ${counts.fb_ads} distinct Meta-compliant ad angles for this product, each as a structured object with a headline, primary_text, description, and cta.`
     );
+    // A Facebook primary text alone runs to 100-150 words, so this is per-angle headroom rather
+    // than a measurement of the average.
+    budget.push({ perItem: 280, count: counts.fb_ads });
   }
   if (wantTiktok) {
     properties.tiktok_md = { type: "string" };
     required.push("tiktok_md");
     asks.push(
-      "tiktok_md — 3 short one-line hooks plus 3 full 30-45s UGC-style video scripts (spoken lines + shot notes) for the same product, as a Markdown string."
+      `tiktok_md — ${counts.tiktok} short one-line hooks plus ${counts.tiktok} full 30-45s UGC-style video scripts (spoken lines + shot notes) for the same product, as a Markdown string.`
     );
+    budget.push({ perItem: 380, count: counts.tiktok });
   }
 
   const result = await completeJSON<{ fb_ad_angles?: FbAdAngle[]; tiktok_md?: string }>({
     system: COMPLIANCE_SYSTEM,
     prompt: `${ctx}\n\nWrite:\n${asks.map((a, i) => `${i + 1}. ${a}`).join("\n")}`,
     schema: { type: "object", properties, required },
-    maxTokens: 3000,
+    maxTokens: maxTokensFor(budget),
     usage,
   });
   // Defensive validation — the JSON Schema's minItems/maxItems is the primary enforcement, but a
   // wire hiccup shouldn't be able to write a malformed array; fail the stage (existing
   // retry/attempts-cap machinery handles it) rather than persist bad data.
-  if (wantFb && (!Array.isArray(result.fb_ad_angles) || result.fb_ad_angles.length !== 3)) {
-    throw new Error("Model did not return exactly 3 ad angles");
+  if (wantFb && (!Array.isArray(result.fb_ad_angles) || result.fb_ad_angles.length !== counts.fb_ads)) {
+    throw new Error(`Model did not return exactly ${counts.fb_ads} ad angles`);
   }
   return { stageData: prior, campaignPatch: result };
 }
@@ -323,7 +348,8 @@ async function stageSocial(
   product: ProductRow,
   prior: Record<string, unknown>,
   usage: UsageContext,
-  assets: KitAssetKey[]
+  assets: KitAssetKey[],
+  counts: Record<CountableKitAssetKey, number>
 ): Promise<StageOutput> {
   // Same combined-call shape as stageAds — organic captions and the email sequence came from one
   // request, so choosing one of them means narrowing the schema, not skipping the stage.
@@ -336,35 +362,38 @@ async function stageSocial(
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
   const asks: string[] = [];
+  const budget: { perItem: number; count: number }[] = [];
   if (wantSocial) {
     properties.social_posts = {
       type: "array",
-      minItems: 5,
-      maxItems: 5,
+      minItems: counts.social,
+      maxItems: counts.social,
       items: { type: "object", properties: { caption: { type: "string" } }, required: ["caption"] },
     };
     required.push("social_posts");
     asks.push(
-      "social_posts — exactly 5 short organic social captions for this product/niche, each as a structured object with a caption field."
+      `social_posts — exactly ${counts.social} short organic social captions for this product/niche, each as a structured object with a caption field.`
     );
+    budget.push({ perItem: 120, count: counts.social });
   }
   if (wantEmail) {
     properties.email_md = { type: "string" };
     required.push("email_md");
     asks.push(
-      'email_md — a 3-email swipe sequence (subject + body each) for the "tid=email" channel, as a Markdown string.'
+      `email_md — a ${counts.email}-email swipe sequence (subject + body each) for the "tid=email" channel, as a Markdown string.`
     );
+    budget.push({ perItem: 450, count: counts.email });
   }
 
   const result = await completeJSON<{ social_posts?: SocialPost[]; email_md?: string }>({
     system: COMPLIANCE_SYSTEM,
     prompt: `${ctx}\n\nWrite:\n${asks.map((a, i) => `${i + 1}. ${a}`).join("\n")}`,
     schema: { type: "object", properties, required },
-    maxTokens: 3000,
+    maxTokens: maxTokensFor(budget),
     usage,
   });
-  if (wantSocial && (!Array.isArray(result.social_posts) || result.social_posts.length !== 5)) {
-    throw new Error("Model did not return exactly 5 social posts");
+  if (wantSocial && (!Array.isArray(result.social_posts) || result.social_posts.length !== counts.social)) {
+    throw new Error(`Model did not return exactly ${counts.social} social posts`);
   }
   return { stageData: prior, campaignPatch: result };
 }
@@ -376,7 +405,8 @@ export async function runBuildCampaignStage(
   priorStageData: Record<string, unknown>,
   usageCtx: { userId: string; jobId: string },
   campaignId: string,
-  assets: KitAssetKey[]
+  assets: KitAssetKey[],
+  counts: Record<CountableKitAssetKey, number>
 ): Promise<StageOutput> {
   const stage = BUILD_CAMPAIGN_STAGES[stageIndex];
   const usage: UsageContext = { ...usageCtx, jobType: "build_campaign", stage };
@@ -394,7 +424,7 @@ export async function runBuildCampaignStage(
         ? stageImage(product, priorStageData, usage)
         : { stageData: priorStageData };
     case "ads":
-      return stageAds(product, priorStageData, usage, assets);
+      return stageAds(product, priorStageData, usage, assets, counts);
     case "pages":
       return wants(assets, "funnel")
         ? stagePages(product, priorStageData, usage, campaignId)
@@ -404,7 +434,7 @@ export async function runBuildCampaignStage(
         ? stageContent(product, priorStageData, usage)
         : { stageData: priorStageData };
     case "social":
-      return stageSocial(product, priorStageData, usage, assets);
+      return stageSocial(product, priorStageData, usage, assets, counts);
     default:
       throw new Error(`Unknown build_campaign stage index ${stageIndex}`);
   }

@@ -185,6 +185,28 @@ design rationale. Mechanics:
 - **Content generation** (`lib/engine/anthropic.ts`, `COMPLIANCE_SYSTEM`) calls the Anthropic
   Messages API directly (`claude-sonnet-5`) with the content rules below as a cached system
   prompt, using forced tool-use for structured JSON output (`completeJSON()`).
+- **How MANY of each is chosen too** (`KIT_ASSET_COUNTS`, `jobs.payload.counts`). The four
+  countable assets are ad angles, TikTok scripts, social captions and emails, 1-10 each; the funnel
+  page and the blog article are absent because one is a page and the other writes a single
+  `blog_md` string that becomes one post — three articles would need a different stage shape, not
+  a bigger number. Each count used to be a literal in THREE places at once (the JSON Schema's
+  `minItems`/`maxItems`, the wording of the prompt, and a defensive length check on the way back),
+  and all three now read the same number.
+  **The maximum of 10 is a token budget, not a preference.** A stage is one Anthropic call
+  returning one JSON object, and exceeding the output allowance truncates that object mid-string —
+  not a shorter kit, but unparseable JSON that fails the stage, burns its retries and ends as a
+  terminal error with nothing generated. `maxTokensFor` (`lib/engine/build.ts`) therefore scales
+  the allowance with what was asked for; the worst case a person can select lands at 7400 (ads)
+  and 6500 (social) against a ceiling of 8000. Raising the max means re-checking that arithmetic.
+  **Absent counts mean the old defaults** — 3 angles, 3 scripts, 5 captions, 3 emails — for exactly
+  the reason absent `assets` means everything: a job queued before this shipped, or any direct API
+  caller, must behave as it did. Verified at the wire that the defaults produce byte-identical
+  prompts and the same flat 3000-token budget as before.
+  **An emptied input falls back to the default, not the minimum.** `Number("")` is `0`, which is
+  finite, so a naive clamp turns a box someone cleared to retype into 1 — and a build silently
+  producing one email is worse than one producing three. Caught by a test, not by review.
+  **The credit price is still flat per build**, so ten emails cost the same as three while costing
+  more real API spend; the dialog says the price is per kit rather than leaving it to the ledger.
 - **A build generates only what was ASKED for** (`lib/kitAssets.ts`, `jobs.payload.assets`). Every
   build used to produce all nine assets whether or not the operator ran TikTok, or wanted anything
   beyond a funnel page. The selection is on the ASSET axis, not the stage axis, and that distinction
@@ -1625,9 +1647,9 @@ OAuth. `GEMINI_API_KEY` is a plain Google AI Studio key, unrelated to the `GOOGL
 
 `fb_ads_md`/`social_md` used to be one flat markdown string each (3 ad angles / 5 social captions
 as prose inside a single string, no per-item addressability). `lib/engine/build.ts`'s `stageAds`/
-`stageSocial` now request structured arrays instead — `campaigns.fb_ad_angles jsonb` (exactly 3
-`{headline, primary_text, description, cta}` objects) and `campaigns.social_posts jsonb` (exactly
-5 `{caption}` objects) — so each angle/post can have its own AI-generated image and/or video,
+`stageSocial` now request structured arrays instead — `campaigns.fb_ad_angles jsonb`
+(`{headline, primary_text, description, cta}` objects) and `campaigns.social_posts jsonb`
+(`{caption}` objects) — so each angle/post can have its own AI-generated image and/or video,
 independent of every other item on the campaign. `fb_ads_md`/`social_md` are never written by new
 builds; old rows keep their legacy flat text, unread by the new UI — same precedent as
 `profiles.nickname`/`campaigns.presell_html`/`campaigns.landing_md`. `tiktok_md`/`email_md`/

@@ -3,7 +3,16 @@
 import { useState } from "react";
 import { AlertTriangle, Loader2, Rocket, RefreshCw, ShieldCheck } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { KIT_ASSETS, ALL_KIT_ASSETS, adsWithoutFunnel, type KitAssetKey } from "@/lib/kitAssets";
+import {
+  KIT_ASSETS,
+  ALL_KIT_ASSETS,
+  KIT_ASSET_COUNTS,
+  adsWithoutFunnel,
+  isCountable,
+  normalizeKitCounts,
+  type KitAssetKey,
+  type CountableKitAssetKey,
+} from "@/lib/kitAssets";
 import { creditCostFor, formatCost } from "@/lib/credits";
 import { Button } from "@/components/ui/button";
 
@@ -44,7 +53,7 @@ export default function PromoteKitDialog({
   /** How many products this will run against — 1 for the row button, N for the bulk bar. */
   count: number;
   busy: boolean;
-  onConfirm: (assets: KitAssetKey[]) => void;
+  onConfirm: (assets: KitAssetKey[], counts: Record<CountableKitAssetKey, number>) => void;
   /** "regenerate" changes the copy and unticks the funnel page by default. */
   mode?: "build" | "regenerate";
   /**
@@ -63,9 +72,22 @@ export default function PromoteKitDialog({
   const [selected, setSelected] = useState<KitAssetKey[]>(
     defaultAssets ?? (regenerate ? ALL_KIT_ASSETS.filter((k) => k !== "funnel") : [...ALL_KIT_ASSETS])
   );
+  const [counts, setCounts] = useState<Record<CountableKitAssetKey, number>>(() => normalizeKitCounts(undefined));
 
   function toggle(key: KitAssetKey) {
     setSelected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }
+
+  // Typed values are stored as-is and only clamped on blur. Clamping per keystroke fights the
+  // person typing: with a minimum of 1, clearing the box to retype reads as 0 and springs back to
+  // 1 under the cursor. Nothing downstream depends on this being in range — normalizeKitCounts
+  // clamps again in the route AND in the worker, so a transient value can't reach a prompt.
+  function setCount(key: CountableKitAssetKey, raw: string) {
+    const n = Number(raw);
+    setCounts((c) => ({ ...c, [key]: raw === "" ? ("" as unknown as number) : Number.isFinite(n) ? n : c[key] }));
+  }
+  function clampCounts() {
+    setCounts((c) => normalizeKitCounts(c));
   }
 
   const none = selected.length === 0;
@@ -98,23 +120,48 @@ export default function PromoteKitDialog({
         </p>
 
         <div className="mt-1 space-y-1.5">
-          {KIT_ASSETS.map((a) => (
-            <label
-              key={a.key}
-              className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-ink-700 p-2.5 hover:border-ink-600"
-            >
-              <input
-                type="checkbox"
-                checked={selected.includes(a.key)}
-                onChange={() => toggle(a.key)}
-                className="mt-0.5 accent-emerald-500"
-              />
-              <span className="min-w-0">
-                <span className="block text-sm text-zinc-200">{a.label}</span>
-                <span className="block text-[12px] text-zinc-500">{a.hint}</span>
-              </span>
-            </label>
-          ))}
+          {KIT_ASSETS.map((a) => {
+            const on = selected.includes(a.key);
+            const spec = isCountable(a.key) ? KIT_ASSET_COUNTS[a.key] : null;
+            return (
+              <div
+                key={a.key}
+                className="flex items-start gap-2.5 rounded-lg border border-ink-700 p-2.5 hover:border-ink-600"
+              >
+                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => toggle(a.key)}
+                    className="mt-0.5 accent-emerald-500"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm text-zinc-200">{a.label}</span>
+                    <span className="block text-[12px] text-zinc-500">{a.hint}</span>
+                  </span>
+                </label>
+
+                {/* How many. Sits outside the <label> so clicking the number doesn't toggle the
+                    checkbox it belongs to. Disabled rather than hidden when the asset is off —
+                    the row shouldn't change height as you tick through the list. */}
+                {spec && (
+                  <label className="flex shrink-0 items-center gap-1.5 text-[12px] text-zinc-500">
+                    <input
+                      type="number"
+                      min={spec.min}
+                      max={spec.max}
+                      value={counts[a.key as CountableKitAssetKey]}
+                      disabled={!on}
+                      onChange={(e) => setCount(a.key as CountableKitAssetKey, e.target.value)}
+                      onBlur={() => clampCounts()}
+                      className="w-14 rounded border border-ink-600 bg-ink-800 px-1.5 py-1 text-xs text-zinc-100 disabled:opacity-40"
+                    />
+                    <span className={on ? undefined : "opacity-40"}>{spec.noun}</span>
+                  </label>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {regenerate && !willReplaceFunnel && (
@@ -184,7 +231,7 @@ export default function PromoteKitDialog({
               Cancel
             </Button>
             <Button
-              onClick={() => onConfirm(selected)}
+              onClick={() => onConfirm(selected, normalizeKitCounts(counts))}
               disabled={busy || none}
               title={none ? "Pick at least one thing to generate" : undefined} className="text-sm">
               {busy ? (

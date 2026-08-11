@@ -138,13 +138,13 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
   // hand-built funnels carry no product at all. That is a convention, not a database constraint:
   // if a second campaign is ever allowed to share a product, this button would need to name the
   // campaign instead, and upsertCampaign would start throwing before it got the chance.
-  async function runRegenerate(assets: string[]) {
+  async function runRegenerate(assets: string[], counts: Record<string, number>) {
     if (!campaign?.product_id) return;
     setRegenBusy(true);
     const res = await fetch("/api/promote", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ product_id: campaign.product_id, assets }),
+      body: JSON.stringify({ product_id: campaign.product_id, assets, counts }),
     });
     const d = await res.json().catch(() => ({}));
     setRegenBusy(false);

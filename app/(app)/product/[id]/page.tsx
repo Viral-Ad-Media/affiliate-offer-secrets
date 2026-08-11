@@ -51,13 +51,13 @@ export default function ProductPage({ params }: { params: { id: string } }) {
   const [regenBusy, setRegenBusy] = useState(false);
   const [regenJob, setRegenJob] = useState<{ jobIds: string[]; titles: Record<string, string> } | null>(null);
 
-  async function runRegenerate(assets: string[]) {
+  async function runRegenerate(assets: string[], counts: Record<string, number>) {
     if (!product) return;
     setRegenBusy(true);
     const res = await fetch("/api/promote", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ product_id: product.id, assets }),
+      body: JSON.stringify({ product_id: product.id, assets, counts }),
     });
     const d = await res.json().catch(() => ({}));
     setRegenBusy(false);

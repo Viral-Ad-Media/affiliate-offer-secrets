@@ -2,7 +2,7 @@ import { db } from "./core";
 import { notify, jobLabel } from "@/lib/notifications";
 import { createPostFromCampaign } from "@/lib/blog/fromCampaign";
 import { runBuildCampaignStage, BUILD_CAMPAIGN_STAGES } from "./build";
-import { normalizeKitAssets } from "@/lib/kitAssets";
+import { normalizeKitAssets, normalizeKitCounts } from "@/lib/kitAssets";
 import { runDiscoverProducts, type DiscoverJobPayload } from "./discover";
 import { runLaunchAdStage, LAUNCH_AD_STAGES, type LaunchAdPayload } from "./adlaunch";
 import { runGenerateAdImageStage, GENERATE_AD_IMAGE_STAGES, type GenerateAdImagePayload } from "./adimage";
@@ -331,6 +331,9 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
   // Absent means everything — see normalizeKitAssets. That keeps jobs queued before this shipped,
   // and any direct API caller, behaving exactly as they did.
   const assets = normalizeKitAssets(job.payload?.assets);
+  // Same rule for the counts: absent falls back to what each was before they were adjustable, so a
+  // job queued before this shipped still produces 3 angles / 3 scripts / 5 captions / 3 emails.
+  const counts = normalizeKitCounts(job.payload?.counts);
   const { stageData, campaignPatch } = await runBuildCampaignStage(
     job.stage,
     product as any,
@@ -338,7 +341,8 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
     job.stage_data ?? {},
     { userId: job.user_id, jobId: job.id },
     campaignRow.id,
-    assets
+    assets,
+    counts
   );
 
   if (campaignPatch && Object.keys(campaignPatch).length > 0) {
