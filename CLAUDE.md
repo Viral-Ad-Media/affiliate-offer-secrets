@@ -627,6 +627,28 @@ when the dashboard field was saved.
 tag inputs: typing a value and pressing Save without first pressing Enter to turn it into a chip
 discards it silently, with no error and no visible change until reload. That happened once here.
 
+### Vault secret names are UNIQUE, so a deterministic name makes reconnect a one-shot
+
+`store_meta_secret`/`store_oauth_secret` were a bare `vault.create_secret()` with a deterministic
+name (`meta_user_token_{user_id}`, `meta_page_token_{page_id}`), and `disconnect_meta()` deleted
+the rows without deleting the secrets they pointed at. Either alone is survivable; together they
+mean **connect → disconnect → you can never connect that account again**, because the leftovers
+from your own previous connection collide with you. It surfaced as
+`duplicate key value violates unique constraint "secrets_name_idx"` behind the generic "Something
+went wrong connecting to Facebook", against secrets orphaned months earlier by a different Meta app.
+
+**0090 makes both store helpers idempotent by NAME** — reuse the row and `vault.update_secret` it,
+rather than create-only. Reusing keeps every existing `*_secret_id` pointer valid and cannot orphan
+anything, which a delete-then-create would risk if it failed between the two statements. Verified:
+a second call with the same name returns the same id and the stored value really is the new one.
+`disconnect_meta` now also collects the secret ids BEFORE deleting (the delete cascades the
+pointers away) and removes them.
+
+This codebase had already written the rule down for Google — "must delete the old Vault secret, not
+just repoint the column" — and explicitly exempted Meta because "token replacement only happens on
+a rare full re-auth". **That exemption was wrong on both counts**: a full re-auth is the common
+case, and rarity was never the mechanism — the deterministic name was.
+
 ### Meta's two server-to-server callbacks (deauthorize + data deletion)
 
 Meta calls both directly, unauthenticated, with a `signed_request` body. **That HMAC is the entire
