@@ -585,6 +585,48 @@ that relied on the trigger now stamp `workspace_id` explicitly (`tiktok/callback
   submit `pages_show_list`/`pages_manage_posts`/`pages_read_engagement` for public App Review
   (separate from the already-approved `ads_management`).
 
+### "Facebook Login for Business" is a different product, and its error message lies
+
+If the Meta app uses **Facebook Login for Business** rather than classic Facebook Login, a
+scope-based dialog request fails with:
+
+> URL Blocked — This redirect failed because the redirect URI is not whitelisted in the app's
+> Client OAuth Settings.
+
+**That message is wrong about its own cause**, and it cost a long debugging session here. The
+redirect URIs were registered correctly the entire time. The real cause is that this product takes
+its permission set from a dashboard-created **configuration**, passed as `config_id` — Meta's docs
+state "`config_id` has replaced `scope`" and recommend not sending `scope` at all. A classic
+scope-only request to a Login-for-Business app dies at the redirect step with a redirect-shaped
+error.
+
+- **The tell is `is_business_login=1`**, which Facebook itself adds to the `login.php` URL it
+  bounces you through. Read the real dialog URL before theorising; it names the product.
+- **`override_default_response_type=true` must accompany `response_type=code`.** The configuration
+  carries its own default response type, and without the override it wins — handing back a token in
+  the URL fragment that a server-side callback never sees. That failure looks like the callback
+  silently doing nothing, which is a much worse thing to debug than an error page.
+- `FB_LOGIN_CONFIG_ID` drives it (`getFbLoginConfigId()`), unset = the classic `scope` flow
+  byte-identical to before. Env-driven because the two products need genuinely different requests
+  and this app has already been repointed at a different Meta app once. It is **not a secret** — it
+  travels as a query parameter in the login dialog URL.
+- The configuration must issue a **User access token**, not a System-user token: the callback
+  exchanges the code for a user token and then calls `/me/accounts` for Page tokens. A system-user
+  configuration returns something that flow can't use.
+
+**Two probes that looked authoritative and measured nothing**, recorded so they aren't repeated:
+`GET /oauth/access_token` with a fake code returns the same "domain of this URL isn't included in
+the app's domains" text for EVERY `redirect_uri`, including ones definitely not registered; and an
+unauthenticated `GET` of the dialog returns a bare 400 for everything. Both were read as evidence
+and both were noise. **Validate a probe against a known-bad control before believing it** — the
+control is what exposed them. What IS readable and trustworthy: `GET /{app-id}?fields=app_domains`
+with an app access token (`{id}|{secret}`) returns the real stored value, and it visibly changed
+when the dashboard field was saved.
+
+**App Domains is a separate field from Valid OAuth Redirect URIs** (Settings → Basic), and both are
+tag inputs: typing a value and pressing Save without first pressing Enter to turn it into a chip
+discards it silently, with no error and no visible change until reload. That happened once here.
+
 ### Meta's two server-to-server callbacks (deauthorize + data deletion)
 
 Meta calls both directly, unauthenticated, with a `signed_request` body. **That HMAC is the entire

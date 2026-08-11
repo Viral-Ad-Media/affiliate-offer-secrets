@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { FB_API_VERSION, FB_OAUTH_SCOPES, getFbClientId, getFbRedirectUri } from "@/lib/meta/config";
+import {
+  FB_API_VERSION,
+  FB_OAUTH_SCOPES,
+  getFbClientId,
+  getFbLoginConfigId,
+  getFbRedirectUri,
+} from "@/lib/meta/config";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +26,21 @@ export async function GET() {
   authUrl.searchParams.set("client_id", getFbClientId());
   authUrl.searchParams.set("redirect_uri", getFbRedirectUri());
   authUrl.searchParams.set("state", state);
-  authUrl.searchParams.set("scope", FB_OAUTH_SCOPES.join(","));
   authUrl.searchParams.set("response_type", "code");
+
+  const configId = getFbLoginConfigId();
+  if (configId) {
+    // Facebook Login for Business. The permission set lives in the dashboard configuration, so
+    // `scope` is deliberately NOT sent — Meta's docs say config_id replaced it and recommend
+    // against including both.
+    authUrl.searchParams.set("config_id", configId);
+    // Without this the configuration's OWN default response type wins and our `response_type=code`
+    // is ignored — which would hand back a token in the fragment that the server-side callback
+    // never sees, and it would look like the callback silently did nothing.
+    authUrl.searchParams.set("override_default_response_type", "true");
+  } else {
+    authUrl.searchParams.set("scope", FB_OAUTH_SCOPES.join(","));
+  }
 
   const res = NextResponse.redirect(authUrl.toString());
   res.cookies.set("meta_oauth_state", state, {
