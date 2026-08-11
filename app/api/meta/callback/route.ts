@@ -10,9 +10,32 @@ import {
   getLinkedInstagramAccount,
   getMe,
   getUserPages,
+  type FbPage,
 } from "@/lib/meta/client";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Swallow a failure in a DISCOVERY call and name it in the log.
+ *
+ * These four Graph calls used to sit in one `Promise.all`, which made them all-or-nothing: a
+ * single missing permission threw, the outer catch flattened it to "Something went wrong
+ * connecting to Facebook", and the log said `(#200) Missing Permissions` without naming which
+ * call. That is a genuinely bad failure — `/me/adaccounts` needs `ads_read`/`ads_management` and
+ * `/me/accounts` needs `pages_show_list`, so an account with no ad account, or a Login-for-Business
+ * configuration that simply didn't include a permission, could not connect AT ALL rather than
+ * connecting with less. Instagram discovery already degraded this way; these now match it.
+ *
+ * Identity (`getMe`) and `debugToken` are deliberately NOT wrapped — without them there is no
+ * fb_user_id and no way to know which scopes were granted, so there is nothing honest to store.
+ */
+function optional<T>(label: string, fallback: T) {
+  return (err: unknown): T => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[meta callback] ${label} failed, continuing without it:`, message);
+    return fallback;
+  };
+}
 
 function appUrl(path: string) {
   return new URL(path, process.env.NEXT_PUBLIC_APP_URL);
@@ -72,12 +95,24 @@ export async function GET(req: Request) {
   try {
     const { access_token: shortLived } = await exchangeCodeForToken(code);
     const { access_token: longLived } = await exchangeForLongLivedToken(shortLived);
-    const [me, pages, tokenInfo, adAccounts] = await Promise.all([
+    const [me, tokenInfo, pages, adAccounts] = await Promise.all([
       getMe(longLived),
-      getUserPages(longLived),
       debugToken(longLived),
-      getAdAccounts(longLived),
+      getUserPages(longLived).catch(optional("getUserPages (/me/accounts, needs pages_show_list)", [] as FbPage[])),
+      getAdAccounts(longLived).catch(
+        optional("getAdAccounts (/me/adaccounts, needs ads_read or ads_management)", [] as {
+          id: string;
+          name: string;
+          currency: string;
+        }[]),
+      ),
     ]);
+
+    // What the app ACTUALLY received, which under Facebook Login for Business is decided by the
+    // dashboard configuration rather than by anything in the request — so this is the only place
+    // it can be observed. Scopes are not secrets; a permission silently absent from the
+    // configuration is otherwise invisible until some later call fails for no obvious reason.
+    console.log(`[meta callback] granted scopes: ${tokenInfo.scopes.join(",") || "(none)"}`);
 
     // Meta's consent dialog allows declining individual permissions — a successful token
     // exchange never guarantees a requested scope was actually granted. Checked explicitly so
@@ -139,7 +174,11 @@ export async function GET(req: Request) {
       });
       if (pageSecretErr) throw new Error(pageSecretErr.message);
 
-      const pageTokenInfo = await debugToken(page.access_token);
+      // One page whose token can't be introspected must not abort the whole loop and lose every
+      // page after it. Null expiry is the same "no known expiry" the non-expiring case stores.
+      const pageTokenInfo = await debugToken(page.access_token).catch(
+        optional(`debugToken(page ${page.id})`, { expires_at: 0, is_valid: true, scopes: [] as string[] }),
+      );
 
       const { data: existingPage } = await admin
         .from("meta_pages")
