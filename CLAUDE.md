@@ -1032,16 +1032,21 @@ feature existed.
   component fetching campaign + steps via `createClient()`, same pattern as `/broadcast/[id]/page.tsx`).
   The product page's Bridge tab is now preview-only (the existing read-only iframe) with a "Manage &
   publish this funnel" link there.
-- **The map is a horizontal canvas of page THUMBNAILS, not a list of rows.** It reads left to
-  right, one card per page, each showing a live miniature of that page's stored html
+- **The map is a VERTICAL canvas of page THUMBNAILS, not a list of rows.** It reads top to
+  bottom, one card per page, each showing a live miniature of that page's stored html
   (`components/FunnelNodeCard.tsx` — `PageThumb` + `NodeCard`, shared with `SplitTestBranch` so the
   branch's variant cards and the ordinary step cards can't drift into two visual languages). It was
   a stack of full-width rows, which told you the order and nothing else: you could not tell an
   opt-in from a thank-you page without reading the label.
-  - **Horizontal because a funnel is a sequence in time** — and because a split test then draws as
-    what it actually is: one column that forks into stacked parallel cards and merges back into the
-    next connector. Vertically stacked rows cannot show that without the branch reading as two
-    consecutive steps.
+  - **Vertical because a funnel is read as a descent** — traffic enters at the top and narrows —
+    and because the page it sits on already scrolls vertically, so a long funnel grows the way the
+    page does instead of hiding its last steps behind a horizontal scrollbar nobody looks for.
+    (It was built horizontal first; vertical is what was actually wanted, and it reads better.)
+  - **The split test forks ACROSS, and that direction is forced by the map's.** `SplitTestBranch`
+    lays its variant cards side by side so they sit at the SAME height — that is what makes the
+    single connector below mean "and then all of them continue here". Stacked in a vertical map
+    they would read as consecutive steps, which is exactly what parallel variants are not. If the
+    map's direction is ever changed again, the branch's has to flip with it.
   - **`sandbox=""` on every thumbnail is load-bearing, not tidiness.** These pages carry the
     tenant's Meta Pixel and a lead form posting to the real `/api/public/leads` on this same
     origin — rendered as ordinary documents, a map with six thumbnails would fire six live pixel

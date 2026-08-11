@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Plus,
   Trash2,
   Pencil,
@@ -30,14 +30,16 @@ const STEP_ICONS: Record<FunnelStepType, typeof CheckCircle2> = {
 };
 
 /**
- * The map reads LEFT TO RIGHT on a canvas, one card per page, each card showing a real miniature
- * of that page — the shape every funnel builder uses, and the reason it is called a map rather
- * than a list. It was a stack of full-width table-ish rows before, which told you the order and
- * nothing else: you could not tell an opt-in from a thank-you page without reading the label.
+ * The map reads TOP TO BOTTOM on a canvas, one card per page, each card showing a real miniature
+ * of that page — the reason it is a map rather than a list. It was full-width table-ish rows
+ * before, which told you the order and nothing else: you could not tell an opt-in from a
+ * thank-you page without reading the label.
  *
- * Horizontal because a funnel is a sequence in time, and because a split test then draws as what
- * it actually is — one column that forks into parallel cards and merges back into the next step.
- * Vertically stacked rows cannot show that without the branch looking like two separate steps.
+ * Vertical because a funnel is read as a descent — traffic enters at the top and narrows — and
+ * because the page it lives on already scrolls vertically, so a long funnel grows the way the
+ * page does instead of hiding its last steps behind a horizontal scrollbar nobody looks for.
+ * A split test forks ACROSS at that one point (see SplitTestBranch) and merges back into the
+ * single column below, which is exactly what the weighted split does to a visitor.
  */
 export default function FunnelMap({
   campaignId,
@@ -105,7 +107,7 @@ export default function FunnelMap({
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-ink-700 px-4 py-3">
         <h2 className="text-sm font-semibold text-zinc-100">Funnel map</h2>
         <p className="text-xs text-zinc-500">
-          Visitors move left to right. Click a page to edit it, or the + between two pages to add one there.
+          Visitors move top to bottom. Click a page to edit it, or the + between two pages to add one there.
         </p>
       </div>
       {error && <p className="border-b border-ink-700 px-4 py-2 text-sm text-red-300">{error}</p>}
@@ -114,12 +116,13 @@ export default function FunnelMap({
           rest of the app in light mode instead of being a hard-coded dark texture. */}
       <div
         className="overflow-x-auto px-6 py-8"
+        data-funnel-canvas
         style={{
           backgroundImage: "radial-gradient(rgb(var(--ink-700)) 1px, transparent 1px)",
           backgroundSize: "18px 18px",
         }}
       >
-        <div className="flex min-w-max items-start gap-0">
+        <div className="flex min-w-max flex-col items-center gap-0">
           <SplitTestBranch
             campaignId={campaignId}
             bridgeHtml={bridgeHtml}
@@ -211,15 +214,15 @@ function ThumbAction({
  * "add a page HERE" one click instead of add-then-reorder. Hover/focus-revealed so a funnel at
  * rest reads as a clean flow — and a real `<button>`, so keyboard focus reveals it too.
  *
- * `mt-14` lines the arrow up with the middle of the card's thumbnail rather than the middle of the
- * whole card, whose height varies with how much a node has to say.
+ * `w-56` matches a card so the line sits under the centre of the column rather than needing the
+ * parent to know anything about connector widths.
  */
 function Connector({ busy, onInsert }: { busy: boolean; onInsert: (t: FunnelStepType) => void }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="group relative mt-14 flex w-14 shrink-0 items-center justify-center">
-      <div className="absolute inset-x-0 h-px bg-ink-600" />
-      <div className="absolute right-0 h-1.5 w-1.5 rotate-45 border-r border-t border-ink-500" />
+    <div className="group relative flex h-12 w-56 shrink-0 items-center justify-center">
+      <div className="absolute inset-y-0 w-px bg-ink-600" />
+      <div className="absolute bottom-0 h-1.5 w-1.5 rotate-45 border-b border-r border-ink-500" />
       {busy ? (
         <Loader2 className="relative h-4 w-4 animate-spin text-emerald-400" />
       ) : (
@@ -245,7 +248,7 @@ function Connector({ busy, onInsert }: { busy: boolean; onInsert: (t: FunnelStep
             onClick={() => setOpen(false)}
             className="fixed inset-0 z-10 cursor-default"
           />
-          <div className="absolute top-7 z-20 flex flex-col gap-0.5 rounded-lg border border-ink-600 bg-ink-900 p-1 shadow-lg">
+          <div className="absolute left-1/2 top-7 z-20 flex -translate-x-1/2 flex-col gap-0.5 rounded-lg border border-ink-600 bg-ink-900 p-1 shadow-lg">
             {(Object.keys(STEP_LABELS) as FunnelStepType[]).map((t) => (
               <button
                 key={t}
@@ -300,8 +303,8 @@ function AddCard({ busy, onAdd }: { busy: boolean; onAdd: (t: FunnelStepType) =>
  *
  * Preview and Edit deliberately stay as direct buttons rather than moving inside — they are the
  * two things you do constantly. What lives in here is the rarely-used and the destructive, which
- * is what a crowded node should shed. Move up/down keep those words rather than left/right: they
- * mean earlier/later in the sequence, and the underlying RPC is `move_funnel_step('up'|'down')`.
+ * is what a crowded node should shed. Up/down match both the column's own direction and the
+ * underlying RPC, `move_funnel_step('up'|'down')`.
  */
 function NodeMenu({
   busy,
@@ -354,7 +357,7 @@ function NodeMenu({
               disabled={!canMoveUp}
               className={`${item} text-zinc-300 hover:bg-ink-800`}
             >
-              <ChevronLeft className="h-3.5 w-3.5" /> Move earlier
+              <ChevronUp className="h-3.5 w-3.5" /> Move up
             </button>
             <button
               type="button"
@@ -365,7 +368,7 @@ function NodeMenu({
               disabled={!canMoveDown}
               className={`${item} text-zinc-300 hover:bg-ink-800`}
             >
-              <ChevronRight className="h-3.5 w-3.5" /> Move later
+              <ChevronDown className="h-3.5 w-3.5" /> Move down
             </button>
             <button
               type="button"

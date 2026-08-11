@@ -9,10 +9,10 @@ import { Button } from "@/components/ui/button";
 
 // The opt-in page's position in the funnel map (components/FunnelMap.tsx) — either one card (no
 // test running, the ~100% common case) or, once a split test is started, a real fork: parallel
-// variant cards stacked in the same column, which is what the weighted-random split
+// variant cards laid out ACROSS the column, which is what the weighted-random split
 // (lib/bridgeVariants.ts's pickWeightedVariant) actually does to a visitor. They merge back into
-// the single connector on the right, because that is also true — every variant leads to the same
-// next step.
+// the single connector below, because that is also true — every variant leads to the same next
+// step.
 //
 // This is the map-integrated counterpart to components/SplitTestPanel.tsx (the detailed list on
 // the opt-in page's own editor view). Both share lib/useSplitTest.ts, so neither can drift on data
@@ -97,15 +97,17 @@ export default function SplitTestBranch({
 
   return (
     <div className="shrink-0 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-500/[0.04] p-2.5">
-      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+      <div className="mb-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
         <Beaker className="h-3.5 w-3.5" /> Split test · {variants.length} variants
       </div>
-      {error && <p className="mb-2 w-56 text-xs text-red-300">{error}</p>}
+      {error && <p className="mb-2 text-center text-xs text-red-300">{error}</p>}
 
-      {/* Stacked, not side by side: the fork happens at ONE point in the funnel, so the variants
-          have to share a column for the connector on the right to mean "and then all of them
-          continue here". Laying them out horizontally would read as consecutive steps. */}
-      <div className="flex flex-col gap-2">
+      {/* Side by side, because the map itself runs top to bottom: the fork happens at ONE point in
+          the funnel, so the variants have to sit at the SAME height for the connector below to
+          mean "and then all of them continue here". Stacking them in a vertical map would read as
+          consecutive steps — which is exactly what they are not. Wraps on a narrow canvas rather
+          than pushing a horizontal scrollbar onto a page that scrolls the other way. */}
+      <div className="flex flex-wrap items-start justify-center gap-2">
         {variants.map((v) => {
           const leads = leadCounts[v.id] ?? 0;
           const rate = v.views > 0 ? `${((leads / v.views) * 100).toFixed(1)}%` : "—";
@@ -203,12 +205,12 @@ export default function SplitTestBranch({
         })}
       </div>
 
-      <div className="mt-2 w-56 space-y-1.5">
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
         <Button
           onClick={addVariant}
           disabled={busy === "add" || variants.length >= 5}
           variant="outline"
-          className="w-full !py-1 text-xs"
+          className="!py-1 text-xs"
         >
           {busy === "add" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
           Add variant
@@ -216,7 +218,7 @@ export default function SplitTestBranch({
         <select
           value={promoteId}
           onChange={(e) => setPromoteId(e.target.value)}
-          className="w-full rounded-lg border border-ink-600 bg-ink-800 px-2 py-1.5 text-xs text-zinc-100"
+          className="rounded-lg border border-ink-600 bg-ink-800 px-2 py-1.5 text-xs text-zinc-100"
         >
           <option value="">Don&apos;t promote a winner</option>
           {nonControl.map((v) => (
@@ -225,7 +227,7 @@ export default function SplitTestBranch({
             </option>
           ))}
         </select>
-        <Button onClick={() => endTest(promoteId || null)} disabled={busy === "end"} variant="outline" className="w-full !py-1 text-xs">
+        <Button onClick={() => endTest(promoteId || null)} disabled={busy === "end"} variant="outline" className="!py-1 text-xs">
           {busy === "end" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
           End test
         </Button>
