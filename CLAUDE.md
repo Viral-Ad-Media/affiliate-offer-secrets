@@ -981,8 +981,26 @@ step count, and leads captured (`contacts` count by `campaign_id`). **All editin
 split-testing, and step management happen on the funnel's own `/funnels/[campaignId]` page** — the
 "Manage" link goes there. The product page's Bridge tab is preview-only (a read-only iframe of the
 opt-in page plus a link to `/funnels/{campaignId}`); it no longer mounts `PublishBridge`/
-`PageEditor`/`SplitTestPanel` directly. A "Testing (N)" chip appears once a campaign has active
+`PageEditor` directly. A "Testing (N)" chip appears once a campaign has active
 `bridge_variants` rows (see below).
+
+**The opt-in editor has its own Regenerate button**, in the overlay's top bar beside Dashboard. It
+opens the SAME `PromoteKitDialog` the product page uses (`mode="regenerate"`, and a new
+`defaultAssets` prop so the funnel page starts ticked — a dialog opening with the thing the button
+named switched OFF reads as broken), with `RestyleDialog` still offered as the non-destructive
+alternative and `BuildProgressDialog` for progress. Three things it gets right and a copy of the
+flow would not:
+- **Opt-in view only.** Regenerating rewrites `bridge_html`/`page_copy`, so offering it while a
+  step or a variant is open would silently rewrite a different page than the one on screen.
+- **It remounts `PageEditor` when the job finishes** (`key={editorNonce}`). The editor seeds its
+  block tree in a `useState` initialiser, so reloading the row alone leaves the canvas showing the
+  OLD copy over freshly-written rows — and the next Save would put the old copy back over the
+  regeneration. Reload and remount are both required.
+- **A funnel with no product shows the button disabled with the reason**, not hidden (same call as
+  the unbuildable funnel types): there is no sales page to write from. It addresses the campaign
+  by its PRODUCT because that is what `/api/promote` takes, which is only correct while the engine
+  keeps one campaign per product (`upsertCampaign` uses `.maybeSingle()` on `product_id`) — a
+  convention, not a constraint.
 
 **Creating one by hand.** "New funnel" on that page (`components/NewFunnelButton.tsx` →
 `NewFunnelDialog.tsx` → `POST /api/funnels`) writes an opt-in page and its steps directly — no AI,
@@ -1139,12 +1157,16 @@ is shared.
   `saveEndpoint=/api/bridge-variants/{id}` (the variant row is fetched on demand there, not
   preloaded with the page); the control card's edit routes to the existing `optin` view, which
   writes the `campaigns` row correctly.
-- **`components/SplitTestPanel.tsx`** (the detailed vertical list — variant rows, "Add variant"
-  capped at 5 total, "End test" with a promote-winner picker, inline variant `PageEditor`) still
-  exists, shown on the opt-in page's own focused editor view. **Both components share
-  `lib/useSplitTest.ts`** — the variants/leadCounts state and every RPC call
-  (start/add/weight/toggle/delete/end) extracted into one hook once this became two consumers, so
-  neither can drift from the other's read-after-write/error-handling behavior.
+- **The map branch is the ONLY place a split test is managed.** There was a second, fuller list
+  (`components/SplitTestPanel.tsx`) inside the opt-in editor as well — deleted outright, not
+  deprecated, the same call as `SortableSection.tsx` and `FunnelStepsSection.tsx` before it. The
+  branch already had every capability it did (start, add capped at 5, weights, pause/resume,
+  delete, preview, "End test" with a promote-winner picker); the only difference was that the
+  panel nested a variant `PageEditor` inline while the branch routes editing to the parent page's
+  focused view, which is the better version. One test rendered in two shapes is a way to end up
+  looking at two different answers, and the branch is where the split visibly happens.
+  `lib/useSplitTest.ts` stays as the data layer with a single caller — it is the whole RPC surface
+  of the feature, and folding it back into a mostly-layout component would bury it.
 
 ## Funnel tracking integrations (GA4 / GTM / Clarity / Meta Pixel)
 
@@ -1252,7 +1274,7 @@ feature existed.
   node (these are map-level operations now, not inside the editor). `FunnelPage`
   (`app/(app)/funnels/[campaignId]/page.tsx`) holds a `View = {kind:"map"}|{kind:"optin"}|
   {kind:"step",stepId}` state — clicking Edit switches to a focused single-page editor view
-  (`PageEditor`+`SplitTestPanel` for `"optin"`, `FunnelStepEditor` for a step) with a "← Back to
+  (`PageEditor` for `"optin"`, `FunnelStepEditor` for a step) with a "← Back to
   funnel map" link, replacing the entire page body rather than expanding inline — the map, the
   opt-in editor, and a step's editor are never rendered at the same time. `PublishBridge` (the
   funnel-wide publish toggle) only shows on the map view, since it's a funnel-level control, not

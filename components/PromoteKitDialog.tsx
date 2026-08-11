@@ -35,6 +35,7 @@ export default function PromoteKitDialog({
   busy,
   onConfirm,
   mode = "build",
+  defaultAssets,
   funnelEditedAt = null,
   onRestyle,
 }: {
@@ -46,6 +47,13 @@ export default function PromoteKitDialog({
   onConfirm: (assets: KitAssetKey[]) => void;
   /** "regenerate" changes the copy and unticks the funnel page by default. */
   mode?: "build" | "regenerate";
+  /**
+   * What starts ticked, overriding the per-mode default. Set by a caller whose button already
+   * names one asset — the funnel editor's "Regenerate page" opens this with just the funnel
+   * ticked, because a dialog that opens with the thing you asked for switched OFF reads as broken.
+   * Everything else stays offerable, so "while I'm here, redo the ads too" is still one click.
+   */
+  defaultAssets?: KitAssetKey[];
   /** ISO date of the last hand edit, when known — sharpens the warning, never gates it. */
   funnelEditedAt?: string | null;
   /** Offered as the non-destructive alternative. Absent in bulk, where there's no one page to restyle. */
@@ -53,7 +61,7 @@ export default function PromoteKitDialog({
 }) {
   const regenerate = mode === "regenerate";
   const [selected, setSelected] = useState<KitAssetKey[]>(
-    regenerate ? ALL_KIT_ASSETS.filter((k) => k !== "funnel") : [...ALL_KIT_ASSETS]
+    defaultAssets ?? (regenerate ? ALL_KIT_ASSETS.filter((k) => k !== "funnel") : [...ALL_KIT_ASSETS])
   );
 
   function toggle(key: KitAssetKey) {

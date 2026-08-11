@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, LayoutDashboard } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, Sparkles } from "lucide-react";
+import { toast } from "@/lib/toast";
 import { createClient } from "@/lib/supabase/client";
 import type { Campaign, FunnelStep, BridgeVariant } from "@/lib/shared";
 import PublishBridge from "@/components/PublishBridge";
 import OfferLinkPanel from "@/components/OfferLinkPanel";
 import PageEditor from "@/components/PageEditor";
-import SplitTestPanel from "@/components/SplitTestPanel";
+import PromoteKitDialog from "@/components/PromoteKitDialog";
+import RestyleDialog from "@/components/RestyleDialog";
+import BuildProgressDialog from "@/components/BuildProgressDialog";
 import FunnelMap from "@/components/FunnelMap";
 import FunnelStepEditor from "@/components/FunnelStepEditor";
 import FunnelSettingsDialog from "@/components/FunnelSettingsDialog";
@@ -35,6 +38,13 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
   const [notFound, setNotFound] = useState(false);
   const [view, setView] = useState<View>({ kind: "map" });
   const [variantInView, setVariantInView] = useState<BridgeVariant | null>(null);
+  const [regenOpen, setRegenOpen] = useState(false);
+  const [restyleOpen, setRestyleOpen] = useState(false);
+  const [regenBusy, setRegenBusy] = useState(false);
+  const [regenJobIds, setRegenJobIds] = useState<string[]>([]);
+  // Bumped after anything rewrites the page server-side, to force PageEditor to remount and
+  // re-seed from the reloaded row — see the `key` on it below for why new props aren't enough.
+  const [editorNonce, setEditorNonce] = useState(0);
 
   // Fetched on demand (not preloaded with the rest of the page) since a variant is only ever
   // reachable by clicking it in components/SplitTestBranch.tsx's own map-integrated fetch — no
@@ -110,6 +120,42 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
     load();
   }, [load]);
 
+  // Re-read the row AND remount the editor. Both halves are needed: without the reload the canvas
+  // shows stale copy, and without the remount PageEditor keeps the tree it seeded at mount — so a
+  // Save afterwards would write the pre-regeneration copy back over what was just generated.
+  const refreshEditor = useCallback(async () => {
+    await load();
+    setEditorNonce((n) => n + 1);
+  }, [load]);
+
+  // Same call as the product page's own regenerate, pointed at this funnel's product — one route,
+  // one credit path. A funnel with no product can't reach here (the button is disabled), but the
+  // guard stays because `product_id` is nullable since 0068.
+  //
+  // This addresses the campaign by its PRODUCT, not by its own id, because that is what
+  // /api/promote takes. It lands on the right funnel because the engine keeps one campaign per
+  // product — `upsertCampaign` looks the campaign up with `.maybeSingle()` on product_id — and
+  // hand-built funnels carry no product at all. That is a convention, not a database constraint:
+  // if a second campaign is ever allowed to share a product, this button would need to name the
+  // campaign instead, and upsertCampaign would start throwing before it got the chance.
+  async function runRegenerate(assets: string[]) {
+    if (!campaign?.product_id) return;
+    setRegenBusy(true);
+    const res = await fetch("/api/promote", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ product_id: campaign.product_id, assets }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setRegenBusy(false);
+    if (!res.ok) {
+      toast.error(d.error ?? "Couldn't start that regeneration");
+      return;
+    }
+    setRegenOpen(false);
+    if (d.job_id) setRegenJobIds([d.job_id]);
+  }
+
   if (loading) return <p className="text-sm text-zinc-500">Loading…</p>;
   if (notFound || !campaign) {
     return (
@@ -152,36 +198,91 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
           <div className="min-w-0 truncate text-sm font-medium text-zinc-100">
             {productTitle} — {editorTitle}
           </div>
-          <Link
-            href="/dashboard"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-ink-600 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
-          >
-            <LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
-          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Opt-in view only. Regenerating rewrites THIS page's copy (stagePages writes
+                bridge_html/page_copy) — offering it while a step or a variant is open would
+                silently rewrite a different page than the one on screen. */}
+            {view.kind === "optin" &&
+              (campaign.product_id ? (
+                <button
+                  onClick={() => setRegenOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-ink-600 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> Regenerate
+                </button>
+              ) : (
+                // Shown disabled with the reason rather than hidden, same call as the unbuildable
+                // funnel types: someone looking for this button should learn why it isn't offered.
+                <span
+                  className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-ink-700 px-2.5 py-1.5 text-xs text-zinc-600"
+                  title="This funnel isn't attached to a product, so there's no sales page to write from. Attach one, or edit the copy by hand."
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> Regenerate
+                </span>
+              ))}
+            <Link
+              href="/dashboard"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-ink-600 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+            >
+              <LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
+            </Link>
+          </div>
         </div>
+
+        <PromoteKitDialog
+          open={regenOpen}
+          onOpenChange={setRegenOpen}
+          count={1}
+          busy={regenBusy}
+          mode="regenerate"
+          // The button says "Regenerate", so the page it regenerates starts ticked. Everything
+          // else in the kit stays offerable underneath it.
+          defaultAssets={["funnel"]}
+          funnelEditedAt={(campaign as { page_copy_edited_at?: string | null }).page_copy_edited_at ?? null}
+          onRestyle={() => {
+            setRegenOpen(false);
+            setRestyleOpen(true);
+          }}
+          onConfirm={runRegenerate}
+        />
+        <RestyleDialog
+          open={restyleOpen}
+          onOpenChange={setRestyleOpen}
+          campaignId={campaign.id}
+          onDone={refreshEditor}
+        />
+        <BuildProgressDialog
+          open={regenJobIds.length > 0}
+          onOpenChange={(o) => !o && setRegenJobIds([])}
+          jobIds={regenJobIds}
+          titleByJobId={Object.fromEntries(regenJobIds.map((id) => [id, productTitle]))}
+          // The whole point of the button: the canvas must show what was just written, not the
+          // copy it was seeded with when the editor opened.
+          onAllDone={refreshEditor}
+        />
 
         {/* Full-bleed: the editor overlay owns the whole viewport, no centered max-width column. */}
         <div className="px-4 py-6">
           {view.kind === "optin" ? (
-            <>
-              <SplitTestPanel campaignId={campaign.id} productTitle={productTitle} />
-
-              <Card as="section" className="p-4">
-                <PageEditor
-                  campaignId={campaign.id}
-                  productTitle={productTitle}
-                  initialCopy={campaign.page_copy}
-                  initialBridgeHtml={campaign.bridge_html}
-                  funnelType={(campaign as any).funnel_type ?? null}
-                  showSeo
-                  initialSeoTitle={(campaign as any).seo_title ?? null}
-                  initialSeoDescription={(campaign as any).seo_description ?? null}
-                  onSaved={({ bridge_html, page_copy }) =>
-                    setCampaign((c) => (c ? { ...c, bridge_html, page_copy } : c))
-                  }
-                />
-              </Card>
-            </>
+            <Card as="section" className="p-4">
+              <PageEditor
+                // Remounted after a regeneration. PageEditor seeds its block tree in a useState
+                // initialiser, so new props alone would leave the canvas showing the OLD copy over
+                // freshly-written rows — and the next Save would put the old copy back.
+                key={editorNonce}
+                campaignId={campaign.id}
+                productTitle={productTitle}
+                initialCopy={campaign.page_copy}
+                initialBridgeHtml={campaign.bridge_html}
+                funnelType={(campaign as any).funnel_type ?? null}
+                showSeo
+                initialSeoTitle={(campaign as any).seo_title ?? null}
+                initialSeoDescription={(campaign as any).seo_description ?? null}
+                onSaved={({ bridge_html, page_copy }) =>
+                  setCampaign((c) => (c ? { ...c, bridge_html, page_copy } : c))
+                }
+              />
+            </Card>
           ) : view.kind === "variant" ? (
             variantInView ? (
               <Card as="section" className="p-4">

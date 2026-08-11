@@ -5,9 +5,10 @@ import { variantVerdict, describeProbability, needsMultipleComparisonsNote } fro
 /**
  * "How likely is this variant to be better than the control", for one variant card.
  *
- * Shared by components/SplitTestBranch.tsx (the funnel-map branch) and components/SplitTestPanel.tsx
- * (the detailed list) for the same reason lib/useSplitTest.ts is: two views of one test that
- * disagreed about whether B is winning would be worse than either one alone.
+ * Rendered by components/SplitTestBranch.tsx, the funnel map's split-test branch — which is the
+ * only place a test is managed now that the duplicate list inside the opt-in editor is gone.
+ * Kept as its own component rather than inlined there: the gate below is the load-bearing part of
+ * this feature, and it belongs somewhere it can be read and tested on its own.
  *
  * The control gets no figure — it IS the baseline, and "control is 50% likely to beat control" is
  * noise on every card.

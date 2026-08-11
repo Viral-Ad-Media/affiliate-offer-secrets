@@ -4,12 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { BridgeVariant } from "@/lib/shared";
 
-// Shared data/mutation logic between components/SplitTestPanel.tsx (the detailed vertical list,
-// shown on the opt-in page's own focused editor view) and components/SplitTestBranch.tsx (the
-// compact horizontal branch rendered directly on the funnel map) — both need the exact same
-// variants/leadCounts state and the same set of RPC calls (start/add/weight/toggle/delete/end);
-// extracted here once this became two consumers instead of one, so neither can drift from the
-// other's read-after-write/error-handling behavior.
+// The variants/leadCounts state and the RPC calls behind a split test (start/add/weight/toggle/
+// delete/end), in one place.
+//
+// It was extracted when there were two consumers — a detailed list inside the opt-in editor and
+// the branch on the funnel map — so neither could drift from the other's read-after-write and
+// error-handling behaviour. The list is gone (the map branch does everything it did, and one test
+// shown in two places was a way to see two different answers), leaving
+// components/SplitTestBranch.tsx as the only caller. Kept as a hook rather than folded back in:
+// it is the whole data layer of the feature, and inlining it would bury the RPC surface in a
+// component that is mostly layout.
 export type LeadCounts = Record<string, number>;
 
 export function useSplitTest(campaignId: string) {

@@ -13,12 +13,17 @@ import VariantConfidence, { MultipleVariantsNote } from "@/components/VariantCon
 // variant cards laid out ACROSS the column, which is what the weighted-random split
 // (lib/bridgeVariants.ts's pickWeightedVariant) actually does to a visitor. They merge back into
 // the single connector below, because that is also true — every variant leads to the same next
-// step.
+// step. It owns the "no test yet" state too, so FunnelMap never needs its own awareness of
+// whether a test is running.
 //
-// This is the map-integrated counterpart to components/SplitTestPanel.tsx (the detailed list on
-// the opt-in page's own editor view). Both share lib/useSplitTest.ts, so neither can drift on data
-// or mutation behaviour; this one differs only in layout and in owning the "no test yet" state, so
-// FunnelMap never needs its own awareness of whether a test is running.
+// This is now the ONLY place a split test is managed. There used to be a second, fuller list
+// (components/SplitTestPanel.tsx) inside the opt-in editor as well; the two showed the same test
+// in two shapes, which is a way to end up looking at two different answers, and the map is where
+// the branch belongs because that is where the split visibly happens. Editing a variant routes
+// back to the parent page's own view-switching (onEditVariant/onEditControl) rather than nesting
+// an editor inside a node. lib/useSplitTest.ts stays as the data layer with this single caller —
+// it is the whole RPC surface of the feature, and folding it into a mostly-layout component
+// would bury it.
 export default function SplitTestBranch({
   campaignId,
   bridgeHtml,

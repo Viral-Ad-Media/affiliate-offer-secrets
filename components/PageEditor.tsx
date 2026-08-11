@@ -32,11 +32,11 @@ type Props = {
   initialCopy: unknown;
   initialBridgeHtml: string | null;
   onSaved: (result: { bridge_html: string; page_copy: PageBlockTree }) => void;
-  // Defaults to the control's own save route. A split-test variant's editor (SplitTestPanel)
-  // passes /api/bridge-variants/{id} instead — everything else about this component is identical.
+  // Defaults to the control's own save route. The funnel page's variant view passes
+  // /api/bridge-variants/{id} instead — everything else about this component is identical.
   saveEndpoint?: string;
   // Opt-in page SEO lives on the campaign row; split-test variants share the campaign's values,
-  // so the variant editor (SplitTestPanel) simply doesn't pass these.
+  // so the variant view simply doesn't pass these.
   initialSeoTitle?: string | null;
   initialSeoDescription?: string | null;
   showSeo?: boolean;
