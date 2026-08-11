@@ -11,7 +11,9 @@ alter table public.payments
   add column if not exists stripe_payment_intent_id text,
   add column if not exists currency text,
   add column if not exists refund_reason text,
-  add column if not exists refunded_at timestamptz;
+  add column if not exists refunded_at timestamptz,
+  add column if not exists fulfillment_version text,
+  add column if not exists fulfilled_at timestamptz;
 
 update public.payments
 set target_workspace_id = workspace_id
@@ -71,6 +73,28 @@ create unique index if not exists credits_ledger_one_delivery_per_payment
   on public.credits_ledger (payment_id)
   where payment_id is not null;
 
+-- Mark historical rows only where the old side effect is observable. The remaining ambiguous
+-- `completed` markers are reconciled transactionally on their next Stripe replay below.
+update public.payments payment
+set fulfillment_version = 'legacy-verified',
+    fulfilled_at = coalesce(payment.fulfilled_at, payment.created_at)
+where payment.status = 'completed'
+  and payment.type = 'credits'
+  and payment.fulfillment_version is null
+  and exists (
+    select 1 from public.credits_ledger ledger where ledger.payment_id = payment.id
+  );
+
+update public.payments payment
+set fulfillment_version = 'legacy-observed',
+    fulfilled_at = coalesce(payment.fulfilled_at, payment.created_at)
+from public.profiles profile
+where payment.status = 'completed'
+  and payment.type = 'access'
+  and payment.fulfillment_version is null
+  and profile.id = payment.user_id
+  and profile.access_granted;
+
 -- The sole fulfillment boundary. The signed checkout metadata supplies the original workspace;
 -- membership is deliberately NOT re-authorized here because a later transfer/removal must still
 -- fund that exact UUID. Missing users/workspaces become refund_pending and never fall back to a
@@ -83,7 +107,8 @@ create or replace function public.fulfill_stripe_checkout(
   p_type text,
   p_amount_cents integer,
   p_currency text,
-  p_credit_units integer default null
+  p_credit_units integer default null,
+  p_workspace_is_signed boolean default false
 )
 returns jsonb
 language plpgsql
@@ -134,7 +159,10 @@ begin
     if v_existing.user_id <> p_user_id
        or v_existing.type <> p_type
        or v_existing.amount_cents <> p_amount_cents
-       or v_existing.target_workspace_id is distinct from p_workspace_id
+       -- A legacy replay can have no signed workspace metadata. The already-durable payment row
+       -- is authoritative in that case; a supplied target must still match exactly.
+       or (p_workspace_id is not null
+           and v_existing.target_workspace_id is distinct from p_workspace_id)
        or (v_existing.credit_units is not null
            and v_existing.credit_units is distinct from p_credit_units)
        or (v_existing.stripe_payment_intent_id is not null

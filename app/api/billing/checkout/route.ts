@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, ACCESS_FEE_CENTS, CREDIT_PACKS } from "@/lib/stripe";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
-import { originFromHost } from "@/lib/host";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +19,14 @@ export async function POST(req: Request) {
   if (!workspaceId) return workspaceRequiredResponse();
 
   const body = await req.json();
+  // Stripe redirect URLs must come from deployment configuration, never Origin/Host headers.
+  // In local development only, req.url is an acceptable fallback so onboarding still works.
   const origin =
-    originFromHost(req.headers.get("host")) || process.env.NEXT_PUBLIC_APP_URL || "";
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+    (process.env.NODE_ENV !== "production" ? new URL(req.url).origin : "");
+  if (!origin) {
+    return NextResponse.json({ error: "checkout return URL is not configured" }, { status: 500 });
+  }
 
   let lineItem: { name: string; cents: number; type: "access" | "credits"; credits?: number };
   if (body.type === "access") {
