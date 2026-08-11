@@ -577,12 +577,72 @@ that relied on the trigger now stamp `workspace_id` explicitly (`tiktok/callback
   generates one key per compose session (`components/PostToFacebook.tsx`) and only rotates it
   after a successful publish, so a retry of a failed/in-flight request can't double-post.
 - **Env vars**: `FB_CLIENT_ID`/`FB_CLIENT_SECRET` (developers.facebook.com → App Dashboard).
-  Register `${NEXT_PUBLIC_APP_URL}/api/meta/callback` as a valid OAuth Redirect URI and
-  `${NEXT_PUBLIC_APP_URL}/api/meta/deauthorize` as the Deauthorize Callback URL in the Meta App
-  Dashboard. Apps in Meta's **Development Mode** work immediately for Admins/Developers/Testers
+  Register `${NEXT_PUBLIC_APP_URL}/api/meta/callback` as a valid OAuth Redirect URI,
+  `${NEXT_PUBLIC_APP_URL}/api/meta/deauthorize` as the Deauthorize Callback URL, and
+  `${NEXT_PUBLIC_APP_URL}/api/meta/data-deletion` as the Data Deletion Request Callback URL in the
+  Meta App Dashboard. Apps in Meta's **Development Mode** work immediately for Admins/Developers/Testers
   on the app with no App Review needed — sufficient for testing before deciding whether/when to
   submit `pages_show_list`/`pages_manage_posts`/`pages_read_engagement` for public App Review
   (separate from the already-approved `ads_management`).
+
+### Meta's two server-to-server callbacks (deauthorize + data deletion)
+
+Meta calls both directly, unauthenticated, with a `signed_request` body. **That HMAC is the entire
+trust boundary**, exactly as the Stripe signature is for the billing webhook — so it lives in ONE
+place, `lib/meta/signedRequest.ts`, rather than being hand-copied into the second route. Two
+implementations of one signature check is how one of them quietly ends up weaker (a `===` instead
+of a timing-safe compare, a missing length guard — `timingSafeEqual` THROWS on a length mismatch,
+so the length check has to come first). It returns the status the caller should answer with, so
+the two routes can't disagree about what a malformed body versus a bad signature means.
+
+**Revoking is not deleting, and the two routes do different things on purpose.**
+`/api/meta/deauthorize` marks the connection and its Pages `needs_reconnect` and leaves every row
+in place — the person may simply re-authorise. `/api/meta/data-deletion` is the stronger ask and
+performs a real deletion. It is required for App Review, and it was the missing half.
+
+- **Both operate on EVERY workspace that Facebook account is connected in.**
+  `meta_connections` is `UNIQUE (workspace_id)` — one Meta connection per workspace — but nothing
+  stops the same Facebook account being connected in several workspaces, and both lookups are by
+  `fb_user_id`. This fixed a real bug in deauthorize: it used `.maybeSingle()`, which does **not**
+  return the first of several rows, it ERRORS — and the error was discarded, so `connection` came
+  back null and a revoke by anyone in two workspaces silently marked nothing at all. Verified
+  against the live constraint rather than assumed from these notes, and then exercised: with the
+  same `fb_user_id` seeded in two workspaces, one signed call flipped both connections and both
+  Pages to `needs_reconnect`.
+- **What "their data" means is a judgement, and it is this**: everything held *because* that
+  Facebook account connected — the Vault tokens, the connection row, the Pages and Instagram
+  accounts discovered through it — is deleted outright. The tenant's own publishing history
+  (`meta_posts`/`instagram_posts`) is **redacted, not destroyed**: the Facebook identifiers become
+  `"redacted"` while the row and the affiliate's own caption survive. That row records that a
+  tenant published something on a date with copy they wrote — their data, not the Facebook user's.
+  Exactly the call `erase_contact_email` already made for addresses in the send logs.
+- **Vault secrets are deleted FIRST, while the rows pointing at them still exist.** The FKs
+  cascade, so deleting parents first would take the pointers with them and strand the secrets in
+  the vault forever. Children are then deleted explicitly before parents — the cascade would
+  handle it, but doing it by hand is what produces honest counts for the status page instead of
+  numbers we assume.
+- **The request row is written BEFORE anything is deleted**, so a process that dies halfway leaves
+  a record saying so. A failure records `status='failed'` and still returns the code with a 200:
+  Meta retries a non-2xx, and a retry cannot fix a half-finished deletion — it would just mint a
+  second confirmation code for the same person. Failing to write the record at all is the one
+  branch that refuses outright, because without it the status page would have nothing honest to say.
+- **`meta_data_deletion_requests` (0089) is deliberately NOT workspace-scoped** — one request spans
+  every workspace that account touched, and it describes an external identity's request rather than
+  anything a tenant owns. RLS on with zero policies plus `revoke all from anon, authenticated`, the
+  `meta_connections` shape. It stores **counts, not ids**: the ids are the very thing being deleted,
+  and writing them here would leave a copy behind in the record of its deletion.
+- **`/data-deletion` (public, `robots: noindex`) shows almost nothing** — status, code, dates. No
+  Facebook user id, no tenant email, no Page names. The unguessable confirmation code is the whole
+  access control, same as `contacts.unsub_token`. Printing the deleted identifiers back at whoever
+  holds the URL would undo part of the point.
+- **Verified end to end, not reasoned about**: 11 endpoint assertions (non-form body → 400,
+  malformed → 400, bad signature → 401, missing `user_id` → 400, unknown user → 200 touching
+  nothing, a real deletion → 200 with `{url, confirmation_code}`, the status page rendering
+  Completed with the code and leaking no FB id, an unknown code handled), then the database:
+  `conns_left=0, pages_left=0, igs_left=0, secrets_left=0`, posts reading `redacted / redacted /
+  my own caption`, and the record `completed conns=1 pages=1 igs=1 secrets=2 posts=2`. Re-run
+  against a two-workspace seed afterwards: `conns=2 pages=2 secrets=4`, zero rows and zero Vault
+  secrets left. All test rows and the temporary workspace removed.
 
 ## Real ad campaign launches (Phase C)
 

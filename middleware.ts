@@ -14,6 +14,10 @@ const PUBLIC_EXACT_PATHS = [
   "/contact",
   "/terms",
   "/privacy",
+  // Meta's Data Deletion Request status URL. The person following it is a Facebook user who may
+  // have no account here at all, so it must render with no session; the unguessable confirmation
+  // code in the query string is the access control, same as the unsubscribe link's token.
+  "/data-deletion",
 ];
 
 // Icon files App Router generates as top-level routes. Browsers fetch these before (and without)
@@ -31,6 +35,9 @@ const PUBLIC_PREFIX_PATHS = [
   "/api/billing/webhook",
   "/api/engine/run",
   "/api/meta/deauthorize",
+  // Meta's Data Deletion Request Callback. Unauthenticated by definition — Meta calls it
+  // server-to-server — and authenticated instead by the signed_request HMAC inside the handler.
+  "/api/meta/data-deletion",
   "/p/", // public bridge (lead-capture landing) pages — real ad destinations, no auth
   "/api/public/campaign-image/", // public campaign product images — needed for Instagram posting
   "/api/public/leads", // bridge-page lead capture — anonymous visitors, no auth
