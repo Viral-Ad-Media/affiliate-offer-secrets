@@ -21,20 +21,32 @@ type Status = {
   instagram_accounts?: IgAccount[];
 };
 
-export default function ConnectionsPanel({ status }: { status: Status }) {
+export default function ConnectionsPanel({
+  status,
+  workspaceId,
+}: {
+  status: Status;
+  workspaceId: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
 
   async function setActivePage(pageId: string) {
     setBusy(pageId);
-    await createClient().rpc("set_active_meta_page", { p_page_id: pageId });
+    await createClient().rpc("set_active_meta_page", {
+      p_page_id: pageId,
+      p_workspace_id: workspaceId,
+    });
     router.refresh();
     setBusy(null);
   }
 
   async function setActiveAdAccount(adAccountId: string) {
     setBusy(adAccountId);
-    await createClient().rpc("set_active_meta_ad_account", { p_ad_account_id: adAccountId });
+    await createClient().rpc("set_active_meta_ad_account", {
+      p_ad_account_id: adAccountId,
+      p_workspace_id: workspaceId,
+    });
     router.refresh();
     setBusy(null);
   }

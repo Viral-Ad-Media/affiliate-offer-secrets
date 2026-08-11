@@ -81,13 +81,15 @@ export default function JobsQueue({ limit = 50 }: { limit?: number }) {
               </div>
               <div className="flex items-center gap-2 text-xs text-zinc-500">
                 <span title={j.id}>#{j.id.slice(0, 8)}</span>
-                <button
-                  onClick={() => deleteJob(j.id)}
-                  title="Delete job"
-                  className="rounded p-1 text-zinc-500 hover:bg-ink-700 hover:text-red-400"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                {(j.status === "done" || j.status === "error") && (
+                  <button
+                    onClick={() => deleteJob(j.id)}
+                    title="Delete job history"
+                    className="rounded p-1 text-zinc-500 hover:bg-ink-700 hover:text-red-400"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             </li>
           );

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { chargeForQueuedJob, insufficientCreditsResponse } from "@/lib/credits";
+import { queueChargedJob } from "@/lib/credits";
 import { normalizeKitAssets } from "@/lib/kitAssets";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
@@ -63,31 +63,31 @@ export async function POST(req: Request) {
       .eq("workspace_id", ws);
   }
 
-  const { data: job, error } = await supabase
-    .from("jobs")
-    .insert({
-      user_id: user.id,
+  const queued = await queueChargedJob(
+    supabase,
+    {
+      workspace_id: ws,
       type: "build_campaign",
       payload: { product_id: productId, vendor_id: product.vendor_id, assets },
-    })
-    .select("id")
-    .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    },
+    {
+      // Preserve the pre-existing claim rollback: if the atomic queue/debit is declined, the
+      // product must not imply a build is still under way.
+      onRollback: async () => {
+        await supabase
+          .from("products")
+          .update({ status: "New", updated_at: new Date().toISOString() })
+          .eq("id", productId)
+          .eq("workspace_id", ws);
+      },
+    }
+  );
+  if (!queued.ok) return NextResponse.json(queued.body, { status: queued.status });
 
-  const charge = await chargeForQueuedJob(supabase, job.id, "build_campaign", product.vendor_id);
-  if (!charge.ok) {
-    // Undo both sides: the job must not run, and the product must not sit in "Selected" implying
-    // a build is under way when the client was never charged for one.
-    await supabase.from("jobs").delete().eq("id", job.id);
-    await supabase
-      .from("products")
-      .update({ status: "New", updated_at: new Date().toISOString() })
-      .eq("id", productId)
-      .eq("workspace_id", ws);
-    return charge.reason === "insufficient"
-      ? NextResponse.json(insufficientCreditsResponse(charge.cost), { status: 402 })
-      : NextResponse.json({ error: charge.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true, job_id: job.id, charged: charge.charged });
+  return NextResponse.json({
+    ok: true,
+    job_id: queued.jobId,
+    charged: queued.charged,
+    ...(queued.deduped ? { deduped: true } : {}),
+  });
 }

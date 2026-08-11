@@ -12,9 +12,9 @@ function normalizePath(raw: unknown): string {
     .replace(/^\/+|\/+$/g, "");
 }
 
-// Ownership of both the domain and the campaign is enforced inside the add_domain_route RPC
-// (supabase/migrations/0009_page_domains.sql), keyed off auth.uid() — this route is a thin
-// pass-through, not the actual security boundary.
+// Same-workspace membership for both the domain and campaign is enforced inside add_domain_route;
+// composite database FKs preserve that relationship for every writer. This route remains a thin
+// input-normalizing pass-through, not the security boundary.
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
   const {

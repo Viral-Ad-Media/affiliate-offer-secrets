@@ -14,11 +14,19 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   const ws = await currentWorkspaceId();
   if (!ws) return workspaceRequiredResponse();
 
-  const { error, count } = await supabase
-    .from("jobs")
-    .delete({ count: "exact" })
-    .eq("id", params.id)
-    .eq("workspace_id", ws);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, deleted: count ?? 0 });
+  // Authenticated table DELETE is intentionally revoked. The RPC permits terminal history only:
+  // cancelling/refunding a pending row would enable a free queue/webhook/cancel loop, and a retry
+  // may already have incurred provider cost.
+  const { data: deleted, error } = await supabase.rpc("delete_job", {
+    p_workspace_id: ws,
+    p_job_id: params.id,
+  });
+  if (error) {
+    const conflict = error.message.includes("Only completed jobs");
+    return NextResponse.json(
+      { error: conflict ? error.message : "Could not delete that job" },
+      { status: conflict ? 409 : 500 }
+    );
+  }
+  return NextResponse.json({ ok: true, deleted: deleted ? 1 : 0 });
 }

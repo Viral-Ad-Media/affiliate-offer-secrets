@@ -21,7 +21,7 @@ type EraseResult = {
 // the send logs, so erase_contact_email (0051) redacts those in the same transaction. The send rows
 // themselves survive: that an email went out is a real audit record, and the pooled daily rate cap
 // counts it.
-export default function ContactErasePanel() {
+export default function ContactErasePanel({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,7 +41,10 @@ export default function ContactErasePanel() {
 
     setBusy(true);
     setResult(null);
-    const { data, error } = await createClient().rpc("erase_contact_email", { p_email: target });
+    const { data, error } = await createClient().rpc("erase_contact_email", {
+      p_email: target,
+      p_workspace_id: workspaceId,
+    });
     setBusy(false);
     if (error) {
       toast.error(error.message);

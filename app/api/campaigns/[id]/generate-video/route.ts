@@ -65,7 +65,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
 
   const queued = await queueChargedJob(
     supabase,
-    { user_id: user.id, type: "generate_video", payload: { campaign_id: params.id } },
+    { workspace_id: ws, type: "generate_video", payload: { campaign_id: params.id } },
     {
       // Roll back the claim if the insert failed OR the charge was declined, so the campaign
       // isn't stuck "generating" forever after a job that will never run.

@@ -50,15 +50,22 @@ function scopeRejects(
 // `bv_{campaignId}`, 30 days) so repeat visits and the post-opt-in "reveal" step stay consistent.
 // `req` is required for this — both callers (app/p/[campaignId]/bridge/route.ts,
 // app/d/[[...path]]/route.ts) already receive the incoming Request and just pass it through.
-export async function servePublicCampaignPage(campaignId: string, req: Request): Promise<Response> {
+export async function servePublicCampaignPage(
+  campaignId: string,
+  req: Request,
+  requiredWorkspaceId?: string
+): Promise<Response> {
   const admin = createAdminClient();
-  const { data: campaign } = await admin
+  let campaignQuery = admin
     .from("campaigns")
     .select("bridge_html, workspace_id")
     .eq("id", campaignId)
     .eq("status", "ready")
-    .eq("bridge_published", true)
-    .maybeSingle();
+    .eq("bridge_published", true);
+  if (requiredWorkspaceId) {
+    campaignQuery = campaignQuery.eq("workspace_id", requiredWorkspaceId);
+  }
+  const { data: campaign } = await campaignQuery.maybeSingle();
 
   if (!campaign?.bridge_html) {
     return new Response("Not found", { status: 404 });

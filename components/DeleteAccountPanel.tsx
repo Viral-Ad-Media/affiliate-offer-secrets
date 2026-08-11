@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 // The one irreversible action in the app. Three gates, deliberately: expand the panel, type your
-// own email address, and enter your password — the password alone is muscle memory, and this
-// removes every campaign, funnel, contact and connection the account owns.
+// own email address, and enter your password — the password alone is muscle memory. Workspace
+// ownership is enforced on the server: a team workspace must be transferred first, and content
+// created inside somebody else's workspace stays with that workspace.
 //
 // The server re-checks all of it (app/api/account/delete/route.ts); none of this is the boundary.
 export default function DeleteAccountPanel({ email }: { email: string }) {
@@ -48,10 +49,11 @@ export default function DeleteAccountPanel({ email }: { email: string }) {
         <TriangleAlert className="h-4 w-4 text-red-300" /> Delete account
       </div>
       <p className="text-xs text-zinc-500">
-        Permanently removes your account and everything in it — products, campaigns, funnels,
-        contacts, blog posts, email sequences and connected accounts. Published funnel and blog
-        pages stop resolving. This cannot be undone, and your access fee isn&apos;t refunded
-        automatically.
+        Permanently removes your profile and any workspace you own by yourself, including its
+        products, campaigns, funnels, contacts, posts, sequences and connections. If an owned
+        workspace has other members, you must transfer ownership first. Content you created in
+        somebody else&apos;s workspace stays there and your membership is removed. This cannot be
+        undone, and your access fee isn&apos;t refunded automatically.
       </p>
 
       {!open ? (

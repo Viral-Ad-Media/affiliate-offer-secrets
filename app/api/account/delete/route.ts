@@ -8,23 +8,114 @@ import { removeDomainFromProject } from "@/lib/vercel/client";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Delete this account and everything in it. Irreversible, so the route re-authenticates with the
-// caller's own password first — supabase.auth.updateUser/admin.deleteUser both trust the session,
-// and a hijacked session must not be able to destroy someone's account. Same reasoning as the
-// change-password flow.
+type AdminClient = ReturnType<typeof createAdminClient>;
+type OwnedWorkspace = { id: string; name: string; memberCount: number };
+type CampaignAsset = { id: string; workspaceId: string };
+type DomainAsset = { id: string; domain: string; workspaceId: string };
+type SecretSource = { table: string; columns: string[]; optional?: boolean };
+
+const SECRET_SOURCES: SecretSource[] = [
+  { table: "meta_connections", columns: ["user_token_secret_id"] },
+  { table: "meta_pages", columns: ["page_token_secret_id"] },
+  { table: "tiktok_connections", columns: ["access_token_secret_id", "refresh_token_secret_id"] },
+  // Some deployed environments have the TikTok Marketing schema described by the app, while the
+  // migration is not present in this checkout. Inventory it when available without making account
+  // deletion impossible in environments where the table genuinely does not exist.
+  {
+    table: "tiktok_ad_accounts",
+    columns: ["access_token_secret_id", "refresh_token_secret_id"],
+    optional: true,
+  },
+  { table: "youtube_connections", columns: ["access_token_secret_id", "refresh_token_secret_id"] },
+  { table: "mail_connections", columns: ["access_token_secret_id", "refresh_token_secret_id"] },
+  { table: "mail_provider_connections", columns: ["secret_id"] },
+  { table: "everflow_connections", columns: ["api_key_secret_id"] },
+];
+
+function isMissingOptionalTable(source: SecretSource, error: { code?: string } | null) {
+  return source.optional && (error?.code === "42P01" || error?.code === "PGRST205");
+}
+
+async function loadOwnedWorkspaces(
+  admin: AdminClient,
+  userId: string
+): Promise<{ workspaces: OwnedWorkspace[]; error: string | null }> {
+  const {
+    data: ownerships,
+    error: ownershipError,
+    count: ownershipCount,
+  } = await admin
+    .from("workspace_members")
+    .select("workspace_id", { count: "exact" })
+    .eq("user_id", userId)
+    .eq("role", "owner");
+  if (ownershipError) return { workspaces: [], error: ownershipError.message };
+  if (ownershipCount !== (ownerships ?? []).length) {
+    return { workspaces: [], error: "incomplete workspace ownership result" };
+  }
+
+  const workspaceIds = Array.from(
+    new Set((ownerships ?? []).map((row) => row.workspace_id as string))
+  );
+  if (workspaceIds.length === 0) return { workspaces: [], error: null };
+
+  const [workspaceResult, memberResult] = await Promise.all([
+    admin.from("workspaces").select("id, name", { count: "exact" }).in("id", workspaceIds),
+    admin
+      .from("workspace_members")
+      .select("workspace_id", { count: "exact" })
+      .in("workspace_id", workspaceIds),
+  ]);
+  if (workspaceResult.error) return { workspaces: [], error: workspaceResult.error.message };
+  if (memberResult.error) return { workspaces: [], error: memberResult.error.message };
+  if (workspaceResult.count !== (workspaceResult.data ?? []).length) {
+    return { workspaces: [], error: "incomplete workspace result" };
+  }
+  if (memberResult.count !== (memberResult.data ?? []).length) {
+    return { workspaces: [], error: "incomplete workspace membership result" };
+  }
+
+  const names = new Map<string, string>();
+  for (const row of workspaceResult.data ?? []) names.set(row.id as string, row.name as string);
+
+  const memberCounts = new Map<string, number>();
+  for (const row of memberResult.data ?? []) {
+    const workspaceId = row.workspace_id as string;
+    memberCounts.set(workspaceId, (memberCounts.get(workspaceId) ?? 0) + 1);
+  }
+
+  return {
+    workspaces: workspaceIds.map((id) => ({
+      id,
+      name: names.get(id) ?? "Unnamed workspace",
+      memberCount: memberCounts.get(id) ?? 0,
+    })),
+    error: null,
+  };
+}
+
+function transferRequired(workspaces: OwnedWorkspace[]) {
+  const names = workspaces.map((workspace) => `“${workspace.name}”`).join(", ");
+  return NextResponse.json(
+    {
+      error: `Transfer ownership of ${names} before deleting your account. These workspaces still have other members.`,
+      code: "workspace_transfer_required",
+      workspaces,
+    },
+    { status: 409 }
+  );
+}
+
+// Deletion follows workspace ownership, not created-by attribution:
+//   * an owner must transfer every workspace that still has another member;
+//   * sole-member owned workspaces are deleted as units by 0085's auth.users trigger;
+//   * memberships in other workspaces disappear, while the rows this person created stay there.
 //
-// Deleting the auth user cascades every tenant table (all of them declare
-// `user_id references auth.users(id) on delete cascade`). Three things do NOT cascade, and are
-// cleaned up explicitly first — an account that's "deleted" while its OAuth tokens still sit in
-// Vault, its videos still sit in Storage, and its domains still route through the Vercel project
-// isn't deleted in any sense the user would recognise:
-//   1. Vault secrets       — vault.secrets is outside the FK graph entirely.
-//   2. Storage objects     — storage.objects references nothing in public.
-//   3. Vercel domains      — an external system that has never heard of our FKs.
-//
-// Cleanup is best-effort per item and never blocks the deletion: leaving someone unable to delete
-// their account because a third-party API is down would be the worse failure. Anything that fails
-// is reported back so it can be chased manually.
+// The route inventories only the sole-member workspaces before deletion. Once the database has
+// atomically guarded/deleted the account, it removes those workspaces' non-database resources:
+// Vault secrets, Storage objects, and verified Vercel domains. Nothing is ever selected for
+// cleanup by user_id, because a connector or domain created for somebody else's workspace belongs
+// to that workspace even after its creator leaves.
 export async function POST(req: Request) {
   const supabase = createClient();
   const {
@@ -44,9 +135,7 @@ export async function POST(req: Request) {
 
   // Re-auth on a THROWAWAY client, never `supabase` (the request-scoped, cookie-writing one).
   // signInWithPassword rewrites session cookies on that client, so a wrong password there logs the
-  // real user out mid-request — confirmed live: a rejected delete attempt left the browser signed
-  // out and every later API call silently 200'd with the login page's HTML instead of doing
-  // anything. Checking a password must never be able to end the session it's checking.
+  // real user out mid-request. Checking a password must never end the session it is checking.
   const verifier = createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -59,79 +148,310 @@ export async function POST(req: Request) {
   if (reauthError) return NextResponse.json({ error: "Password is incorrect" }, { status: 403 });
 
   const admin = createAdminClient();
-  const failures: string[] = [];
 
-  // 1. Vault secrets. Every connector column that points into Vault, gathered in one pass so a
-  //    newly-added connector shows up as a missing entry here rather than a silent leak.
-  const secretSources: { table: string; columns: string[] }[] = [
-    { table: "meta_connections", columns: ["user_token_secret_id"] },
-    { table: "meta_pages", columns: ["page_token_secret_id"] },
-    { table: "tiktok_connections", columns: ["access_token_secret_id", "refresh_token_secret_id"] },
-    { table: "youtube_connections", columns: ["access_token_secret_id", "refresh_token_secret_id"] },
-    { table: "mail_connections", columns: ["access_token_secret_id", "refresh_token_secret_id"] },
-    { table: "mail_provider_connections", columns: ["secret_id"] },
-    { table: "everflow_connections", columns: ["api_key_secret_id"] },
-  ];
-  for (const src of secretSources) {
-    const { data, error } = await admin.from(src.table).select(src.columns.join(", ")).eq("user_id", user.id);
-    if (error) {
-      failures.push(`${src.table}: ${error.message}`);
-      continue;
-    }
-    for (const row of (data ?? []) as any[]) {
-      for (const col of src.columns) {
-        const id = row[col];
-        if (!id) continue;
-        // delete_oauth_secret deletes straight from vault.secrets by id, so it covers Meta's
-        // tokens too even though those were stored through the older store_meta_secret wrapper —
-        // there is no separate delete_meta_secret, and none is needed.
-        const { error: delErr } = await admin.rpc("delete_oauth_secret", { p_secret_id: id });
-        if (delErr) failures.push(`vault ${src.table}.${col}`);
-      }
-    }
-  }
-
-  // 2. Storage. Video paths are keyed by campaign id — both the legacy flat `{campaignId}.mp4` and
-  //    the per-item `{campaignId}/{source}-{index}.mp4` shape.
-  const { data: campaigns } = await admin.from("campaigns").select("id").eq("user_id", user.id);
-  const campaignIds = (campaigns ?? []).map((c) => c.id as string);
-  if (campaignIds.length > 0) {
-    const paths: string[] = campaignIds.map((id) => `${id}.mp4`);
-    for (const id of campaignIds) {
-      const { data: listed } = await admin.storage.from(CAMPAIGN_VIDEOS_BUCKET).list(id);
-      for (const obj of listed ?? []) paths.push(`${id}/${obj.name}`);
-    }
-    const { error: rmErr } = await admin.storage.from(CAMPAIGN_VIDEOS_BUCKET).remove(paths);
-    if (rmErr) failures.push(`storage: ${rmErr.message}`);
-  }
-
-  // 3. Vercel domains. Only the ones this account actually got verified are attached to the
-  //    project; a pending claim never reached Vercel's side in a way that needs undoing.
-  const { data: domains } = await admin
-    .from("custom_domains")
-    .select("domain, status")
-    .eq("user_id", user.id);
-  for (const d of domains ?? []) {
-    if (d.status !== "verified") continue;
-    try {
-      await removeDomainFromProject(d.domain as string);
-    } catch (err) {
-      failures.push(`vercel ${d.domain}`);
-    }
-  }
-
-  // The actual deletion. Everything in public.* cascades from here.
-  const { error: deleteErr } = await admin.auth.admin.deleteUser(user.id);
-  if (deleteErr) {
+  // Fail closed if the schema migration has not landed. Without the attribution tombstone, a
+  // hard auth deletion would still cascade shared workspace rows.
+  const { data: attribution, error: attributionError } = await admin
+    .from("account_attributions")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (attributionError || !attribution) {
+    console.error("Account deletion attribution preflight failed", attributionError);
     return NextResponse.json(
-      { error: `Could not delete the account: ${deleteErr.message}` },
+      { error: "Account deletion is temporarily unavailable. Nothing was deleted." },
+      { status: 503 }
+    );
+  }
+
+  const ownedResult = await loadOwnedWorkspaces(admin, user.id);
+  if (ownedResult.error) {
+    console.error("Account deletion workspace preflight failed", ownedResult.error);
+    return NextResponse.json(
+      { error: "Could not verify workspace ownership. Nothing was deleted." },
       { status: 500 }
     );
   }
 
-  // Best-effort local sign-out; the account is gone either way, and the session's refresh token
-  // dies with the user record.
+  const blockedWorkspaces = ownedResult.workspaces.filter((workspace) => workspace.memberCount > 1);
+  if (blockedWorkspaces.length > 0) return transferRequired(blockedWorkspaces);
+
+  const ownedWorkspaceIds = ownedResult.workspaces.map((workspace) => workspace.id);
+  const secretWorkspaces = new Map<string, Set<string>>();
+  let campaigns: CampaignAsset[] = [];
+  let customDomains: DomainAsset[] = [];
+
+  // Inventory is read-only and must be complete before anything irreversible happens. An error in
+  // any query aborts the deletion so an external secret/object cannot become undiscoverable.
+  if (ownedWorkspaceIds.length > 0) {
+    const [secretResults, campaignResult, domainResult] = await Promise.all([
+      Promise.all(
+        SECRET_SOURCES.map(async (source) => ({
+          source,
+          result: await admin
+            .from(source.table)
+            .select(["workspace_id", ...source.columns].join(", "), { count: "exact" })
+            .in("workspace_id", ownedWorkspaceIds),
+        }))
+      ),
+      admin
+        .from("campaigns")
+        .select("id, workspace_id", { count: "exact" })
+        .in("workspace_id", ownedWorkspaceIds),
+      admin
+        .from("custom_domains")
+        .select("id, domain, status, workspace_id", { count: "exact" })
+        .in("workspace_id", ownedWorkspaceIds),
+    ]);
+
+    const inventoryErrors: string[] = [];
+    for (const { source, result } of secretResults) {
+      if (result.error) {
+        if (isMissingOptionalTable(source, result.error)) continue;
+        inventoryErrors.push(`${source.table}: ${result.error.message}`);
+        continue;
+      }
+      if (result.count !== (result.data ?? []).length) {
+        inventoryErrors.push(`${source.table}: incomplete result`);
+        continue;
+      }
+      for (const row of (result.data ?? []) as unknown as Record<string, unknown>[]) {
+        const workspaceId = row.workspace_id;
+        if (typeof workspaceId !== "string" || !workspaceId) {
+          inventoryErrors.push(`${source.table}: missing workspace attribution`);
+          continue;
+        }
+        for (const column of source.columns) {
+          const secretId = row[column];
+          if (typeof secretId !== "string" || !secretId) continue;
+          const workspaces = secretWorkspaces.get(secretId) ?? new Set<string>();
+          workspaces.add(workspaceId);
+          secretWorkspaces.set(secretId, workspaces);
+        }
+      }
+    }
+    if (campaignResult.error) inventoryErrors.push(`campaigns: ${campaignResult.error.message}`);
+    else if (campaignResult.count !== (campaignResult.data ?? []).length) {
+      inventoryErrors.push("campaigns: incomplete result");
+    }
+    if (domainResult.error) inventoryErrors.push(`custom_domains: ${domainResult.error.message}`);
+    else if (domainResult.count !== (domainResult.data ?? []).length) {
+      inventoryErrors.push("custom_domains: incomplete result");
+    }
+
+    if (inventoryErrors.length > 0) {
+      console.error("Account deletion asset inventory failed", inventoryErrors);
+      return NextResponse.json(
+        { error: "Could not safely inventory account assets. Nothing was deleted." },
+        { status: 500 }
+      );
+    }
+
+    campaigns = (campaignResult.data ?? []).map((campaign) => ({
+      id: campaign.id as string,
+      workspaceId: campaign.workspace_id as string,
+    }));
+    // Pending domains are already attached to the Vercel project: domain creation calls Vercel
+    // before DNS verification. Inventory every row, not only verified ones, so deletion cannot
+    // orphan a pending project-domain attachment.
+    customDomains = (domainResult.data ?? []).map((domain) => ({
+        id: domain.id as string,
+        domain: domain.domain as string,
+        workspaceId: domain.workspace_id as string,
+      }));
+  }
+
+  // 0085's BEFORE DELETE trigger locks ownership, repeats the team-workspace guard, deletes each
+  // sole-member owned workspace through workspace_id cascades, and tombstones creator attribution.
+  // If any part fails, PostgreSQL rolls the whole delete back and no external resource was touched.
+  const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
+  if (deleteError) {
+    // A member can be added after the friendly preflight. The trigger catches that race; reload so
+    // the caller still gets the actionable transfer-ownership response when it happens.
+    const currentOwned = await loadOwnedWorkspaces(admin, user.id);
+    const newlyBlocked = currentOwned.workspaces.filter((workspace) => workspace.memberCount > 1);
+    if (!currentOwned.error && newlyBlocked.length > 0) return transferRequired(newlyBlocked);
+
+    console.error("Account deletion failed", deleteError);
+    return NextResponse.json(
+      { error: "Could not delete the account. Nothing was deleted." },
+      { status: 500 }
+    );
+  }
+
+  // Database deletion succeeded. External cleanup is best-effort from the retained inventory: a
+  // third-party outage must not resurrect or block an otherwise-complete account deletion.
+  const cleanupFailures: string[] = [];
+  const deletedWorkspaceIds = new Set<string>();
+
+  // Ownership could have been transferred away after the first inventory. The database trigger
+  // correctly leaves that workspace intact, so re-read the original IDs and clean only those that
+  // actually disappeared. Keeping workspace_id on every inventoried asset makes this check useful
+  // instead of trusting a stale preflight snapshot.
+  if (ownedWorkspaceIds.length > 0) {
+    const survivingResult = await admin
+      .from("workspaces")
+      .select("id", { count: "exact" })
+      .in("id", ownedWorkspaceIds);
+    if (
+      survivingResult.error ||
+      survivingResult.count !== (survivingResult.data ?? []).length
+    ) {
+      console.error("Account deletion workspace cleanup verification failed", survivingResult.error);
+      cleanupFailures.push("external cleanup skipped: workspace verification failed");
+    } else {
+      const survivingWorkspaceIds = new Set(
+        (survivingResult.data ?? []).map((workspace) => workspace.id as string)
+      );
+      for (const workspaceId of ownedWorkspaceIds) {
+        if (!survivingWorkspaceIds.has(workspaceId)) deletedWorkspaceIds.add(workspaceId);
+      }
+    }
+  }
+
+  // A connector can be moved after the inventory snapshot, and a Vault UUID can be referenced by
+  // more than one row. Verify every candidate secret across every known secret-bearing column;
+  // any incomplete query skips secret cleanup entirely rather than deleting a live credential.
+  const candidateSecretIds = Array.from(secretWorkspaces.entries())
+    .filter(([, workspaceIds]) =>
+      Array.from(workspaceIds).every((workspaceId) => deletedWorkspaceIds.has(workspaceId))
+    )
+    .map(([secretId]) => secretId);
+
+  if (candidateSecretIds.length > 0) {
+    const referenceResults = await Promise.all(
+      SECRET_SOURCES.flatMap((source) =>
+        source.columns.map(async (column) => ({
+          source,
+          column,
+          result: await admin
+            .from(source.table)
+            .select(column, { count: "exact" })
+            .in(column, candidateSecretIds),
+        }))
+      )
+    );
+    const liveSecretIds = new Set<string>();
+    let verificationFailed = false;
+    for (const { source, column, result } of referenceResults) {
+      if (result.error) {
+        if (isMissingOptionalTable(source, result.error)) continue;
+        verificationFailed = true;
+        console.error(`Secret cleanup verification failed for ${source.table}.${column}`, result.error);
+        continue;
+      }
+      if (result.count !== (result.data ?? []).length) {
+        verificationFailed = true;
+        console.error(`Secret cleanup verification was incomplete for ${source.table}.${column}`);
+        continue;
+      }
+      for (const row of (result.data ?? []) as unknown as Record<string, unknown>[]) {
+        const secretId = row[column];
+        if (typeof secretId === "string") liveSecretIds.add(secretId);
+      }
+    }
+
+    if (verificationFailed) {
+      cleanupFailures.push("vault cleanup skipped: reference verification failed");
+    } else {
+      for (const secretId of candidateSecretIds) {
+        if (liveSecretIds.has(secretId)) continue;
+        const { error } = await admin.rpc("delete_oauth_secret", { p_secret_id: secretId });
+        if (error) cleanupFailures.push("vault secret");
+      }
+    }
+  }
+
+  const candidateCampaignIds = campaigns
+    .filter((campaign) => deletedWorkspaceIds.has(campaign.workspaceId))
+    .map((campaign) => campaign.id);
+
+  if (candidateCampaignIds.length > 0) {
+    const liveCampaignResult = await admin
+      .from("campaigns")
+      .select("id", { count: "exact" })
+      .in("id", candidateCampaignIds);
+    if (
+      liveCampaignResult.error ||
+      liveCampaignResult.count !== (liveCampaignResult.data ?? []).length
+    ) {
+      console.error("Campaign storage cleanup verification failed", liveCampaignResult.error);
+      cleanupFailures.push("storage cleanup skipped: campaign verification failed");
+    } else {
+      const liveCampaignIds = new Set(
+        (liveCampaignResult.data ?? []).map((campaign) => campaign.id as string)
+      );
+      const deletedCampaignIds = candidateCampaignIds.filter((id) => !liveCampaignIds.has(id));
+      const videoPaths = new Set(deletedCampaignIds.map((id) => `${id}.mp4`));
+      for (const campaignId of deletedCampaignIds) {
+        const { data: listed, error: listError } = await admin.storage
+          .from(CAMPAIGN_VIDEOS_BUCKET)
+          .list(campaignId);
+        if (listError) {
+          cleanupFailures.push(`storage folder ${campaignId}`);
+          continue;
+        }
+        for (const object of listed ?? []) videoPaths.add(`${campaignId}/${object.name}`);
+      }
+      if (videoPaths.size > 0) {
+        const { error: removeError } = await admin.storage
+          .from(CAMPAIGN_VIDEOS_BUCKET)
+          .remove(Array.from(videoPaths));
+        if (removeError) cleanupFailures.push(`storage: ${removeError.message}`);
+      }
+    }
+  }
+
+  const candidateDomains = customDomains.filter((domain) =>
+    deletedWorkspaceIds.has(domain.workspaceId)
+  );
+  if (candidateDomains.length > 0) {
+    const [liveDomainIdResult, liveDomainNameResult] = await Promise.all([
+      admin
+        .from("custom_domains")
+        .select("id", { count: "exact" })
+        .in("id", candidateDomains.map((domain) => domain.id)),
+      admin
+        .from("custom_domains")
+        .select("domain", { count: "exact" })
+        .in("domain", candidateDomains.map((domain) => domain.domain)),
+    ]);
+    const domainVerificationFailed =
+      Boolean(liveDomainIdResult.error) ||
+      Boolean(liveDomainNameResult.error) ||
+      liveDomainIdResult.count !== (liveDomainIdResult.data ?? []).length ||
+      liveDomainNameResult.count !== (liveDomainNameResult.data ?? []).length;
+
+    if (domainVerificationFailed) {
+      console.error(
+        "Domain cleanup verification failed",
+        liveDomainIdResult.error ?? liveDomainNameResult.error
+      );
+      cleanupFailures.push("domain cleanup skipped: reference verification failed");
+    } else {
+      const liveDomainIds = new Set(
+        (liveDomainIdResult.data ?? []).map((domain) => domain.id as string)
+      );
+      const liveDomainNames = new Set(
+        (liveDomainNameResult.data ?? []).map((domain) => domain.domain as string)
+      );
+      for (const { id, domain } of candidateDomains) {
+        if (liveDomainIds.has(id) || liveDomainNames.has(domain)) continue;
+        try {
+          await removeDomainFromProject(domain);
+        } catch {
+          cleanupFailures.push(`vercel ${domain}`);
+        }
+      }
+    }
+  }
+
+  // Best-effort local sign-out; the account is gone either way, and its refresh token is invalid.
   await supabase.auth.signOut().catch(() => {});
 
-  return NextResponse.json({ ok: true, cleanupFailures: failures });
+  if (cleanupFailures.length > 0) {
+    console.error("Account deleted with external cleanup failures", cleanupFailures);
+  }
+
+  return NextResponse.json({ ok: true, cleanupFailures });
 }

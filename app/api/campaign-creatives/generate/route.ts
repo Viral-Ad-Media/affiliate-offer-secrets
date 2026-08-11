@@ -100,7 +100,7 @@ export async function POST(req: Request) {
 
   const queued = await queueChargedJob(
     supabase,
-    { user_id: user.id, type: jobType, payload: { campaign_creative_id: creativeId } },
+    { workspace_id: ws, type: jobType, payload: { campaign_creative_id: creativeId } },
     {
       // Roll back the claim if the insert failed OR the charge was declined, so the row isn't
       // stuck "generating" forever — authenticated has no UPDATE grant on campaign_creatives, so

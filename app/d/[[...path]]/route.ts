@@ -138,9 +138,12 @@ export async function GET(request: Request, { params }: { params: { path?: strin
     .from("custom_domain_routes")
     .select("campaign_id")
     .eq("domain_id", domainRow.id)
+    .eq("workspace_id", domainRow.workspace_id)
     .eq("path", path)
     .maybeSingle();
-  if (routeRow) return servePublicCampaignPage(routeRow.campaign_id, request);
+  if (routeRow) {
+    return servePublicCampaignPage(routeRow.campaign_id, request, domainRow.workspace_id);
+  }
 
   // Blog fallback (0033): explicit funnel routes above always win, so a domain can host mapped
   // funnel pages AND serve the owner's blog on every other path — "" is the index, anything else

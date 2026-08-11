@@ -271,6 +271,19 @@ export type AdminAccountRow = {
   spend_usd: number;
 };
 
+export type AdminWorkspaceRow = {
+  user_id: string;
+  workspace_id: string;
+  workspace_name: string;
+  role: "owner" | "admin" | "member";
+  is_active: boolean;
+  credits: number;
+  products: number;
+  campaigns: number;
+  contacts: number;
+  jobs_error: number;
+};
+
 export type AdminProblemJob = {
   id: string;
   user_id: string;

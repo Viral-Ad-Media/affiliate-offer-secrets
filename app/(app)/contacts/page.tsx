@@ -156,7 +156,7 @@ export default async function ContactsPage({
         label="contacts"
         preserve={{ tag: tagFilter ?? undefined }}
       />
-      <ContactErasePanel />
+      <ContactErasePanel workspaceId={ws} />
     </main>
   );
 }

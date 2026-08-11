@@ -58,7 +58,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
 
   const queued = await queueChargedJob(
     supabase,
-    { user_id: user.id, type: "generate_blog_image", payload: { post_id: params.id } },
+    { workspace_id: ws, type: "generate_blog_image", payload: { post_id: params.id } },
     {
       onRollback: async () => {
         await admin.from("blog_posts").update({ featured_image_status: "none" }).eq("id", params.id);

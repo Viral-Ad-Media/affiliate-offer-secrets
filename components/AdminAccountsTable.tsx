@@ -1,10 +1,10 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ShieldCheck, Clock, Coins, Check, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import type { AdminAccountRow } from "@/lib/shared";
+import type { AdminAccountRow, AdminWorkspaceRow } from "@/lib/shared";
 import { hasAppAccess } from "@/lib/shared";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,7 +15,13 @@ import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components
 // worth doing by hand. Every action is a self-gating RPC that writes its own audit row — see
 // 0055_superadmin.sql. Credit adjustment in particular is the one sanctioned exception to "only
 // the Stripe webhook writes credits_ledger", which is why it insists on a reason.
-export default function AdminAccountsTable({ accounts }: { accounts: AdminAccountRow[] }) {
+export default function AdminAccountsTable({
+  accounts,
+  workspaces,
+}: {
+  accounts: AdminAccountRow[];
+  workspaces: AdminWorkspaceRow[];
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +29,29 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
   const [creditDelta, setCreditDelta] = useState("");
   const [creditReason, setCreditReason] = useState("");
   const [trialDays, setTrialDays] = useState("14");
+  const [workspaceSelections, setWorkspaceSelections] = useState<Record<string, string>>({});
+
+  const workspacesByUser = useMemo(() => {
+    const grouped = new Map<string, AdminWorkspaceRow[]>();
+    for (const workspace of workspaces) {
+      const rows = grouped.get(workspace.user_id) ?? [];
+      rows.push(workspace);
+      grouped.set(workspace.user_id, rows);
+    }
+    return grouped;
+  }, [workspaces]);
+
+  function selectedWorkspace(userId: string): AdminWorkspaceRow | null {
+    const rows = workspacesByUser.get(userId) ?? [];
+    const selectedId = workspaceSelections[userId];
+    return (
+      rows.find((workspace) => workspace.workspace_id === selectedId) ??
+      rows.find((workspace) => workspace.is_active) ??
+      rows.find((workspace) => workspace.role === "owner") ??
+      rows[0] ??
+      null
+    );
+  }
 
   async function run(userId: string, fn: () => PromiseLike<{ error: { message: string } | null }>) {
     setBusy(userId);
@@ -58,6 +87,11 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
   }
 
   async function adjustCredits(a: AdminAccountRow) {
+    const workspace = selectedWorkspace(a.user_id);
+    if (!workspace) {
+      setError("This account does not belong to a workspace, so it has no credit pool to adjust.");
+      return;
+    }
     const delta = Number(creditDelta);
     if (!Number.isInteger(delta) || delta === 0) {
       setError("Credit change must be a non-zero whole number (negative to claw back).");
@@ -69,8 +103,9 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
     }
     const supabase = createClient();
     const ok = await run(a.user_id, () =>
-      supabase.rpc("admin_adjust_credits", {
-        p_user_id: a.user_id,
+      supabase.rpc("admin_adjust_workspace_credits", {
+        p_target_user_id: a.user_id,
+        p_workspace_id: workspace.workspace_id,
         p_delta: delta,
         p_reason: creditReason.trim(),
       })
@@ -124,6 +159,7 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
             <tr>
               <TableHead edge>Account</TableHead>
               <TableHead>Access</TableHead>
+              <TableHead>Workspace</TableHead>
               <TableHead className="text-right">Credits</TableHead>
               <TableHead className="text-right">Products</TableHead>
               <TableHead className="text-right">Kits</TableHead>
@@ -137,6 +173,8 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
           <TableBody>
             {accounts.map((a) => {
               const badge = accessLabel(a);
+              const accountWorkspaces = workspacesByUser.get(a.user_id) ?? [];
+              const workspace = selectedWorkspace(a.user_id);
               return (
                 <Fragment key={a.user_id}>
                   <TableRow>
@@ -152,12 +190,35 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
                     <td>
                       <Badge className={badge.cls}>{badge.text}</Badge>
                     </td>
-                    <td className="text-right text-zinc-300">{a.credits}</td>
-                    <td className="text-right text-zinc-400">{a.products}</td>
-                    <td className="text-right text-zinc-400">{a.campaigns}</td>
-                    <td className="text-right text-zinc-400">{a.contacts}</td>
-                    <td className={`text-right ${a.jobs_error > 0 ? "text-red-300" : "text-zinc-500"}`}>
-                      {a.jobs_error}
+                    <td>
+                      {workspace ? (
+                        <select
+                          aria-label={`Workspace for ${a.email}`}
+                          value={workspace.workspace_id}
+                          onChange={(event) =>
+                            setWorkspaceSelections((current) => ({
+                              ...current,
+                              [a.user_id]: event.target.value,
+                            }))
+                          }
+                          className="max-w-48 rounded-lg border border-ink-600 bg-ink-900 px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-emerald-500"
+                        >
+                          {accountWorkspaces.map((option) => (
+                            <option key={option.workspace_id} value={option.workspace_id}>
+                              {option.workspace_name} · {option.role}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs text-zinc-600">No workspace</span>
+                      )}
+                    </td>
+                    <td className="text-right text-zinc-300">{workspace?.credits ?? "—"}</td>
+                    <td className="text-right text-zinc-400">{workspace?.products ?? "—"}</td>
+                    <td className="text-right text-zinc-400">{workspace?.campaigns ?? "—"}</td>
+                    <td className="text-right text-zinc-400">{workspace?.contacts ?? "—"}</td>
+                    <td className={`text-right ${(workspace?.jobs_error ?? 0) > 0 ? "text-red-300" : "text-zinc-500"}`}>
+                      {workspace?.jobs_error ?? "—"}
                     </td>
                     <td className="text-right text-zinc-400">${a.spend_usd.toFixed(2)}</td>
                     <td className="whitespace-nowrap text-xs text-zinc-500">
@@ -173,7 +234,7 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
 
                   {open === a.user_id && (
                     <TableRow>
-                      <td colSpan={10} className="bg-ink-900/60">
+                      <td colSpan={11} className="bg-ink-900/60">
                         <div className="flex flex-wrap items-end gap-6 p-4">
                           <div>
                             <div className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">
@@ -197,6 +258,11 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
                             <div className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">
                               Credits
                             </div>
+                            <div className="mb-2 max-w-80 truncate text-xs text-zinc-400">
+                              {workspace
+                                ? `${workspace.workspace_name} · ${workspace.credits} available`
+                                : "No workspace credit pool"}
+                            </div>
                             <div className="flex items-end gap-2">
                               <input
                                 value={creditDelta}
@@ -212,7 +278,7 @@ export default function AdminAccountsTable({ accounts }: { accounts: AdminAccoun
                               />
                               <Button
                                 onClick={() => adjustCredits(a)}
-                                disabled={busy === a.user_id} variant="outline" className="text-xs">
+                                disabled={busy === a.user_id || !workspace} variant="outline" className="text-xs">
                                 <Coins className="h-3.5 w-3.5" /> Apply
                               </Button>
                             </div>

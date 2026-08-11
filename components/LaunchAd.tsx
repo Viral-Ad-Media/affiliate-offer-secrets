@@ -177,8 +177,15 @@ export default function LaunchAd({
   }
   if (launch?.status === "activating") {
     return (
-      <div className="mt-2 flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-300">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Activating…
+      <div className="mt-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-300">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Activation is in progress or needs to resume.
+        </div>
+        <Button onClick={activate} disabled={busy} variant="outline" className="mt-2 !py-1 text-xs">
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Megaphone className="h-3.5 w-3.5" />}
+          Resume activation
+        </Button>
+        {error && <p className="mt-1.5 text-xs text-red-300">{error}</p>}
       </div>
     );
   }

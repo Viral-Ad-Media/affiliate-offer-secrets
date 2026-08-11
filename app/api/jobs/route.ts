@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { chargeForQueuedJob, insufficientCreditsResponse } from "@/lib/credits";
+import { queueChargedJob } from "@/lib/credits";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { CLICKBANK_CATEGORIES } from "@/lib/categories";
@@ -93,22 +93,16 @@ export async function POST(req: Request) {
     .maybeSingle();
   if (open) return NextResponse.json({ ok: true, job_id: open.id, deduped: true });
 
-  const { data: job, error } = await supabase
-    .from("jobs")
-    .insert({ user_id: user.id, type: "discover_products", payload })
-    .select("id")
-    .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Charged after the insert because the debit is keyed on the job's own id — that key is what
-  // makes it idempotent against a retried request and impossible to repeat from a worker retry.
-  // A declined charge deletes the job, so nothing is seeded or processed for free below.
-  const charge = await chargeForQueuedJob(supabase, job.id, "discover_products");
-  if (!charge.ok) {
-    await supabase.from("jobs").delete().eq("id", job.id);
-    return charge.reason === "insufficient"
-      ? NextResponse.json(insufficientCreditsResponse(charge.cost), { status: 402 })
-      : NextResponse.json({ error: charge.message }, { status: 500 });
+  // queue_job validates the discovery payload/network connection and commits the debit plus
+  // runnable job atomically. Authenticated clients no longer have direct jobs INSERT permission.
+  const queued = await queueChargedJob(supabase, {
+    workspace_id: ws,
+    type: "discover_products",
+    payload,
+  });
+  if (!queued.ok) return NextResponse.json(queued.body, { status: queued.status });
+  if (queued.deduped) {
+    return NextResponse.json({ ok: true, job_id: queued.jobId, deduped: true });
   }
 
   // Instant seeding from the marketplace preload cache (marketplace_products, refreshed daily —
@@ -146,5 +140,5 @@ export async function POST(req: Request) {
     // never fail the queue over the fast path
   }
 
-  return NextResponse.json({ ok: true, job_id: job.id, seeded });
+  return NextResponse.json({ ok: true, job_id: queued.jobId, seeded, charged: queued.charged });
 }

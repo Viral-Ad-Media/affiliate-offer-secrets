@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   // Same enumeration-oracle guard as app/api/public/leads/route.ts uses for campaign UUIDs —
   // generic response either way (found vs. not), no distinguishing message.
   const { data: contact } = token
-    ? await admin.from("contacts").select("id").eq("unsub_token", token).maybeSingle()
+    ? await admin.from("contacts").select("id, workspace_id").eq("unsub_token", token).maybeSingle()
     : { data: null };
 
   if (contact) {
@@ -25,6 +25,10 @@ export async function GET(req: Request) {
     // the security boundary; lib/engine/broadcast.ts's verify stage re-checks unsubscribed_at
     // unconditionally right before every send regardless of these writes.
     await admin.from("contacts").update({ unsubscribed_at: new Date().toISOString() }).eq("id", contact.id);
+    await admin.rpc("cancel_contact_broadcast_jobs", {
+      p_workspace_id: contact.workspace_id,
+      p_contact_ids: [contact.id],
+    });
     await admin.from("broadcast_enrollments").update({ status: "unsubscribed" }).eq("contact_id", contact.id);
     const { data: enrollments } = await admin.from("broadcast_enrollments").select("id").eq("contact_id", contact.id);
     const enrollmentIds = (enrollments ?? []).map((e) => e.id);
@@ -33,7 +37,7 @@ export async function GET(req: Request) {
         .from("broadcast_enrollment_steps")
         .update({ status: "skipped" })
         .in("enrollment_id", enrollmentIds)
-        .eq("status", "pending");
+        .in("status", ["pending", "queued"]);
     }
   }
 

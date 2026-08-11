@@ -20,112 +20,171 @@ export type BroadcastEmailStageOutput = {
 // This is a defensive re-check for the narrow race window between the sweep's admission check
 // and this job actually running, not the primary gate (the sweep is). Provider-aware since
 // 0027_provider_aware_send_cap.sql: applies only to personal-mailbox senders (SMTP pointed at a
-// Gmail/Yahoo/consumer host, via the shared is_capped_mail_sender() SQL function) —
+// Gmail/Yahoo/consumer host, via the shared is_capped_mail_workspace() SQL function) —
 // transactional providers (Resend/SendGrid/Mailgun) are governed by their own plan limits.
 const MAX_SENDS_PER_DAY = 300;
 
-// The real security boundary — jobs' RLS only validates the row's own user_id, not
-// payload.enrollment_step_id's contents. Re-scopes every hop (enrollment_step -> enrollment ->
-// sequence/step -> contact) to job.user_id, mirroring every other job type's stage-0 pattern.
-async function stageVerify(payload: SendBroadcastEmailPayload, workspaceId: string, userId: string): Promise<BroadcastEmailStageOutput> {
-  const { data: enrollmentStep } = await db
+type BroadcastSendContext = {
+  enrollmentStep: { id: string; enrollment_id: string; step_id: string };
+  enrollment: { id: string; sequence_id: string; contact_id: string; status: string };
+  step: { subject: string; body_md: string };
+  sequence: { id: string; campaign_id: string | null; status: string };
+  contact: { email: string; unsubscribed_at: string | null; unsub_token: string };
+};
+
+async function loadBroadcastSendContext(
+  enrollmentStepId: string,
+  workspaceId: string
+): Promise<BroadcastSendContext | null> {
+  const { data: enrollmentStep, error: enrollmentStepError } = await db
     .from("broadcast_enrollment_steps")
     .select("id, enrollment_id, step_id")
-    .eq("id", payload.enrollment_step_id)
+    .eq("id", enrollmentStepId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
-  if (!enrollmentStep) throw new Error("Broadcast enrollment step not found for this account");
+  if (enrollmentStepError) throw new Error(`Could not load broadcast schedule: ${enrollmentStepError.message}`);
+  if (!enrollmentStep) return null;
 
-  const { data: enrollment } = await db
+  const { data: enrollment, error: enrollmentError } = await db
     .from("broadcast_enrollments")
-    .select("id, sequence_id, contact_id")
+    .select("id, sequence_id, contact_id, status")
     .eq("id", enrollmentStep.enrollment_id)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
-  if (!enrollment) throw new Error("Broadcast enrollment not found for this account");
+  if (enrollmentError) throw new Error(`Could not load broadcast enrollment: ${enrollmentError.message}`);
+  if (!enrollment) return null;
 
-  const { data: step } = await db
-    .from("broadcast_steps")
-    .select("subject, body_md")
-    .eq("id", enrollmentStep.step_id)
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  if (!step) throw new Error("Broadcast step not found for this account");
+  const [stepResult, sequenceResult, contactResult] = await Promise.all([
+    db
+      .from("broadcast_steps")
+      .select("subject, body_md")
+      .eq("id", enrollmentStep.step_id)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle(),
+    db
+      .from("broadcast_sequences")
+      .select("id, campaign_id, status")
+      .eq("id", enrollment.sequence_id)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle(),
+    db
+      .from("contacts")
+      .select("email, unsubscribed_at, unsub_token")
+      .eq("id", enrollment.contact_id)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle(),
+  ]);
+  if (stepResult.error) throw new Error(`Could not load broadcast step: ${stepResult.error.message}`);
+  if (sequenceResult.error) {
+    throw new Error(`Could not load broadcast sequence: ${sequenceResult.error.message}`);
+  }
+  if (contactResult.error) throw new Error(`Could not load broadcast contact: ${contactResult.error.message}`);
+  const step = stepResult.data;
+  const sequence = sequenceResult.data;
+  const contact = contactResult.data;
+  if (!step || !sequence || !contact) return null;
 
-  const { data: sequence } = await db
-    .from("broadcast_sequences")
-    .select("id, campaign_id")
-    .eq("id", enrollment.sequence_id)
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  if (!sequence) throw new Error("Broadcast sequence not found for this account");
+  return { enrollmentStep, enrollment, step, sequence, contact } as BroadcastSendContext;
+}
 
-  const { data: contact } = await db
-    .from("contacts")
-    .select("email, unsubscribed_at, unsub_token")
-    .eq("id", enrollment.contact_id)
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  if (!contact) throw new Error("Contact not found for this account");
+async function workspaceSendCapReached(workspaceId: string): Promise<boolean> {
+  const { data: capped, error: capError } = await db.rpc("is_capped_mail_workspace", {
+    p_workspace_id: workspaceId,
+  });
+  if (capError) throw new Error(`Could not verify broadcast send cap: ${capError.message}`);
+  if (capped === false) return false;
+
+  const cutoffIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const [mailResult, broadcastResult] = await Promise.all([
+    db
+      .from("mail_sends")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .gte("created_at", cutoffIso),
+    db
+      .from("broadcast_sends")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .eq("status", "sent")
+      .gte("created_at", cutoffIso),
+  ]);
+  if (mailResult.error) throw new Error(`Could not count direct sends: ${mailResult.error.message}`);
+  if (broadcastResult.error) {
+    throw new Error(`Could not count broadcast sends: ${broadcastResult.error.message}`);
+  }
+  const mailCount = mailResult.count;
+  const broadcastCount = broadcastResult.count;
+  return (mailCount ?? 0) + (broadcastCount ?? 0) >= MAX_SENDS_PER_DAY;
+}
+
+// The real security boundary — a job payload is not trusted. Re-scope every hop
+// (enrollment_step -> enrollment -> sequence/step -> contact) to the job's workspace.
+async function stageVerify(payload: SendBroadcastEmailPayload, workspaceId: string): Promise<BroadcastEmailStageOutput> {
+  const context = await loadBroadcastSendContext(payload.enrollment_step_id, workspaceId);
+  if (!context) return { stageData: {}, skip: true };
 
   // Re-checked unconditionally right before every send — the actual security/compliance
   // boundary. The unsubscribe route eagerly flips enrollment/step status too, but that's a UI
   // nicety, not what's relied on here.
-  if (contact.unsubscribed_at) {
+  if (context.enrollment.status !== "active" || context.contact.unsubscribed_at) {
     return { stageData: {}, skip: true, enrollmentStepPatch: { status: "skipped" } };
   }
+  if (context.sequence.status === "paused") return { stageData: {}, retry: true };
+  if (context.sequence.status !== "active") return { stageData: {}, skip: true };
 
-  const { data: capped } = await db.rpc("is_capped_mail_sender", { p_user_id: userId });
-  if (capped !== false) {
-    const cutoffIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const [{ count: mailCount }, { count: broadcastCount }] = await Promise.all([
-      db.from("mail_sends").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).gte("created_at", cutoffIso),
-      db
-        .from("broadcast_sends")
-        .select("id", { count: "exact", head: true })
-        .eq("workspace_id", workspaceId)
-        .eq("status", "sent")
-        .gte("created_at", cutoffIso),
-    ]);
-    if ((mailCount ?? 0) + (broadcastCount ?? 0) >= MAX_SENDS_PER_DAY) {
-      return { stageData: {}, retry: true };
-    }
-  }
+  if (await workspaceSendCapReached(workspaceId)) return { stageData: {}, retry: true };
 
-  return {
-    stageData: {
-      to: contact.email,
-      unsub_token: contact.unsub_token,
-      subject: step.subject,
-      body_md: step.body_md,
-      sequence_id: sequence.id,
-      campaign_id: sequence.campaign_id,
-      contact_id: enrollment.contact_id,
-      step_id: enrollmentStep.step_id,
-    },
-  };
+  // Do not persist recipient PII in jobs.stage_data. The send stage reloads the contact and
+  // consent state after this stage commits, so an erasure/unsubscribe/pause wins before delivery.
+  return { stageData: {} };
 }
 
 async function stageSend(stageData: Record<string, unknown>, userId: string, workspaceId: string): Promise<BroadcastEmailStageOutput> {
   // Sender identity for the footer (business name + postal address). Read per send rather than
   // baked into the step at enrollment time: an address correction should apply to mail going out
   // now, not only to sequences enrolled after the edit.
-  const { data: emailSettings } = await db
+  const { data: emailSettings, error: emailSettingsError } = await db
     .from("email_settings")
     .select(EMAIL_SETTINGS_COLUMNS)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
+  if (emailSettingsError) {
+    throw new Error(`Could not load email compliance settings: ${emailSettingsError.message}`);
+  }
+
+  const enrollmentStepId = stageData.enrollment_step_id as string;
+  const context = await loadBroadcastSendContext(enrollmentStepId, workspaceId);
+  if (!context) return { stageData: {}, skip: true };
+  if (context.enrollment.status !== "active" || context.contact.unsubscribed_at) {
+    return { stageData: {}, skip: true, enrollmentStepPatch: { status: "skipped" } };
+  }
+  if (context.sequence.status === "paused") return { stageData: {}, retry: true };
+  if (context.sequence.status !== "active") return { stageData: {}, skip: true };
+  if (await workspaceSendCapReached(workspaceId)) return { stageData: {}, retry: true };
+
+  // One final contact read immediately before dispatch. This closes the persisted-stage gap and
+  // reduces an unavoidable already-in-flight unsubscribe race to the provider-call boundary.
+  const { data: liveContact, error: liveContactError } = await db
+    .from("contacts")
+    .select("email, unsubscribed_at, unsub_token")
+    .eq("id", context.enrollment.contact_id)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (liveContactError) throw new Error(`Could not recheck broadcast consent: ${liveContactError.message}`);
+  if (!liveContact || liveContact.unsubscribed_at) {
+    return { stageData: {}, skip: true, enrollmentStepPatch: { status: "skipped" } };
+  }
 
   const html =
-    (marked.parse(stageData.body_md as string) as string) +
-    renderUnsubscribeFooterHtml(stageData.unsub_token as string, emailSettings);
+    (marked.parse(context.step.body_md) as string) +
+    renderUnsubscribeFooterHtml(liveContact.unsub_token, emailSettings);
 
   // Dispatches via the account's active sender — a connected
   // Resend/SendGrid/Mailgun/SMTP provider (lib/mail/send.ts). A not-connected/needs-reconnect
   // sender throws (normal retry-then-terminal-fail path).
   const result = await sendViaActiveSender(db, userId, workspaceId, {
-    to: stageData.to as string,
-    subject: stageData.subject as string,
+    to: liveContact.email,
+    subject: context.step.subject,
     html,
   });
   if (isSendFailure(result)) {
@@ -138,19 +197,20 @@ async function stageSend(stageData: Record<string, unknown>, userId: string, wor
 
   await db.from("broadcast_sends").insert({
     user_id: userId,
-    sequence_id: stageData.sequence_id,
-    step_id: stageData.step_id,
-    enrollment_step_id: stageData.enrollment_step_id,
-    contact_id: stageData.contact_id,
-    campaign_id: stageData.campaign_id ?? null,
-    to_address: stageData.to,
-    subject: stageData.subject,
+    workspace_id: workspaceId,
+    sequence_id: context.sequence.id,
+    step_id: context.enrollmentStep.step_id,
+    enrollment_step_id: context.enrollmentStep.id,
+    contact_id: context.enrollment.contact_id,
+    campaign_id: context.sequence.campaign_id,
+    to_address: liveContact.email,
+    subject: context.step.subject,
     message_id: result.messageId,
     provider: result.provider,
     status: "sent",
   });
 
-  return { stageData, enrollmentStepPatch: { status: "sent" } };
+  return { stageData: {}, enrollmentStepPatch: { status: "sent" } };
 }
 
 export async function runSendBroadcastEmailStage(
@@ -163,7 +223,7 @@ export async function runSendBroadcastEmailStage(
   const stage = SEND_BROADCAST_EMAIL_STAGES[stageIndex];
   switch (stage) {
     case "verify":
-      return stageVerify(payload, workspaceId, userId);
+      return stageVerify(payload, workspaceId);
     case "send":
       return stageSend({ ...stageData, enrollment_step_id: payload.enrollment_step_id }, userId, workspaceId);
     default:

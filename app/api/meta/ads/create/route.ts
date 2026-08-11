@@ -1,19 +1,23 @@
 import { NextResponse } from "next/server";
+import { queueChargedJob } from "@/lib/credits";
 import { createClient } from "@/lib/supabase/server";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 // Queues a launch_ad job — no credit touch here (deduct-at-activate, not deduct-at-create, so a
 // client can build and compare a few paused drafts for free). Ownership checks here are a UX
-// nicety for a fast error; the worker's "verify" stage (lib/engine/adlaunch.ts) re-checks
-// ownership again, since that's the real security boundary (jobs' own RLS only validates the
-// row's user_id, not payload contents).
+// nicety for a fast error; queue_job and the worker's "verify" stage both re-check the payload's
+// referenced rows against the explicit workspace at their respective trust boundaries.
 export async function POST(req: Request) {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+
+  const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const body = await req.json();
   const campaignId = body.campaign_id as string | undefined;
@@ -56,6 +60,7 @@ export async function POST(req: Request) {
     .from("campaigns")
     .select("bridge_published, fb_ad_angles")
     .eq("id", campaignId)
+    .eq("workspace_id", ws)
     .single();
   if (!campaign?.bridge_published) {
     return NextResponse.json(
@@ -77,6 +82,7 @@ export async function POST(req: Request) {
     .from("campaign_creatives")
     .select("status")
     .eq("campaign_id", campaignId)
+    .eq("workspace_id", ws)
     .eq("source", "fb_ad_angle")
     .eq("item_index", angleIndex)
     .eq("kind", creativeKind)
@@ -88,30 +94,32 @@ export async function POST(req: Request) {
     );
   }
 
-  const { data: job, error } = await supabase
-    .from("jobs")
-    .insert({
-      user_id: user.id,
-      type: "launch_ad",
-      payload: {
-        campaign_id: campaignId,
-        ad_account_id: adAccountId,
-        page_id: pageId,
-        angle_index: angleIndex,
-        creative_kind: creativeKind,
-        // Always "bridge" — the presell page variant was merged into it (see
-        // lib/engine/renderPages.ts); ad_launches.destination stays a NOT NULL column with the
-        // legacy 'presell' check-constraint option (no live rows use it, harmless to leave).
-        destination: "bridge",
-        headline,
-        primary_text: primaryText,
-        country,
-        budget_credits: Math.round(budgetCredits),
-      },
-    })
-    .select("id")
-    .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // launch_ad is intentionally free at queue time, but it still goes through queue_job so direct
+  // jobs INSERT remains closed and every referenced resource is revalidated against this workspace.
+  const queued = await queueChargedJob(supabase, {
+    workspace_id: ws,
+    type: "launch_ad",
+    payload: {
+      campaign_id: campaignId,
+      ad_account_id: adAccountId,
+      page_id: pageId,
+      angle_index: angleIndex,
+      creative_kind: creativeKind,
+      // Always "bridge" — the presell page variant was merged into it (see
+      // lib/engine/renderPages.ts); ad_launches.destination stays a NOT NULL column with the
+      // legacy 'presell' check-constraint option (no live rows use it, harmless to leave).
+      destination: "bridge",
+      headline,
+      primary_text: primaryText,
+      country,
+      budget_credits: Math.round(budgetCredits),
+    },
+  });
+  if (!queued.ok) return NextResponse.json(queued.body, { status: queued.status });
 
-  return NextResponse.json({ ok: true, job_id: job.id });
+  return NextResponse.json({
+    ok: true,
+    job_id: queued.jobId,
+    ...(queued.deduped ? { deduped: true } : {}),
+  });
 }

@@ -42,10 +42,10 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     );
   }
 
-  // jobs RLS already permits an authenticated user to insert their own row directly (same
-  // pattern as app/api/promote/route.ts) — no admin client needed for this insert.
+  // The queue RPC verifies this campaign belongs to the explicit workspace and atomically charges
+  // before the pending row becomes visible to the worker.
   const queued = await queueChargedJob(supabase, {
-    user_id: user.id,
+    workspace_id: ws,
     type: "generate_ad_image",
     payload: { campaign_id: params.id },
   });

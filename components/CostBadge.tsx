@@ -9,7 +9,7 @@ import { useCredits } from "@/components/CreditsProvider";
  * The price of an action, shown next to the button that triggers it.
  *
  * Deliberately a HINT, never a gate: it never disables anything itself. The server re-checks the
- * balance inside charge_job_credits under an advisory lock and answers 402, which is the only
+ * balance inside queue_job under an advisory lock and answers 402, which is the only
  * answer that can be trusted — a client-side block computed from a possibly-stale number would
  * either lie about affordability or, worse, grey out a button that would actually have worked.
  * What this does buy is that nobody clicks a generate button without knowing it costs 10 credits.

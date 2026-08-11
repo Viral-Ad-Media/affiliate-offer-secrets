@@ -40,11 +40,6 @@ export function formatCost(credits: number): string {
   return `${credits} credit${credits === 1 ? "" : "s"}`;
 }
 
-export type ChargeResult =
-  | { ok: true; charged: number; balance: number }
-  | { ok: false; reason: "insufficient"; cost: number }
-  | { ok: false; reason: "error"; message: string };
-
 // Minimal shape of a supabase-js client, so this module stays isomorphic and testable — the caller
 // passes whichever client it already holds rather than this file importing a server-only one.
 // PromiseLike, not Promise: supabase-js's .rpc() returns a PostgrestFilterBuilder that is only
@@ -56,41 +51,6 @@ type RpcClient = {
   ): PromiseLike<{ data: any; error: { message: string } | null }>;
 };
 
-/**
- * Charge a job that has ALREADY been inserted.
- *
- * Ordering matters and is not arbitrary: the charge is keyed on the job's own id, so the row has to
- * exist first. That leaves a brief window where the insert trigger may have already woken the
- * worker for a job we are about to cancel — accepted, because the alternative (charge first
- * against a client-chosen id) would let a caller mint the primary key of a row only the admin
- * client writes, a pattern nothing else in this codebase allows. Callers MUST delete the job when
- * this returns `insufficient`; see the routes for that pairing.
- *
- * Idempotent: charge_job_credits swallows a duplicate and returns the current balance, so a
- * retried request cannot debit twice, and neither can a future caller that forgets.
- */
-export async function chargeForQueuedJob(
-  client: RpcClient,
-  jobId: string,
-  jobType: string,
-  label?: string
-): Promise<ChargeResult> {
-  const cost = creditCostFor(jobType);
-  if (cost === 0) return { ok: true, charged: 0, balance: Number.NaN };
-
-  const reason = label ? `${jobType}: ${label}` : jobType;
-  const { data, error } = await client.rpc("charge_job_credits", {
-    p_job_id: jobId,
-    p_amount: cost,
-    p_reason: reason,
-  });
-
-  if (error) return { ok: false, reason: "error", message: error.message };
-  // NULL back means "cannot afford it" — a real answer, not a failure.
-  if (data === null || data === undefined) return { ok: false, reason: "insufficient", cost };
-  return { ok: true, charged: cost, balance: Number(data) };
-}
-
 /** The 402 body every queueing route returns, so the message is identical everywhere. */
 export function insufficientCreditsResponse(cost: number) {
   return {
@@ -100,51 +60,71 @@ export function insufficientCreditsResponse(cost: number) {
   };
 }
 
-type QueueClient = RpcClient & {
-  from(table: string): any;
-};
-
 export type QueueOutcome =
-  | { ok: true; jobId: string; charged: number }
+  | { ok: true; jobId: string; charged: number; deduped: boolean }
   | { ok: false; status: number; body: Record<string, unknown> };
 
+type QueueRpcResult = {
+  ok: boolean;
+  job_id?: string;
+  charged?: number;
+  balance?: number;
+  code?: string;
+  needed?: number;
+  deduped?: boolean;
+};
+
 /**
- * Insert a job and charge for it, undoing the insert if the workspace can't afford it.
+ * Atomically queue and (when non-free) charge for a job.
  *
- * Every queueing route goes through this so the insert/charge/rollback triple can't drift apart —
- * a route that inserted without charging would silently give work away, and one that charged
- * without deleting on failure would bill for a job that never runs. `onRollback` exists for the
- * two routes that take a concurrency claim before queueing (campaigns.video_status,
- * claim_campaign_creative): the claim has to be released too, or the entity is stuck "generating"
- * forever after a declined charge.
+ * queue_job() derives the price in SQL, validates every referenced row against the explicit
+ * workspace, and writes the ledger debit plus pending job in one transaction. The insert trigger
+ * cannot expose a runnable unpaid row: another transaction only sees the job after the debit has
+ * committed too. `onRollback` preserves the existing pre-queue entity claims when the RPC rejects
+ * or cannot queue video, creative, or blog-image work.
  */
 export async function queueChargedJob(
-  client: QueueClient,
-  job: { user_id: string; type: string; payload: Record<string, unknown> },
-  opts: { label?: string; onRollback?: () => Promise<void> } = {}
+  client: RpcClient,
+  job: {
+    workspace_id: string;
+    type: Exclude<ChargeableJobType, "send_broadcast_email">;
+    payload: Record<string, unknown>;
+  },
+  opts: { onRollback?: () => Promise<void> } = {}
 ): Promise<QueueOutcome> {
-  const { data: row, error } = await client
-    .from("jobs")
-    .insert({ user_id: job.user_id, type: job.type, payload: job.payload })
-    .select("id")
-    .single();
+  const { data, error } = await client.rpc("queue_job", {
+    p_workspace_id: job.workspace_id,
+    p_type: job.type,
+    p_payload: job.payload,
+  });
 
-  if (error || !row?.id) {
+  if (error) {
     await opts.onRollback?.();
-    return { ok: false, status: 500, body: { error: error?.message ?? "Could not queue the job" } };
+    return { ok: false, status: 500, body: { error: error.message } };
   }
 
-  const charge = await chargeForQueuedJob(client, row.id, job.type, opts.label);
-
-  if (!charge.ok) {
-    // The job must not survive a failed charge — the trigger may already have woken the worker,
-    // so deleting it is what actually stops the work from being done for free.
-    await client.from("jobs").delete().eq("id", row.id);
+  const result = data as QueueRpcResult | null;
+  if (!result?.ok) {
     await opts.onRollback?.();
-    return charge.reason === "insufficient"
-      ? { ok: false, status: 402, body: insufficientCreditsResponse(charge.cost) }
-      : { ok: false, status: 500, body: { error: charge.message } };
+    if (result?.code === "insufficient_credits") {
+      return {
+        ok: false,
+        status: 402,
+        body: insufficientCreditsResponse(Number(result.needed ?? creditCostFor(job.type))),
+      };
+    }
+    return { ok: false, status: 500, body: { error: "Could not queue the job" } };
   }
 
-  return { ok: true, jobId: row.id, charged: charge.charged };
+  if (!result.job_id) {
+    await opts.onRollback?.();
+    return { ok: false, status: 500, body: { error: "Queue returned no job id" } };
+  }
+
+  return {
+    ok: true,
+    jobId: result.job_id,
+    charged: Number(result.charged ?? 0),
+    deduped: result.deduped === true,
+  };
 }

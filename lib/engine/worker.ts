@@ -149,10 +149,15 @@ async function markDone(jobId: string, result: string) {
  * downstream. That's deliberate: it means this flag can only make failure FASTER, never quieter.
  */
 async function failJob(job: JobRow, message: string, permanent = false) {
+  // Provider/SMTP errors can echo the recipient address. Broadcast delivery failures belong in
+  // jobs.result and notifications only as generic operational text so a later statutory erasure
+  // never has to discover provider-specific PII hidden inside an arbitrary error string.
+  const safeMessage = job.type === "send_broadcast_email" ? "Broadcast delivery failed" : message;
+
   if (permanent || job.attempts >= MAX_ATTEMPTS) {
     await db
       .from("jobs")
-      .update({ status: "error", result: message, updated_at: new Date().toISOString() })
+      .update({ status: "error", result: safeMessage, updated_at: new Date().toISOString() })
       .eq("id", job.id);
 
     // Credits were debited when this job was queued (see lib/credits.ts). A job that will never
@@ -172,13 +177,13 @@ async function failJob(job: JobRow, message: string, permanent = false) {
     await notify(db, job.user_id, {
       kind: "job_failed",
       title: `${jobLabel(job.type)} failed`,
-      body: message,
+      body: safeMessage,
       href: "/audit",
     });
     if (job.type === "build_campaign" && job.payload?.product_id) {
       await db
         .from("campaigns")
-        .update({ status: "error", notes: message, updated_at: new Date().toISOString() })
+        .update({ status: "error", notes: safeMessage, updated_at: new Date().toISOString() })
         .eq("workspace_id", job.workspace_id)
         .eq("product_id", job.payload.product_id);
     }
@@ -194,14 +199,14 @@ async function failJob(job: JobRow, message: string, permanent = false) {
       if (launchId) {
         await db
           .from("ad_launches")
-          .update({ status: "failed", notes: message, updated_at: new Date().toISOString() })
+          .update({ status: "failed", notes: safeMessage, updated_at: new Date().toISOString() })
           .eq("id", launchId);
       }
     }
     if (job.type === "generate_video" && job.payload?.campaign_id) {
       await db
         .from("campaigns")
-        .update({ video_status: "failed", video_error: message, updated_at: new Date().toISOString() })
+        .update({ video_status: "failed", video_error: safeMessage, updated_at: new Date().toISOString() })
         .eq("id", job.payload.campaign_id);
     }
     // Unlike generate_ad_image (which has no analogous failure signal — a known, documented gap
@@ -213,13 +218,13 @@ async function failJob(job: JobRow, message: string, permanent = false) {
     ) {
       await db
         .from("campaign_creatives")
-        .update({ status: "failed", error: message, updated_at: new Date().toISOString() })
+        .update({ status: "failed", error: safeMessage, updated_at: new Date().toISOString() })
         .eq("id", job.payload.campaign_creative_id);
     }
     if (job.type === "generate_blog_image" && job.payload?.post_id) {
       await db
         .from("blog_posts")
-        .update({ featured_image_status: "failed", featured_image_error: message, updated_at: new Date().toISOString() })
+        .update({ featured_image_status: "failed", featured_image_error: safeMessage, updated_at: new Date().toISOString() })
         .eq("id", job.payload.post_id);
     }
     if (job.type === "send_broadcast_email" && job.payload?.enrollment_step_id) {
@@ -232,7 +237,7 @@ async function failJob(job: JobRow, message: string, permanent = false) {
     // Leave pending (not running) so the natural claim_job() path retries it.
     await db
       .from("jobs")
-      .update({ status: "pending", result: message, updated_at: new Date().toISOString() })
+      .update({ status: "pending", result: safeMessage, updated_at: new Date().toISOString() })
       .eq("id", job.id);
   }
 }

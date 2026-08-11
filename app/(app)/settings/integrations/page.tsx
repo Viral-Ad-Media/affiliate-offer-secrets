@@ -118,7 +118,7 @@ export default async function ConnectionsPage({
 
       <EverflowPanel initial={everflowStatus} />
 
-      <ConnectionsPanel status={metaStatus} />
+      <ConnectionsPanel status={metaStatus} workspaceId={ws!} />
 
       <div>
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">TikTok</h2>

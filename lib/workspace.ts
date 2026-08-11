@@ -95,11 +95,9 @@ export async function currentUserAndWorkspace(): Promise<{
 // routes) — there is no session and no meaningful Host there, so the workspace has to come from a
 // row that already records it, or from the owning user.
 //
-// Currently unused: the Stripe webhook, its intended consumer, doesn't set workspace_id at all and
-// instead relies on 0058's `stamp_workspace_id()` BEFORE INSERT trigger, which derives exactly the
-// same answer in the database. Kept because it is the right helper for any admin-client path that
-// needs the id in hand rather than at insert time — but prefer passing an existing row's
-// workspace_id where one exists.
+// Kept for admin-client paths that must recover a workspace from a user for legacy data. New
+// financial and automation paths carry an explicit workspace_id from the signed-in request; never
+// use this helper where choosing the wrong one of several memberships would move tenant data.
 export async function workspaceIdForUser(
   admin: SupabaseClient,
   userId: string

@@ -11,7 +11,12 @@ import {
 } from "lucide-react";
 import AdminAccountsTable from "@/components/AdminAccountsTable";
 import AdminProblemJobs from "@/components/AdminProblemJobs";
-import type { AdminAccountRow, AdminProblemJob, AdminActionRow } from "@/lib/shared";
+import type {
+  AdminAccountRow,
+  AdminWorkspaceRow,
+  AdminProblemJob,
+  AdminActionRow,
+} from "@/lib/shared";
 import { Card } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
 
@@ -59,15 +64,17 @@ function humanDuration(seconds: number): string {
 export default async function AdminPage() {
   const supabase = createClient();
 
-  const [statsRes, accountsRes, jobsRes, actionsRes] = await Promise.all([
+  const [statsRes, accountsRes, workspacesRes, jobsRes, actionsRes] = await Promise.all([
     supabase.rpc("admin_platform_stats"),
     supabase.rpc("admin_accounts"),
+    supabase.rpc("admin_account_workspaces"),
     supabase.rpc("admin_problem_jobs"),
     supabase.rpc("admin_recent_actions"),
   ]);
 
   const s = (statsRes.data ?? {}) as Record<string, number>;
   const accounts = (accountsRes.data ?? []) as AdminAccountRow[];
+  const workspaces = (workspacesRes.data ?? []) as AdminWorkspaceRow[];
   const jobs = (jobsRes.data ?? []) as AdminProblemJob[];
   const actions = (actionsRes.data ?? []) as AdminActionRow[];
 
@@ -112,7 +119,7 @@ export default async function AdminPage() {
           <Tile
             label="Workspaces"
             value={s.workspaces ?? 0}
-            hint="Teams created (data is not workspace-scoped yet)"
+            hint="Shared tenant data and credit pools"
             Icon={Globe}
           />
         </div>
@@ -161,7 +168,7 @@ export default async function AdminPage() {
 
       <AdminProblemJobs jobs={jobs} />
 
-      <AdminAccountsTable accounts={accounts} />
+      <AdminAccountsTable accounts={accounts} workspaces={workspaces} />
 
       <section>
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">

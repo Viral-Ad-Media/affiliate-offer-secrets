@@ -5,25 +5,36 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { setEntityStatus } from "@/lib/meta/client";
 
 export const dynamic = "force-dynamic";
+// The database lease is two minutes. Keep the platform's hard invocation ceiling comfortably
+// below that so an old request cannot still be talking to Meta after a replacement may claim it.
+export const maxDuration = 60;
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-async function refundAndFail(
+async function holdReservationForRetry(
   admin: AdminClient,
-  userId: string,
   launchId: string,
-  amount: number,
-  message: string
+  leaseId: string,
+  message: string,
+  activationState?: Record<string, string>
 ) {
-  await admin
+  const { data, error } = await admin
     .from("ad_launches")
-    .update({ status: "failed", notes: message, updated_at: new Date().toISOString() })
-    .eq("id", launchId);
-  await admin.rpc("refund_ad_credits", {
-    p_user_id: userId,
-    p_amount: amount,
-    p_reason: `refund: activation failed for launch ${launchId}`,
-  });
+    .update({
+      status: "activating",
+      activation_locked_at: null,
+      activation_lease_id: null,
+      notes: message,
+      ...(activationState ? { activation_state: activationState } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", launchId)
+    .eq("status", "activating")
+    .eq("activation_lease_id", leaseId)
+    .select("id")
+    .maybeSingle();
+  if (error) console.error("Could not release ad activation lease", error.message);
+  return Boolean(data);
 }
 
 // Single fast confirmed action, not a queued job — the client wants immediate feedback. Two
@@ -40,44 +51,107 @@ export async function POST(req: Request) {
   const ws = await currentWorkspaceId();
   if (!ws) return workspaceRequiredResponse();
 
+  // Members can create/edit campaign material, but only an owner/admin may commit the shared
+  // workspace's credits to real ad spend. reserve_ad_credits re-checks this inside the transaction;
+  // this early check only gives the caller a clear response before claiming the launch.
+  const { data: role, error: roleErr } = await supabase.rpc("workspace_role", {
+    p_workspace_id: ws,
+  });
+  if (roleErr) return NextResponse.json({ error: roleErr.message }, { status: 500 });
+  if (role !== "owner" && role !== "admin") {
+    return NextResponse.json(
+      { error: "Only workspace owners and admins can activate ads" },
+      { status: 403 }
+    );
+  }
+
   const body = await req.json();
   const launchId = body.launch_id as string | undefined;
   if (!launchId) return NextResponse.json({ error: "launch_id is required" }, { status: 400 });
 
-  // ad_launches' RLS ("own ad launches", select-only for auth.uid()=user_id) is what makes this
-  // an implicit ownership check — a row belonging to another tenant simply won't be visible.
-  const { data: launch } = await supabase.from("ad_launches").select("*").eq("id", launchId).maybeSingle();
+  // Workspace-scoped RLS plus the explicit active-workspace predicate make this the route-level
+  // ownership check; the reservation RPC independently derives and re-checks the launch workspace.
+  const { data: launch } = await supabase
+    .from("ad_launches")
+    .select("*")
+    .eq("id", launchId)
+    .eq("workspace_id", ws)
+    .maybeSingle();
   if (!launch) return NextResponse.json({ error: "Launch not found" }, { status: 404 });
-  if (launch.status !== "paused_review") {
+  if (launch.status !== "paused_review" && launch.status !== "activating") {
     return NextResponse.json(
       { error: `Cannot activate from status: ${launch.status}` },
       { status: 409 }
     );
   }
+  const resuming = launch.status === "activating";
 
   const admin = createAdminClient();
+  const leaseId = crypto.randomUUID();
 
-  const { data: claimed } = await admin
-    .from("ad_launches")
-    .update({ status: "activating", updated_at: new Date().toISOString() })
-    .eq("id", launchId)
-    .eq("status", "paused_review")
-    .select("id")
-    .maybeSingle();
+  const { data: claimed, error: claimErr } = await supabase.rpc("claim_ad_activation", {
+    p_launch_id: launchId,
+    p_lease_id: leaseId,
+  });
+  if (claimErr) return NextResponse.json({ error: claimErr.message }, { status: 409 });
   if (!claimed) {
-    return NextResponse.json({ error: "This launch is already being activated" }, { status: 409 });
+    return NextResponse.json(
+      { error: "This launch is already being activated. Try again in two minutes if it stalls." },
+      { status: 409 }
+    );
   }
 
   const { data: reserved, error: reserveErr } = await supabase.rpc("reserve_ad_credits", {
-    p_amount: launch.budget_credits,
-    p_reason: `ad launch: ${launch.campaign_id} angle ${launch.angle_index}`,
+    p_launch_id: launchId,
   });
-  if (reserveErr || !reserved) {
+  if (reserveErr) {
+    if (resuming) await holdReservationForRetry(admin, launchId, leaseId, reserveErr.message);
+    else {
+      await admin
+        .from("ad_launches")
+        .update({
+          status: "paused_review",
+          activation_locked_at: null,
+          activation_lease_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", launchId)
+        .eq("status", "activating")
+        .eq("activation_lease_id", leaseId);
+    }
+    return NextResponse.json({ error: reserveErr.message }, { status: 500 });
+  }
+  if (!reserved) {
     await admin
       .from("ad_launches")
-      .update({ status: "paused_review", updated_at: new Date().toISOString() })
-      .eq("id", launchId);
+      .update({
+        status: "paused_review",
+        activation_locked_at: null,
+        activation_lease_id: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", launchId)
+      .eq("status", "activating")
+      .eq("activation_lease_id", leaseId);
     return NextResponse.json({ error: "Insufficient credits" }, { status: 402 });
+  }
+
+  // The resumable claim may have picked up progress written by an earlier request. Always drive
+  // Meta from the fresh locked-row state, not the pre-claim snapshot above.
+  const { data: currentLaunch, error: currentLaunchErr } = await admin
+    .from("ad_launches")
+    .select("*")
+    .eq("id", launchId)
+    .eq("workspace_id", ws)
+    .single();
+  if (currentLaunchErr || !currentLaunch) {
+    await holdReservationForRetry(
+      admin,
+      launchId,
+      leaseId,
+      "Could not reload activation state"
+    );
+    return NextResponse.json({ error: "Could not reload activation state" }, { status: 500 });
   }
 
   const { data: connection } = await admin
@@ -86,7 +160,24 @@ export async function POST(req: Request) {
     .eq("workspace_id", ws)
     .maybeSingle();
   if (!connection) {
-    await refundAndFail(admin, user.id, launchId, launch.budget_credits, "No Meta connection");
+    if (resuming) {
+      await holdReservationForRetry(
+        admin,
+        launchId,
+        leaseId,
+        "Reconnect Meta, then resume activation"
+      );
+    } else {
+      const { error: finalizeErr } = await admin.rpc("finalize_failed_ad_activation", {
+        p_launch_id: launchId,
+        p_lease_id: leaseId,
+        p_notes: "No Meta connection",
+        p_activation_state: currentLaunch.activation_state ?? {},
+      });
+      if (finalizeErr) {
+        return NextResponse.json({ error: "Activation cleanup needs retry" }, { status: 500 });
+      }
+    }
     return NextResponse.json({ error: "No Meta connection" }, { status: 500 });
   }
 
@@ -94,23 +185,34 @@ export async function POST(req: Request) {
     p_secret_id: connection.user_token_secret_id,
   });
   if (tokenErr || !token) {
-    await refundAndFail(
-      admin,
-      user.id,
-      launchId,
-      launch.budget_credits,
-      "Could not retrieve Meta access token"
-    );
+    if (resuming) {
+      await holdReservationForRetry(
+        admin,
+        launchId,
+        leaseId,
+        "Reconnect Meta, then resume activation"
+      );
+    } else {
+      const { error: finalizeErr } = await admin.rpc("finalize_failed_ad_activation", {
+        p_launch_id: launchId,
+        p_lease_id: leaseId,
+        p_notes: "Could not retrieve Meta access token",
+        p_activation_state: currentLaunch.activation_state ?? {},
+      });
+      if (finalizeErr) {
+        return NextResponse.json({ error: "Activation cleanup needs retry" }, { status: 500 });
+      }
+    }
     return NextResponse.json({ error: "Could not retrieve Meta access token" }, { status: 500 });
   }
 
   const levels: { key: "campaign" | "adset" | "ad"; id: string | null }[] = [
-    { key: "campaign", id: launch.meta_campaign_id },
-    { key: "adset", id: launch.meta_adset_id },
-    { key: "ad", id: launch.meta_ad_id },
+    { key: "campaign", id: currentLaunch.meta_campaign_id },
+    { key: "adset", id: currentLaunch.meta_adset_id },
+    { key: "ad", id: currentLaunch.meta_ad_id },
   ];
 
-  const activationState: Record<string, string> = { ...(launch.activation_state ?? {}) };
+  const activationState: Record<string, string> = { ...(currentLaunch.activation_state ?? {}) };
   let failedAt: string | null = null;
   let failureMessage = "";
 
@@ -124,6 +226,20 @@ export async function POST(req: Request) {
     try {
       await setEntityStatus(level.id, token, "ACTIVE");
       activationState[level.key] = "active";
+      const { data: stateSaved, error: stateSaveErr } = await admin
+        .from("ad_launches")
+        .update({ activation_state: activationState, updated_at: new Date().toISOString() })
+        .eq("id", launchId)
+        .eq("status", "activating")
+        .eq("activation_lease_id", leaseId)
+        .select("id")
+        .maybeSingle();
+      if (stateSaveErr || !stateSaved) {
+        return NextResponse.json(
+          { error: "Activation lease expired; resume to confirm the current Meta state" },
+          { status: 409 }
+        );
+      }
     } catch (err: any) {
       failedAt = level.key;
       failureMessage = err?.message ?? `Failed to activate ${level.key}`;
@@ -131,48 +247,71 @@ export async function POST(req: Request) {
     }
   }
 
-  await admin
-    .from("ad_launches")
-    .update({ activation_state: activationState, updated_at: new Date().toISOString() })
-    .eq("id", launchId);
-
   if (failedAt) {
-    // Re-pause whatever DID activate — so the ledger and Meta's actual state never disagree
-    // about whether anything is live — before writing the compensating refund.
+    // A lost ACTIVE response is indistinguishable from failure even though Meta may have applied
+    // it. Therefore pause EVERY object with an id, not only levels whose response was recorded.
+    // Refund only if all pause calls are positively acknowledged.
+    let allPaused = true;
     for (const level of levels) {
-      if (activationState[level.key] === "active" && level.id) {
+      if (level.id) {
         try {
           await setEntityStatus(level.id, token, "PAUSED");
           activationState[level.key] = "paused";
         } catch {
-          // best-effort compensation; the failure is already surfaced via notes regardless
+          activationState[level.key] = "pause_unconfirmed";
+          allPaused = false;
         }
       }
     }
 
-    await admin
-      .from("ad_launches")
-      .update({
-        status: "failed",
-        activation_state: activationState,
-        notes: failureMessage,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", launchId);
+    if (!allPaused) {
+      const retryMessage = `${failureMessage}. Meta pause could not be confirmed; credits remain reserved.`;
+      await holdReservationForRetry(admin, launchId, leaseId, retryMessage, activationState);
+      return NextResponse.json({ error: retryMessage }, { status: 502 });
+    }
 
-    await admin.rpc("refund_ad_credits", {
-      p_user_id: user.id,
-      p_amount: launch.budget_credits,
-      p_reason: `refund: activation failed for launch ${launch.campaign_id} angle ${launch.angle_index}`,
+    const { error: finalizeErr } = await admin.rpc("finalize_failed_ad_activation", {
+      p_launch_id: launchId,
+      p_lease_id: leaseId,
+      p_notes: failureMessage,
+      p_activation_state: activationState,
     });
-
+    if (finalizeErr) {
+      await holdReservationForRetry(
+        admin,
+        launchId,
+        leaseId,
+        `${failureMessage}. Refund finalization needs retry.`,
+        activationState
+      );
+      return NextResponse.json({ error: "Activation cleanup needs retry" }, { status: 500 });
+    }
     return NextResponse.json({ error: failureMessage }, { status: 502 });
   }
 
-  await admin
+  const { data: activated, error: activateStateErr } = await admin
     .from("ad_launches")
-    .update({ status: "active", updated_at: new Date().toISOString() })
-    .eq("id", launchId);
+    .update({
+      status: "active",
+      activation_locked_at: null,
+      activation_lease_id: null,
+      notes: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", launchId)
+    .eq("status", "activating")
+    .eq("activation_lease_id", leaseId)
+    .select("id")
+    .maybeSingle();
+  if (activateStateErr || !activated) {
+    await holdReservationForRetry(
+      admin,
+      launchId,
+      leaseId,
+      "Meta is active; local finalization needs retry"
+    );
+    return NextResponse.json({ error: "Activation finalization needs retry" }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }
