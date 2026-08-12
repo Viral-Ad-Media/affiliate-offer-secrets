@@ -30,6 +30,52 @@ const ICON_PATHS = ["/icon.svg", "/apple-icon.png", "/favicon.ico"];
 // those two files exist to serve. Caught the day the real domain went live.
 const CRAWLER_PATHS = ["/robots.txt", "/sitemap.xml"];
 
+// What the auth gate actually turns away, as an explicit list.
+//
+// This file used to gate by OMISSION: anything not named public was redirected to /login. Safe by
+// construction, and wrong for one specific case — a path that matches no route at all. A stale
+// marketing link or a typo went to a login page instead of a 404, so an anonymous visitor could
+// never reach the custom 404 and a crawler read every dead URL as a soft-404 redirect rather than
+// a real one. Same bug class as ICON_PATHS and CRAWLER_PATHS above; this is the general form of it.
+//
+// Narrowing an auth gate deserves the reasoning written down, so: for everything under
+// `app/(app)/` this was never the only gate. `app/(app)/layout.tsx` starts with
+// `if (!user) redirect("/login")`, so those pages turn a session-less visitor away on their own
+// and this list is defense-in-depth. `/preview` and `/admin` are the two that are NOT in that
+// route group — `/preview` is a Route Handler that CLAUDE.md says relies on this gate, and
+// `/admin` 404s non-superadmins from the database — so both are listed explicitly and by name.
+//
+// Adding a new authenticated top-level route means adding it here. Forgetting one does not expose
+// data (RLS, and the layout's own redirect, both still apply) — it means an anonymous request
+// reaches the page and gets bounced one layer later instead of at the edge.
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/marketplace",
+  "/products",
+  "/product/",
+  "/funnels",
+  "/contacts",
+  "/emails",
+  "/blog",
+  "/ads",
+  "/socials",
+  "/analytics",
+  "/audit",
+  "/referrals",
+  "/rewards",
+  "/settings",
+  "/billing",
+  "/invite",
+  // Not under app/(app)/ — no layout gate behind these, so this list is their only edge check.
+  "/admin",
+  "/preview",
+  // Every API route that isn't explicitly public. Listed as one entry rather than being allowed to
+  // fall through, deliberately: an unknown /api path 404ing is no better than it redirecting, and
+  // leaving ~60 routes' edge behaviour to "they all check getUser() themselves" is a bet this
+  // change has no reason to take. The public ones are exempted before this is consulted.
+  "/api",
+];
+
 // Prefix-match — dynamic sub-paths (e.g. /p/[campaignId]/bridge) or server-to-server webhooks.
 const PUBLIC_PREFIX_PATHS = [
   "/api/billing/webhook",
@@ -176,6 +222,11 @@ export async function middleware(request: NextRequest) {
 
   const isPublic =
     PUBLIC_EXACT_PATHS.includes(pathname) || PUBLIC_PREFIX_PATHS.some((p) => pathname.startsWith(p));
+  // Segment-boundary matching, not a bare startsWith: "/ads" must cover "/ads" and "/ads/tiktok"
+  // without also swallowing a future "/adsomething".
+  const isProtected = PROTECTED_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p.endsWith("/") ? p : `${p}/`)
+  );
   // App Router serves these icon conventions as real routes, NOT from /_next — so the auth gate
   // was 307'ing them to /login for every logged-out visitor, i.e. the marketing site and every
   // public funnel/blog page had a broken favicon. (`favicon.ico` is already excluded by this
@@ -193,7 +244,11 @@ export async function middleware(request: NextRequest) {
     makeSessionScoped(response.cookies);
   }
 
-  if (!user && !isPublic && !isAsset) {
+  // `isProtected` replaces the old "everything unlisted" rule — see PROTECTED_PREFIXES. A path
+  // matching nothing now reaches the router and renders app/not-found.tsx with a real 404, which
+  // is what a mistyped URL and a dead link deserve. isPublic is still consulted first, so a
+  // public path under a protected prefix stays public.
+  if (!user && !isPublic && !isAsset && isProtected) {
     // On a workspace subdomain, go straight to the canonical login — a same-host /login would
     // only bounce there via the marketing-path redirect above, one wasted hop.
     if (hostKind.kind === "workspace") {

@@ -1,4 +1,5 @@
 import { contentWidthOf } from "@/lib/engine/renderPages";
+import { publicNotFound } from "@/lib/notFoundPage";
 import { createClient } from "@/lib/supabase/server";
 import { renderPublicPostHtml } from "@/lib/blog";
 
@@ -17,7 +18,7 @@ const HEADERS = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
 };
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
   const {
     data: { user },
@@ -33,7 +34,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     )
     .eq("id", params.id)
     .maybeSingle();
-  if (!post) return new Response("Not found", { status: 404 });
+  if (!post) return publicNotFound(req.headers.get("host"));
 
   const { data: settings } = await supabase
     .from("blog_settings")

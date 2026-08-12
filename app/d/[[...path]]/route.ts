@@ -1,4 +1,5 @@
 import { contentWidthOf } from "@/lib/engine/renderPages";
+import { publicNotFound } from "@/lib/notFoundPage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { servePublicCampaignPage } from "@/lib/publicPage";
 import {
@@ -132,7 +133,7 @@ export async function GET(request: Request, { params }: { params: { path?: strin
     .eq("domain", host)
     .eq("status", "verified")
     .maybeSingle();
-  if (!domainRow) return new Response("Not found", { status: 404 });
+  if (!domainRow) return publicNotFound(host);
 
   const { data: routeRow } = await admin
     .from("custom_domain_routes")
@@ -159,5 +160,5 @@ export async function GET(request: Request, { params }: { params: { path?: strin
     if (blog) return blog;
   }
 
-  return new Response("Not found", { status: 404 });
+  return publicNotFound(host);
 }

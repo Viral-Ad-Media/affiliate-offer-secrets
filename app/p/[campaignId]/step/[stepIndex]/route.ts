@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { publicNotFound } from "@/lib/notFoundPage";
 import { publicWorkspaceScope } from "@/lib/publicPage";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export async function GET(
 ) {
   const stepIndex = Number(params.stepIndex);
   if (!Number.isInteger(stepIndex) || stepIndex < 1) {
-    return new Response("Not found", { status: 404 });
+    return publicNotFound(req.headers.get("host"));
   }
 
   const admin = createAdminClient();
@@ -27,14 +28,14 @@ export async function GET(
     .eq("bridge_published", true)
     .maybeSingle();
   if (!campaign) {
-    return new Response("Not found", { status: 404 });
+    return publicNotFound(req.headers.get("host"));
   }
 
   // Same host scoping as the opt-in page (lib/publicPage.ts): a workspace subdomain only ever
   // serves its own workspace's funnel steps, same generic 404 on a mismatch.
   const scope = await publicWorkspaceScope(admin, req.headers.get("host"));
   if (scope.restricted && (!scope.workspaceId || scope.workspaceId !== campaign.workspace_id)) {
-    return new Response("Not found", { status: 404 });
+    return publicNotFound(req.headers.get("host"));
   }
 
   const { data: step } = await admin
@@ -45,7 +46,7 @@ export async function GET(
     .maybeSingle();
 
   if (!step?.html) {
-    return new Response("Not found", { status: 404 });
+    return publicNotFound(req.headers.get("host"));
   }
 
   return new Response(step.html, {

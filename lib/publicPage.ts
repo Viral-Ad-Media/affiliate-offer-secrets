@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { publicNotFound } from "@/lib/notFoundPage";
 import { classifyHost } from "@/lib/host";
 import { IMAGE_DATA_URL_RE } from "@/lib/images/validate";
 import { pickWeightedVariant, readStickyVariantId, buildStickyVariantCookie } from "@/lib/bridgeVariants";
@@ -68,12 +69,14 @@ export async function servePublicCampaignPage(
   const { data: campaign } = await campaignQuery.maybeSingle();
 
   if (!campaign?.bridge_html) {
-    return new Response("Not found", { status: 404 });
+    return publicNotFound(req.headers.get("host"));
   }
 
   const scope = await publicWorkspaceScope(admin, req.headers.get("host"));
   if (scopeRejects(scope, campaign.workspace_id as string)) {
-    return new Response("Not found", { status: 404 });
+    // Byte-identical to the branch above, deliberately: "no such campaign" and "not yours to see
+    // on this host" must be indistinguishable, or the difference enumerates campaigns.
+    return publicNotFound(req.headers.get("host"));
   }
 
   let html = campaign.bridge_html as string;
@@ -153,6 +156,10 @@ export async function servePublicCampaignImage(campaignId: string, req?: Request
     .eq("status", "ready")
     .maybeSingle();
 
+  // Deliberately NOT the HTML 404 page the routes above serve. This endpoint answers an <img src>
+  // and Instagram's media fetcher — nothing here ever renders a document, so a styled page would
+  // be bytes no one sees. The property that matters (one indistinguishable 404 for every reason)
+  // holds either way.
   if (campaign && req) {
     const scope = await publicWorkspaceScope(admin, req.headers.get("host"));
     if (scopeRejects(scope, campaign.workspace_id as string)) {

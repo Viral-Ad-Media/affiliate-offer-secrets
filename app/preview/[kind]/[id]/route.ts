@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicNotFound } from "@/lib/notFoundPage";
 import { createClient } from "@/lib/supabase/server";
 import { currentWorkspaceId } from "@/lib/workspace";
 
@@ -54,7 +55,11 @@ function sandboxDocument(html: string, title: string): string {
 </html>`;
 }
 
-const NOT_FOUND = new NextResponse("Not found", { status: 404 });
+// A FUNCTION, not a shared constant: a Response body is single-use, so one module-level
+// instance handed to every request is a latent bug waiting for a body to be read twice.
+// Signed-in and app-host only (middleware gates /preview by omission), so it is always the
+// branded page.
+const notFound = (req: Request) => publicNotFound(req.headers.get("host"));
 
 function page(html: string, title: string) {
   return new NextResponse(sandboxDocument(html, title), {
@@ -69,15 +74,15 @@ function page(html: string, title: string) {
   });
 }
 
-export async function GET(_req: Request, { params }: { params: { kind: string; id: string } }) {
+export async function GET(req: Request, { params }: { params: { kind: string; id: string } }) {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NOT_FOUND;
+  if (!user) return notFound(req);
 
   const ws = await currentWorkspaceId();
-  if (!ws) return NOT_FOUND;
+  if (!ws) return notFound(req);
 
   if (params.kind === "funnel") {
     const { data: campaign } = await supabase
@@ -86,7 +91,7 @@ export async function GET(_req: Request, { params }: { params: { kind: string; i
       .eq("id", params.id)
       .eq("workspace_id", ws)
       .maybeSingle();
-    if (!campaign?.bridge_html) return NOT_FOUND;
+    if (!campaign?.bridge_html) return notFound(req);
     const title =
       ((campaign as any).products?.product_title as string | undefined) ??
       ((campaign as any).name as string | null) ??
@@ -101,9 +106,9 @@ export async function GET(_req: Request, { params }: { params: { kind: string; i
       .eq("id", params.id)
       .eq("workspace_id", ws)
       .maybeSingle();
-    if (!step?.html) return NOT_FOUND;
+    if (!step?.html) return notFound(req);
     return page(step.html as string, `Step ${step.step_index} — ${step.step_type}`);
   }
 
-  return NOT_FOUND;
+  return notFound(req);
 }

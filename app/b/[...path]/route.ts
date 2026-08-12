@@ -1,4 +1,5 @@
 import { contentWidthOf } from "@/lib/engine/renderPages";
+import { publicNotFound } from "@/lib/notFoundPage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   renderPublicPostHtml,
@@ -27,7 +28,9 @@ const HTML_HEADERS = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
 };
 
-const notFound = () => new Response("Not found", { status: 404 });
+// Bound per request inside the handler below, because the page it serves depends on the host:
+// the blog also serves on tenants' own domains (custom_domains.serves_blog), where our brand
+// has no business appearing. See lib/notFoundPage.ts.
 
 // Public blog on the app's own domain:
 //   /b/{blogSlug}             → index of that tenant's published posts
@@ -44,6 +47,7 @@ const notFound = () => new Response("Not found", { status: 404 });
 // indexable — blog posts are content marketing, unlike funnel pages which send noindex.
 // The custom-domain equivalent lives in app/d/[[...path]]/route.ts and shares the same renderers.
 export async function GET(req: Request, { params }: { params: { path?: string[] } }) {
+  const notFound = () => publicNotFound(req.headers.get("host"));
   const segments = (params.path ?? []).filter(Boolean);
   // blogSlug + at most a 3-segment permalink (yyyy/mm/slug) — anything longer is not a shape this
   // app can produce.
@@ -77,7 +81,7 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
     if (target !== `/b/${post.id}`) {
       return new Response(null, { status: 301, headers: { Location: target } });
     }
-    return renderPost(admin, post.id as string);
+    return renderPost(admin, post.id as string, req.headers.get("host"));
   }
 
   // Everything else is keyed off the blog slug.
@@ -143,10 +147,14 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
   if (requested !== canonical) {
     return new Response(null, { status: 301, headers: { Location: canonical } });
   }
-  return renderPost(admin, post.id as string);
+  return renderPost(admin, post.id as string, req.headers.get("host"));
 }
 
-async function renderPost(admin: ReturnType<typeof createAdminClient>, postId: string): Promise<Response> {
+async function renderPost(
+  admin: ReturnType<typeof createAdminClient>,
+  postId: string,
+  host: string | null
+): Promise<Response> {
   const { data: post } = await admin
     .from("blog_posts")
     .select(
@@ -155,7 +163,7 @@ async function renderPost(admin: ReturnType<typeof createAdminClient>, postId: s
     .eq("id", postId)
     .eq("status", "published")
     .maybeSingle();
-  if (!post) return notFound();
+  if (!post) return publicNotFound(host);
 
   const { data: settings } = await admin
     .from("blog_settings")

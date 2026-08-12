@@ -148,8 +148,15 @@ the marketing route group can render full-bleed sections (hero backgrounds, full
 nav/footer) — `/login` and `/billing` are standalone pages outside both route groups and each
 carry their own wrapper. `middleware.ts`'s `PUBLIC_EXACT_PATHS` (exact match: `/`, `/login`,
 `/about`, `/pricing`, `/faq`, `/contact`, `/terms`, `/privacy`) and `PUBLIC_PREFIX_PATHS` (prefix
-match: Stripe/engine/Meta webhooks, `/p/`) gate everything else behind auth — never add `/` as a
-prefix entry, it would match every path and disable the gate entirely.
+match: Stripe/engine/Meta webhooks, `/p/`) list what is public — never add `/` as a prefix entry,
+it would match every path and disable the gate entirely. What the gate TURNS AWAY is now its own
+explicit list, `PROTECTED_PREFIXES`: the app's route-group paths plus `/admin`, `/preview` and
+`/api`. It used to gate by omission, which was safe but sent every unmatched path to `/login` —
+so a stale link or a typo reached a login page instead of a 404, an anonymous visitor could never
+see `app/not-found.tsx`, and a crawler read every dead URL as a soft-404. Adding a new
+authenticated top-level route means adding it there; forgetting one exposes no data (RLS applies,
+and `app/(app)/layout.tsx` opens with its own `if (!user) redirect("/login")`), it just moves the
+bounce one layer in.
 
 Clients pay a one-time access fee (Stripe) to unlock the dashboard, then buy **credits** (1
 credit ≈ $1) that authorize the platform to launch ads on the client's *own* connected Meta ad
@@ -917,7 +924,9 @@ A funnel page previously had no URL at all until it was published — the public
 `bridge_published` — and Preview was a `blob:` document built client-side, so the one thing you
 want right after generating a kit had no link you could open, bookmark or send to a teammate.
 
-**Signed-in only, and the gate is by omission.** `/preview` is in NEITHER `PUBLIC_EXACT_PATHS` nor
+**Signed-in only, and `/preview` is named in `PROTECTED_PREFIXES` for it.** It is a Route Handler
+outside `app/(app)/`, so no layout redirect stands behind it and middleware is its only edge check
+— which is why it is listed by name rather than left to a default. `/preview` is in NEITHER `PUBLIC_EXACT_PATHS` nor
 `PUBLIC_PREFIX_PATHS`, so middleware's auth gate turns an anonymous request away before the
 handler runs — everything unlisted is gated by default. **Do not add `/preview` to either list.**
 It also reads through the RLS-scoped client AND filters `workspace_id`, so a signed-in member of
@@ -3706,6 +3715,34 @@ page), and the disclosure still renders last. Found while doing it, unrelated an
 bridge page with NO `lead_capture_form` — a state `requiredLockedKinds` explicitly permits — still
 emits the opt-in submit handler unconditionally, so `getElementById('leadForm')` is null and the
 page throws on every load.
+
+## Two 404s, for two different audiences
+
+`app/not-found.tsx` covers the app's own unmatched paths. `lib/notFoundPage.ts`'s `publicNotFound()`
+covers every PUBLIC route — funnel pages, funnel steps, the blog, custom domains, the signed-in
+preview. They are separate because the public one carries two constraints the app one doesn't:
+
+- **It is not an oracle.** No such campaign, a campaign that exists but isn't published, a draft
+  post, a path mapped to no route, a workspace subdomain asked for another workspace's id — all
+  return THE SAME BYTES. An unguessable campaign UUID *is* the access control on those routes
+  (an anonymous request has no RLS identity), so a 404 that varied by cause would enumerate.
+  Verified by hashing the responses: four different failure reasons, one identical digest.
+- **It is unbranded off our own host.** A visitor mistyping a path on a tenant's bring-your-own
+  domain is on the TENANT's site. Putting our wordmark and a link to us there would advertise the
+  tooling behind their funnel to their own traffic. `classifyHost` decides; anything `custom` —
+  including an absent Host header, the fail-safe direction — gets the plain version with no brand
+  and no outbound link, because there is nowhere we have any business sending that visitor.
+
+It replaced eleven separate `new Response("Not found")` call sites across five files. Eleven copies
+of a security-relevant response is how one of them ends up saying something the others don't.
+**The one deliberate hold-out is `servePublicCampaignImage`**, which answers an `<img src>` and
+Instagram's fetcher — nothing there renders a document, so a styled page would be bytes no one
+sees. The property that matters still holds.
+
+`app/not-found.tsx` is self-contained by necessity: Next renders the root not-found inside
+`app/layout.tsx` only, which is fonts and `<body>`, so no nav, sidebar or container comes with it.
+It links to both the marketing home and the dashboard because it cannot know which side of the
+paywall the reader is on.
 
 ## A failed poll must not be stored where an array belongs
 
