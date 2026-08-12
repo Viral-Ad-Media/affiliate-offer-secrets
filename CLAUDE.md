@@ -552,6 +552,8 @@ re-keyed to `(workspace_id, …)`, all their `get_*_connection_status`/`disconne
 workspace-scoped with the same optional `p_workspace_id` shape. Three more admin-client writes
 that relied on the trigger now stamp `workspace_id` explicitly (`tiktok/callback`,
 `everflow/connect`, `mail-providers`), and their `onConflict` targets moved with the constraints.
+(Everflow has since been removed entirely — see below — so its route and RPC named here no longer
+exist. The rest of that description still holds.)
 
 - **`active_mail_provider` moved from `profiles` to `workspaces`** as part of that, because it was
   a genuine split-brain, not just an inconsistency: `lib/mail/send.ts` read the provider *name*
@@ -1913,6 +1915,36 @@ foundation.
   work for ClickBank — before writing any discovery code against it, not an assumption. Connect
   (Affiliate ID) + manual product entry + full content-kit generation for Digistore24 is real,
   buildable work independent of that spike and not blocked on it.
+
+### Everflow is gone (0091)
+
+0046 added Everflow as the "one adapter reaches dozens of CPA networks" bet — the API key
+identifies both the affiliate and their network, so a single integration would have covered every
+CPA network running on that platform. It never got past connect-only: no discovery, no offer
+import, nothing that completes a workflow. `0091_remove_everflow.sql` drops
+`everflow_connections` and `get_everflow_connection_status`, and narrows both
+`network_connections.network` and `products.network` back to `('clickbank','digistore24')`.
+`app/api/everflow/*`, `components/EverflowPanel.tsx` and `lib/everflow/` are deleted.
+
+- **This DROPS a table, which departs from the `youtube_connections`/`mail_connections`/
+  `profiles.nickname` precedent of leaving dead schema in place.** That precedent exists for
+  reasons that don't apply here: `youtube_posts` is one of the six tables `audit_events` UNIONs,
+  so dropping it meant rewriting a view for no gain. `everflow_connections` is in no view, joined
+  by nothing, and held only a pointer into Vault.
+- **What made the drop safe was measuring, not tidiness.** Immediately before applying: 0 rows in
+  `everflow_connections`, 0 `network_connections` with `network='everflow'`, 0 such `products`. So
+  nobody lost a connection, no Vault secret was orphaned, and neither CHECK could fail on existing
+  data. **A non-empty `everflow_connections` would need its secrets deleted through
+  `delete_oauth_secret` FIRST** — dropping the table strands them with nothing pointing at them,
+  and no other column references `api_key_secret_id`.
+- **Narrowing `products.network` matters more than it looks**: it is what `buildHoplink()` branches
+  on, and a value no branch handles renders as a ClickBank-shaped link for a network that isn't
+  ClickBank. Verified live after applying that an UPDATE to `'everflow'` is refused by the
+  constraint (in a probe that rolled itself back), and that products/network_connections row counts
+  were untouched.
+- The account-deletion route's Vault sweep lost its `everflow_connections` entry. That list is
+  deliberately exhaustive — its comment says a newly-added connector shows up as a missing entry
+  rather than a silent leak — so a *removed* connector has to come out of it too.
 
 ## Lead capture (Contacts)
 

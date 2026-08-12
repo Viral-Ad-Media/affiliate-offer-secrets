@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 const NETWORKS = ["clickbank", "digistore24"] as const;
 // The same charset network_connections' CHECK enforces, restated so a bad value comes back as a
-// sentence instead of a constraint violation — the precedent everflow/connect already set.
+// sentence instead of a constraint violation.
 const AFFILIATE_ID_RE = /^[A-Za-z0-9_.-]{1,64}$/;
 
 /**

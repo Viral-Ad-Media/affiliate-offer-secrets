@@ -29,7 +29,6 @@ const SECRET_SOURCES: SecretSource[] = [
   { table: "youtube_connections", columns: ["access_token_secret_id", "refresh_token_secret_id"] },
   { table: "mail_connections", columns: ["access_token_secret_id", "refresh_token_secret_id"] },
   { table: "mail_provider_connections", columns: ["secret_id"] },
-  { table: "everflow_connections", columns: ["api_key_secret_id"] },
 ];
 
 function isMissingOptionalTable(source: SecretSource, error: { code?: string } | null) {

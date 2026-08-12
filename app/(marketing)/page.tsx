@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 // Everything claimed on this page has actually shipped. Two things deliberately NOT claimed,
 // because they haven't: automated marketplace discovery for anything but ClickBank (Digistore24 is
-// manual product entry, Everflow is connect-only), and SMS.
+// manual product entry), and SMS.
 
 const STEPS = [
   {
