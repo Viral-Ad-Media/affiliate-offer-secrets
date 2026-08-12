@@ -278,6 +278,57 @@ export function themeFromBrandColors(
   };
 }
 
+/**
+ * Gives alternating content sections a tinted band, so the page reads as distinct areas instead
+ * of one continuous column of text.
+ *
+ * Applied as a post-pass over an already-normalised tree rather than inside `normalizePageCopy`,
+ * for two reasons: that function is documented as pure and signature-stable, and the brand colour
+ * isn't known until the theme has been derived, which happens later in `stagePages`.
+ *
+ * Only sections that contain a ROW are banded. That is not arbitrary — a row is where the
+ * generated layout put its grids (the benefits columns, the FAQ pairs), and a band behind a grid
+ * reads as a deliberate feature area, while a band behind a lone paragraph just looks like a
+ * highlight someone forgot to remove.
+ *
+ * The colour is a real stored hex, not a variable, because `sanitizeStyle` only accepts
+ * `#rrggbb` — so it is a snapshot of the brand colour at generation time. An operator who later
+ * changes the page theme will need to change these too; the alternative (a var) is not
+ * expressible in the style model, and inventing one for this would put a second, weaker theming
+ * mechanism next to the existing one.
+ */
+export function applySectionBands<T extends { blocks: unknown[] }>(tree: T, accent: string | undefined): T {
+  if (!accent || !HEX.test(accent)) return tree;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(accent.slice(i, i + 2), 16));
+  // Stronger than the page background (5%) so the band is visible against it, still far too pale
+  // to affect text contrast — the same argument, and the same guard, as themeFromBrandColors.
+  const band = mixWithWhite(r, g, b, 0.1);
+  if (contrastRatio(THEME_DEFAULTS.text, band) < 4.5) return tree;
+
+  let banded = 0;
+  const blocks = (tree.blocks as Record<string, unknown>[]).map((blockRaw) => {
+    const block = blockRaw as { type?: string; style?: Record<string, unknown>; children?: { type?: string }[] };
+    if (block.type !== "section") return blockRaw;
+    const hasRow = (block.children ?? []).some((c) => c?.type === "row");
+    if (!hasRow) return blockRaw;
+    // Alternate, so two grid sections in a row don't merge into one long tinted slab.
+    if (banded++ % 2 === 1) return blockRaw;
+    return {
+      ...block,
+      style: {
+        ...(block.style ?? {}),
+        backgroundColor: band,
+        paddingTop: 28,
+        paddingBottom: 28,
+        paddingLeft: 20,
+        paddingRight: 20,
+        borderRadius: 16,
+      },
+    };
+  });
+  return { ...tree, blocks };
+}
+
 /** WCAG relative luminance of an sRGB triple. */
 function relativeLuminance(r: number, g: number, b: number): number {
   const lin = (c: number) => {

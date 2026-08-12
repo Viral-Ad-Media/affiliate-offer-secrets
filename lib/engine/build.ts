@@ -2,7 +2,7 @@ import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic"
 import { fetchSalesPage, type ImageCandidate, type BrandStyle } from "./salespage";
 import { pickProductImage, fetchImageAsDataUrl } from "./images";
 import { renderBridgeHtml, buildHoplink, normalizePageCopy, keywordsOf, type PageBlockTree, type PageCopy, type Network, type TrackingSettings } from "./renderPages";
-import { themeFromBrandColors } from "./pageTheme";
+import { themeFromBrandColors, applySectionBands } from "./pageTheme";
 import { db } from "./core";
 import type { FbAdAngle, SocialPost } from "@/lib/shared";
 import { wants, type KitAssetKey, type CountableKitAssetKey } from "@/lib/kitAssets";
@@ -245,7 +245,7 @@ Also plan the search targeting for this offer: one primary keyword a real buyer 
   // lib/engine/renderPages.ts's header comment) — normalize it into a block tree once here so
   // every newly-built campaign persists version-2 page_copy going forward, rather than relying on
   // renderBridgeHtml's own internal (idempotent) normalization at every future read.
-  const tree = normalizePageCopy(copy, imageDataUrl);
+  let tree = normalizePageCopy(copy, imageDataUrl, { siteName: product.product_title });
   // The plan rides on the tree, like contentWidth and theme — the funnel page, its variants, its
   // steps and the blog post derived from it all read page_copy, so one write covers them.
   const planned = keywordsOf({ keywords: (copy as unknown as { keywords?: unknown }).keywords } as PageBlockTree);
@@ -260,7 +260,12 @@ Also plan the search targeting for this offer: one primary keyword a real buyer 
     headingFont: brandStyle.headingFont,
     buttonShape: brandStyle.buttonShape,
   });
-  if (brandTheme) tree.theme = brandTheme;
+  if (brandTheme) {
+    tree.theme = brandTheme;
+    // Tinted bands behind the grid sections, from the same accent — see applySectionBands for why
+    // this is a post-pass and why only sections containing a row get one.
+    tree = applySectionBands(tree, brandTheme.colors?.primary);
+  }
   // A REBUILD of a campaign whose funnel already has tracking settings must keep its snippets —
   // fresh builds just read null here (the column defaults to null until funnel settings set it).
   const { data: trackingRow } = await db.from("campaigns").select("tracking").eq("id", campaignId).maybeSingle();

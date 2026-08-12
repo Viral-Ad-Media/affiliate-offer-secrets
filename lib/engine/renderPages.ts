@@ -25,6 +25,8 @@ import {
   type PageBlockTree,
   type RenderCtx,
   type SectionBlock,
+  type RowBlock,
+  type ColumnBlock,
   type LockedBlock,
   type ElementBlock,
   type FormInputBlock,
@@ -133,10 +135,36 @@ function legacyId(): string {
   return `legacy-${legacyIdCounter++}`;
 }
 
+/**
+ * Deterministic 32-bit hash (FNV-1a). Seeds the layout choices below.
+ *
+ * Layout has to VARY between products or every generated page is the same shape, and it has to be
+ * STABLE for one product or a rebuild silently rearranges a page someone has been running traffic
+ * to. Hashing the headline gives both: different copy lands on a different arrangement, the same
+ * copy always lands on the same one. Deliberately not Math.random — this function's determinism is
+ * a documented property, and a page that reshuffles on every render is not reviewable.
+ */
+function layoutSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Splits items into `n` contiguous, as-even-as-possible groups. Reading order across columns. */
+function splitInto<T>(items: T[], n: number): T[][] {
+  const out: T[][] = Array.from({ length: n }, () => []);
+  const per = Math.ceil(items.length / n);
+  items.forEach((item, i) => out[Math.min(n - 1, Math.floor(i / per))].push(item));
+  return out;
+}
+
 export function normalizePageCopy(
   raw: unknown,
   imageDataUrl: string | null,
-  opts?: { stepType?: FunnelStepType }
+  opts?: { stepType?: FunnelStepType; siteName?: string }
 ): PageBlockTree {
   if (isPageBlockTree(raw)) return raw;
 
@@ -182,16 +210,109 @@ export function normalizePageCopy(
     ],
   };
 
-  const sectionChildren = resolveSectionOrder(copy.sectionOrder).flatMap((key) => sectionHtml[key]);
+  // ---------------------------------------------------------------------------------------
+  // Layout. The AI still returns the same flat fields it always has — retraining that schema to
+  // emit a block tree is explicitly out of scope (see the note at the top of this file) — so the
+  // arrangement is composed HERE, from content the model already produced.
+  //
+  // Before this, everything went into one umbrella section as a single column of blocks: the
+  // page builder had sections, rows and columns, and generated pages used none of them. Now each
+  // part of the page is its own root-level section (which also makes them individually draggable
+  // in the editor), and the two parts with repeating content — benefits and FAQ — become real
+  // multi-column rows.
+  //
+  // Column counts are driven by how MUCH content there is, not by taste: three bullets read well
+  // as three columns, two do not, and one always stays full width. Where more than one
+  // arrangement genuinely works, `seed` picks between them so two products don't come out
+  // identically shaped.
+  // ---------------------------------------------------------------------------------------
+  const seed = layoutSeed(headline || lead || "aos");
 
-  const umbrellaSection: SectionBlock = {
+  const col = (children: ElementBlock[]): ColumnBlock => ({
+    id: legacyId(),
+    type: "column",
+    style: {},
+    children,
+  });
+  // The validator hard-rejects a row whose column count doesn't match its layout, so the two are
+  // always derived from the same number here rather than passed separately.
+  const rowOf = (groups: ElementBlock[][]): RowBlock => ({
+    id: legacyId(),
+    type: "row",
+    layout: groups.length === 3 ? "3col" : groups.length === 2 ? "2col" : "1col",
+    style: {},
+    columns: groups.map(col),
+  });
+
+  const sectionOf = (children: (RowBlock | ElementBlock)[]): SectionBlock => ({
     id: legacyId(),
     type: "section",
     style: {},
-    children: [{ id: legacyId(), type: "heading", style: {}, content: { text: headline } }, ...sectionChildren],
+    children,
+  });
+
+  const sectionLayout: Record<SectionKey, () => (RowBlock | ElementBlock)[]> = {
+    // Hero. With an image it becomes a real two-column split — copy beside the product shot —
+    // which is the arrangement a single column could never express. Without one it stays full
+    // width rather than leaving an empty column.
+    lead: () => {
+      const [para, image] = [sectionHtml.lead[0], sectionHtml.lead[1]];
+      if (!image) return [para];
+      // Which side the image sits on is the one genuinely free choice here, so it varies.
+      return [seed % 2 === 0 ? rowOf([[para], [image]]) : rowOf([[image], [para]])];
+    },
+    // A single explanatory paragraph. Nothing to split.
+    mechanism: () => sectionHtml.mechanism,
+    // Benefits are the natural grid: the heading stays full width above a row of columns, each
+    // holding its share of the bullets as its own list.
+    benefits: () => {
+      const [heading, list] = sectionHtml.benefits;
+      const items = benefits.filter((b) => b.trim());
+      if (items.length < 2) return [heading, list];
+      // 3 columns only when they divide sensibly and each still gets something to say.
+      const cols = items.length % 3 === 0 && items.length >= 3 ? 3 : items.length >= 4 && seed % 3 === 0 ? 3 : 2;
+      const groups = splitInto(items, Math.min(cols, items.length));
+      return [
+        heading,
+        rowOf(
+          groups.map((group) => [
+            { id: legacyId(), type: "bullet_list", style: {}, content: { items: group } } as ElementBlock,
+          ])
+        ),
+      ];
+    },
+    proof: () => sectionHtml.proof,
+    // FAQ pairs sit side by side once there are enough of them to make two columns balance.
+    faq: () => {
+      const [heading, ...items] = sectionHtml.faq;
+      if (items.length < 4) return [heading, ...items];
+      const groups = splitInto(items, 2);
+      return [heading, rowOf(groups)];
+    },
   };
 
-  const blocks: (SectionBlock | LockedBlock)[] = [umbrellaSection];
+  const heroHeading: ElementBlock = {
+    id: legacyId(),
+    type: "heading",
+    style: {},
+    content: { text: headline },
+  };
+
+  const order = resolveSectionOrder(copy.sectionOrder);
+  const contentSections: SectionBlock[] = order
+    .map((key, i) => {
+      const children = sectionLayout[key]().filter(Boolean);
+      // The headline belongs to whichever section comes first, so reordering sections in the
+      // editor can never leave the page without one at the top.
+      return sectionOf(i === 0 ? [heroHeading, ...children] : children);
+    })
+    // A section whose only content was an empty string renders as a gap; drop it rather than ship
+    // an empty band. `pruneEmptySections` does the same job for hand-built funnels.
+    .filter((s) => s.children.length > 0);
+
+  const blocks: (SectionBlock | LockedBlock)[] = contentSections.length
+    ? contentSections
+    : [sectionOf([heroHeading])];
 
   if (opts?.stepType === "upsell") {
     blocks.push({
@@ -221,6 +342,24 @@ export function normalizePageCopy(
       content: { ctaText: cta, afterSubmit: { kind: "offer" }, successText: "Thanks — check your inbox." },
       children: [] as FormInputBlock[],
     });
+  }
+
+  // A footer, when there is something real to put in it.
+  //
+  // Links are deliberately NOT generated. A footer's links are Privacy/Terms/Contact for whoever
+  // runs the page, and this code has no idea what those URLs are — emitting `#` placeholders would
+  // ship dead links onto a page taking paid ad traffic, which is worse than no links at all. The
+  // block is there with the operator's own name in it; adding links is one drag in the editor.
+  //
+  // The affiliate disclosure is NOT part of this: it stays its own locked block, and the renderer
+  // hoists it below everything regardless of where it sits (see renderBlockTree).
+  const siteName = (opts?.siteName ?? "").trim();
+  if (siteName) {
+    blocks.push(
+      sectionOf([
+        { id: legacyId(), type: "footer", style: {}, content: { text: siteName, links: [] } } as ElementBlock,
+      ])
+    );
   }
 
   blocks.push({ id: legacyId(), type: "disclosure", locked: "disclosure", style: {}, content: {} });
@@ -471,11 +610,24 @@ const PAGE_STYLE = `
     .wrap > *:nth-child(4) { animation-delay:.20s; }
     .wrap > *:nth-child(n+5) { animation-delay:.24s; }
 
+    /* The scroll-linked layer moves things; it never FADES them, and that is a correctness
+       requirement rather than a style choice.
+
+       A scroll-driven animation only advances as far as its element's scroll range allows, and
+       elements at the very end of a short document never scroll far enough to finish theirs —
+       they freeze partway. With opacity in the keyframes that means permanently invisible, which
+       is exactly what happened here: the footer and the AFFILIATE DISCLOSURE both sat at
+       opacity 0 at the bottom of the page, and the disclosure is required on every page by
+       content rule 3. Caught by scrolling to the bottom and reading back computed opacity.
+
+       Animating transform alone removes the failure mode entirely: the worst a stuck element can
+       do is sit a few pixels low, fully visible and readable. The fade still happens — it comes
+       from the time-based animation above, which always completes because time always passes. */
+    @keyframes aos-slide { from { transform:translateY(14px); } to { transform:none; } }
+
     @supports (animation-timeline: view()) {
-      /* Re-driven by scroll position instead of by load. The delays above are cleared or every
-         block would sit out its stagger before its own scroll range began. */
       .wrap > * {
-        animation:aos-rise .6s cubic-bezier(.2,.7,.3,1) both;
+        animation:aos-slide .6s cubic-bezier(.2,.7,.3,1) both;
         animation-delay:0s;
         animation-timeline:view();
         animation-range:entry 0% entry 55%;
@@ -501,7 +653,7 @@ export function renderBridgeHtml(
   tracking?: TrackingSettings | null,
   seo?: SeoMeta | null
 ): string {
-  const tree = normalizePageCopy(copy, imageDataUrl);
+  const tree = normalizePageCopy(copy, imageDataUrl, { siteName: product.product_title });
   const ctx: RenderCtx = {
     pageKind: "bridge",
     disclosureText: DISCLOSURE,
@@ -632,7 +784,7 @@ export function renderFunnelStepHtml(
   tracking?: TrackingSettings | null,
   seo?: SeoMeta | null
 ): string {
-  const tree = normalizePageCopy(copy, imageDataUrl, { stepType });
+  const tree = normalizePageCopy(copy, imageDataUrl, { stepType, siteName: product.product_title });
   const ctx: RenderCtx = {
     pageKind: "funnel_step",
     stepType,
