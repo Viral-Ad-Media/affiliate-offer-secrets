@@ -1,15 +1,26 @@
 export const FB_API_VERSION = "v21.0";
 export const FB_GRAPH_BASE = `https://graph.facebook.com/${FB_API_VERSION}`;
 
-// ads_management is already App-Review-approved (per the user). Requesting it here means every
-// new/re-run connect flow grants it; existing Phase-B-only connections need one re-auth to add
-// it (Meta supports incremental auth — re-running the dialog keeps already-granted permissions).
-// instagram_basic/instagram_content_publish added for Phase E's Instagram posting — existing
-// connections need one re-auth to pick up the new scopes, same pattern as ads_management before.
+// The permission set this app actually uses, one entry per real Graph call:
+//   pages_show_list            -> /me/accounts
+//   pages_manage_posts         -> /{page-id}/feed, /{page-id}/photos
+//   instagram_basic            -> /{page-id}?fields=instagram_business_account
+//   instagram_content_publish  -> /{ig-user-id}/media, /media_publish
+//   ads_management             -> /me/adaccounts, /act_{id}/{campaigns,adsets,adcreatives,ads}
+//
+// **`pages_read_engagement` was removed**: nothing in this codebase reads engagement, insights,
+// reactions or comments — verified by grepping every Graph call before Meta App Review, where a
+// justification that doesn't match observed behaviour is what gets a submission rejected. Ask for
+// what is used and nothing else; it also shortens the consent screen a tenant has to approve.
+//
+// **This list is NOT what gets requested when FB_LOGIN_CONFIG_ID is set** (see getFbLoginConfigId
+// below). Under Facebook Login for Business the permissions come from the dashboard configuration
+// and `scope` is not sent at all, so editing this array changes nothing on that path — the
+// configuration has to be edited too. It stays as the classic-login fallback and as the
+// authoritative statement of what the app needs, which is what the configuration is built from.
 export const FB_OAUTH_SCOPES = [
   "pages_show_list",
   "pages_manage_posts",
-  "pages_read_engagement",
   "ads_management",
   "instagram_basic",
   "instagram_content_publish",

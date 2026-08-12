@@ -582,7 +582,7 @@ that relied on the trigger now stamp `workspace_id` explicitly (`tiktok/callback
   `${NEXT_PUBLIC_APP_URL}/api/meta/data-deletion` as the Data Deletion Request Callback URL in the
   Meta App Dashboard. Apps in Meta's **Development Mode** work immediately for Admins/Developers/Testers
   on the app with no App Review needed — sufficient for testing before deciding whether/when to
-  submit `pages_show_list`/`pages_manage_posts`/`pages_read_engagement` for public App Review
+  submit `pages_show_list`/`pages_manage_posts`/`instagram_basic`/`instagram_content_publish` for public App Review
   (separate from the already-approved `ads_management`).
 
 ### "Facebook Login for Business" is a different product, and its error message lies
@@ -626,6 +626,22 @@ when the dashboard field was saved.
 **App Domains is a separate field from Valid OAuth Redirect URIs** (Settings → Basic), and both are
 tag inputs: typing a value and pressing Save without first pressing Enter to turn it into a chip
 discards it silently, with no error and no visible change until reload. That happened once here.
+
+### Ask for the permissions the code actually calls, and nothing else
+
+`FB_OAUTH_SCOPES` is one entry per real Graph call, and `pages_read_engagement` was dropped from it
+because **nothing here reads engagement, insights, reactions or comments** — established by
+grepping every `graphGet`/`graphPost` call site, not by assumption. Meta's App Review asks you to
+justify each permission and then checks the justification against the screencast, so a permission
+you can't demonstrate is a rejection risk; it also lengthens the consent screen every tenant has to
+approve. The endpoint-per-permission mapping lives in the comment above that array — keep it
+accurate, since it is what an App Review submission is written from.
+
+**Under Login for Business, editing that array changes nothing.** `scope` isn't sent when
+`FB_LOGIN_CONFIG_ID` is set; the granted set comes from the dashboard configuration. The array
+remains the classic-login fallback and the authoritative statement of intent, but a permission
+change has to be made in BOTH places or the two silently disagree — and the only way to see what
+was really granted is the `[meta callback] granted scopes:` log line.
 
 ### Vault secret names are UNIQUE, so a deterministic name makes reconnect a one-shot
 
