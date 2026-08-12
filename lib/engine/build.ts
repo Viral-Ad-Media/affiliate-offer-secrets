@@ -1,6 +1,6 @@
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { fetchSalesPage, type ImageCandidate, type BrandStyle } from "./salespage";
-import { pickProductImage, fetchImageAsDataUrl } from "./images";
+import { pickProductImages, fetchImagesWithBudget } from "./images";
 import { renderBridgeHtml, buildHoplink, normalizePageCopy, keywordsOf, type PageBlockTree, type PageCopy, type Network, type TrackingSettings } from "./renderPages";
 import { themeFromBrandColors, applySectionBands } from "./pageTheme";
 import { db } from "./core";
@@ -95,12 +95,17 @@ async function stageImage(
   usage: UsageContext
 ): Promise<StageOutput> {
   const candidates = (prior.image_candidates as ImageCandidate[]) ?? [];
+  // Up to three: a hero, and one apiece for two of the sections below it. More than that stops
+  // being illustration and starts being page weight — see fetchImagesWithBudget, which caps the
+  // total regardless of how many come back.
   const picked =
-    candidates.length > 0 ? await pickProductImage(candidates, _product.product_title, usage) : null;
-  const dataUrl = picked ? await fetchImageAsDataUrl(picked.url) : null;
+    candidates.length > 0 ? await pickProductImages(candidates, _product.product_title, 3, usage) : [];
+  const dataUrls = await fetchImagesWithBudget(picked.map((p) => p.url));
   return {
-    stageData: { ...prior, image_data_url: dataUrl },
-    campaignPatch: { images_json: { source_images: picked ? [picked.url] : [] } },
+    // image_data_url stays the FIRST image: embedded_image_data_url, the Instagram poster and the
+    // ad-creative fallback all read it, and they each want one hero shot, not a gallery.
+    stageData: { ...prior, image_data_url: dataUrls[0] ?? null, image_data_urls: dataUrls },
+    campaignPatch: { images_json: { source_images: picked.map((p) => p.url) } },
   };
 }
 
@@ -245,7 +250,10 @@ Also plan the search targeting for this offer: one primary keyword a real buyer 
   // lib/engine/renderPages.ts's header comment) — normalize it into a block tree once here so
   // every newly-built campaign persists version-2 page_copy going forward, rather than relying on
   // renderBridgeHtml's own internal (idempotent) normalization at every future read.
-  let tree = normalizePageCopy(copy, imageDataUrl, { siteName: product.product_title });
+  let tree = normalizePageCopy(copy, imageDataUrl, {
+    siteName: product.product_title,
+    extraImages: (prior.image_data_urls as string[] | undefined)?.slice(1) ?? [],
+  });
   // The plan rides on the tree, like contentWidth and theme — the funnel page, its variants, its
   // steps and the blog post derived from it all read page_copy, so one write covers them.
   const planned = keywordsOf({ keywords: (copy as unknown as { keywords?: unknown }).keywords } as PageBlockTree);

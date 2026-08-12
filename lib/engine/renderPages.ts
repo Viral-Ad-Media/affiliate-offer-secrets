@@ -144,6 +144,13 @@ function legacyId(): string {
  * copy always lands on the same one. Deliberately not Math.random — this function's determinism is
  * a documented property, and a page that reshuffles on every render is not reviewable.
  */
+/**
+ * Icons that can sit beside a benefit without contradicting it. A deliberate SUBSET of
+ * ALLOWED_ICON_NAMES — that list also contains `alert-circle` and `x-circle`, which next to "no
+ * equipment needed" would read as a warning rather than a tick.
+ */
+const BENEFIT_ICONS = ["check-circle", "check", "star", "shield", "zap", "sparkles", "award", "target", "thumbs-up", "heart"];
+
 function layoutSeed(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -164,7 +171,7 @@ function splitInto<T>(items: T[], n: number): T[][] {
 export function normalizePageCopy(
   raw: unknown,
   imageDataUrl: string | null,
-  opts?: { stepType?: FunnelStepType; siteName?: string }
+  opts?: { stepType?: FunnelStepType; siteName?: string; extraImages?: string[] }
 ): PageBlockTree {
   if (isPageBlockTree(raw)) return raw;
 
@@ -251,6 +258,41 @@ export function normalizePageCopy(
     children,
   });
 
+  /**
+   * Benefits as an icon list rather than bullets.
+   *
+   * A tick beside a benefit is the single most recognisable landing-page convention there is, and
+   * the block type already existed — generated pages just never used it. Icons are picked from
+   * `BENEFIT_ICONS`, a subset of the allowlist chosen because each one reads as a POSITIVE (a
+   * tick, a shield, a spark); the full set includes `alert-circle` and `x-circle`, which beside a
+   * benefit would say the opposite of what the line says.
+   *
+   * Which icon a line gets is seeded rather than fixed, so pages don't all show the same column of
+   * identical ticks, and `offset` keeps the sequence running across a row's columns instead of
+   * restarting in each one. An unknown name could never render anyway — the renderer looks it up
+   * in ICON_SVG_PATHS and emits nothing on a miss — but these all come from that same map.
+   */
+  const iconList = (items: string[], offset = 0): ElementBlock => ({
+    id: legacyId(),
+    type: "icon_list",
+    style: {},
+    content: {
+      items: items.map((text, i) => ({
+        icon: BENEFIT_ICONS[(seed + offset + i) % BENEFIT_ICONS.length],
+        text,
+      })),
+    },
+  });
+
+  /**
+   * The nth EXTRA image, or null. The hero already used the first one, so these are the tail —
+   * `extraImages` is passed pre-sliced by the caller. Each is consumed at most once: a section
+   * asks for a specific index, so two sections can never render the same picture.
+   */
+  const extras = (opts?.extraImages ?? []).filter((u) => typeof u === "string" && u);
+  const extraImage = (n: number): ElementBlock | null =>
+    extras[n] ? { id: legacyId(), type: "image", style: {}, content: { dataUrl: extras[n], alt: "" } } : null;
+
   const sectionLayout: Record<SectionKey, () => (RowBlock | ElementBlock)[]> = {
     // Hero. With an image it becomes a real two-column split — copy beside the product shot —
     // which is the arrangement a single column could never express. Without one it stays full
@@ -261,27 +303,30 @@ export function normalizePageCopy(
       // Which side the image sits on is the one genuinely free choice here, so it varies.
       return [seed % 2 === 0 ? rowOf([[para], [image]]) : rowOf([[image], [para]])];
     },
-    // A single explanatory paragraph. Nothing to split.
-    mechanism: () => sectionHtml.mechanism,
+    // A single explanatory paragraph — paired with a second product shot when one was fetched, so
+    // the middle of the page isn't an unbroken wall of text.
+    mechanism: () => {
+      const img = extraImage(0);
+      if (!img) return sectionHtml.mechanism;
+      const [sub, para] = sectionHtml.mechanism;
+      // Opposite side to the hero, so the two rows don't stack into one column of images.
+      return [sub, seed % 2 === 0 ? rowOf([[img], [para]]) : rowOf([[para], [img]])];
+    },
     // Benefits are the natural grid: the heading stays full width above a row of columns, each
     // holding its share of the bullets as its own list.
     benefits: () => {
       const [heading, list] = sectionHtml.benefits;
       const items = benefits.filter((b) => b.trim());
-      if (items.length < 2) return [heading, list];
+      if (items.length < 2) return [heading, iconList(items)];
       // 3 columns only when they divide sensibly and each still gets something to say.
       const cols = items.length % 3 === 0 && items.length >= 3 ? 3 : items.length >= 4 && seed % 3 === 0 ? 3 : 2;
       const groups = splitInto(items, Math.min(cols, items.length));
-      return [
-        heading,
-        rowOf(
-          groups.map((group) => [
-            { id: legacyId(), type: "bullet_list", style: {}, content: { items: group } } as ElementBlock,
-          ])
-        ),
-      ];
+      return [heading, rowOf(groups.map((group, gi) => [iconList(group, gi * 100)]))];
     },
-    proof: () => sectionHtml.proof,
+    proof: () => {
+      const img = extraImage(1);
+      return img ? [...sectionHtml.proof, img] : sectionHtml.proof;
+    },
     // FAQ pairs sit side by side once there are enough of them to make two columns balance.
     faq: () => {
       const [heading, ...items] = sectionHtml.faq;
@@ -334,14 +379,25 @@ export function normalizePageCopy(
     // `offer` resolves at render time to the next funnel step when one exists, else the hoplink —
     // exactly where the old reveal-and-click CTA pointed, so this changes the number of clicks,
     // not the destination.
-    blocks.push({
+    const form: LockedBlock = {
       id: legacyId(),
       type: "lead_capture_form",
       locked: "lead_capture_form",
       style: {},
       content: { ctaText: cta, afterSubmit: { kind: "offer" }, successText: "Thanks — check your inbox." },
       children: [] as FormInputBlock[],
-    });
+    };
+    // WHERE the form sits varies, because "always at the very bottom" is a real cost on a long
+    // page: a reader who is convinced by the second section has to scroll past everything else to
+    // act. Two placements, both of which keep the form after enough copy to have made the case —
+    // never before the first section, which would ask for an email before saying anything.
+    //
+    // Only the position varies. The form itself, its consent text and its afterSubmit action are
+    // identical either way; this is not an A/B test and must not be mistaken for one (that is
+    // bridge_variants' job, and it measures results — this does not).
+    const midpoint = Math.max(1, Math.ceil(blocks.length / 2));
+    if (blocks.length >= 4 && seed % 3 === 0) blocks.splice(midpoint, 0, form);
+    else blocks.push(form);
   }
 
   // A footer, when there is something real to put in it.
