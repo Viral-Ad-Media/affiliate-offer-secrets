@@ -1,5 +1,5 @@
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
-import { fetchSalesPage, type ImageCandidate } from "./salespage";
+import { fetchSalesPage, type ImageCandidate, type BrandStyle } from "./salespage";
 import { pickProductImage, fetchImageAsDataUrl } from "./images";
 import { renderBridgeHtml, buildHoplink, normalizePageCopy, keywordsOf, type PageBlockTree, type PageCopy, type Network, type TrackingSettings } from "./renderPages";
 import { themeFromBrandColors } from "./pageTheme";
@@ -68,7 +68,13 @@ function buildHoplinks(network: Network, affiliateId: string, vendorId: string, 
 async function stageContext(product: ProductRow, affiliateId: string): Promise<StageOutput> {
   const page = product.sales_page_url
     ? await fetchSalesPage(product.sales_page_url)
-    : { ok: false, text: null, imageCandidates: [] as ImageCandidate[], brandColors: [] as string[] };
+    : {
+        ok: false,
+        text: null,
+        imageCandidates: [] as ImageCandidate[],
+        brandColors: [] as string[],
+        brandStyle: {} as BrandStyle,
+      };
   const hoplinks = buildHoplinks(product.network, affiliateId, product.vendor_id, product.hoplink_override);
   return {
     stageData: {
@@ -76,6 +82,7 @@ async function stageContext(product: ProductRow, affiliateId: string): Promise<S
       image_candidates: page.imageCandidates,
       page_ok: page.ok,
       brand_colors: page.brandColors,
+      brand_style: page.brandStyle,
       hoplink_by_channel: hoplinks.byChannel,
     },
     campaignPatch: { hoplinks_txt: hoplinks.text },
@@ -243,11 +250,16 @@ Also plan the search targeting for this offer: one primary keyword a real buyer 
   // steps and the blog post derived from it all read page_copy, so one write covers them.
   const planned = keywordsOf({ keywords: (copy as unknown as { keywords?: unknown }).keywords } as PageBlockTree);
   if (planned) tree.keywords = planned;
-  // Theme the page from the colours on the product's OWN sales page (stage 0 collected them).
-  // Only the accent is taken — see themeFromBrandColors for why the reading surface is left
-  // alone. A rebuild re-derives it; a tenant's own edits live on the saved tree and are only
-  // replaced when they deliberately rebuild the kit, same as every other generated field.
-  const brandTheme = themeFromBrandColors((prior.brand_colors as string[] | undefined) ?? []);
+  // Theme the page from the product's OWN sales page (stage 0 collected the colours, the heading
+  // typeface and the button roundness). The accent drives buttons and links; the reading surfaces
+  // are TINTED toward it rather than painted with it, and the tint is re-measured for contrast —
+  // see themeFromBrandColors. A rebuild re-derives all of it; a tenant's own edits live on the
+  // saved tree and are only replaced when they deliberately rebuild, same as every generated field.
+  const brandStyle = (prior.brand_style as BrandStyle | undefined) ?? {};
+  const brandTheme = themeFromBrandColors((prior.brand_colors as string[] | undefined) ?? [], {
+    headingFont: brandStyle.headingFont,
+    buttonShape: brandStyle.buttonShape,
+  });
   if (brandTheme) tree.theme = brandTheme;
   // A REBUILD of a campaign whose funnel already has tracking settings must keep its snippets —
   // fresh builds just read null here (the column defaults to null until funnel settings set it).

@@ -381,6 +381,107 @@ const PAGE_STYLE = `
   .decline { color:var(--t-muted,#888); text-decoration:underline; font-size:14px; }
   .disclosure { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e5e5; font-size: 12px; color: #888; }
   .optin .disclosure { margin-top: 12px; padding-top: 0; border-top: none; text-align: left; }
+
+  /* ==========================================================================================
+     The funnel page's own look. EVERY selector below is scoped under .wrap, which only funnel
+     pages emit — blog posts use <main> and share almost every block class through PUBLIC_CSS
+     (.block-btn, .testimonial, .carousel, .optin…), so an unscoped rule here would silently
+     restyle the blog too. That is the one hard constraint in this block; keep the .wrap prefix.
+
+     None of this touches a published page. HTML is rendered and stored at write time, so a live
+     funnel keeps the stylesheet it was built with until it is rebuilt or re-saved.
+
+     Colour comes from --t-primary-rgb (see pageTheme.ts), which is derived from the product's own
+     sales page — so two products produce visibly different pages rather than the same white sheet.
+     ========================================================================================== */
+
+  /* A soft wash of the brand colour behind the top of the page. Fixed height and -1 z-index so it
+     sits behind content without affecting layout or catching clicks. */
+  .wrap { position:relative; }
+  .wrap::before {
+    content:""; position:absolute; top:0; left:50%; transform:translateX(-50%);
+    width:100vw; height:min(520px, 60vh); z-index:-1; pointer-events:none;
+    background:
+      radial-gradient(60% 70% at 50% 0%, rgba(var(--t-primary-rgb,22,163,74), .13), transparent 70%),
+      linear-gradient(to bottom, rgba(var(--t-primary-rgb,22,163,74), .05), transparent);
+  }
+
+  /* Type scale that responds to the viewport instead of one fixed size. clamp() keeps the themed
+     --t-h1-size as the upper bound, so a tenant raising it in the editor still wins. */
+  .wrap h1 { font-size:clamp(30px, 5.2vw, var(--t-h1-size,32px)); letter-spacing:-0.022em; margin-top:0; }
+  .wrap h2 { font-size:clamp(21px, 3.2vw, var(--t-h2-size,22px)); letter-spacing:-0.012em; }
+  .wrap .section { margin:0 0 8px; }
+  .wrap .section + .section { margin-top:12px; }
+
+  /* Images get depth rather than sitting flat on the page. */
+  .wrap .block-img { box-shadow:0 12px 32px -12px rgba(0,0,0,.28); }
+
+  /* Buttons: a subtle vertical gradient, a shadow tinted with the brand hue, and a press. */
+  .wrap .cta, .wrap .block-btn {
+    background-image:linear-gradient(to bottom, rgba(255,255,255,.14), rgba(0,0,0,.06));
+    box-shadow:0 8px 20px -8px rgba(var(--t-primary-rgb,22,163,74), .55);
+    /* Colour and shadow only. The lift is MOTION, so it lives behind the reduced-motion query
+       below with everything else that moves — a hover that shifts the button under the cursor is
+       exactly what someone with that preference set has asked not to have. */
+    transition:box-shadow .16s ease, background-color .16s ease;
+  }
+  .wrap .cta:hover, .wrap .block-btn:hover { box-shadow:0 12px 26px -8px rgba(var(--t-primary-rgb,22,163,74), .68); }
+  .wrap .cta:active, .wrap .block-btn:active { box-shadow:0 4px 12px -6px rgba(var(--t-primary-rgb,22,163,74), .5); }
+
+  /* The opt-in box is the thing the page exists for, so it reads as a raised card with a brand
+     edge along the top rather than a bordered rectangle. */
+  .wrap .optin {
+    border-radius:16px;
+    box-shadow:0 24px 48px -24px rgba(16,24,40,.28), 0 2px 6px -2px rgba(16,24,40,.08);
+    border-top:3px solid var(--t-primary,#16a34a);
+    padding:28px 24px;
+  }
+  .wrap .optin input, .wrap .optin textarea, .wrap .optin select { transition:border-color .15s ease, box-shadow .15s ease; }
+  .wrap .optin input:focus, .wrap .optin textarea:focus, .wrap .optin select:focus {
+    box-shadow:0 0 0 3px rgba(var(--t-primary-rgb,22,163,74), .18);
+  }
+
+  /* Testimonials as cards, matching the opt-in's language. */
+  .wrap .testimonial { border-radius:12px; box-shadow:0 10px 24px -18px rgba(16,24,40,.4); }
+
+  /* --- Motion -----------------------------------------------------------------------------
+     Two layers, both CSS. The page still ships no JavaScript of its own: a funnel page that
+     needed a script to become visible would be a page that renders blank when one fails.
+
+     1. An entrance rise for the first few root blocks, staggered.
+     2. A scroll-linked reveal for everything, behind @supports — where the browser lacks
+        animation-timeline the rules never apply and content is simply visible, which is the
+        right failure direction for a page carrying paid traffic.
+
+     Both are wrapped in prefers-reduced-motion: no-preference. Honouring that is not optional
+     here: these pages are shown to whoever clicks the ad, including people for whom motion
+     causes real symptoms. */
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes aos-rise { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
+
+    /* The button's lift, kept with the rest of the motion. */
+    .wrap .cta, .wrap .block-btn { transition:transform .16s ease, box-shadow .16s ease, background-color .16s ease; }
+    .wrap .cta:hover, .wrap .block-btn:hover { transform:translateY(-1px); }
+    .wrap .cta:active, .wrap .block-btn:active { transform:translateY(1px); }
+
+    .wrap > * { animation:aos-rise .5s cubic-bezier(.2,.7,.3,1) both; }
+    .wrap > *:nth-child(1) { animation-delay:.02s; }
+    .wrap > *:nth-child(2) { animation-delay:.08s; }
+    .wrap > *:nth-child(3) { animation-delay:.14s; }
+    .wrap > *:nth-child(4) { animation-delay:.20s; }
+    .wrap > *:nth-child(n+5) { animation-delay:.24s; }
+
+    @supports (animation-timeline: view()) {
+      /* Re-driven by scroll position instead of by load. The delays above are cleared or every
+         block would sit out its stagger before its own scroll range began. */
+      .wrap > * {
+        animation:aos-rise .6s cubic-bezier(.2,.7,.3,1) both;
+        animation-delay:0s;
+        animation-timeline:view();
+        animation-range:entry 0% entry 55%;
+      }
+    }
+  }
 `;
 
 // Step 1 is the advertorial (headline + content blocks) plus the opt-in form. Step 2 is the

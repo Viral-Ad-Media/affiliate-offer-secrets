@@ -98,6 +98,11 @@ export const THEME_DEFAULTS = {
 } as const;
 
 const hex = (v: unknown, fallback: string) => (typeof v === "string" && HEX.test(v) ? v.toLowerCase() : fallback);
+
+/** "#16a34a" → "22,163,74". Input is always an already-validated hex, so this can't emit anything else. */
+function rgbChannels(hexColor: string): string {
+  return [1, 3, 5].map((i) => parseInt(hexColor.slice(i, i + 2), 16)).join(",");
+}
 const num = (v: unknown, min: number, max: number, fallback: number) =>
   typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : fallback;
 
@@ -175,6 +180,11 @@ export function themeToCssVars(raw: unknown): string {
 
   const vars: [string, string][] = [
     ["--t-primary", primary],
+    // The primary's channels, so the stylesheet can compose tints with rgba() — a soft brand wash
+    // behind the hero, a tinted focus ring, a shadow that carries the brand hue. A hex var can't
+    // do that, and `color-mix()` would put the whole visual treatment behind one browser feature
+    // on pages that take paid traffic. Numbers only, derived from an already-validated hex.
+    ["--t-primary-rgb", rgbChannels(primary)],
     ["--t-primary-hover", hex(c.primaryHover, d.primaryHover)],
     ["--t-on-primary", onPrimary],
     ["--t-text", hex(c.text, d.text)],
@@ -222,7 +232,10 @@ export function themeToCssVars(raw: unknown): string {
  * darkened, and the label is black or white based on the primary's actual luminance, so a
  * light brand colour doesn't produce white-on-yellow.
  */
-export function themeFromBrandColors(colors: string[]): PageTheme | undefined {
+export function themeFromBrandColors(
+  colors: string[],
+  extras?: { headingFont?: ThemeFont; buttonShape?: ButtonShape }
+): PageTheme | undefined {
   const primary = colors.find((c) => /^#[0-9a-f]{6}$/i.test(c));
   if (!primary) return undefined;
 
@@ -230,16 +243,64 @@ export function themeFromBrandColors(colors: string[]): PageTheme | undefined {
   const darken = (n: number) => Math.max(0, Math.round(n * 0.82));
   const hover = "#" + [darken(r), darken(g), darken(b)].map((n) => n.toString(16).padStart(2, "0")).join("");
 
-  // WCAG relative luminance, so the CTA label is legible on whatever the brand colour turns out
-  // to be. 0.45 rather than 0.5 because white-on-mid is more forgiving than black-on-mid.
+  // Whichever of black/white actually contrasts more against this colour — not a luminance
+  // threshold. A threshold has to sit at the crossover to be right, and this one sat at 0.45 when
+  // the crossover is ~0.18, so a mid-luminance brand colour (a medium blue, say) got white text
+  // at 2.2:1 — unreadable, on the one element the page exists to get clicked. Comparing the two
+  // directly is both simpler and provably the best available: the two curves cross at 4.58:1, so
+  // this can never return worse than that for any colour.
+  const onPrimary =
+    contrastRatio("#1a1a1a", primary) >= contrastRatio("#ffffff", primary) ? "#1a1a1a" : "#ffffff";
+
+  // The READING surfaces are tinted toward the brand hue, never painted with it.
+  //
+  // This is the line the whole function is organised around. A palette taken wholesale from a
+  // vendor page is regularly unreadable — dark-red-on-black is a common sales-page look, and this
+  // page exists to convert paid traffic, not to be a faithful reproduction. So the brand colour
+  // is mixed into WHITE at a few percent: enough that the page reads as that product's rather
+  // than as a default template, nowhere near enough to move text contrast.
+  //
+  // The mix ratios are the whole safety argument, so they are checked rather than asserted: the
+  // guard below re-measures body text against the derived background and drops back to the
+  // untinted defaults if it ever fails.
+  const background = mixWithWhite(r, g, b, 0.05);
+  const surface = mixWithWhite(r, g, b, 0.02);
+  const border = mixWithWhite(r, g, b, 0.16);
+
+  const readable = contrastRatio(THEME_DEFAULTS.text, background) >= 4.5;
+
+  return {
+    colors: readable
+      ? { primary, primaryHover: hover, onPrimary, background, surface, border }
+      : { primary, primaryHover: hover, onPrimary },
+    ...(extras?.headingFont ? { typography: { headingFont: extras.headingFont } } : {}),
+    ...(extras?.buttonShape ? { button: { shape: extras.buttonShape } } : {}),
+  };
+}
+
+/** WCAG relative luminance of an sRGB triple. */
+function relativeLuminance(r: number, g: number, b: number): number {
   const lin = (c: number) => {
     const s = c / 255;
     return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
   };
-  const luminance = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  const onPrimary = luminance > 0.45 ? "#1a1a1a" : "#ffffff";
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
 
-  return { colors: { primary, primaryHover: hover, onPrimary } };
+/** WCAG contrast between two #rrggbb colours, 1–21. */
+function contrastRatio(a: string, b: string): number {
+  const lum = (h: string) => {
+    const [r, g, bl] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    return relativeLuminance(r, g, bl);
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** `amount` of the colour, the rest white. 0 = white, 1 = the colour itself. */
+function mixWithWhite(r: number, g: number, b: number, amount: number): string {
+  const mix = (c: number) => Math.round(255 - (255 - c) * amount);
+  return "#" + [mix(r), mix(g), mix(b)].map((n) => n.toString(16).padStart(2, "0")).join("");
 }
 
 /**

@@ -2748,12 +2748,61 @@ what makes this safe to ship against pages already serving ad traffic.
 `extractBrandColors` (`lib/engine/salespage.ts`) reads hex/rgb colours out of the RAW html —
 it has to run before cheerio strips `<style>`, which is where the colours live — drops greys,
 near-white and near-black as structure rather than brand, and ranks the rest by frequency.
-`themeFromBrandColors` then takes **only the accent**: the brand colour drives buttons, links and
-the testimonial rule, while the page background and body text stay at the defaults. A palette
-generated wholly from a vendor page would regularly be unreadable (dark-red-on-black is a common
-sales-page look) and this page exists to convert paid traffic. The hover shade is computed by
-darkening, and the button label is black or white chosen by the primary's real WCAG luminance —
-verified that a pale brand colour yields a dark label rather than white-on-yellow.
+`themeFromBrandColors` uses the accent for buttons, links and the testimonial rule, and **TINTS**
+the reading surfaces toward it rather than painting them with it — background at 5% of the brand
+colour mixed into white, cards at 2%, borders at 16%. That distinction is the whole design: a
+palette taken wholesale from a vendor page is regularly unreadable (dark-red-on-black is a common
+sales-page look) and this page exists to convert paid traffic, but a few percent is enough that
+two products no longer produce the same white sheet. The tint is re-measured, not asserted — body
+text is checked against the derived background and the whole colour block falls back to the
+untinted defaults if it ever drops below 4.5:1. Swept across 96 brand colours: the worst case is
+15.6:1.
+
+**The CTA label picks whichever of black/white contrasts more, not a luminance threshold**, and
+that fixed a real bug: the threshold sat at 0.45 when the crossover is ~0.18, so a mid-luminance
+brand colour (a medium blue) got white text at **2.2:1** — unreadable, on the one element the page
+exists to get clicked. Comparing directly is provably optimal for the two candidates; the worst
+case across the same sweep is 4.3:1, comfortably past the 3:1 that applies to large bold text.
+
+**`extractBrandStyle` also copies the vendor's heading typeface and button roundness**, as members
+of the existing `ThemeFont`/`ButtonShape` enums — never a string lifted off the page, because a
+`font-family` read from a sales page is attacker-influenced text heading for a `style` attribute.
+It classifies rather than copies: font families are matched against a known list and need two hits
+before they override the default (one mention among dozens of declarations is noise), and button
+shape comes from the MEDIAN `border-radius` so a single round avatar can't drag a page to pills.
+
+Its font regex deliberately does NOT exclude quotes. `font-family:'Playfair Display',Georgia,serif`
+is the common shape, and stopping at the first quote captured nothing — every serif page read as
+the default until a test caught it. Nothing from that capture is ever emitted, only substring-
+matched, so what it contains cannot matter.
+
+## The generated funnel page's own look
+
+`PAGE_STYLE` (renderPages.ts) carries a visual treatment beyond the block styling: a soft wash of
+the brand colour behind the hero, viewport-responsive type, a raised opt-in card with a brand edge,
+gradient buttons with a brand-tinted shadow, and a scroll reveal.
+
+- **Every selector is scoped under `.wrap`, and that is not cosmetic.** Blog posts share almost
+  every block class with funnel pages through `PUBLIC_CSS` (`.block-btn`, `.testimonial`,
+  `.carousel`, `.optin`, `.fld`…), so an unscoped rule here silently restyles the blog too. `.wrap`
+  is emitted only by funnel pages — the blog renders `<main>` — which is what keeps the two apart
+  without duplicating anything. Keep the prefix.
+- **No published page changes.** HTML is rendered and stored at write time, so a live funnel keeps
+  the stylesheet it was built with until it is rebuilt or re-saved.
+- **Colour comes from `--t-primary-rgb`**, the primary's channels emitted alongside the hex so the
+  stylesheet can compose tints with `rgba()`. A hex var cannot do that, and `color-mix()` would put
+  the whole visual treatment behind one browser feature on pages carrying paid traffic.
+- **Motion is CSS-only, in two layers**: a staggered entrance for the first root blocks, and a
+  scroll-linked reveal behind `@supports (animation-timeline: view())`. Where that is unsupported
+  the rules never apply and content is simply visible — the right failure direction. The page still
+  ships no JavaScript of its own; one that needed a script to become visible would render blank
+  when the script failed.
+- **Everything that moves sits inside `@media (prefers-reduced-motion: no-preference)`**, including
+  the button's 1px hover lift — only the colour and shadow transitions live outside it. These pages
+  are shown to whoever clicks the ad, including people for whom motion causes real symptoms.
+  Verified against the real rendered output that no `aos-rise` or hover `transform` appears before
+  the guard opens; the three transforms that do are static layout (the FAQ chevron, the hero
+  wash's centring).
 
 ## The affiliate disclosure always renders last
 
