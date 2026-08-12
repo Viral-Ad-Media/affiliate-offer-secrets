@@ -122,6 +122,29 @@ function hasForm(blocks: Block[]): boolean {
 }
 
 /**
+ * A footer carrying at least one real link.
+ *
+ * This is a checklist item rather than something the generator fills in, and the distinction is
+ * the point: a footer's links are the operator's OWN privacy policy, terms and contact page, and
+ * the engine has no idea what those URLs are. Emitting `#` placeholders would put dead links on a
+ * page taking paid traffic — worse than an empty footer, because a dead privacy link reads as a
+ * policy that exists. So the generator ships the footer with the product's name and no links, and
+ * this asks the one person who knows the URLs to add them.
+ *
+ * A link with an empty or `#` href doesn't count, for the same reason.
+ */
+function hasFooterLinks(blocks: Block[]): boolean {
+  return blocks.some((b) => {
+    if (b.type !== "footer") return false;
+    const links = ((b as ElementBlock).content as { links?: { href?: string }[] } | undefined)?.links ?? [];
+    return links.some((l) => {
+      const href = (l?.href ?? "").trim();
+      return href.length > 0 && href !== "#";
+    });
+  });
+}
+
+/**
  * Button labels that are the template's own default, or so generic they say nothing. A squeeze
  * page's button is one of about four things on it, so "Continue" is a wasted line rather than a
  * small blemish — hence this is a required item there and nowhere else.
@@ -288,7 +311,13 @@ export function funnelPageChecklist(
     "A call to action",
     "The button that tells someone what happens next.",
     "required",
-    hasAny(b, ["button"]) || b.some((x) => (x as LockedBlock).locked === "primary_cta")
+    // A FORM counts, and leaving it out was a publish-blocking bug: opt-in pages stopped carrying a
+    // separate primary_cta when the form's own submit button became the thing that sends someone to
+    // the offer (reconcileBridgeCta drops the CTA whenever the page has a form). This predicate
+    // still asked for a button or a primary_cta, so every freshly generated bridge page failed a
+    // REQUIRED item and app/api/campaigns/[id]/publish/route.ts refused to publish it. Found by
+    // running the checklist over a real generated tree rather than by reading it.
+    hasAny(b, ["button"]) || b.some((x) => (x as LockedBlock).locked === "primary_cta") || hasForm(b)
   );
   const body = item(
     "body",
@@ -337,6 +366,30 @@ export function funnelPageChecklist(
   // reader already knows they have" is instructions to the author, and publishing it sends real ad
   // traffic to a page telling them to write something.
   const starter = starterCopyItem(b);
+
+  // Appended to every type.
+  //
+  // RECOMMENDED, not required, and the distinction is load-bearing: a `required` item that isn't
+  // done makes app/api/campaigns/[id]/publish/route.ts refuse to publish. The generator cannot
+  // satisfy this one — it doesn't know the operator's privacy/terms URLs and guessing them would
+  // ship dead links (see hasFooterLinks) — so as `required` every freshly generated funnel would
+  // be born unpublishable, and every existing one would become unpublishable on its next publish.
+  // That is a workflow change, not a nudge.
+  //
+  // The argument for required is real and worth recording: a page carrying a lead form is
+  // collecting a real person's email, and a reachable privacy policy is the baseline expectation
+  // for that under GDPR/CCPA as well as something ad reviewers look for. If that gate is wanted,
+  // this is the one line to change — `hasForm(b) ? "required" : "recommended"` — and the cost is
+  // that nobody can publish until they have filled the footer in.
+  const footerLinks = item(
+    "footerLinks",
+    "Footer links (privacy, terms, contact)",
+    hasForm(b)
+      ? "This page collects an email address, so a reachable privacy policy is the baseline expectation — and one of the things ad reviewers look for. Add your own URLs to the footer; the generator can't know them."
+      : "Somewhere for a visitor to check who they're dealing with. Add your own privacy, terms or contact URLs to the footer.",
+    "recommended",
+    hasFooterLinks(b)
+  );
 
   const byType = ((): ChecklistItem[] => {
   switch (funnelType) {
@@ -461,7 +514,7 @@ export function funnelPageChecklist(
   }
   })();
 
-  return [...byType, starter];
+  return [...byType, footerLinks, starter];
 }
 
 /** A post-opt-in step page, by step type. These have no lead form — the visitor is already a lead. */
@@ -471,6 +524,17 @@ export function funnelStepChecklist(
 ): ChecklistItem[] {
   const b = allBlocks(tree);
   const hasButton = has(b, "button") || b.some((x) => (x as LockedBlock).locked === "primary_cta");
+  // Recommended, not required: a step page sits AFTER the opt-in, so it isn't collecting an
+  // address and the obligation that makes this required on the opt-in page doesn't apply. Still
+  // worth having — a visitor who wants to check who they're dealing with is usually further along,
+  // not further back.
+  const footerLinks = item(
+    "footerLinks",
+    "Footer links (privacy, terms, contact)",
+    "Somewhere for a visitor to check who they're dealing with. Add your own URLs to the footer — the generator can't know them.",
+    "recommended",
+    hasFooterLinks(b)
+  );
 
   const headline = item(
     "headline",
@@ -560,7 +624,7 @@ export function funnelStepChecklist(
   }
   })();
 
-  return [...byType, starter];
+  return [...byType, footerLinks, starter];
 }
 
 /** A blog post. Takes the fields that live outside the tree, since they're half of what a post needs. */
@@ -604,6 +668,17 @@ export function blogPostChecklist(input: {
       "Categories are how the index filters, and an uncategorised post is reachable only by its direct link.",
       "recommended",
       !!input.categoryId
+    ),
+    // A post carries the affiliate disclosure and usually a tracked offer link, so a reader who
+    // wants to know who is behind it should have somewhere to go. Recommended rather than
+    // required: unlike the opt-in page this collects nothing, so nobody is owed a privacy policy
+    // by it. The generator can't fill these in — it doesn't know the operator's URLs.
+    item(
+      "footerLinks",
+      "Footer links (privacy, terms, contact)",
+      "A post carries your disclosure and usually an affiliate link. Somewhere to check who's behind it is what makes that read as disclosure rather than fine print.",
+      "recommended",
+      hasFooterLinks(b)
     ),
     item(
       "excerpt",

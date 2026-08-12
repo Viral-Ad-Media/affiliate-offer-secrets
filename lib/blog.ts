@@ -444,6 +444,65 @@ const PUBLIC_CSS = `
      top of this constant about the two stylesheets not drifting. */
   .custom-html { margin:24px 0; max-width:100%; }
   .custom-html img, .custom-html iframe { max-width:100%; }
+
+  /* ==========================================================================================
+     The post's own look — the blog counterpart to the .wrap-scoped treatment in
+     lib/engine/renderPages.ts.
+
+     Scoped under "main" and the site chrome rather than copied wholesale, because a blog post is
+     not a landing page: it wants comfortable measure and quiet emphasis, not a hero wash and a
+     button that lifts. What IS shared is the vocabulary — the same brand tint, the same soft
+     shadows, the same card language — so the two surfaces read as one product.
+
+     Colour again comes from --t-primary-rgb (pageTheme.ts). A post with no theme renders on the
+     defaults, exactly as before.
+     ========================================================================================== */
+
+  /* A restrained brand tint behind the masthead instead of a bare rule. */
+  .site-head { background:linear-gradient(to bottom, rgba(var(--t-primary-rgb,22,163,74), .07), transparent); }
+
+  /* Measure. An article is read, not scanned, so it gets a narrower column than the funnel's
+     full-width default — capped independently of --content-w, which a tenant sets for layout. */
+  main { max-width:min(var(--content-w, 1280px), 760px); }
+
+  h1.post-title { letter-spacing:-0.022em; }
+
+  /* Images earn the same depth they have on a funnel page. */
+  main .block-img { box-shadow:0 12px 32px -14px rgba(0,0,0,.26); }
+
+  /* Pull-quotes and testimonials as cards. */
+  main .testimonial { border-radius:12px; box-shadow:0 10px 24px -18px rgba(16,24,40,.4); }
+
+  /* Any button in a post body — a tracked offer link, usually. */
+  main .block-btn {
+    background-image:linear-gradient(to bottom, rgba(255,255,255,.14), rgba(0,0,0,.06));
+    box-shadow:0 8px 20px -8px rgba(var(--t-primary-rgb,22,163,74), .5);
+    transition:box-shadow .16s ease, background-color .16s ease;
+  }
+  main .block-btn:hover { box-shadow:0 12px 26px -8px rgba(var(--t-primary-rgb,22,163,74), .62); }
+
+  /* Motion, on the same terms as the funnel page: a time-based entrance that always completes,
+     and a scroll-linked layer that moves things WITHOUT fading them — a scroll-driven animation
+     stops wherever its element's scroll range ends, and on a long article the last blocks would
+     otherwise sit permanently invisible. Everything is inside prefers-reduced-motion. */
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes post-rise { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+    @keyframes post-slide { from { transform:translateY(12px); } to { transform:none; } }
+
+    main > .section { animation:post-rise .5s cubic-bezier(.2,.7,.3,1) both; }
+    main > .section:nth-child(1) { animation-delay:.02s; }
+    main > .section:nth-child(2) { animation-delay:.08s; }
+    main > .section:nth-child(n+3) { animation-delay:.12s; }
+
+    @supports (animation-timeline: view()) {
+      main > .section {
+        animation:post-slide .6s cubic-bezier(.2,.7,.3,1) both;
+        animation-delay:0s;
+        animation-timeline:view();
+        animation-range:entry 0% entry 55%;
+      }
+    }
+  }
   .aos-consent { position:fixed; left:0; right:0; bottom:0; z-index:2147483000; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:12px 20px; padding:14px 20px; background:#1a1a1a; color:#f5f5f5; font-size:14px; line-height:1.5; box-shadow:0 -2px 12px rgba(0,0,0,.2); }
   .aos-consent p { margin:0; max-width:60ch; }
   .aos-consent a { color:#9ae6b4; }
