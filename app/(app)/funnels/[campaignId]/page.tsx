@@ -170,6 +170,14 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
 
   const stepInView = view.kind === "step" ? steps.find((s) => s.id === view.stepId) ?? null : null;
 
+  // Branch destinations for a form's answer-based routing. Keyed by step ID, not index —
+  // move_funnel_step swaps indexes, so a rule stored against one would follow the position instead
+  // of the page. The label still shows the index, because that is how the map reads left to right.
+  const stepOptions = steps.map((s) => ({
+    id: s.id,
+    label: `Step ${s.step_index} · ${STEP_LABELS[s.step_type]}`,
+  }));
+
   // Editing a page takes over the whole viewport (no sidebar/app chrome) — the canvas needs the
   // room, and a focused editor shouldn't compete with app navigation. Rendered as a fixed overlay
   // above the (app) layout rather than a separate route, so all the existing view-switching state
@@ -275,6 +283,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
                 initialCopy={campaign.page_copy}
                 initialBridgeHtml={campaign.bridge_html}
                 funnelType={(campaign as any).funnel_type ?? null}
+                funnelSteps={stepOptions}
                 showSeo
                 initialSeoTitle={(campaign as any).seo_title ?? null}
                 initialSeoDescription={(campaign as any).seo_description ?? null}
@@ -294,6 +303,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
                   // A variant is the same page with different copy, so it's held to the same
                   // funnel type's requirements as the control.
                   funnelType={(campaign as any).funnel_type ?? null}
+                  funnelSteps={stepOptions}
                   saveEndpoint={`/api/bridge-variants/${variantInView.id}`}
                   onSaved={({ bridge_html, page_copy }) =>
                     setVariantInView((v) => (v ? { ...v, bridge_html, page_copy } : v))

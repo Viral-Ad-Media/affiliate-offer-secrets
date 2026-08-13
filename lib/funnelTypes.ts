@@ -5,22 +5,28 @@ import { isFunnelStyleId, type FunnelStyleId } from "@/lib/funnelStyles";
  * The funnel shapes a tenant can build, and — honestly — which ones this app can actually deliver
  * today.
  *
- * `support` is not decoration. Four of these need capability that does not exist yet, and shipping
- * them as labels on a squeeze page would be a promise the product can't keep:
+ * `support` is not decoration: a type shipped as a label on a squeeze page would be a promise the
+ * product can't keep. What is still unmet:
  *
- *   video      — VSL and Webinar are a video presentation. lib/engine/blockTree.ts has no `video`
- *                block (heading, subheading, paragraph, image, bullet_list, icon_list, divider,
- *                image_list, button, faq_item, form_input — that's the whole list), so there is
- *                nowhere to put the thing the funnel is named after.
- *   branching  — a Survey routes people to different pages based on their answer. funnel_steps is
- *                a linear chain ordered by step_index with no conditional edge.
  *   payment    — Book / free-plus-shipping needs an order form that charges the VISITOR. The Stripe
  *                integration in this codebase bills the tenant for their own access and credits;
  *                collecting a tenant's customers' money is a different system with its own
  *                compliance surface.
  *
+ * Two capabilities that used to be unmet now exist, and the reasons are worth keeping because they
+ * are what the `support` field is FOR:
+ *
+ *   video      — VSL and Webinar were blocked on there being no `video` block. There is one now
+ *                (lib/engine/videoEmbed.ts parses the source; the renderer rebuilds the embed URL
+ *                from a fixed template rather than interpolating what was pasted).
+ *   branching  — a Survey routes people to different pages based on their answer, and funnel_steps
+ *                is still a linear chain with no conditional edge. The routing does NOT live there:
+ *                it is a form's `branch` after-submit action (lib/engine/blockTree.ts), whose
+ *                targets are resolved to real URLs at bake time. So the chain stayed linear and the
+ *                branch sits on the page, which is also why it needed no migration.
+ *
  * Unsupported types stay VISIBLE in the picker with the reason attached rather than hidden —
- * someone who came looking for a webinar funnel should learn why it isn't there, not conclude the
+ * someone who came looking for a checkout funnel should learn why it isn't there, not conclude the
  * feature is missing.
  */
 /** Display name for a funnel — the tenant's own label, never shown to visitors. */
@@ -95,7 +101,7 @@ export const FUNNEL_TYPES: FunnelTypeDef[] = [
     label: "Survey",
     group: "Lead generation",
     blurb: "A bucket question sorts visitors, then routes each answer somewhere different.",
-    support: "needs_branching",
+    support: "ready",
     steps: ["thank_you"],
   },
   {

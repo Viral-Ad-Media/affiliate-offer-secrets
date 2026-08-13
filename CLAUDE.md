@@ -1057,13 +1057,15 @@ order, and how the placeholder prompts read. 36 authored blobs would drift apart
 anyone edited one. `pruneEmptySections` is what actually drops what a style leaves out —
 `normalizePageCopy` appends every missing section by design (right for the AI path, wrong here), so
 without it "Minimal" shipped with an empty "How it works" and an empty "Questions" heading.
-Verified all six produce distinct block shapes per type. `lib/funnelTypes.ts` lists eight types and, honestly, which four this app can actually
-deliver: VSL and Webinar need a video block that `blockTree.ts` doesn't have, Survey needs
-answer-based routing that `funnel_steps` (a linear chain ordered by `step_index`) can't express,
-and Book/free-plus-shipping needs checkout charging the VISITOR, which is a different system from
-the Stripe integration that bills tenants for their own access. Those four render **disabled with
-the reason shown**, not hidden — someone who came looking for a webinar funnel should learn why
-it isn't there. `isBuildable()` is re-checked server-side; the greyed-out UI is not the boundary.
+Verified all six produce distinct block shapes per type. `lib/funnelTypes.ts` lists eight types and,
+honestly, which ones this app can actually deliver. **Seven are buildable now; only
+Book/free-plus-shipping is not** — it needs checkout charging the VISITOR, a different system from
+the Stripe integration that bills tenants for their own access. VSL and Webinar were unblocked by
+the video block, and Survey by answer-based routing (see "Answer-based routing" below — the routing
+lives on the page as a form action, so `funnel_steps` stayed a linear chain and needed no
+migration). An unsupported type renders **disabled with the reason shown**, not hidden — someone who
+came looking for a checkout funnel should learn why it isn't there. `isBuildable()` is re-checked
+server-side; the greyed-out UI is not the boundary.
 
 `lib/funnelTemplates.ts` authors starter copy in the LEGACY flat `PageCopy` shape and runs it
 through `normalizePageCopy` — the same permanent adapter every AI-generated campaign uses — so a
@@ -2542,8 +2544,9 @@ out identically.
 
 **This unblocked VSL and Webinar** in `lib/funnelTypes.ts` — they were `needs_video` for exactly
 this reason, and their templates seed an empty video block above the copy (`VIDEO_FIRST_TYPES`),
-since a VSL template without one is just a squeeze page with a different headline. Survey
-(`needs_branching`) and Book (`needs_payment`) are still correctly blocked.
+since a VSL template without one is just a squeeze page with a different headline. Survey was
+unblocked separately by answer-based routing (below); **Book (`needs_payment`) is the only type
+still correctly blocked.**
 
 ## The form's own button decides what happens next (primary_cta is gone from opt-in pages)
 
@@ -2622,6 +2625,93 @@ that to `{kind:"link"}` rather than a migration — the same permanent-adapter h
 Verified: link/legacy-href/scroll/popup all render the right element, `javascript:` and a
 quote-injecting scroll target are both rejected, and a standalone popup form renders its email +
 extra field with its key reaching `extractLeadFormFields`.
+
+## Answer-based routing — the Survey funnel, and why it isn't a quiz block
+
+`lib/funnelTypes.ts` greyed out **Survey** with `support: "needs_branching"` — *"funnel steps run in
+a fixed order today"*. It is `"ready"` now. The chain is still linear and **no migration was
+needed**: the routing lives on the page, as a form's after-submit action, not in `funnel_steps`.
+
+**The quiz IS the form.** A separate `quiz` ElementBlock would have needed its own field
+extraction, its own submit path and its own lead capture — a second anonymous write path, which the
+section above calls the one thing that must not happen. Most of it already existed: a `form_input`
+with `fieldType: "radio"` is a question with answers, `visibleWhen` already does conditional
+show/hide, radios already submit only the checked value, and `extractLeadFormFields` already
+allowlists form children into `contacts.extra_fields`. The only missing piece was one destination
+per answer, so that is the only thing that was added.
+
+- **`FormSubmitAction` gained `{kind:"branch", fieldKey, rules, otherwise}`**, each rule pointing at
+  a `BranchTarget` (`offer` | `url` | `step` | `message`). `BranchTarget` is deliberately NOT
+  recursive back into `FormSubmitAction`: `popup` and a nested branch would both require the client
+  script to make a decision, and the encoding exists precisely so it makes none.
+- **Every target is resolved to a real URL at BAKE time** (`resolveBranchTarget` /
+  `branchRulesHtml` / `afterSubmitAttrs` in `blockTree.ts`), then written as inert hidden elements
+  carrying `data-branch-value` + an already-finished `data-branch-url`. The script picks between
+  finished strings; it never builds one. Same invariant `{kind:"offer"}` has always had — the tenant
+  never types the hoplink. Elements rather than a JSON attribute on purpose: JSON would have to be
+  parsed, which is one step from the script deciding things, and it would put tenant text through
+  `JSON.parse`. `escapeHtml` covers `& < > "`, so the double-quoted attributes cannot be escaped
+  from — **keep those quotes double**; single quotes are not escaped.
+
+**A `step` target stores `funnel_steps.id`, NEVER `step_index`.** `move_funnel_step`
+(`0023_funnel_steps.sql`) *swaps* index values between two rows, so an index stored in a rule would
+silently begin pointing at a different page after any reorder — real ad traffic sent somewhere wrong
+with nothing on screen saying so. Keyed by row id it is self-healing, because
+`rerenderFunnelSequence` rebuilds `RenderCtx.steps` and re-bakes every href after any
+add/move/delete. Verified by actually swapping two steps and confirming the baked URL follows the
+step rather than the position.
+
+**`RenderCtx.steps` is new because `nextStepUrl` is only the FIRST step** and cannot express "answer
+B goes to step 3". Populated by `rerenderFunnelSequence`, and by both page-copy PATCH routes — which
+now select every step rather than `limit(1)`. A `{kind:"step"}` naming a step that isn't in the list
+falls back to `otherwise`, never to a dead link.
+
+**Validation drops, never rejects** — `pruneBranchRules` mirrors `pruneFieldConditions` exactly, for
+the reason already written down there: deleting the question a rule pointed at must not produce a
+page that refuses to save. A branch whose `fieldKey` names no field collapses to `message`; a rule
+whose value is not one of that field's `options` is dropped while its siblings survive; a branch
+left with no rules collapses to `message`. Only fields that actually carry `options` are checked — a
+free-text field can be branched on and has no list to check against.
+
+**`stepped` is presentational and DEGRADES OPEN.** The server renders every question visible and
+hides nothing but the nav; `FORM_STEPPED_SCRIPT` is what collapses them to one at a time. So with JS
+off the page is an ordinary long form that submits correctly, rather than a blank card on the one
+page kind that is paid for by the click. It uses delegated document listeners like
+`FORM_ACTION_SCRIPT`, **not** `COUNTDOWN_SCRIPT`'s one-shot `querySelectorAll` — a form can be
+`popup: true` and appear long after parse. Stepped also puts the contact inputs LAST, which is the
+order a survey actually gets answered; unstepped output is byte-identical to before.
+
+**Both `stepped` and `branch` are STRIPPED on `pageKind: "blog"`** (`stripInteractiveOnBlog`, a
+post-pass beside `reconcileBridgeCta` rather than threading `pageKind` through every element
+validator). A blog post shipping JS is the property the carousel block was built in pure CSS to
+protect. Strip, not reject: someone importing a survey as a post should get a working post with a
+plain form.
+
+**The resolver is emitted only where it is used.** `BRANCH_RESOLVE_JS` (assigned to `window` so two
+branching forms define it once) first lived inside `FORM_ACTION_SCRIPT` — which every form block
+emits — so an ordinary blog subscribe form shipped routing code it can never use. It now ships
+beside a droppable form only when that form branches, and from the page shell only when the rendered
+body contains `data-after="branch"`. Both submit handlers guard on `window.aosBranchUrl` before
+calling it: a throw there would strand a visitor whose lead had already been saved. **There are two
+submit handlers** — the shell's own for `#leadForm` (`renderPages.ts`) and `FORM_ACTION_SCRIPT` for
+droppable forms — which is why the resolver is one exported constant interpolated into both.
+
+**The seeded survey ships UNROUTED.** `withQuizBlock` (`lib/funnelTemplates.ts`, mirroring
+`withVideoBlock`) adds a real bucket question with two placeholder answers and marks the form
+`stepped`, but sets no branch. A seeded route would be a guess about destinations baked into a page
+that can take paid traffic; unrouted, the page behaves like every other funnel type and sends people
+to the offer until someone sets the routing. Same call as the video block shipping `source: null`.
+
+**Verified**: 67 assertions across the validator and renderer (XSS, pruning, blog gating, reorder
+safety, byte-identical round-trip when unused), plus a real browser run on a page built through the
+real template path — the same page routed to two different destinations for two different answers,
+and the lead POST failing did not stop the visitor being routed.
+
+**Not built, deliberately: scoring.** The Survey blurb is bucket routing. A points-and-outcome quiz
+is a different feature and half-building it would be worse than not having it. Also unchanged:
+`MAX_FORM_CHILDREN` stays 10, so a quiz is capped at 10 questions — it is mirrored by
+`MAX_EXTRA_FIELDS = 10` in `app/api/public/leads/route.ts`, and **raising one without the other
+silently drops answers past the tenth**.
 
 ## Cookie / GDPR consent
 

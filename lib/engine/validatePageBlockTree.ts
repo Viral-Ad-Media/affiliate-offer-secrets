@@ -33,6 +33,7 @@ import {
   treeHasForm,
   type ButtonAction,
   type FormSubmitAction,
+  type BranchTarget,
   type TestimonialMedia,
   FIELD_CONDITION_OPS,
   type FieldConditionOp,
@@ -66,6 +67,8 @@ const MAX_ROOT_BLOCKS = 40;
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 const ID_RE = /^[a-zA-Z0-9_-]{1,100}$/;
 const FIELD_KEY_RE = /^[a-z0-9_-]{1,60}$/;
+// A branch's step target is a funnel_steps row id. Shape-checked only — see validateBranchTarget.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FONT_FAMILIES = new Set(["system", "serif", "mono"]);
 const FONT_WEIGHTS = new Set([400, 500, 600, 700, 800]);
 const TEXT_ALIGNS = new Set(["left", "center", "right"]);
@@ -357,6 +360,15 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
     }
     case "form": {
       const kids = Array.isArray((b as Record<string, unknown>).children) ? ((b as any).children as unknown[]) : [];
+      // Same cap and same per-field validation as the locked opt-in form — one definition of
+      // what a form field may be, so a standalone form can't accept anything the other can't.
+      // Conditions get pruned here too: a standalone form's fields reference each other exactly
+      // the same way, and skipping it would leave the rule enforced on one form and not the other.
+      //
+      // Built BEFORE the action, because pruneBranchRules can only check a rule against the fields
+      // that ended up on the form.
+      const fields = kids.slice(0, MAX_FORM_CHILDREN).map((f) => validateFormInput(f, count));
+      pruneFieldConditions(fields);
       return {
         id,
         type: "form",
@@ -367,17 +379,14 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
           successText: clampStr(content.successText, MAX_TEXT_SHORT) || "Thanks.",
           popup: content.popup === true,
           // Absent = message, which is exactly what this form did before actions existed.
-          afterSubmit: validateFormSubmitAction(content.afterSubmit, { kind: "message" }),
+          afterSubmit: pruneBranchRules(
+            validateFormSubmitAction(content.afterSubmit, { kind: "message" }),
+            fields
+          ),
+          // Omitted when false so a form that never used it round-trips byte-identical.
+          ...(content.stepped === true ? { stepped: true } : {}),
         },
-        // Same cap and same per-field validation as the locked opt-in form — one definition of
-        // what a form field may be, so a standalone form can't accept anything the other can't.
-        // Conditions get pruned here too: a standalone form's fields reference each other exactly
-        // the same way, and skipping it would leave the rule enforced on one form and not the other.
-        children: (() => {
-          const fields = kids.slice(0, MAX_FORM_CHILDREN).map((f) => validateFormInput(f, count));
-          pruneFieldConditions(fields);
-          return fields;
-        })(),
+        children: fields,
       };
     }
     case "video": {
@@ -629,6 +638,38 @@ function pruneFieldConditions(fields: FormInputBlock[]): void {
   }
 }
 
+/**
+ * The branch analogue of pruneFieldConditions, and it runs for the same reason and at the same
+ * point: after the whole form is assembled, because a rule can only be checked against the fields
+ * that ended up on the form.
+ *
+ * Two prunes:
+ *   - the whole branch, when `fieldKey` names no field on this form (renaming or deleting the
+ *     question is how this happens);
+ *   - one rule, when its `value` is not one of that field's `options` — an answer nobody can give
+ *     is a destination nobody can reach, and leaving it makes the editor list a route that will
+ *     never fire.
+ *
+ * DROP, never reject, exactly as documented above: deleting the question a rule pointed at must not
+ * produce a page that refuses to save. A branch left with no rules collapses to `message`, which is
+ * the same end state the renderer already gives an unresolvable action.
+ *
+ * Only fields that actually CARRY options are checked. A free-text field can be branched on (a
+ * bucket question is usually radio/select, but nothing says it must be), and there is no list to
+ * check a typed answer against.
+ */
+function pruneBranchRules(action: FormSubmitAction | undefined, fields: FormInputBlock[]): FormSubmitAction | undefined {
+  if (!action || action.kind !== "branch") return action;
+  const field = fields.find((f) => f.content.fieldKey === action.fieldKey);
+  if (!field) return { kind: "message" };
+  const options = field.content.options;
+  if (!options || options.length === 0) return action;
+  const allowed = new Set(options);
+  const rules = action.rules.filter((r) => allowed.has(r.value));
+  if (rules.length === 0) return { kind: "message" };
+  return { ...action, rules };
+}
+
 function validateColumn(raw: unknown, count: { n: number }): ColumnBlock {
   if (++count.n > MAX_TOTAL_BLOCKS) throw new BlockCountLimit("too many blocks");
   const b = (raw ?? {}) as Record<string, unknown>;
@@ -712,8 +753,13 @@ function validateLockedBlockInner(raw: unknown, count: { n: number }): LockedBlo
           ctaText: clampStr(content.ctaText, MAX_CTA) || "Get started",
           // Absent = offer, which is where the old separate primary_cta button pointed. Every
           // page saved before this shipped therefore keeps its exact destination.
-          afterSubmit: validateFormSubmitAction(content.afterSubmit, { kind: "offer" }),
+          afterSubmit: pruneBranchRules(
+            validateFormSubmitAction(content.afterSubmit, { kind: "offer" }),
+            validated
+          ),
           successText: clampStr(content.successText, MAX_TEXT_SHORT) || "Thanks — check your inbox.",
+          // Omitted when false, so every page saved before this round-trips byte-identical.
+          ...(content.stepped === true ? { stepped: true } : {}),
         },
         children: validated,
       };
@@ -745,7 +791,14 @@ function validateLockedBlockInner(raw: unknown, count: { n: number }): LockedBlo
  * Anything unusable degrades to `message`, which the renderer treats as "show the thank-you".
  */
 function validateFormSubmitAction(raw: unknown, fallback: FormSubmitAction): FormSubmitAction {
-  const a = raw as { kind?: unknown; href?: unknown; formId?: unknown } | null;
+  const a = raw as {
+    kind?: unknown;
+    href?: unknown;
+    formId?: unknown;
+    fieldKey?: unknown;
+    rules?: unknown;
+    otherwise?: unknown;
+  } | null;
   if (!a || typeof a !== "object" || typeof a.kind !== "string") return fallback;
   switch (a.kind) {
     case "offer":
@@ -760,8 +813,56 @@ function validateFormSubmitAction(raw: unknown, fallback: FormSubmitAction): For
     }
     case "message":
       return { kind: "message" };
+    case "branch": {
+      // A branch that names no field can never resolve an answer, so it is the same dead end as a
+      // popup pointing at nothing — degrade rather than throw, for the same reason.
+      const fieldKey = clampStr(a.fieldKey, 60);
+      if (!FIELD_KEY_RE.test(fieldKey)) return { kind: "message" };
+      // Capped at the number of answers a field may have. More rules than options means rules that
+      // can never match, and this is the value that bounds how much markup one form can emit.
+      const rawRules = Array.isArray(a.rules) ? a.rules.slice(0, MAX_FIELD_OPTIONS) : [];
+      const rules = rawRules
+        .map((r) => {
+          const rule = (r ?? {}) as { value?: unknown; then?: unknown };
+          const value = clampStr(rule.value, MAX_TEXT_SHORT);
+          // A rule with no answer to match is inert, not dangerous — drop it rather than storing a
+          // row that can never fire. pruneBranchRules drops the ones that name a real-looking
+          // answer no longer on the field.
+          return value ? { value, then: validateBranchTarget(rule.then) } : null;
+        })
+        .filter((r): r is { value: string; then: BranchTarget } => r !== null);
+      if (rules.length === 0) return { kind: "message" };
+      return { kind: "branch", fieldKey, rules, otherwise: validateBranchTarget(a.otherwise) };
+    }
     default:
       return fallback;
+  }
+}
+
+/**
+ * One answer's destination. Same closed-union discipline as the action that contains it: `url` is
+ * the only kind carrying a tenant-typed string and it goes through isValidRedirectUrl.
+ *
+ * `stepId` is SHAPE-checked only, never checked for existence — the same rule ID_RE targets follow.
+ * A step can be deleted after a rule pointed at it, and the render path already handles that by
+ * falling back to `otherwise`; refusing the save instead would strand the page.
+ */
+function validateBranchTarget(raw: unknown): BranchTarget {
+  const t = raw as { kind?: unknown; href?: unknown; stepId?: unknown } | null;
+  if (!t || typeof t !== "object" || typeof t.kind !== "string") return { kind: "message" };
+  switch (t.kind) {
+    case "offer":
+      return { kind: "offer" };
+    case "url": {
+      const href = clampStr(t.href, 2000);
+      return isValidRedirectUrl(href) ? { kind: "url", href } : { kind: "message" };
+    }
+    case "step": {
+      const id = clampStr(t.stepId, 100);
+      return UUID_RE.test(id) ? { kind: "step", stepId: id } : { kind: "message" };
+    }
+    default:
+      return { kind: "message" };
   }
 }
 
@@ -835,6 +936,36 @@ function inheritOfferAction(blocks: unknown[]): void {
   }
 }
 
+/**
+ * A blog post ships no JavaScript, and these are the two form settings that would break that.
+ *
+ * `stepped` emits FORM_STEPPED_SCRIPT and `branch` needs the submit handler's routing. Neither has
+ * any business on a blog post — a form there collects a subscriber, it doesn't run a quiz.
+ *
+ * Done here as a post-pass rather than by threading pageKind through every element validator,
+ * matching reconcileBridgeCta: this is a rule about the finished PAGE, not about one block.
+ *
+ * STRIP, not reject. Someone who builds a survey and then imports it as a blog post should get a
+ * working post with a plain form, not a save that fails with nothing to act on. The zero-JS
+ * property is what the carousel block was deliberately built in pure CSS to protect, and it holds
+ * only if nothing else quietly reintroduces a script.
+ */
+function stripInteractiveOnBlog(blocks: unknown[]): void {
+  for (const raw of blocks) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = raw as any;
+    if (!b || typeof b !== "object") continue;
+    if (b.locked === "lead_capture_form" || b.type === "form") {
+      if (b.content) {
+        delete b.content.stepped;
+        if (b.content.afterSubmit?.kind === "branch") b.content.afterSubmit = { kind: "message" };
+      }
+    }
+    if (Array.isArray(b.children)) stripInteractiveOnBlog(b.children);
+    if (Array.isArray(b.columns)) stripInteractiveOnBlog(b.columns);
+  }
+}
+
 type LockedKind = LockedBlock["locked"];
 
 function requiredLockedKinds(opts: ValidatePageBlockTreeOptions): Set<LockedKind> {
@@ -889,6 +1020,7 @@ export function validatePageBlockTree(raw: unknown, opts: ValidatePageBlockTreeO
     }
 
     reconcileBridgeCta(blocks, opts);
+    if (opts.pageKind === "blog") stripInteractiveOnBlog(blocks);
 
     const lockedKinds = new Set(blocks.filter((b): b is LockedBlock => "locked" in b).map((b) => b.locked));
     const required = requiredLockedKinds(opts);

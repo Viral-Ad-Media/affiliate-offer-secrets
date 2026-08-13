@@ -102,6 +102,13 @@ export async function rerenderFunnelSequence(
     .order("step_index", { ascending: true });
   const steps = (stepsRaw ?? []) as FunnelStepRow[];
 
+  // Every step as {row id -> current URL}, for a form's `branch` action. Built here because this
+  // is the one place that holds the whole sequence, and rebuilt on every re-render — which is what
+  // makes a branch survive a reorder: move_funnel_step SWAPS step_index values, so the URL a given
+  // step id maps to changes, and a rule keyed on the id follows it instead of pointing at whatever
+  // page now happens to sit at the old index.
+  const stepLinks = steps.map((s) => ({ id: s.id, url: stepUrl(campaignId, s.step_index) }));
+
   // Opt-in page: redirect to step 1 if any steps exist, else today's in-place reveal (unchanged
   // behavior for the ~100% of campaigns with no added funnel steps).
   if (campaign.page_copy) {
@@ -115,7 +122,8 @@ export async function rerenderFunnelSequence(
       campaignId,
       nextStepUrl,
       tracking,
-      campaign
+      campaign,
+      stepLinks
     );
     await admin.from("campaigns").update({ bridge_html: bridgeHtml }).eq("id", campaignId);
 
@@ -139,7 +147,8 @@ export async function rerenderFunnelSequence(
         campaignId,
         nextStepUrl,
         tracking,
-        campaign
+        campaign,
+        stepLinks
       );
       await admin.from("bridge_variants").update({ bridge_html: variantHtml }).eq("id", v.id);
     }
@@ -213,7 +222,8 @@ export async function rerenderFunnelSequence(
         step.embedded_image_data_url,
         declineHref,
         tracking,
-        step
+        step,
+        stepLinks
       );
       await admin.from("funnel_steps").update({ html }).eq("id", step.id);
     } else {
@@ -233,7 +243,8 @@ export async function rerenderFunnelSequence(
         step.embedded_image_data_url,
         null,
         tracking,
-        step
+        step,
+        stepLinks
       );
       await admin.from("funnel_steps").update({ html }).eq("id", step.id);
     }

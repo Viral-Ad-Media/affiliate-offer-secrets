@@ -121,16 +121,19 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   // Variants serve at the same URL as the control, so they carry the same post-submit
   // redirect (multi-step funnels) and the same tracking snippets — part of the same gap fix as
   // rerenderFunnelSequence's variant pass (a variant page previously never picked up either).
-  const { data: firstStep } = await admin
+  // All steps, not just the first — a variant can carry a branching form exactly as the control
+  // can, and a branch resolves step ids against this list.
+  const { data: allSteps } = await admin
     .from("funnel_steps")
-    .select("step_index")
+    .select("id, step_index")
     .eq("campaign_id", variant.campaign_id)
-    .order("step_index", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  const nextStepUrl = firstStep
-    ? `/p/${variant.campaign_id}/step/${firstStep.step_index}` // path-relative: see lib/funnelSteps.ts stepUrl()
-    : null;
+    .order("step_index", { ascending: true });
+  // path-relative: see lib/funnelSteps.ts stepUrl()
+  const stepLinks = (allSteps ?? []).map((s) => ({
+    id: s.id as string,
+    url: `/p/${variant.campaign_id}/step/${s.step_index}`,
+  }));
+  const nextStepUrl = stepLinks[0]?.url ?? null;
 
   const bridgeHtml = renderBridgeHtml(
     product,
@@ -139,7 +142,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     imageDataUrl,
     variant.campaign_id,
     nextStepUrl,
-    (campaign.tracking ?? null) as import("@/lib/engine/renderPages").TrackingSettings | null
+    (campaign.tracking ?? null) as import("@/lib/engine/renderPages").TrackingSettings | null,
+    // seo unpassed, as before — only positional so stepLinks lands correctly.
+    undefined,
+    stepLinks
   );
 
   const { error: updateErr } = await admin

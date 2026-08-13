@@ -42,6 +42,8 @@ type Props = {
   showSeo?: boolean;
   /** lib/funnelTypes.ts key — drives which elements the checklist asks for. Null = generic list. */
   funnelType?: string | null;
+  /** This funnel's steps, offered as destinations by a form's answer-based routing. */
+  funnelSteps?: { id: string; label: string }[];
 };
 
 export default function PageEditor({
@@ -55,6 +57,7 @@ export default function PageEditor({
   initialSeoDescription,
   showSeo = false,
   funnelType = null,
+  funnelSteps = [],
 }: Props) {
   const [tree, setTree] = useState<PageBlockTree>(() => normalizePageCopy(initialCopy, null));
   const [saving, setSaving] = useState(false);
@@ -152,6 +155,7 @@ export default function PageEditor({
         onImageBusyChange={setImageBusyBlockId}
         onImageError={setError}
         productTitle={productTitle}
+        funnelSteps={funnelSteps}
         settings={{
           title: "Page settings",
           panel: (

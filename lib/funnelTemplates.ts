@@ -105,6 +105,22 @@ const TEMPLATES: Record<string, Template> = {
     ],
     cta: "Start my application",
   },
+  survey: {
+    headline: "Which one sounds most like you?",
+    lead: "Say what the question is for and what they get at the end — people answer when they know why they're being asked.",
+    mechanism: "Explain how the answer changes what you show them next. One sentence is enough.",
+    benefits: [
+      "Why the question is worth answering",
+      "What they get once they've answered",
+      "How long it takes",
+    ],
+    proof: "If you have something real to point to here, use it. Leave it out if you don't.",
+    faq: [
+      { q: "How long does this take?", a: "Give the real number — a survey that runs long loses people mid-way." },
+      { q: "What happens with my answer?", a: "Say plainly what you do with it and what they'll see next." },
+    ],
+    cta: "See my result",
+  },
 };
 
 /** Copy for a step page. Keyed by step type, not by funnel type — a thank-you page is a thank-you
@@ -142,6 +158,8 @@ const STEP_TEMPLATES: Record<FunnelStepType, Template> = {
 
 // Types where the video IS the page, so the template seeds a video block rather than an image.
 const VIDEO_FIRST_TYPES = new Set(["vsl", "webinar"]);
+// Types whose whole point is the question — same relationship VIDEO_FIRST_TYPES has to the player.
+const SURVEY_TYPES = new Set(["survey"]);
 
 function fill(t: Template, productTitle: string): PageCopy {
   const sub = (s: string) => s.replaceAll("{PRODUCT}", productTitle);
@@ -271,6 +289,51 @@ function withVideoBlock(tree: PageBlockTree, headline: string): PageBlockTree {
   return { ...tree, blocks: [{ ...first, children }, ...tree.blocks.slice(1)] };
 }
 
+/**
+ * Seeds the bucket question a Survey funnel is named after, onto the page's lead-capture form.
+ *
+ * The same call withVideoBlock makes: the block is the reason the type is buildable at all, so the
+ * template ships one rather than leaving someone to discover they must add it. And it ships
+ * DELIBERATELY UNROUTED — a real question with two placeholder answers and no `branch` action.
+ *
+ * Unrouted because a seeded route would be a guess about where each answer should go, baked into a
+ * page that can take paid traffic. An unanswered question shows the visitor a normal form and sends
+ * them to the offer, which is the same thing every other funnel type does. Setting the destinations
+ * is one panel away, and the editor is where that decision belongs.
+ *
+ * Marked `stepped` because a survey that asks its question and its email on one screen is a lead
+ * form with extra words — the one-at-a-time flow is the shape people recognise.
+ */
+function withQuizBlock(tree: PageBlockTree): PageBlockTree {
+  const form = tree.blocks.find(
+    (b): b is Extract<(typeof tree.blocks)[number], { locked: "lead_capture_form" }> =>
+      "locked" in b && b.locked === "lead_capture_form"
+  );
+  if (!form) return tree;
+  const question = {
+    id: "survey-bucket",
+    type: "form_input" as const,
+    style: {},
+    content: {
+      label: "Which one sounds most like you?",
+      // Becomes the CSV column header and the key in contacts.extra_fields, so it has to read.
+      fieldKey: "bucket",
+      fieldType: "radio" as const,
+      placeholder: "",
+      required: true,
+      options: ["Just getting started", "Been at it a while"],
+    },
+  };
+  return {
+    ...tree,
+    blocks: tree.blocks.map((b) =>
+      b === form
+        ? { ...b, content: { ...b.content, stepped: true }, children: [...(b.children ?? []), question] }
+        : b
+    ) as typeof tree.blocks,
+  };
+}
+
 /** Which starting layout — one of the six styles, or an empty page. */
 
 /**
@@ -325,7 +388,10 @@ export function optInPageCopy(
   const filled = styled(fill(t, title), style);
   const tree = pruneEmptySections(normalizePageCopy(filled, style.mediaFirst ? imageDataUrl : null));
   // Video-first types always get a player; styles that open with words put it under the lead.
-  return VIDEO_FIRST_TYPES.has(typeKey) ? withVideoBlock(tree, filled.headline) : tree;
+  if (VIDEO_FIRST_TYPES.has(typeKey)) return withVideoBlock(tree, filled.headline);
+  // Survey types get the bucket question, unrouted — see withQuizBlock.
+  if (SURVEY_TYPES.has(typeKey)) return withQuizBlock(tree);
+  return tree;
 }
 
 /** A step page's starting content. */

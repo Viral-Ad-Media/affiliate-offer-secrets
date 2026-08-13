@@ -121,16 +121,21 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   // If this campaign's funnel has added steps after opt-in (0023_funnel_steps.sql), the
   // post-submit CTA redirects to step 1 instead of revealing in place — resolved here, not
   // baked in once at step-creation time, so editing the opt-in copy never goes stale.
-  const { data: firstStep } = await admin
+  // All of them, not just the first: `nextStepUrl` still comes from step 1, but a form's `branch`
+  // action can point one answer at any step, and it resolves ids against this list at render time.
+  // Same reasoning as before — resolved on every save rather than baked once, so editing the
+  // opt-in copy never leaves a stale destination.
+  const { data: allSteps } = await admin
     .from("funnel_steps")
-    .select("step_index")
+    .select("id, step_index")
     .eq("campaign_id", campaignId)
-    .order("step_index", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  const nextStepUrl = firstStep
-    ? `/p/${campaignId}/step/${firstStep.step_index}` // path-relative: see lib/funnelSteps.ts stepUrl()
-    : null;
+    .order("step_index", { ascending: true });
+  // path-relative: see lib/funnelSteps.ts stepUrl()
+  const stepLinks = (allSteps ?? []).map((s) => ({
+    id: s.id as string,
+    url: `/p/${campaignId}/step/${s.step_index}`,
+  }));
+  const nextStepUrl = stepLinks[0]?.url ?? null;
 
   const bridgeHtml = renderBridgeHtml(
     product,
@@ -139,7 +144,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     imageDataUrl,
     campaignId,
     nextStepUrl,
-    (campaign.tracking ?? null) as import("@/lib/engine/renderPages").TrackingSettings | null
+    (campaign.tracking ?? null) as import("@/lib/engine/renderPages").TrackingSettings | null,
+    // seo stays unpassed here, exactly as before — rerenderFunnelSequence is what applies the
+    // campaign's SEO overrides. Spelled as undefined only so `stepLinks` lands in the right slot.
+    undefined,
+    stepLinks
   );
 
   const { error: updateErr } = await admin

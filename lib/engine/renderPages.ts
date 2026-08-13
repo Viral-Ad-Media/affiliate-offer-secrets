@@ -22,6 +22,7 @@ import {
   styleToInlineCss,
   renderBlockTree,
   contentWidthOf,
+  BRANCH_RESOLVE_JS,
   type PageBlockTree,
   type RenderCtx,
   type SectionBlock,
@@ -707,7 +708,16 @@ export function renderBridgeHtml(
   campaignId: string,
   nextStepUrl?: string | null,
   tracking?: TrackingSettings | null,
-  seo?: SeoMeta | null
+  seo?: SeoMeta | null,
+  /**
+   * Every step of this funnel, so a form's `branch` action can route one answer to step 3 while
+   * another goes to the offer. `nextStepUrl` above is only the first step.
+   *
+   * Optional because most callers have no funnel steps to describe (the build pipeline, the blog,
+   * and the editors' live preview). Absent simply means a `{kind:"step"}` rule resolves to nothing
+   * and falls back to its `otherwise` — never a dead link.
+   */
+  steps?: { id: string; url: string }[]
 ): string {
   const tree = normalizePageCopy(copy, imageDataUrl, { siteName: product.product_title });
   const ctx: RenderCtx = {
@@ -717,6 +727,7 @@ export function renderBridgeHtml(
     campaignId,
     primaryHref: hoplink,
     nextStepUrl: nextStepUrl ?? null,
+    steps,
     productTitle: product.product_title,
   };
   const meta = seoMetaTags(seo, titleOf(tree));
@@ -770,6 +781,17 @@ ${t.bodyStart}
           var u = form.getAttribute('data-after-url');
           if (u) { window.location.href = u; return; }
         }
+        // Answer-based routing. Every candidate URL was resolved server-side by afterSubmitAttrs/
+        // branchRulesHtml — aosBranchUrl only picks between finished strings, exactly as the 'url'
+        // branch above does. No match falls through to the same in-place thank-you as everything else.
+        // aosBranchUrl is only defined when this page actually has a branching form (see the
+        // conditional emit at the end of this script), so guard rather than assume — an
+        // undefined-function throw here would abort advance() and strand the visitor on the form
+        // after their lead had already been saved.
+        if (after === 'branch' && window.aosBranchUrl) {
+          var b = window.aosBranchUrl(form);
+          if (b) { window.location.href = b; return; }
+        }
         if (after === 'popup') {
           var p = document.getElementById(form.getAttribute('data-after-id') || '');
           if (p) { p.hidden = false; p.classList.add('is-open'); }
@@ -789,6 +811,7 @@ ${t.bodyStart}
         body: JSON.stringify(payload)
       }).catch(function () {}).then(advance);
     });
+    ${body.includes('data-after="branch"') ? BRANCH_RESOLVE_JS : ""}
   </script>
 </body>
 </html>`;
@@ -838,7 +861,9 @@ export function renderFunnelStepHtml(
   imageDataUrl: string | null,
   declineHref?: string | null,
   tracking?: TrackingSettings | null,
-  seo?: SeoMeta | null
+  seo?: SeoMeta | null,
+  /** See renderBridgeHtml — a step page can carry a branching form too. */
+  steps?: { id: string; url: string }[]
 ): string {
   const tree = normalizePageCopy(copy, imageDataUrl, { stepType, siteName: product.product_title });
   const ctx: RenderCtx = {
@@ -849,6 +874,7 @@ export function renderFunnelStepHtml(
     campaignId: "",
     primaryHref,
     declineHref: declineHref ?? null,
+    steps,
     productTitle: product.product_title,
   };
   const meta = seoMetaTags(seo, titleOf(tree));

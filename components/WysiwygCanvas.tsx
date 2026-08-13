@@ -1065,6 +1065,30 @@ function SectionBody({
 // Not a block id — must never collide with one findBlockLocation could resolve.
 const PAGE_SETTINGS_ID = "__page_settings__";
 
+/**
+ * The content-settings panel's heading.
+ *
+ * A lookup rather than the two-way ternary this replaced: that one read
+ * `type === "button" ? "Button" : "Input"`, so every type added to hasContentSettings after buttons
+ * — forms, custom code — was labelled "Input". Falls back to "Settings", which is at least never
+ * wrong, instead of naming the wrong thing.
+ */
+function settingsPanelTitle(type: Block["type"]): string {
+  switch (type) {
+    case "button":
+      return "Button";
+    case "form_input":
+      return "Input";
+    case "form":
+    case "lead_capture_form":
+      return "Form";
+    case "custom_html":
+      return "Custom code";
+    default:
+      return "Settings";
+  }
+}
+
 export type WysiwygCanvasProps = {
   tree: PageBlockTree;
   onChange: (tree: PageBlockTree) => void;
@@ -1074,6 +1098,14 @@ export type WysiwygCanvasProps = {
   onImageError: (message: string) => void;
   productTitle: string;
   ctaClassName?: string;
+  /**
+   * This funnel's steps, offered as destinations by a form's answer-based routing.
+   *
+   * Passed down rather than fetched here: the canvas is shared by the funnel editors, the blog
+   * post editor and the blog home editor, and only the first of those has steps at all. Empty
+   * means the branch picker simply doesn't offer "a step in this funnel".
+   */
+  funnelSteps?: { id: string; label: string }[];
   /**
    * An editor-only block pinned after the tree — for page furniture that is generated, not
    * authored, so it has no place in page_copy but still belongs on the canvas.
@@ -1126,6 +1158,7 @@ export default function WysiwygCanvas({
   ctaClassName,
   settings,
   appendix,
+  funnelSteps = [],
 }: WysiwygCanvasProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -2737,7 +2770,7 @@ export default function WysiwygCanvas({
                     field this is the whole panel. */}
                 {hasContentSettings(selectedBlock) && (
                   <EditorSidePanel
-                    title={selectedBlock.type === "button" ? "Button" : "Input"}
+                    title={settingsPanelTitle(selectedBlock.type)}
                     onClose={() => setSelectedBlockId(null)}
                   >
                     <BlockSettingsPanel
@@ -2746,6 +2779,7 @@ export default function WysiwygCanvas({
                       targets={actionTargets()}
                       forms={actionTargets().filter((t) => t.isForm)}
                       siblingFields={siblingFieldsOf(tree, selectedBlock.id)}
+                      funnelSteps={funnelSteps}
                     />
                   </EditorSidePanel>
                 )}

@@ -10,6 +10,7 @@ import {
   type FormInputBlock,
   type ButtonAction,
   type FormSubmitAction,
+  type BranchTarget,
   type FormFieldType,
 } from "@/lib/engine/renderPages";
 
@@ -42,6 +43,72 @@ export function hasContentSettings(block: Block | null): boolean {
 
 const INPUT =
   "mt-1 w-full rounded-lg border border-ink-700 bg-ink-950 px-2 py-1.5 text-xs text-zinc-200";
+
+export type FunnelStepOption = { id: string; label: string };
+
+/**
+ * Where one answer sends someone. Module scope, NOT defined inside the panel's render — a nested
+ * component definition gets a fresh identity on every render, which remounts its inputs and eats
+ * whatever is being typed. The same trap WysiwygCanvas documents for its own wrappers.
+ *
+ * Every choice is a picker over things that really exist: a step is chosen from the funnel's own
+ * steps, never typed. The validator prunes a target naming nothing, so offering a dropdown is what
+ * keeps the editor and the validator agreeing about what is selectable.
+ */
+function BranchTargetPicker({
+  value,
+  onChange,
+  steps,
+  allowOffer,
+}: {
+  value: BranchTarget;
+  onChange: (t: BranchTarget) => void;
+  steps: FunnelStepOption[];
+  allowOffer: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <select
+        className={SELECT}
+        value={value.kind}
+        onChange={(e) => {
+          const kind = e.target.value as BranchTarget["kind"];
+          // A complete target every time, never a patch — a half-set one (step with no id) would
+          // reach the validator and silently become "message".
+          if (kind === "url") onChange({ kind: "url", href: "" });
+          else if (kind === "step") onChange({ kind: "step", stepId: steps[0]?.id ?? "" });
+          else onChange({ kind } as BranchTarget);
+        }}
+      >
+        {allowOffer && <option value="offer">the offer</option>}
+        {steps.length > 0 && <option value="step">a step in this funnel</option>}
+        <option value="url">a link</option>
+        <option value="message">nowhere — show the message</option>
+      </select>
+      {value.kind === "step" && (
+        <select
+          className={SELECT}
+          value={value.stepId}
+          onChange={(e) => onChange({ kind: "step", stepId: e.target.value })}
+        >
+          {steps.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      )}
+      {value.kind === "url" && (
+        <input
+          className={INPUT}
+          value={value.href}
+          placeholder="https://..."
+          onChange={(e) => onChange({ kind: "url", href: e.target.value })}
+        />
+      )}
+    </div>
+  );
+}
 
 
 type SavedAttribute = {
@@ -108,6 +175,7 @@ export default function BlockSettingsPanel({
   targets,
   forms,
   siblingFields = [],
+  funnelSteps = [],
 }: {
   block: Block;
   onChange: (blockId: string, patch: Record<string, unknown>) => void;
@@ -121,6 +189,13 @@ export default function BlockSettingsPanel({
    * dropdown rather than a text box is what keeps the two in step.
    */
   siblingFields?: { fieldKey: string; label: string }[];
+  /**
+   * This funnel's steps, as branch destinations. Empty on a blog post and on a standalone funnel
+   * with no steps — the picker simply doesn't offer "a step in this funnel" then.
+   *
+   * Ids, not indexes: a branch rule stores funnel_steps.id because move_funnel_step swaps indexes.
+   */
+  funnelSteps?: FunnelStepOption[];
 }) {
   const set = (patch: Record<string, unknown>) => onChange(block.id, patch);
   // Called unconditionally: this component returns early for other block types, and a hook behind
@@ -142,6 +217,26 @@ export default function BlockSettingsPanel({
     // Never offer this form as its own popup target — opening yourself on submit does nothing
     // visible and reads as a broken setting.
     const popupTargets = forms.filter((f) => f.id !== block.id);
+
+    // Only a field with a fixed set of answers can be branched on: the rules match answer VALUES,
+    // and a free-text box has none to list. So the option is hidden entirely until the form has a
+    // question worth branching on, rather than offered and then unusable.
+    const fields = (block.children ?? []) as FormInputBlock[];
+    const branchable = fields.filter((f) => (f.content.options ?? []).length > 0);
+    const branchField =
+      action.kind === "branch"
+        ? branchable.find((f) => f.content.fieldKey === action.fieldKey) ?? branchable[0]
+        : branchable[0];
+    const answers = branchField?.content.options ?? [];
+    const ruleFor = (v: string): BranchTarget =>
+      (action.kind === "branch" ? action.rules.find((r) => r.value === v)?.then : undefined) ?? {
+        kind: "message",
+      };
+    const setRule = (v: string, then: BranchTarget) => {
+      if (action.kind !== "branch") return;
+      const rest = action.rules.filter((r) => r.value !== v);
+      set({ afterSubmit: { ...action, rules: [...rest, { value: v, then }] } });
+    };
 
     return (
       <div className="space-y-3">
@@ -167,6 +262,21 @@ export default function BlockSettingsPanel({
               if (kind === "url") set({ afterSubmit: { kind: "url", href: "" } });
               else if (kind === "popup")
                 set({ afterSubmit: { kind: "popup", formId: popupTargets[0]?.id ?? "" } });
+              else if (kind === "branch")
+                set({
+                  afterSubmit: {
+                    kind: "branch",
+                    fieldKey: branchable[0]?.content.fieldKey ?? "",
+                    // Seeded with every answer pointing at the offer — the same place the form
+                    // would have gone anyway. So switching to branching changes nothing until a
+                    // destination is actually chosen, rather than silently stranding answers.
+                    rules: (branchable[0]?.content.options ?? []).map((v) => ({
+                      value: v,
+                      then: { kind: isOptIn ? "offer" : "message" } as BranchTarget,
+                    })),
+                    otherwise: { kind: isOptIn ? "offer" : "message" },
+                  },
+                });
               else set({ afterSubmit: { kind } });
             }}
           >
@@ -174,8 +284,89 @@ export default function BlockSettingsPanel({
             {isOptIn && <option value="offer">Send them to the offer</option>}
             <option value="url">Send them to a link</option>
             {popupTargets.length > 0 && <option value="popup">Open another form</option>}
+            {branchable.length > 0 && (
+              <option value="branch">Send each answer somewhere different</option>
+            )}
             <option value="message">Stay here and show a message</option>
           </select>
+        </label>
+
+        {action.kind === "branch" && (
+          <div className="space-y-2 rounded-lg border border-ink-700 p-2">
+            <label className="block">
+              <span className={LABEL}>Question to sort on</span>
+              <select
+                className={SELECT}
+                value={branchField?.content.fieldKey ?? ""}
+                onChange={(e) => {
+                  const f = branchable.find((x) => x.content.fieldKey === e.target.value);
+                  // Changing the question rebuilds the rules against the NEW answers. Keeping the
+                  // old ones would leave rules matching values nobody can pick, which the validator
+                  // prunes on save — so the editor would show routes that quietly vanish.
+                  set({
+                    afterSubmit: {
+                      ...action,
+                      fieldKey: e.target.value,
+                      rules: (f?.content.options ?? []).map((v) => ({
+                        value: v,
+                        then: { kind: isOptIn ? "offer" : "message" } as BranchTarget,
+                      })),
+                    },
+                  });
+                }}
+              >
+                {branchable.map((f) => (
+                  <option key={f.id} value={f.content.fieldKey}>
+                    {f.content.label || f.content.fieldKey}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {answers.map((v) => (
+              <label className="block" key={v}>
+                <span className={LABEL}>&ldquo;{v}&rdquo; goes to</span>
+                <BranchTargetPicker
+                  value={ruleFor(v)}
+                  onChange={(t) => setRule(v, t)}
+                  steps={funnelSteps}
+                  allowOffer={isOptIn}
+                />
+              </label>
+            ))}
+
+            <label className="block">
+              <span className={LABEL}>Anyone who skips it goes to</span>
+              <BranchTargetPicker
+                value={action.otherwise}
+                onChange={(t) => set({ afterSubmit: { ...action, otherwise: t } })}
+                steps={funnelSteps}
+                allowOffer={isOptIn}
+              />
+            </label>
+
+            {funnelSteps.length === 0 && (
+              <p className="text-[11px] text-zinc-500">
+                Add steps to this funnel and they&apos;ll show up here as destinations.
+              </p>
+            )}
+          </div>
+        )}
+
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={(c as { stepped?: boolean }).stepped === true}
+            onChange={(e) => set({ stepped: e.target.checked })}
+          />
+          <span>
+            <span className="block text-[11px] font-medium text-zinc-300">One question at a time</span>
+            <span className="block text-[11px] text-zinc-500">
+              Shows each field on its own with Next/Back, and asks for the name and email last. With
+              JavaScript off it stays one plain form, so nobody sees a blank page.
+            </span>
+          </span>
         </label>
 
         {action.kind === "url" && (

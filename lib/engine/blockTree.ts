@@ -357,9 +357,35 @@ export type FormSubmitAction =
   /** Open another form block on this page as a modal. */
   | { kind: "popup"; formId: string }
   /** Stay on the page and swap the form for its success text. */
+  | { kind: "message" }
+  /** Send each answer somewhere different — see BranchTarget below. */
+  | {
+      kind: "branch";
+      /** Names a field on THIS form, the same way FieldCondition.fieldKey does. */
+      fieldKey: string;
+      rules: { value: string; then: BranchTarget }[];
+      /** Where an answer matching no rule goes. Never optional — a quiz must always land somewhere. */
+      otherwise: BranchTarget;
+    };
+
+// Where one answer sends someone. Deliberately NOT recursive into FormSubmitAction: `popup` and a
+// nested `branch` would both need the client script to make a decision, and the whole point of the
+// encoding below is that it makes none.
+//
+// `step` names a funnel_steps ROW ID, never a step_index. move_funnel_step
+// (supabase/migrations/0023_funnel_steps.sql) SWAPS step_index values between two rows, so an index
+// stored here would silently start pointing at a different page after any reorder — the worst shape
+// of bug this codebase has: real ad traffic sent somewhere wrong, with nothing on screen saying so.
+// Keyed by row id it is self-healing, because rerenderFunnelSequence re-bakes every href after any
+// add/move/delete.
+export type BranchTarget =
+  | { kind: "offer" }
+  | { kind: "url"; href: string }
+  | { kind: "step"; stepId: string }
   | { kind: "message" };
 
-export const FORM_SUBMIT_ACTION_KINDS = ["offer", "url", "popup", "message"] as const;
+export const FORM_SUBMIT_ACTION_KINDS = ["offer", "url", "popup", "message", "branch"] as const;
+export const BRANCH_TARGET_KINDS = ["offer", "url", "step", "message"] as const;
 
 export type ButtonBlock = Base & {
   type: "button";
@@ -382,6 +408,16 @@ export type FormBlock = Base & {
     popup: boolean;
     /** Same union the opt-in form uses. Absent = {kind:"message"} — this form's existing behavior. */
     afterSubmit?: FormSubmitAction;
+    /**
+     * Show one question at a time with Next/Back. Purely presentational — the same fields are
+     * submitted either way, so nothing downstream (extractLeadFormFields, /api/public/leads,
+     * contacts.extra_fields) sees any difference.
+     *
+     * Absent/false means today's behavior exactly, which is what keeps every stored page unchanged.
+     * Stripped on blog pages by the validator: it is the one form flag that ships a script, and a
+     * blog post shipping JS is the property the carousel block was built in pure CSS to protect.
+     */
+    stepped?: boolean;
   };
   children: FormInputBlock[];
 };
@@ -701,7 +737,14 @@ export type LeadCaptureFormBlock = Base & {
   // own submit decides where the lead goes next, so the page no longer carries a second button
   // that only appears after submitting. Absent = {kind:"offer"}, which is exactly where the old
   // reveal-then-click CTA pointed.
-  content: { ctaText: string; afterSubmit?: FormSubmitAction; successText?: string };
+  // `stepped` is here as well as on FormBlock because the opt-in form is the one a Survey funnel
+  // actually uses — the bucket questions are its children. Same presentational-only meaning.
+  content: {
+    ctaText: string;
+    afterSubmit?: FormSubmitAction;
+    successText?: string;
+    stepped?: boolean;
+  };
   children: FormInputBlock[];
 };
 export type PrimaryCtaBlock = Base & { type: "primary_cta"; locked: "primary_cta"; content: { text: string } };
@@ -841,6 +884,16 @@ export type RenderCtx = {
   primaryHref: string;
   declineHref?: string | null;
   nextStepUrl?: string | null;
+  /**
+   * Every step of this funnel, in order, so a branch rule can name one. `nextStepUrl` above is
+   * only the FIRST step, which cannot express "answer B goes to step 3".
+   *
+   * Keyed by funnel_steps.id, resolved to a URL here at bake time — see BranchTarget for why an
+   * index would be wrong. Populated by rerenderFunnelSequence (lib/funnelSteps.ts), which already
+   * loads every step and owns stepUrl(). Absent on blog pages and on a funnel with no steps; a
+   * branch naming a step that isn't here falls back to its `otherwise`, never to a dead link.
+   */
+  steps?: { id: string; url: string }[];
   productTitle: string;
   /** Set by renderBlockTree from the tree itself — never passed in. See the CTA's reveal. */
   /**
@@ -1212,9 +1265,15 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       // `?? []` deliberately: this renders a page served to paid ad traffic, so a block missing
       // its children array must degrade to "no extra fields" rather than throw and take the whole
       // page down. The validator already normalizes this on save; this covers everything else.
-      const fields = (block.children ?? [])
-        .map((f) => renderFormField(f))
-        .join("");
+      const fieldList = (block.children ?? []).map((f) => renderFormField(f)).filter(Boolean);
+      const contactInputs = `<input type="text" name="first_name" placeholder="First name" autocomplete="given-name" />
+    <input type="email" name="email" placeholder="Email address" required autocomplete="email" />`;
+      // Same ordering rule as the opt-in form: questions first, contact details last, but only
+      // when stepped. Unstepped is byte-identical to before.
+      const formBody = block.content.stepped
+        ? steppedBody([...fieldList, contactInputs])
+        : `${contactInputs}
+    ${fieldList.join("")}`;
       // Posts to the same endpoint as the locked opt-in form, with the same field-key validation
       // server-side — a second write path for anonymous visitors is exactly what shouldn't exist.
       return `<div class="aos-form-wrap${popup ? " aos-form-popup" : ""}" id="${escapeHtml(block.id)}"${
@@ -1227,15 +1286,15 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       )}>
     ${popup ? '<button type="button" class="aos-form-close" data-close-form="1" aria-label="Close">&times;</button>' : ""}
     ${title.trim() ? `<h3>${escapeHtml(title)}</h3>` : ""}
-    <input type="text" name="first_name" placeholder="First name" autocomplete="given-name" />
-    <input type="email" name="email" placeholder="Email address" required autocomplete="email" />
-    ${fields}
+    ${formBody}${branchRulesHtml(block.content.afterSubmit, ctx)}
     <p class="consent-note">${escapeHtml(ctx.leadConsentText)}</p>
     <button type="submit" class="cta">${escapeHtml(submitText || "Send")}</button>
     <p class="aos-form-done" hidden>${escapeHtml(successText || "Thanks.")}</p>
   </form>
 </div>${FORM_ACTION_SCRIPT}${
         block.children.some((f) => f.content.visibleWhen) ? FORM_CONDITION_SCRIPT : ""
+      }${block.content.stepped ? FORM_STEPPED_SCRIPT : ""}${
+        block.content.afterSubmit?.kind === "branch" ? BRANCH_RESOLVE_SCRIPT : ""
       }`;
     }
     case "custom_html": {
@@ -1293,6 +1352,44 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
  * Nothing from the page reaches this as code: it reads three data attributes as strings and
  * compares them.
  */
+/**
+ * Reads the chosen answer and returns its baked URL, or null.
+ *
+ * Defined once and interpolated into BOTH submit handlers — FORM_ACTION_SCRIPT below for droppable
+ * form blocks, and the opt-in form's own handler in renderPages.ts. Those two already duplicate the
+ * collect-and-post logic; two copies of the routing decision as well is how one of them quietly
+ * ends up resolving an answer differently from the other.
+ *
+ * Every string it can return was resolved server-side (afterSubmitAttrs / branchRulesHtml). This
+ * picks between finished URLs; it never builds one.
+ */
+export const BRANCH_RESOLVE_JS = `window.aosBranchUrl = window.aosBranchUrl || function(form){
+  var f = form.getAttribute('data-branch-field');
+  if (!f) return null;
+  var sel = (window.CSS && CSS.escape) ? CSS.escape(f) : f;
+  var els = form.querySelectorAll('[name="' + sel + '"]'), v = '';
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    if (el.type === 'checkbox' || el.type === 'radio') { if (el.checked) { v = el.value || 'yes'; break; } }
+    else { v = el.value; break; }
+  }
+  var rules = form.querySelectorAll('[data-branch-value]');
+  for (var j = 0; j < rules.length; j++) {
+    if (rules[j].getAttribute('data-branch-value') === v) return rules[j].getAttribute('data-branch-url') || null;
+  }
+  return form.getAttribute('data-branch-else-url') || null;
+};`;
+
+/**
+ * Standalone tag, emitted ONLY beside a form whose action is actually a branch.
+ *
+ * It used to live inside FORM_ACTION_SCRIPT, which every form block emits — so a blog post with an
+ * ordinary subscribe form shipped the routing resolver it can never use, and so did every funnel
+ * form that doesn't branch. Assigned to `window` (rather than declared) so two branching forms on
+ * one page define it once.
+ */
+const BRANCH_RESOLVE_SCRIPT = `<script>${BRANCH_RESOLVE_JS}</script>`;
+
 const FORM_CONDITION_SCRIPT = `<script>(function(){
 function val(form, key){
   var els = form.querySelectorAll('[name="' + CSS.escape(key) + '"]');
@@ -1364,6 +1461,9 @@ document.addEventListener("submit", function(e){
   function finish(){
     var after = form.getAttribute("data-after");
     if (after === "url") { var u = form.getAttribute("data-after-url"); if (u) { window.location.href = u; return; } }
+    // Guarded: the resolver is only emitted beside a form that actually branches, so a throw here
+    // would strand a visitor whose lead has already been saved.
+    if (after === "branch" && window.aosBranchUrl) { var b = window.aosBranchUrl(form); if (b) { window.location.href = b; return; } }
     if (after === "popup") {
       var p = document.getElementById(form.getAttribute("data-after-id") || "");
       if (p) { p.hidden = false; p.classList.add("is-open"); }
@@ -1376,6 +1476,54 @@ document.addEventListener("submit", function(e){
     body: JSON.stringify({ campaign_id: form.getAttribute("data-campaign"), first_name: first, email: email, extra_fields: extra })
   }).catch(function(){}).then(finish);
 });
+})();</script>`;
+
+/**
+ * One question at a time, with Next/Back.
+ *
+ * Delegated document-level listeners and a re-scan on click, NOT COUNTDOWN_SCRIPT's one-shot
+ * querySelectorAll: a form block can be `popup: true`, so it may be revealed long after parse, and
+ * a one-shot scan would leave it showing every question at once.
+ *
+ * DEGRADES OPEN. The server renders every question visible and marks nothing hidden; this script is
+ * what collapses them to one at a time. So with JS off, or before this runs, the page is a normal
+ * long form that submits correctly — rather than a blank card, which is what hiding server-side and
+ * revealing client-side would produce on the one page kind that is paid for by the click.
+ */
+const FORM_STEPPED_SCRIPT = `<script>(function(){
+if (window.__aosStepped) return; window.__aosStepped = 1;
+function groups(form){ return form.querySelectorAll(".aos-step"); }
+function show(form, i){
+  var g = groups(form); if (!g.length) return;
+  var n = Math.max(0, Math.min(g.length - 1, i));
+  for (var k = 0; k < g.length; k++) g[k].hidden = (k !== n);
+  form.setAttribute("data-step", String(n));
+  var back = form.querySelector(".aos-step-back"), next = form.querySelector(".aos-step-next");
+  var submit = form.querySelector('button[type="submit"]');
+  if (back) back.hidden = n === 0;
+  // The submit button only appears on the last question, so Enter can't post a half-finished quiz.
+  if (next) next.hidden = n >= g.length - 1;
+  if (submit) submit.hidden = n < g.length - 1;
+}
+function setup(form){
+  if (form.getAttribute("data-stepped-ready") === "1") return;
+  if (!groups(form).length) return;
+  form.setAttribute("data-stepped-ready", "1");
+  // The nav is rendered hidden and revealed here, so with JS off the page is a plain long form
+  // with a working submit rather than one carrying two buttons that do nothing.
+  var nav = form.querySelector(".aos-step-nav"); if (nav) nav.hidden = false;
+  show(form, 0);
+}
+document.addEventListener("click", function(e){
+  var t = e.target && e.target.closest ? e.target.closest(".aos-step-next,.aos-step-back") : null;
+  if (!t) return;
+  var form = t.closest("form"); if (!form) return;
+  e.preventDefault();
+  setup(form);
+  var cur = Number(form.getAttribute("data-step") || 0);
+  show(form, cur + (t.classList.contains("aos-step-next") ? 1 : -1));
+});
+document.querySelectorAll("form").forEach(setup);
 })();</script>`;
 
 const COUNTDOWN_SCRIPT = `<script>(function(){
@@ -1549,6 +1697,63 @@ export function treeHasForm(blocks: unknown[]): boolean {
   return false;
 }
 
+/**
+ * One answer's destination, resolved to a real URL HERE, at bake time. Returns null for "stay on
+ * the page and show the success message".
+ *
+ * Everything the client script ever sees is the output of this function. That is the same
+ * invariant `{kind:"offer"}` has always had — the tenant never types the hoplink — extended to
+ * per-answer routing: the script picks between finished URLs, it never builds one.
+ */
+function resolveBranchTarget(t: BranchTarget, ctx: RenderCtx): string | null {
+  switch (t.kind) {
+    case "offer":
+      return ctx.nextStepUrl || ctx.primaryHref || null;
+    case "url":
+      return t.href || null;
+    case "step":
+      // Absent id -> null -> the caller falls back to `otherwise`. A funnel whose steps were
+      // deleted must land somewhere, not on a dead link.
+      return (ctx.steps ?? []).find((s) => s.id === t.stepId)?.url ?? null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * The rule table, as inert hidden elements inside the form. One per answer, each carrying the
+ * answer value and its already-resolved URL.
+ *
+ * Elements rather than a JSON blob on purpose: a JSON attribute would have to be parsed by the
+ * script, which is a step away from the script making decisions, and it would put a tenant-authored
+ * string through JSON.parse. escapeHtml covers `& < > "`, so a double-quoted attribute cannot be
+ * broken out of — keep these quotes double.
+ */
+function branchRulesHtml(action: FormSubmitAction | undefined, ctx: RenderCtx): string {
+  if (!action || action.kind !== "branch") return "";
+  return action.rules
+    .map((r) => {
+      const url = resolveBranchTarget(r.then, ctx);
+      return `<span class="aos-branch" hidden data-branch-value="${escapeHtml(r.value)}"${
+        url ? ` data-branch-url="${escapeHtml(url)}"` : ""
+      }></span>`;
+    })
+    .join("");
+}
+
+/**
+ * Wraps each already-rendered field in its own step, and appends the Back/Next nav.
+ *
+ * Nothing is `hidden` here except the nav — see FORM_STEPPED_SCRIPT for why the collapse to one
+ * question at a time is the script's job, not the server's.
+ *
+ * Shared by both form renderers so the class names the script looks for are written once.
+ */
+function steppedBody(parts: string[]): string {
+  const steps = parts.filter(Boolean).map((p) => `<div class="aos-step">${p}</div>`).join("");
+  return `${steps}<div class="aos-step-nav" hidden><button type="button" class="aos-step-back" hidden>Back</button><button type="button" class="aos-step-next">Next</button></div>`;
+}
+
 export function afterSubmitAttrs(
   action: FormSubmitAction | undefined,
   ctx: RenderCtx,
@@ -1564,13 +1769,33 @@ export function afterSubmitAttrs(
       return a.href ? ` data-after="url" data-after-url="${escapeHtml(a.href)}"` : ` data-after="message"`;
     case "popup":
       return a.formId ? ` data-after="popup" data-after-id="${escapeHtml(a.formId)}"` : ` data-after="message"`;
+    case "branch": {
+      // The rules themselves live in the form body (branchRulesHtml); this carries which field to
+      // read and where an unmatched answer goes. An `otherwise` that resolves to nothing simply
+      // omits the attribute, and the script shows the success message — the same end state as
+      // every other unresolvable action here.
+      const other = resolveBranchTarget(a.otherwise, ctx);
+      return ` data-after="branch" data-branch-field="${escapeHtml(a.fieldKey)}"${
+        other ? ` data-branch-else-url="${escapeHtml(other)}"` : ""
+      }`;
+    }
     default:
       return ` data-after="message"`;
   }
 }
 
 function renderLeadCaptureForm(block: LeadCaptureFormBlock, ctx: RenderCtx): string {
-  const extraInputs = (block.children ?? []).map(renderFormField).filter(Boolean).join("\n          ");
+  const extraFields = (block.children ?? []).map(renderFormField).filter(Boolean);
+  // Never tree nodes — there is no tree state that could represent "email field deleted".
+  const contactInputs = `<input id="leadFirstName" name="first_name" type="text" placeholder="First name" required />
+          <input id="leadEmail" name="email" type="email" placeholder="Email address" required />`;
+  // Stepped puts the CONTACT details last: a survey asks its questions and then asks who you are,
+  // which is also the order that gets them answered. Unstepped keeps the original DOM order exactly,
+  // so no stored page moves.
+  const formBody = block.content.stepped
+    ? steppedBody([...extraFields, contactInputs])
+    : `${contactInputs}
+          ${extraFields.join("\n          ")}`;
   const done = escapeHtml(block.content.successText || "Thanks — check your inbox.");
   return `<div class="optin"${styleAttr(block.style, FORM_STYLE_KEYS)}>
         <form id="leadForm" data-campaign-id="${escapeHtml(ctx.campaignId)}"${afterSubmitAttrs(
@@ -1578,14 +1803,16 @@ function renderLeadCaptureForm(block: LeadCaptureFormBlock, ctx: RenderCtx): str
     ctx,
     "offer"
   )}>
-          <input id="leadFirstName" name="first_name" type="text" placeholder="First name" required />
-          <input id="leadEmail" name="email" type="email" placeholder="Email address" required />
-          ${extraInputs}
+          ${formBody}${branchRulesHtml(block.content.afterSubmit, ctx)}
           <button type="submit" class="cta">${escapeHtml(block.content.ctaText)}</button>
           <p class="disclosure">${ctx.leadConsentText}</p>
         </form>
         <p class="aos-form-done reveal" hidden>${done}</p>
-      </div>${block.children.some((f) => f.content.visibleWhen) ? FORM_CONDITION_SCRIPT : ""}`;
+      </div>${block.children.some((f) => f.content.visibleWhen) ? FORM_CONDITION_SCRIPT : ""}${
+    block.content.stepped ? FORM_STEPPED_SCRIPT : ""
+  }`;
+  // NOTE: the opt-in form does NOT emit BRANCH_RESOLVE_SCRIPT — its submit handler lives in the
+  // page shell (renderPages.ts), which emits the resolver itself when the body contains a branch.
 }
 
 function renderLockedBlock(block: LockedBlock, ctx: RenderCtx): string {
