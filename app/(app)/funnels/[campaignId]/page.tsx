@@ -10,6 +10,7 @@ import PublishBridge from "@/components/PublishBridge";
 import OfferLinkPanel from "@/components/OfferLinkPanel";
 import PageEditor from "@/components/PageEditor";
 import PromoteKitDialog from "@/components/PromoteKitDialog";
+import { ALL_KIT_ASSETS } from "@/lib/kitAssets";
 import RestyleDialog from "@/components/RestyleDialog";
 import BuildProgressDialog from "@/components/BuildProgressDialog";
 import FunnelMap from "@/components/FunnelMap";
@@ -235,9 +236,20 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
           count={1}
           busy={regenBusy}
           mode="regenerate"
-          // The button says "Regenerate", so the page it regenerates starts ticked. Everything
-          // else in the kit stays offerable underneath it.
-          defaultAssets={["funnel"]}
+          // The WHOLE kit starts ticked, funnel included.
+          //
+          // This opened with only the funnel ticked, on the reasoning that a button labelled
+          // "Regenerate" sitting in the funnel editor should default to the page it sits on. That
+          // reads the button too literally: "regenerate" means the kit — the ads, captions, emails
+          // and article that go with this campaign — and defaulting to funnel-only quietly
+          // produced a regeneration with none of them, which is indistinguishable from the build
+          // failing to generate them at all.
+          //
+          // Ticking the funnel is safe to default to here precisely because this dialog already
+          // warns about it: `willReplaceFunnel` shows the red "there is no undo" notice, sharpened
+          // with page_copy_edited_at, and offers Restyle as the non-destructive alternative.
+          // Anything not wanted is one click away.
+          defaultAssets={[...ALL_KIT_ASSETS]}
           funnelEditedAt={(campaign as { page_copy_edited_at?: string | null }).page_copy_edited_at ?? null}
           onRestyle={() => {
             setRegenOpen(false);
