@@ -110,5 +110,67 @@ export async function completeJSON<T>(opts: {
 
   const block = msg.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
   if (!block) throw new Error("Model did not return structured output");
-  return block.input as T;
+  return repairDoubleEncoded(block.input) as T;
+}
+
+/**
+ * Recovers a tool result whose values the model serialised to JSON *strings* instead of emitting
+ * as structure.
+ *
+ * This is not hypothetical tidiness. Observed live against a real product: with a schema demanding
+ * `fb_ad_angles: {type: "array", minItems: 3}`, the model returned
+ *
+ *   { "fb_ad_angles": "{\"fb_ad_angles\":[{...},{...},{...}]}" }
+ *
+ * — the whole object re-encoded as a string under its own key. The three angles were all there and
+ * perfectly good; the stage still threw "Model did not return exactly 3 ad angles", which is both
+ * wrong and unhelpful, and did so on all five attempts because the behaviour was deterministic for
+ * that prompt. A build ended as a terminal error with nothing written.
+ *
+ * Both observed shapes are handled: a value that is the expected value re-encoded, and a value that
+ * is the WHOLE object re-encoded under its own key.
+ *
+ * Deliberately conservative. A string is only replaced when it starts with `{`/`[` AND parses AND
+ * yields an object or array — so a legitimate markdown field (email_md, tiktok_md, blog_md) is
+ * untouched even when it opens with a markdown link. Anything that doesn't parse is left exactly
+ * as it came back.
+ */
+export function repairDoubleEncoded(input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+
+  const obj = input as Record<string, unknown>;
+  let changed = false;
+  const out: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value !== "string") {
+      out[key] = value;
+      continue;
+    }
+    const trimmed = value.trim();
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+      out[key] = value;
+      continue;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      out[key] = value; // Not JSON after all — a markdown link, say. Leave it alone.
+      continue;
+    }
+    if (!parsed || typeof parsed !== "object") {
+      out[key] = value; // Parsed to a bare number/bool/null; that was never the intent.
+      continue;
+    }
+    // The whole object re-encoded under its own key — unwrap one level rather than nesting it.
+    const unwrapped =
+      !Array.isArray(parsed) && key in (parsed as Record<string, unknown>)
+        ? (parsed as Record<string, unknown>)[key]
+        : parsed;
+    out[key] = unwrapped;
+    changed = true;
+  }
+
+  return changed ? out : input;
 }
