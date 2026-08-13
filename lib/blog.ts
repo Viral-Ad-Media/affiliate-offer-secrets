@@ -732,6 +732,24 @@ export function renderPublicPostHtml(post: {
     .join(" · ");
   const seoTitle = (post.seo_title || "").trim() || post.title;
   const titleTag = post.settings?.blog_title ? `${seoTitle} — ${post.settings.blog_title}` : seoTitle;
+  // og:image only when the image is something a crawler can actually FETCH.
+  //
+  // featured_image_url is usually a base64 data: URI (8 of 9 published posts here, averaging
+  // 598 kB and reaching 1172 kB). Open Graph wants a URL a scraper retrieves out-of-band, so a
+  // data: URI in this tag does nothing for any social platform — while doubling the page, because
+  // the same bytes are already in the hero <img> below. Measured: a real post was 2.43 MB, 98% of
+  // it base64, with the image present twice.
+  //
+  // Dropping the tag rather than the hero image: the hero is the one that renders. This makes the
+  // twitter:card fall back to "summary" too, which is honest — a large-image card with no image
+  // the crawler can reach renders worse than a small one.
+  //
+  // When featured images move to real URLs (object storage or an image CDN) this starts emitting
+  // again on its own, with no change here.
+  const shareImage =
+    post.featured_image_url && !post.featured_image_url.startsWith("data:")
+      ? post.featured_image_url
+      : null;
   const { body, toc } = buildTableOfContents(
     post.html ?? renderPostContentHtml(post.content_md),
     post.settings
@@ -751,8 +769,8 @@ ${description ? `<meta property="og:description" content="${escapeHtml(descripti
 ${canonical ? `<meta property="og:url" content="${escapeHtml(canonical)}">` : ""}
 ${post.settings?.blog_title ? `<meta property="og:site_name" content="${escapeHtml(post.settings.blog_title)}">` : ""}
 ${post.published_at ? `<meta property="article:published_time" content="${escapeHtml(post.published_at)}">` : ""}
-${post.featured_image_url ? `<meta property="og:image" content="${escapeHtml(post.featured_image_url)}">` : ""}
-<meta name="twitter:card" content="${post.featured_image_url ? "summary_large_image" : "summary"}">
+${shareImage ? `<meta property="og:image" content="${escapeHtml(shareImage)}">` : ""}
+<meta name="twitter:card" content="${shareImage ? "summary_large_image" : "summary"}">
 ${post.seo_index === false ? '<meta name="robots" content="noindex, nofollow">' : ""}
 <style>:root{--content-w:${contentWidthOf({ contentWidth: post.content_width ?? undefined })}px;${themeToCssVars(post.theme)}}${PUBLIC_CSS}</style>
 </head>
