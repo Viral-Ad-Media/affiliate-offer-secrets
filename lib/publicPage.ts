@@ -122,6 +122,30 @@ export async function servePublicCampaignPage(
     }
   }
 
+  // DELIBERATELY no Cache-Control, unlike the blog pages (app/b/[...path]/route.ts) which do
+  // carry a short shared cache. This response is not the same bytes for every visitor and must
+  // never be served from a shared cache:
+  //
+  //   - It can carry Set-Cookie. A shared cache would hand ONE visitor's sticky `bv_{campaignId}`
+  //     assignment to everybody downstream of it, so every later visitor inherits that variant.
+  //     That doesn't just skew the split test, it silently ends it.
+  //   - The weighted pick has to run per visitor, and `increment_bridge_variant_views` has to run
+  //     on the assigning visit. A cache hit skips this function entirely, so views stop counting
+  //     while leads keep arriving — which moves the computed opt-in rate, and the confidence
+  //     figure derived from it, in the direction that gets a test called early.
+  //   - `bridge_published` is a real gate a tenant may use to pull a page down. It is the exact
+  //     staleness bug lib/supabase/admin.ts documents, one layer further out.
+  //
+  // This is not hypothetical for this deployment: measured live, every published funnel has active
+  // variants, so the "no variants, deterministic response" case that would be safe to cache is
+  // currently the empty set. If caching this is revisited, gate it on there being no active
+  // variants AND no Set-Cookie, and keep the TTL under the publish gate's tolerance.
+  //
+  // The cost this leaves on the table is real but is NOT a caching problem: bridge_html averages
+  // 105 kB and reaches 276 kB, almost all of it one inline base64 image that never changes. Moving
+  // that image to a URL would shrink the page ~20x and let the image cache on its own, which is
+  // the actual fix. See content rule 9 before doing it — the "never hotlinked" rule is about
+  // vendor URLs, not about serving our own bytes.
   return new Response(html, {
     status: 200,
     headers: {

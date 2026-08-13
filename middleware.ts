@@ -134,6 +134,22 @@ function redirectToHost(target: URL): NextResponse {
   return new NextResponse(null, { status: 307, headers: { Location: target.toString() } });
 }
 
+// Segment-boundary prefix match, shared by all three of the lists above.
+//
+// A bare startsWith over-matches at the segment boundary: "/api/domains/reverify-all" would also
+// cover "/api/domains/reverify-all-not-really", so a path that is merely SPELLED like a public
+// route inherited its exemption. Confirmed live before this fix — that URL was let through as
+// public instead of being sent to /login. Nothing exploitable today (no such route exists, and
+// each public route authorizes itself), but it is the same bug the matcher's (?:$|/) boundary
+// closes, and the two must agree about what "a public path" means.
+//
+// An entry ending in "/" keeps plain prefix semantics — "/p/" is meant to cover "/p/{id}/bridge".
+function matchesPrefix(pathname: string, prefixes: readonly string[]): boolean {
+  return prefixes.some(
+    (p) => pathname === p || pathname.startsWith(p.endsWith("/") ? p : `${p}/`)
+  );
+}
+
 export async function middleware(request: NextRequest) {
   // Three kinds of host, decided BEFORE the auth-gate logic below (see lib/host.ts):
   //
@@ -159,7 +175,7 @@ export async function middleware(request: NextRequest) {
   // /api/public/ prefix stays as well, so a new route under it is covered even before someone
   // remembers to list it above.
   const isPublicApiPath =
-    pathname.startsWith("/api/public/") || PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p));
+    pathname.startsWith("/api/public/") || matchesPrefix(pathname, PUBLIC_API_PREFIXES);
 
   if (hostKind.kind === "custom" && !isAssetPath && !isPublicApiPath) {
     const url = request.nextUrl.clone();
@@ -221,12 +237,10 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isPublic =
-    PUBLIC_EXACT_PATHS.includes(pathname) || PUBLIC_PREFIX_PATHS.some((p) => pathname.startsWith(p));
+    PUBLIC_EXACT_PATHS.includes(pathname) || matchesPrefix(pathname, PUBLIC_PREFIX_PATHS);
   // Segment-boundary matching, not a bare startsWith: "/ads" must cover "/ads" and "/ads/tiktok"
   // without also swallowing a future "/adsomething".
-  const isProtected = PROTECTED_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(p.endsWith("/") ? p : `${p}/`)
-  );
+  const isProtected = matchesPrefix(pathname, PROTECTED_PREFIXES);
   // App Router serves these icon conventions as real routes, NOT from /_next — so the auth gate
   // was 307'ing them to /login for every logged-out visitor, i.e. the marketing site and every
   // public funnel/blog page had a broken favicon. (`favicon.ico` is already excluded by this
@@ -262,6 +276,47 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
+// Every matched request runs this whole function, including the getUser() round trip — and on a
+// serverless host that is billed as origin transfer once for the middleware and again for the
+// route it falls through to. So the matcher is not just a performance knob: paths that gain
+// nothing from middleware should never reach it.
+//
+// What is excluded, and why each one is safe:
+//
+//   _next/         — build assets. The body already treats these as `isAssetPath`/`isAsset`, so
+//                    middleware's only effect on them was the cost of running.
+//   favicon.ico    — already excluded before this change.
+//   icon.svg,      — App Router serves these as real top-level routes, so browsers fetch them on
+//   apple-icon.png   every page load with no session. ICON_PATHS keeps them exempt from the auth
+//                    gate for any request that still reaches here.
+//   api/public/    — anonymous by design; each route does its own campaign-scoped authorization.
+//   the named      — Stripe/Meta HMAC or x-engine-secret. Each authorizes itself and none of them
+//   webhook/cron     has ever needed a session, a rewrite, or the auth gate.
+//   routes
+//
+// These mirror PUBLIC_API_PREFIXES (and the /api/public/ blanket) above. The two lists are
+// separate because a Next matcher must be a static literal and PUBLIC_PREFIX_PATHS is a runtime
+// array — but they cannot be kept in sync by wishing, so note which way each drift fails:
+//
+//   in PUBLIC_PREFIX_PATHS, not here  -> the route runs middleware, is exempted from the rewrite
+//                                        by isPublicApiPath, and passes the gate as public. Works,
+//                                        just pays for a middleware invocation. Safe.
+//   here, not in PUBLIC_PREFIX_PATHS  -> the route skips the edge gate entirely. Only ever add a
+//                                        path here once it is genuinely self-authorizing.
+//
+// Excluding the webhooks also permanently closes the bug documented at PUBLIC_API_PREFIXES: a
+// delivery arriving on a non-canonical host can no longer be rewritten to /d and answered 405,
+// because it never reaches the rewrite.
+//
+// NOT excluded, deliberately: /robots.txt and /sitemap.xml. A connected custom domain serves its
+// OWN robots.txt and sitemap.xml through the /d rewrite (app/d/[[...path]]/route.ts) — taking
+// them out of the matcher would skip that rewrite and answer with the app's copy instead.
+// The two prefix entries end in "/" and match by prefix. Everything in the second group is an
+// EXACT route and is followed by a (?:$|/) boundary — without it the lookahead is a bare prefix
+// test, so a future "/api/engine/run-once" would silently inherit the exemption and skip the gate,
+// which is the unsafe drift direction named above. Verified against both lists.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!_next/|api/public/|(?:favicon\\.ico|icon\\.svg|apple-icon\\.png|api/billing/webhook|api/engine/run|api/broadcast/sweep|api/marketplace/refresh|api/domains/reverify-all|api/meta/deauthorize|api/meta/data-deletion)(?:$|/)).*)",
+  ],
 };

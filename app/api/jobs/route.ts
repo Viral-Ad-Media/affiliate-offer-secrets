@@ -10,6 +10,30 @@ import type { DiscoverPayload } from "@/lib/engine/clickbank";
 
 export const dynamic = "force-dynamic";
 
+// Every column of `jobs` EXCEPT stage_data — and that exception is the entire point.
+//
+// `stage_data` is where the worker parks each stage's committed output as a build advances:
+// the scraped sales-page text, the base64 product image, the generated kit. Measured against the
+// live table, it is ~100% of the row: jobs average 595 kB and reach 10 MB, of which payload is
+// 149 bytes and result is 244. A `select("*")` here returned **32 MB** for one call; the same 50
+// rows without stage_data are **12 kB**.
+//
+// That matters because this endpoint is POLLED — every 2s by BuildProgressDialog while a kit
+// builds, every 5s by ProductsPanel while a job is open, and on the jobs page. A 32 MB response
+// on a 2s timer is ~1 GB a minute per open tab, billed both from the function to the CDN and
+// from the CDN to the browser.
+//
+// Nothing consumes it: no component reads `stage_data`, and `Job` (lib/shared.ts) doesn't even
+// declare it. It is a server-side scratchpad for the worker, which reads it through its own
+// service-role client, never through this route.
+//
+// Keep this list explicit rather than reaching back for `*`. Same rule as
+// app/api/products/[id]/route.ts: a column a child component needs that is missing here is
+// invisible to `tsc` and shows up as a broken UI, which is why `stage` is listed — buildProgress's
+// buildSteps() derives the whole checklist from it.
+const JOB_COLUMNS =
+  "id, type, status, stage, payload, result, attempts, created_at, updated_at";
+
 export async function GET() {
   const supabase = createClient();
   const {
@@ -22,7 +46,7 @@ export async function GET() {
 
   const { data: jobs, error } = await supabase
     .from("jobs")
-    .select("*")
+    .select(JOB_COLUMNS)
     .eq("workspace_id", ws)
     .order("created_at", { ascending: false })
     .limit(50);

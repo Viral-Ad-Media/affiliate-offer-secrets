@@ -149,6 +149,17 @@ export type Job = {
   result: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Which stage the worker has committed. Declared because lib/buildProgress.ts derives the whole
+   * build checklist from it — it was being read off the row while absent from this type, so
+   * `/api/jobs` dropping the column would have silently pinned every build to 0% with a clean
+   * typecheck. Optional because discover_products is single-stage and leaves it null.
+   *
+   * `stage_data` is deliberately NOT here: it averages 595 kB (max 10 MB) and is a server-side
+   * scratchpad the worker reads through its own client. See JOB_COLUMNS in app/api/jobs/route.ts.
+   */
+  stage?: number | null;
+  attempts?: number | null;
 };
 
 export type Profile = {

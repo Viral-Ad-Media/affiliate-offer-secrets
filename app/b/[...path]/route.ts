@@ -23,9 +23,23 @@ export const dynamic = "force-dynamic";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Same reasoning as the feeds above, now applied to the pages themselves: a published post is
+// identical bytes for every reader — no cookie, no per-visitor state, nothing host-dependent past
+// the workspace scoping that already resolved before this is used. Every request was reaching the
+// function and re-rendering from the database, which is the one thing a blog page never needs.
+//
+// `max-age=0` keeps the BROWSER revalidating, so an author reloading after an edit sees it at
+// once; `s-maxage` is what actually collapses crawler and reader traffic at the CDN.
+//
+// The tradeoff, stated because it changes a property this codebase verified explicitly:
+// unpublishing a post no longer 404s its URL and drops it from the index *instantly*, but within
+// roughly a minute (up to ~2 with the revalidate window). That is the standard trade for public
+// content and matches what the feeds have always done — but it means unpublish is not an
+// immediate kill switch. Keep these numbers small for that reason.
 const HTML_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
   "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Cache-Control": "public, max-age=0, s-maxage=60, stale-while-revalidate=60",
 };
 
 // Bound per request inside the handler below, because the page it serves depends on the host:
