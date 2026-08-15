@@ -1,0 +1,31 @@
+# Netlify build configuration.
+#
+# Without this file Netlify reported "No config file was defined: using default values", which set
+# `publish` to the repo root — the same path as the base directory — and @netlify/plugin-nextjs
+# refuses that outright:
+#
+#   Error: Your publish directory cannot be the same as the base directory of your site.
+#
+# The Next.js runtime wants the build output directory, not the repo root. Everything the app
+# actually serves (SSR pages, all ~79 API routes, the middleware) is produced by the plugin from
+# `.next` — an earlier deploy that shipped 452 static assets with "No functions deployed" and
+# "No edge functions deployed" was this same misconfiguration one step further along: it uploaded
+# the build's static files and none of the app.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# The plugin is also enabled in the Netlify UI (the failing build logged `origin: ui`). Declaring it
+# here as well is idempotent and makes the dependency visible in the repo rather than only in
+# somebody's dashboard.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# `NEXT_PUBLIC_*` values are inlined at BUILD time, not read at runtime, so every one of them has to
+# exist in Netlify's environment before the build runs — setting one afterwards changes nothing
+# until the next deploy. NEXT_PUBLIC_APP_URL is the load-bearing one: middleware.ts rewrites any
+# request whose Host doesn't match it to /d${pathname}, so pointing it at the wrong host does not
+# degrade gracefully, it 404s every page of the app.
+#
+# Deliberately NOT listed here — secrets belong in the Netlify UI, never in a committed file.
