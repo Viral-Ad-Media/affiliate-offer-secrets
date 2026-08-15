@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { removeDomainFromProject, VercelApiError } from "@/lib/vercel/client";
+import { syncDomainAliases } from "@/lib/netlify/domains";
 
 export const dynamic = "force-dynamic";
 
@@ -25,17 +25,23 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     .single();
   if (!domainRow) return NextResponse.json({ error: "domain not found" }, { status: 404 });
 
-  try {
-    await removeDomainFromProject(domainRow.domain);
-  } catch (err) {
-    if (!(err instanceof VercelApiError && err.status === 404)) {
-      const message = err instanceof VercelApiError ? err.message : "Failed to remove domain";
-      return NextResponse.json({ error: message }, { status: 502 });
-    }
-  }
-
+  // Row first, then reconcile — the same ordering the add path uses, for the same reason: the
+  // table is the authority and Netlify's alias list is derived from it. Detaching remotely first
+  // and then failing to delete the row would leave the app believing it serves a domain it no
+  // longer has.
+  //
   // custom_domain_routes cascades on domain_id, so mapped paths are cleaned up automatically.
   await admin.from("custom_domains").delete().eq("id", domainRow.id);
+
+  // Not fatal. The row is already gone and the domain no longer resolves here as far as this app
+  // is concerned; a stale alias left on the site is corrected by the next reconcile, including the
+  // 6-hourly cron. Reporting a failure now would invite a retry against a row that no longer exists.
+  try {
+    await syncDomainAliases(admin);
+  } catch (err) {
+    console.error("[domains] deleted the row but could not sync Netlify aliases", (err as Error).message);
+  }
+
   return NextResponse.json({ ok: true });
 }
 

@@ -3,7 +3,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CAMPAIGN_VIDEOS_BUCKET } from "@/lib/supabase/storage";
-import { removeDomainFromProject } from "@/lib/vercel/client";
+import { syncDomainAliases } from "@/lib/netlify/domains";
 import { destroyImage } from "@/lib/cloudinary/client";
 
 export const dynamic = "force-dynamic";
@@ -455,12 +455,19 @@ export async function POST(req: Request) {
       const liveDomainNames = new Set(
         (liveDomainNameResult.data ?? []).map((domain) => domain.domain as string)
       );
-      for (const { id, domain } of candidateDomains) {
-        if (liveDomainIds.has(id) || liveDomainNames.has(domain)) continue;
+      // One reconcile rather than a detach per domain. Netlify has no per-domain endpoint — the
+      // alias list is set wholesale from custom_domains — and by this point the deleted account's
+      // rows are gone, so pushing the current table state is exactly "drop the ones that left".
+      // The liveDomain* checks above still matter: they prove the rows really went, so a failed
+      // cascade can't cause this to detach a domain that another workspace still owns.
+      const detached = candidateDomains.filter(
+        ({ id, domain }) => !liveDomainIds.has(id) && !liveDomainNames.has(domain)
+      );
+      if (detached.length > 0) {
         try {
-          await removeDomainFromProject(domain);
+          await syncDomainAliases(admin);
         } catch {
-          cleanupFailures.push(`vercel ${domain}`);
+          cleanupFailures.push(`netlify aliases (${detached.length} domain(s))`);
         }
       }
     }

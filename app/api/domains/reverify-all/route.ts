@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isDomainFullyVerified } from "@/lib/vercel/client";
+import { isDomainFullyVerified } from "@/lib/netlify/client";
+import { syncDomainAliases } from "@/lib/netlify/domains";
 import { notify } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,13 @@ export async function POST(req: Request) {
     .select("id, domain, user_id")
     .eq("status", "verified");
 
+  // This sweep doubles as the self-healing reconcile: anything that failed to attach earlier — a
+  // row added while Netlify was unreachable, a dropped PATCH — is corrected here without anyone
+  // noticing it was wrong. Non-fatal, because the point of the sweep is the per-domain checks below.
+  await syncDomainAliases(admin).catch((err) =>
+    console.error("[domains] alias reconcile failed during reverify sweep", (err as Error).message)
+  );
+
   let checked = 0;
   let flaggedError = 0;
 
@@ -34,7 +42,7 @@ export async function POST(req: Request) {
         .from("custom_domains")
         .update({
           status: "error",
-          error_message: "DNS no longer points at Vercel — re-verify after fixing your DNS records.",
+          error_message: "DNS no longer points at this app — re-verify after fixing your DNS records.",
           updated_at: new Date().toISOString(),
         })
         .eq("id", row.id);
@@ -44,7 +52,7 @@ export async function POST(req: Request) {
       await notify(admin, row.user_id as string, {
         kind: "domain_error",
         title: `${row.domain} stopped resolving`,
-        body: "DNS no longer points at Vercel, so pages on this domain aren't being served. Re-verify after fixing your DNS records.",
+        body: "DNS no longer points at this app, so pages on this domain aren't being served. Re-verify after fixing your DNS records.",
         href: "/settings/domains",
       });
     }

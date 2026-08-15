@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { addDomainToProject, isDomainFullyVerified, VercelApiError } from "@/lib/vercel/client";
+import { isDomainFullyVerified, NetlifyApiError } from "@/lib/netlify/client";
+import { syncDomainAliases } from "@/lib/netlify/domains";
 
 export const dynamic = "force-dynamic";
 
@@ -39,9 +40,10 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
 
   try {
-    const result = await addDomainToProject(domain);
-    const verified = result.verified && (await isDomainFullyVerified(domain));
-
+    // The ROW goes in first, then Netlify is reconciled from the table. Reversed — attach remotely,
+    // then insert — a failed insert would leave an alias on the site that nothing in this app knows
+    // about, and nothing would ever clean it up. This order means the database is always the
+    // authority and the remote list is derived from it.
     const { data: row, error: insertErr } = await admin
       .from("custom_domains")
       .insert({
@@ -49,7 +51,9 @@ export async function POST(req: Request) {
         // Explicit, never left to the trigger — see the comment above.
         workspace_id: ws,
         domain,
-        status: verified ? "verified" : "pending",
+        // Always pending at first. Netlify has no ownership challenge to answer; a domain is
+        // verified here only once its DNS actually resolves to us, which it cannot yet.
+        status: "pending",
       })
       .select()
       .single();
@@ -62,9 +66,19 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json({ domain: row, verification: result.verification });
+    await syncDomainAliases(admin);
+
+    // Usually false right now, and that is the normal path rather than a failure: the tenant has
+    // not pointed their DNS yet. The UI shows the records to add and they press Verify after.
+    const verified = await isDomainFullyVerified(domain);
+    if (verified) {
+      await admin.from("custom_domains").update({ status: "verified" }).eq("id", row.id);
+      row.status = "verified";
+    }
+
+    return NextResponse.json({ domain: row, verification: [] });
   } catch (err) {
-    const message = err instanceof VercelApiError ? err.message : "Failed to add domain";
+    const message = err instanceof NetlifyApiError ? err.message : "Failed to add domain";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

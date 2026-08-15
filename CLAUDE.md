@@ -1362,6 +1362,58 @@ feature existed.
   opt-in page) — downstream steps are only reachable via the internal redirect chain, using the
   default `/p/` URL even when the opt-in page itself was reached through a custom domain.
 
+## Custom domains run on Netlify now, and the API shape is genuinely different
+
+The Vercel project was deleted, so `lib/vercel/client.ts` was calling a project that no longer
+exists and every add/verify/remove threw. It is gone; `lib/netlify/client.ts` replaces it. Two
+differences drove the whole rewrite, and neither is cosmetic:
+
+**There is no per-domain resource.** A Netlify site has one `custom_domain` and an array of
+`domain_aliases`, changed by PATCHing the site with the WHOLE array. Adding one domain is therefore
+a read-modify-write over a list shared by every tenant, and two concurrent adds can silently drop
+each other.
+
+**The fix is reconciliation, not a lock.** `custom_domains` is already the source of truth, so
+`syncDomainAliases()` (`lib/netlify/domains.ts`) derives the FULL desired set from that table and
+pushes it. Two callers compute the same set and converge; a dropped write self-heals on the next
+reconcile, including the 6-hourly reverify cron. A lock would also have needed a transaction
+spanning an HTTP call, which supabase-js cannot express. **Every route writes the ROW first and
+reconciles second** — the reverse would leave an alias attached that nothing in the app knows about.
+Pending domains are included deliberately: Netlify will not issue a certificate for a name that
+isn't attached, so it must be an alias *before* its DNS can be confirmed. `status` is what gates
+serving, not presence in the list.
+
+**There is no verification endpoint at all.** Vercel had two — `/verify` for ownership and `/config`
+for DNS-pointing — and `isDomainFullyVerified` required both. Netlify reports neither, so the
+question is answered by resolving the domain's DNS in-process (`node:dns`). That is the more honest
+check: it asks whether the name reaches us *right now* rather than what a provider's records claim.
+It **fails closed** — NXDOMAIN, timeout, no records all read as not-verified and never throw,
+because the cron loops over every domain and one bad name must not abort the sweep.
+
+**Match the CNAME target exactly, never `*.netlify.app`.** A loose suffix match would mark a domain
+verified while it points at somebody else's Netlify site, and the app would then claim to serve a
+name that resolves elsewhere. With `NEXT_PUBLIC_NETLIFY_SITE_HOSTNAME` unset, subdomain-CNAME
+verification simply does not pass — conservative, and the apex record still verifies.
+
+**The DNS values live in `lib/netlify/dns.ts`, imported by both sides.** They must stay isomorphic:
+`client.ts` imports `node:dns` and holds the token, so `components/DomainsPanel.tsx` cannot import
+it. This also fixes a real pre-existing drift — the Vercel constants were exported from the API
+client AND hardcoded again as literals in the panel, so the exported pair had no consumers at all.
+A tenant following a stale record watches their domain never verify, which reads as a broken
+product rather than a moved value. Current targets: A `75.2.60.5`, apex ALIAS/ANAME
+`apex-loadbalancer.netlify.com`, subdomain CNAME to the site's own `.netlify.app` hostname.
+
+**Env**: `NETLIFY_SITE_ID`, `NETLIFY_AUTH_TOKEN` (a personal access token), and
+`NEXT_PUBLIC_NETLIFY_SITE_HOSTNAME`. Unconfigured, tenants can still add domain rows — they simply
+are not attached, and `syncDomainAliases` returns null rather than throwing.
+
+**Not yet exercised against the live API.** `api.netlify.com` is unreachable from the sandbox this
+was written in (0/6, while Cloudinary and GitHub answered), so the request shapes come from
+Netlify's OpenAPI spec rather than a probe — the one place in this integration that departs from
+the standing verify-before-writing rule, and it is flagged rather than hidden. The DNS half IS
+verified live: 10 assertions including that the app's own domain correctly reads NOT verified while
+its records still point at Vercel. **Run one real add → verify → remove cycle before trusting it.**
+
 ## Custom domains
 
 Clients can connect their own domain(s) — bring-your-own only, no in-app domain purchase — and

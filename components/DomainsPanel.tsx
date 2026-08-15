@@ -19,6 +19,7 @@ import {
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { NETLIFY_DNS_A_RECORD, netlifyCnameTarget } from "@/lib/netlify/dns";
 import { Badge } from "@/components/ui/badge";
 import EmptyState from "@/components/EmptyState";
 
@@ -130,8 +131,12 @@ function AddRouteForm({
 //
 // The label counts dots, which is right for example.com and blog.example.com and wrong for a
 // two-part public suffix like example.co.uk (it reads as a subdomain). Both records are listed
-// either way and Vercel accepts whichever is correct, so the mislabel costs a reader a moment,
-// not a failed setup.
+// either way and whichever is correct is the one that resolves, so the mislabel costs a reader a
+// moment, not a failed setup.
+//
+// The values come from lib/netlify/dns.ts rather than being typed here. They were literals, while
+// the API client exported its own copies that nothing imported — so the pair could drift, and a
+// tenant following a stale record would just watch their domain never verify.
 function DnsSetup({
   domain,
   verifying,
@@ -154,7 +159,7 @@ function DnsSetup({
       id: `${domain.id}-a`,
       type: "A",
       name: "@",
-      value: "76.76.21.21",
+      value: NETLIFY_DNS_A_RECORD,
       applies: isApex,
       note: "apex domain (example.com)",
     },
@@ -162,7 +167,7 @@ function DnsSetup({
       id: `${domain.id}-cname`,
       type: "CNAME",
       name: subdomain === "@" ? "www" : subdomain,
-      value: "cname.vercel-dns.com",
+      value: netlifyCnameTarget(),
       applies: !isApex,
       note: "subdomain (blog.example.com)",
     },

@@ -254,11 +254,15 @@ begin
 end;
 $$;
 
+-- Every parameter type must be named, including the two that carry defaults: Postgres resolves a
+-- GRANT/REVOKE signature by exact argument list and does not consider defaults. Naming only the
+-- first eight aborts the migration with "function does not exist" — and had it merely warned, the
+-- skipped REVOKE would have left this fulfillment function EXECUTE-able by public.
 revoke execute on function public.fulfill_stripe_checkout(
-  text, text, uuid, uuid, text, integer, text, integer
+  text, text, uuid, uuid, text, integer, text, integer, boolean
 ) from public, anon, authenticated;
 grant execute on function public.fulfill_stripe_checkout(
-  text, text, uuid, uuid, text, integer, text, integer
+  text, text, uuid, uuid, text, integer, text, integer, boolean
 ) to service_role;
 
 -- Stripe refunds happen outside Postgres. This idempotent second half lets a retry repeat Stripe's
