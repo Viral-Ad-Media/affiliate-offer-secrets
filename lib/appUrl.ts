@@ -24,7 +24,11 @@
 // Read as a literal `process.env.NEXT_PUBLIC_APP_URL` expression: NEXT_PUBLIC_* is substituted at
 // BUILD time by static analysis, so it can never be indexed dynamically.
 
-export const DEFAULT_APP_URL = "https://www.affiliateoffersecrets.com";
+// The APEX, not www. Netlify serves the apex as the site's primary domain and 301s www to it
+// (measured 2026-08-15), so a www fallback would send every request through a redirect and print
+// a canonical URL that redirects — and, worse, anything POSTed to www gets a 308 rather than
+// reaching the route. This value must track whichever host Netlify has as primary.
+export const DEFAULT_APP_URL = "https://affiliateoffersecrets.com";
 
 // Only the two shapes anyone actually puts in this variable for dev. A bracketed IPv6 literal
 // would need its own parsing and has never appeared here; it would fall through to https, which

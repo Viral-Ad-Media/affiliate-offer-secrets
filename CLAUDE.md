@@ -1,7 +1,8 @@
 # Affiliate Offer Secrets
 
 **Product name is "Affiliate Offer Secrets,"** matching the domain
-**`www.affiliateoffersecrets.com`**. It was "ClickBank Studio" until Digistore24 support made a
+**`affiliateoffersecrets.com`** (the apex is canonical; `www` redirects to it). It was
+"ClickBank Studio" until Digistore24 support made a
 network-specific name wrong, then "Affiliate Studio" until the domain was bought — the
 user-facing wordmark must stay network-agnostic. "ClickBank" survives ONLY where it names the
 real network: the `'clickbank'` enum value in `network_connections`/`products`, `clickbank.com`'s
@@ -35,35 +36,37 @@ GitHub repo is `Viral-Ad-Media/affiliate-offer-secrets`, the local directory is
 migrations/0001_init.sql`'s header keeps the original name on purpose — a migration is a record
 of what was written at the time, not a live label.
 
-**Every internal reference to `clickbank-studio.vercel.app` moved to the custom domain** when the
-project was renamed: `NEXT_PUBLIC_APP_URL`, the fallback origins in `app/layout.tsx`/
-`app/robots.ts`/`app/sitemap.ts`/`lib/blog.ts`, and all four Vault cron URLs
-(`engine_webhook_url`, `marketplace_refresh_url`, `domains_reverify_url`, `broadcast_sweep_url` —
-verified 2026-08-06, all four canonical). Externally registered callbacks pointing at the old host
-— Meta/TikTok OAuth redirect URIs, Meta's deauthorize callback, the Stripe webhook endpoint, and
-Supabase Auth's Site URL/redirect allowlist — are the one class this codebase can't fix from
-inside itself and must be re-registered by hand.
+**The canonical host is the APEX, `affiliateoffersecrets.com` — NOT `www`.** Netlify serves the
+apex as the site's primary domain and redirects www to it at the edge. Measured 2026-08-15:
+`GET https://www.affiliateoffersecrets.com/` → **301** to the apex, and `POST` to any path on www →
+**308**. `NEXT_PUBLIC_APP_URL` is `https://affiliateoffersecrets.com`, read back out of the
+deployed build's own `robots.txt` (`Sitemap: https://affiliateoffersecrets.com/sitemap.xml`) and
+`og:url` rather than from the dashboard.
 
-**This section used to claim the hostname "is gone." It is not, and that false claim was
-load-bearing** — it is why nobody re-checked the Stripe registration after the rename. Measured
-live 2026-08-06: `clickbank-studio.vercel.app` is still a production alias on the Vercel project,
-alongside `www.affiliateoffersecrets.com`, the apex, and `*.affiliateoffersecrets.com`.
+**That redirect is why every externally-registered callback MUST name the apex.** Stripe does not
+follow redirects when delivering a webhook — a 3xx is a failed delivery, retried for days over
+something no retry can fix. A webhook still registered at `www` therefore grants no access and adds
+no credits, silently, exactly the way the old `*.vercel.app` registration did when it answered 405.
+This codebase cannot fix that class from inside itself; re-register by hand: the Stripe webhook,
+Meta's OAuth redirect URI / deauthorize / data-deletion callbacks, TikTok's redirect URI, and
+Supabase Auth's Site URL + redirect allowlist. Verify by measuring, not by reading the dashboard:
+`POST https://affiliateoffersecrets.com/api/billing/webhook` answers the real route's
+**400 missing signature/secret**, while the same POST to www answers **308**.
 
-**What it actually serves matters, and it is not a second copy of the app.** `classifyHost()`
-(`lib/host.ts`) files it as a **custom** host, so middleware rewrites every path to `/d`, matches
-no `custom_domain_routes` row, and returns the generic 404 — confirmed for `/`, `/login` and
-`/dashboard`. So there is no duplicate site, no old-brand marketing page, nothing indexable. The
-one thing that DOES resolve is `/api/`, because `PUBLIC_API_PREFIXES` exempts it from that rewrite:
-`POST /api/billing/webhook` on the old host returns the real route's `400 missing signature/secret`.
+**The Vercel project is deleted, and with it `clickbank-studio.vercel.app`.** An earlier version of
+this section documented that alias at length — including that removing it would return the name to
+Vercel's pool — and all of it is now moot. Kept only as the lesson that outlived it: that section
+once claimed the hostname "is gone" when it was still live and still serving `/api/`, and the false
+claim was load-bearing, because it is why nobody re-checked the Stripe registration after a rename.
+**Measure a host before writing down what it does.**
 
-**So the alias is doing exactly two useful jobs, and removing it is not obviously the fix**:
-it blocks anyone else claiming a `.vercel.app` hostname that still carries this product's old
-name, and it keeps a Stripe webhook registered against the old host working. Removing it is
-irreversible in the sense that matters — the name goes back into Vercel's pool. **Before removing
-it, confirm in the Stripe dashboard that the endpoint names
-`https://www.affiliateoffersecrets.com/api/billing/webhook`**; `payments` has zero rows ever, so
-nothing has exercised that path yet and a mis-registration would first show up as a paying
-customer who never gets access.
+**The four Vault cron URLs point at the raw Netlify site hostname**
+(`comforting-florentine-472348.netlify.app`), not the apex — `engine_webhook_url`,
+`marketplace_refresh_url`, `domains_reverify_url`, `broadcast_sweep_url`. That is deliberate and
+safe: it survives any future custom-domain change, and `PUBLIC_API_PREFIXES` exempts `/api/` from
+the host-mismatch rewrite so these resolve regardless of arriving Host. Verified 2026-08-15 — all
+four answer **401** without `x-engine-secret` and **200** with it, so the raw hostname is NOT being
+redirected away by the primary-domain setting.
 
 **`NEXT_PUBLIC_APP_URL` is load-bearing for the whole app, not just link generation.**
 `middleware.ts` rewrites any request whose `Host` doesn't match it to `/d${pathname}` (tenant
@@ -4369,7 +4372,10 @@ they are now exempt from the rewrite — derived by filtering `PUBLIC_PREFIX_PAT
 the two lists can't drift. `/p/`, `/b/` and `/r/` are deliberately NOT exempt: those are content
 routes whose host-scoping is the whole point (custom domains, and per-workspace subdomains).
 **A webhook registered anywhere other than the canonical host is now served rather than silently
-dropped** — but registrations should still name `www.affiliateoffersecrets.com`.
+dropped** — but registrations should still name the canonical APEX,
+`https://affiliateoffersecrets.com`. Note the exemption does not save a registration pointing at
+**`www`**: that redirect happens at Netlify's edge, before any middleware runs, so a POST there
+gets a 308 and never reaches the route at all. See the canonical-host section at the top.
 
 **`CRAWLER_PATHS` (`/robots.txt`, `/sitemap.xml`) is the same bug, found the same way.**
 `app/robots.ts` and `app/sitemap.ts` are also real top-level App Router routes, and both were
