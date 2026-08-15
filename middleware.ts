@@ -93,6 +93,10 @@ const PUBLIC_PREFIX_PATHS = [
   // shipped, so the auth gate 307'd every unauthenticated pg_net POST to /login and the sweep
   // never once ran — confirmed live against production before this fix.
   "/api/domains/reverify-all",
+  // Read-only dry run of the alias reconcile, x-engine-secret gated. Same caller shape as
+  // reverify-all (server-to-server, no session), so the same exemption — without it the auth gate
+  // 307s the POST to /login, the exact bug reverify-all shipped with.
+  "/api/domains/reconcile-preview",
   "/api/marketplace/refresh", // pg_cron daily marketplace-cache sweep, x-engine-secret gated
   "/b/", // public blog post pages — anonymous readers, no auth
   "/r/", // referral link capture — the visitor has no account yet, that's the point

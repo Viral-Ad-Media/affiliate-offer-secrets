@@ -114,6 +114,35 @@ export function isSiteOwnName(host: string): boolean {
 }
 
 /**
+ * Reads the site and computes what reconcileDomainAliases would send — without sending it.
+ *
+ * The single source of the plan: the real call below delegates here, so the dry-run route
+ * (app/api/domains/reconcile-preview) can never show a different answer than the write path acts
+ * on. Two computations of "what should the alias list be" is how a preview becomes a lie.
+ */
+export async function previewDomainAliases(domains: string[]): Promise<{
+  primary: string;
+  current: string[];
+  desired: string[];
+  changes: boolean;
+}> {
+  const site = await getSiteDomains();
+  const primary = (site.custom_domain ?? "").toLowerCase();
+
+  const tenant = domains.map((d) => d.trim().toLowerCase()).filter((d) => d && d !== primary);
+  // Our own names (www, the subdomain wildcard, netlify.app hosts — see isSiteOwnName) are carried
+  // across untouched; only tenant domains reconcile from the database.
+  const preserved = site.domain_aliases
+    .map((d) => d.trim().toLowerCase())
+    .filter((d) => d && d !== primary && isSiteOwnName(d));
+
+  const desired = Array.from(new Set([...preserved, ...tenant])).sort();
+  const current = [...site.domain_aliases].map((d) => d.toLowerCase()).sort();
+  const changes = !(current.length === desired.length && current.every((d, i) => d === desired[i]));
+  return { primary, current, desired, changes };
+}
+
+/**
  * Brings the site's alias list in line with `custom_domains`, without touching our own names.
  *
  * Callers pass the FULL desired set of TENANT domains derived from the table, never a delta — see
@@ -122,22 +151,11 @@ export function isSiteOwnName(host: string): boolean {
  * anything isSiteOwnName() claims, which is carried across untouched.
  */
 export async function reconcileDomainAliases(domains: string[]): Promise<string[]> {
-  const site = await getSiteDomains();
-  const primary = (site.custom_domain ?? "").toLowerCase();
-
-  const tenant = domains.map((d) => d.trim().toLowerCase()).filter((d) => d && d !== primary);
-  const preserved = site.domain_aliases
-    .map((d) => d.trim().toLowerCase())
-    .filter((d) => d && d !== primary && isSiteOwnName(d));
-
-  const desired = Array.from(new Set([...preserved, ...tenant])).sort();
+  const { desired, changes } = await previewDomainAliases(domains);
 
   // Skip the write when nothing changes. This runs on a 6-hourly cron over every domain, and a
   // no-op PATCH would rewrite the site record — and bump its updated_at — on every tick.
-  const current = [...site.domain_aliases].map((d) => d.toLowerCase()).sort();
-  if (current.length === desired.length && current.every((d, i) => d === desired[i])) {
-    return desired;
-  }
+  if (!changes) return desired;
 
   await netlifyFetch(`/sites/${getSiteId()}`, {
     method: "PATCH",
