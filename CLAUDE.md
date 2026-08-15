@@ -3145,6 +3145,39 @@ public routes had to start selecting `page_copy` (they only ever needed the pre-
 before). The canvas's desktop preview honours the width too, so the control does something visible
 before you publish.
 
+### The canvas is wide; running text is not (the measure cap)
+
+That 1280 default had a measured cost on text-heavy pages: an advertorial funnel's paragraphs
+rendered **1,152px wide — ~128 characters per line**, roughly double the readable 60-75. Both
+stylesheets now cap TEXT-SHAPED blocks (`p`, `h1/h2`, lists, FAQ `details`, testimonial, opt-in
+card, droppable forms, countdown, plus `.block-img`/`.video-wrap`) at
+`min(100%, var(--t-measure, 760px))`, centered — while sections, rows, carousels and `custom_html`
+keep the full canvas, which is what the wide default exists for. Measured live after the change:
+760px, ~75 real chars/line. Details that are load-bearing:
+
+- **`min(100%, …)`, never a bare `760px`** — `.block-img` is a replaced element whose intrinsic
+  width can exceed a phone-width container; its old `max-width:100%` was the overflow protection
+  and a bare px cap would reintroduce sideways scroll on mobile.
+- **`max-width` never widens**, so a 680px page is untouched, and anything inside a column is a
+  no-op (columns are already narrower). An explicit width from the editor's Layout panel is an
+  inline style and beats the stylesheet — user control survives.
+- **Blog's copy is `article`-scoped, NOT `main`-scoped** (`lib/blog.ts`): the blog INDEX renders
+  inside `main` too, and capping its `h1` would visibly re-center the page title over the card
+  grid. The two stylesheets must not drift, same as every other duplicated block rule.
+- **The default h1 moved 32 → 40px in the same pass** (`THEME_DEFAULTS.h1Size` +
+  `PAGE_STYLE`'s fallback + the canvas's `text-[40px]` — all three must move together). Themed
+  pages ALWAYS emit `--t-h1-size`, so the default reaches every theme without explicit
+  `typography.h1Size` — most AI-generated themes, which carry brand colors only. A mobile media
+  query caps h1 at `min(var(--t-h1-size), 34px)` below 640px.
+- **`npm run rerender-funnels` (`scripts/rerender-funnels.ts`) is how a stylesheet change reaches
+  LIVE funnel pages** — their HTML is baked at write time, so editing `PAGE_STYLE` alone changes
+  only future renders. It drives the real `rerenderFunnelSequence` per campaign (never a second
+  render path); blog pages need only a deploy, since `PUBLIC_CSS` renders at serve time. Run after
+  any `PAGE_STYLE` change; verified 15/15 campaigns re-rendered when this shipped.
+- **The editor canvas does NOT mirror the measure cap** — its desktop preview already showed
+  longer lines than the published page (documented under the editor-chrome rework); this widens
+  that known gap slightly. Judge real line length with the Tablet toggle, as before.
+
 ## Testimonial block
 
 One element type with three media shapes (`text` | `image` | `video`), not three block types —

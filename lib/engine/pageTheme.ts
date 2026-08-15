@@ -84,7 +84,12 @@ export const THEME_DEFAULTS = {
   surface: "#ffffff",
   border: "#e5e5e5",
   baseSize: 16,
-  h1Size: 32,
+  // 40, up from 32 (2026-08-15): a 32px hook read as body text on an advertorial whose whole job
+  // is the first impression on a cold click. Themed pages ALWAYS emit --t-h1-size, so this default
+  // reaches every page whose stored theme has no explicit typography.h1Size — most AI-generated
+  // themes, which carry brand colors only. A stored explicit size is untouched. Must stay in step
+  // with PAGE_STYLE's var fallback and WysiwygCanvas's heading preview class.
+  h1Size: 40,
   h2Size: 22,
   headingWeight: 700 as const,
   lineHeight: 1.6,

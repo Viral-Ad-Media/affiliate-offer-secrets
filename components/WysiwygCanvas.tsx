@@ -1410,7 +1410,7 @@ export default function WysiwygCanvas({
             value={el.content.text}
             onCommit={(v) => commit(el.id, { text: v })}
             maxLength={200}
-            className="mb-4 block text-[32px] font-bold leading-tight"
+            className="mb-4 block text-[40px] font-bold leading-tight"
             style={blockInlineStyle(el)}
           />
         );

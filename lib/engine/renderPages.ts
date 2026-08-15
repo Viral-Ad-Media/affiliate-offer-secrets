@@ -437,7 +437,23 @@ const PAGE_STYLE = `
      monitor stretching a line of text across the whole display. --content-w is emitted per
      page from the tree's own contentWidth (see contentWidthOf), so PAGE_STYLE stays a const. */
   .wrap { width: 90%; max-width: var(--content-w, 1280px); margin: 0 auto; padding: 40px 20px 80px; }
-  h1 { font-family:var(--t-heading-font,inherit); font-size: var(--t-h1-size,32px); font-weight:var(--t-heading-weight,700); line-height:1.2; margin-bottom: 16px; }
+  /* A readable MEASURE inside a wide canvas. The 1280px canvas is right for rows, columns and
+     carousels and wrong for running text — measured live on a funnel at ~128 characters per line,
+     roughly double the comfortable 60-75. Text-shaped blocks cap at --t-measure and center;
+     sections, rows, carousels and custom code keep the full canvas. min(100%, …) because .block-img
+     is a replaced element whose intrinsic width can exceed a narrow container — a bare 760px cap
+     would reintroduce sideways overflow on phones, the exact thing its max-width:100% prevented.
+     max-width never widens, so a 680px page is unchanged; a width set in the editor's Layout panel
+     is an inline style and wins. DUPLICATED (article-scoped) in lib/blog.ts PUBLIC_CSS. */
+  .wrap p, .wrap h1, .wrap h2, .wrap ul, .wrap ol, .wrap details,
+  .wrap .icon-list, .wrap .testimonial, .wrap .optin, .wrap .aos-form-wrap,
+  .wrap .countdown, .wrap .block-img, .wrap .video-wrap {
+    max-width: min(100%, var(--t-measure, 760px)); margin-left: auto; margin-right: auto;
+  }
+  h1 { font-family:var(--t-heading-font,inherit); font-size: var(--t-h1-size,40px); font-weight:var(--t-heading-weight,700); line-height:1.15; margin-bottom: 16px; }
+  /* The stored h1 size is a desktop number; on a phone it wraps a five-word hook onto four lines.
+     min() keeps a deliberately SMALL stored size while capping large ones. */
+  @media (max-width: 639px) { h1 { font-size: min(var(--t-h1-size, 40px), 34px); } }
   h2 { font-family:var(--t-heading-font,inherit); font-size: var(--t-h2-size,22px); font-weight:var(--t-heading-weight,700); margin-top: 32px; margin-bottom: 8px; }
   ul { padding-left: 20px; }
   hr { border: none; border-top: 1px solid var(--t-border,#e5e5e5); margin: 24px 0; }

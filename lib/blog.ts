@@ -323,6 +323,15 @@ const PUBLIC_CSS = `
      cap keeps a line of text readable on a wide monitor. --content-w comes from the post's own
      page_copy.contentWidth; the index grid below keeps its own fixed 1040px on purpose. */
   main { width: 90%; max-width: var(--content-w, 1280px); margin: 0 auto; padding: 48px 20px 80px; }
+  /* The funnel stylesheet's measure cap, article-scoped — see renderPages.ts PAGE_STYLE for the
+     full rationale (change both). Scoped to article, NOT main, deliberately: the blog INDEX also
+     renders inside main, and capping its h1 would visibly re-center the page title over the card
+     grid. Only a post's running text needs the measure. */
+  article p, article h1, article h2, article ul, article ol, article details,
+  article .icon-list, article .testimonial, article .countdown,
+  article .block-img, article .video-wrap {
+    max-width: min(100%, var(--t-measure, 760px)); margin-left: auto; margin-right: auto;
+  }
   .site-head { border-bottom: 1px solid var(--line); }
   .site-head-inner { max-width: 1040px; margin: 0 auto; padding: 20px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .site-title { font-size: 1.15rem; font-weight: 700; text-decoration: none; color: var(--ink); }
