@@ -44,7 +44,9 @@ export default function PublishBridge({
       supabase.from("custom_domains").select("id, domain").eq("status", "verified"),
       supabase
         .from("custom_domain_routes")
-        .select("id, domain_id, path, custom_domains(domain)")
+        // FK hint required since 0088 added a second FK between these tables — unhinted, PostgREST
+        // answers PGRST201 and the branded-link list silently renders empty. See settings/domains.
+        .select("id, domain_id, path, custom_domains!custom_domain_routes_domain_id_fkey(domain)")
         .eq("campaign_id", campaignId),
     ]).then(([{ data: domainRows }, { data: routeRows }]) => {
       setDomains((domainRows ?? []) as Domain[]);

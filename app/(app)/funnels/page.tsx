@@ -39,7 +39,9 @@ export default async function FunnelsPage() {
         .order("updated_at", { ascending: false }),
       supabase
         .from("custom_domain_routes")
-        .select("campaign_id, path, custom_domains(domain, status)")
+        // FK hint required since 0088 added a second FK between these tables — unhinted, PostgREST
+        // answers PGRST201 and the branded links silently vanish. See settings/domains/page.tsx.
+        .select("campaign_id, path, custom_domains!custom_domain_routes_domain_id_fkey(domain, status)")
         .eq("workspace_id", ws)
         .eq("destination", "bridge"),
       // One aggregate instead of three fetch-alls grouped in JS (0079). The old version pulled

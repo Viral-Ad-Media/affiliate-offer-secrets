@@ -19,7 +19,14 @@ export default async function DomainsPage() {
   const [{ data: domains }, { data: campaigns }] = await Promise.all([
     supabase
       .from("custom_domains")
-      .select("*, custom_domain_routes(id, path, destination, campaign_id, created_at)")
+      // The FK hint is REQUIRED, not stylistic: 0088 added a second (composite, workspace-scoped)
+      // FK between these tables, and an unhinted embed has been PGRST201 "ambiguous relationship"
+      // ever since — the whole query errors, the ignored-error destructure below turned that into
+      // an empty panel, and an operator re-added a live domain because the list showed nothing.
+      // Same hint needed anywhere these two tables (or routes ↔ campaigns) embed each other.
+      .select(
+        "*, custom_domain_routes!custom_domain_routes_domain_id_fkey(id, path, destination, campaign_id, created_at)"
+      )
       .eq("workspace_id", ws)
       .order("created_at", { ascending: false }),
     supabase
