@@ -9,7 +9,7 @@ import {
   uploadAdImage,
   uploadAdVideo,
 } from "@/lib/meta/client";
-import { fetchImageAsDataUrl } from "./images";
+import { fetchImageAsDataUrl, imageRefToDataUrl } from "./images";
 import { downloadCampaignVideo } from "@/lib/supabase/storage";
 import type { FbAdAngle } from "@/lib/shared";
 
@@ -201,6 +201,9 @@ async function stageAdSet(
 // Same resolution chain for both image and video-thumbnail use: this angle's own generated image
 // first, then the campaign-level fallback, then the vendor product photo — never a hard
 // dependency on any one of them having been generated.
+// ~10MB, matching MAX_AD_IMAGE_DATA_URL_CHARS's decoded ceiling in lib/images/validate.ts.
+const MAX_AD_IMAGE_BYTES = 10 * 1024 * 1024;
+
 async function resolveImageHash(
   adAccountId: string,
   token: string,
@@ -210,8 +213,19 @@ async function resolveImageHash(
   const adCreativeDataUrl = stageData.ad_creative_image_data_url as string | null;
   const sourceImageUrl = stageData.source_image_url as string | null;
 
-  if (angleImage) return uploadAdImage(adAccountId, token, angleImage);
-  if (adCreativeDataUrl) return uploadAdImage(adAccountId, token, adCreativeDataUrl);
+  // Meta gets BYTES, never a link — content rule 9, and lib/meta/client.ts documents it at each
+  // upload helper. Since creatives moved to Cloudinary these first two may now be a URL rather
+  // than a data URI, so each is pulled back to bytes first. imageRefToDataUrl passes a data URI
+  // through untouched, so a campaign that has not been migrated behaves exactly as before.
+  //
+  // MAX_AD_IMAGE_BYTES, not the 200 KB default: an AI-generated creative is a full-resolution
+  // photograph (~2.7 MB observed), and these URLs are our own. The small default stays on the
+  // vendor path below, where the URL is untrusted.
+  for (const ref of [angleImage, adCreativeDataUrl]) {
+    if (!ref) continue;
+    const bytes = await imageRefToDataUrl(ref, MAX_AD_IMAGE_BYTES);
+    if (bytes) return uploadAdImage(adAccountId, token, bytes);
+  }
   if (sourceImageUrl) {
     const dataUrl = await fetchImageAsDataUrl(sourceImageUrl);
     if (dataUrl) return uploadAdImage(adAccountId, token, dataUrl);

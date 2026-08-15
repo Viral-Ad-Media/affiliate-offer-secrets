@@ -1,4 +1,5 @@
 import { db } from "./core";
+import { uploadImageRef, CLD_FOLDER } from "@/lib/cloudinary/upload";
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { createKieTask, getKieTaskStatus, downloadKieResult } from "@/lib/kieai/client";
 import { isValidImageDataUrl, ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/images/validate";
@@ -23,7 +24,7 @@ export type BlogImageStageOutput = {
 // The real security boundary for this job type — jobs' own RLS only validates the row's user_id,
 // not payload contents, so a forged post_id must be caught here, not just at the API route that
 // queues the job. Same pattern as creativeimage.ts/adlaunch.ts's stageVerify.
-async function stageVerify(payload: GenerateBlogImagePayload, workspaceId: string): Promise<BlogImageStageOutput> {
+async function stageVerify(payload: GenerateBlogImagePayload, workspaceId: string, userId: string): Promise<BlogImageStageOutput> {
   const { data: post } = await db
     .from("blog_posts")
     .select("id, title, content_md, html")
@@ -41,7 +42,7 @@ async function stageVerify(payload: GenerateBlogImagePayload, workspaceId: strin
     .trim()
     .slice(0, 1500);
 
-  return { stageData: { title: post.title, body } };
+  return { stageData: { title: post.title, body, workspace_id: workspaceId, user_id: userId } };
 }
 
 async function stagePrompt(stageData: Record<string, unknown>, usage: UsageContext): Promise<BlogImageStageOutput> {
@@ -119,9 +120,17 @@ async function stageFinalize(stageData: Record<string, unknown>): Promise<BlogIm
     );
   }
 
+  // Hosted before it is written, so the post never stores base64 in the first place. Falls back
+  // to the data URI if Cloudinary is unconfigured or the upload fails — a generated image is
+  // worth keeping either way, and the backfill can move it later.
+  const hosted = (await uploadImageRef(db, dataUrl, CLD_FOLDER.blog, {
+    workspaceId: stageData.workspace_id as string,
+    userId: stageData.user_id as string,
+  })) ?? dataUrl;
+
   return {
     stageData,
-    postPatch: { featured_image_url: dataUrl, featured_image_status: "ready", featured_image_error: null },
+    postPatch: { featured_image_url: hosted, featured_image_status: "ready", featured_image_error: null },
   };
 }
 
@@ -137,7 +146,7 @@ export async function runGenerateBlogImageStage(
   const usage: UsageContext = { ...usageCtx, jobType: "generate_blog_image", stage };
   switch (stage) {
     case "verify":
-      return stageVerify(payload, workspaceId);
+      return stageVerify(payload, workspaceId, userId);
     case "prompt":
       return stagePrompt(stageData, usage);
     case "submit":

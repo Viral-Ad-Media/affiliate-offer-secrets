@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CAMPAIGN_VIDEOS_BUCKET } from "@/lib/supabase/storage";
 import { removeDomainFromProject } from "@/lib/vercel/client";
+import { destroyImage } from "@/lib/cloudinary/client";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -179,11 +180,14 @@ export async function POST(req: Request) {
   const secretWorkspaces = new Map<string, Set<string>>();
   let campaigns: CampaignAsset[] = [];
   let customDomains: DomainAsset[] = [];
+  // Hosted images. Inventoried up front like everything else here: cloudinary_assets
+  // cascades with its workspace, so after deletion there is nothing left to read.
+  let cloudinaryAssets: { publicId: string; workspaceId: string }[] = [];
 
   // Inventory is read-only and must be complete before anything irreversible happens. An error in
   // any query aborts the deletion so an external secret/object cannot become undiscoverable.
   if (ownedWorkspaceIds.length > 0) {
-    const [secretResults, campaignResult, domainResult] = await Promise.all([
+    const [secretResults, campaignResult, domainResult, cloudinaryResult] = await Promise.all([
       Promise.all(
         SECRET_SOURCES.map(async (source) => ({
           source,
@@ -200,6 +204,10 @@ export async function POST(req: Request) {
       admin
         .from("custom_domains")
         .select("id, domain, status, workspace_id", { count: "exact" })
+        .in("workspace_id", ownedWorkspaceIds),
+      admin
+        .from("cloudinary_assets")
+        .select("public_id, workspace_id", { count: "exact" })
         .in("workspace_id", ownedWorkspaceIds),
     ]);
 
@@ -238,6 +246,14 @@ export async function POST(req: Request) {
       inventoryErrors.push("custom_domains: incomplete result");
     }
 
+    // Same fail-closed treatment as every other asset class: an unreadable inventory aborts the
+    // deletion rather than proceeding and leaving images nobody can find afterwards.
+    if (cloudinaryResult.error) {
+      inventoryErrors.push(`cloudinary_assets: ${cloudinaryResult.error.message}`);
+    } else if (cloudinaryResult.count !== (cloudinaryResult.data ?? []).length) {
+      inventoryErrors.push("cloudinary_assets: incomplete result");
+    }
+
     if (inventoryErrors.length > 0) {
       console.error("Account deletion asset inventory failed", inventoryErrors);
       return NextResponse.json(
@@ -249,6 +265,11 @@ export async function POST(req: Request) {
     campaigns = (campaignResult.data ?? []).map((campaign) => ({
       id: campaign.id as string,
       workspaceId: campaign.workspace_id as string,
+    }));
+
+    cloudinaryAssets = (cloudinaryResult.data ?? []).map((asset) => ({
+      publicId: asset.public_id as string,
+      workspaceId: asset.workspace_id as string,
     }));
     // Pending domains are already attached to the Vercel project: domain creation calls Vercel
     // before DNS verification. Inventory every row, not only verified ones, so deletion cannot
@@ -442,6 +463,23 @@ export async function POST(req: Request) {
           cleanupFailures.push(`vercel ${domain}`);
         }
       }
+    }
+  }
+
+  // Hosted images, for the workspaces that were actually deleted. Same rule as every other class
+  // here: selected by WORKSPACE, never by user_id, because an image uploaded into somebody else's
+  // workspace belongs to that workspace after this person leaves.
+  //
+  // No liveness re-check like domains and campaigns get: cloudinary_assets cascades with its
+  // workspace, so "the workspace is gone" already means "no surviving row references this asset".
+  // destroyImage treats an already-deleted id as success, so a partial previous run is safe to
+  // repeat.
+  const doomedAssets = cloudinaryAssets.filter((asset) => deletedWorkspaceIds.has(asset.workspaceId));
+  for (const asset of doomedAssets) {
+    try {
+      await destroyImage(asset.publicId);
+    } catch {
+      cleanupFailures.push(`cloudinary ${asset.publicId}`);
     }
   }
 

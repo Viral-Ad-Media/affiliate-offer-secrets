@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   MAX_BLOG_SETTING,
@@ -10,7 +11,8 @@ import {
   slugify,
   isPermalinkStyle,
 } from "@/lib/blog";
-import { isValidImageDataUrl } from "@/lib/images/validate";
+import { isValidImageRef } from "@/lib/images/validate";
+import { uploadImageRef, CLD_FOLDER } from "@/lib/cloudinary/upload";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +28,13 @@ export async function POST(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
+
+  // Resolved rather than left to the stamp_workspace_id trigger. This route writes on the admin
+  // client, where auth.uid() is NULL, so the trigger's fallback is "this user's FIRST owned
+  // workspace" — which files a second workspace's asset under the first. CLAUDE.md records the
+  // same trap firing for real in the Meta callback and in POST /api/domains.
+  const ws = await currentWorkspaceId();
+  if (!ws) return workspaceRequiredResponse();
 
   const body = await req.json().catch(() => ({}));
   const clean = (v: unknown, max = MAX_BLOG_SETTING) =>
@@ -80,10 +89,17 @@ export async function POST(req: Request) {
   if (body.author_avatar_url === null) {
     patch.author_avatar_url = null;
   } else if (typeof body.author_avatar_url === "string") {
-    if (!isValidImageDataUrl(body.author_avatar_url, MAX_FEATURED_IMAGE_CHARS)) {
+    if (!isValidImageRef(body.author_avatar_url, MAX_FEATURED_IMAGE_CHARS)) {
       return NextResponse.json({ error: "avatar must be a PNG/JPEG/WebP/GIF under the size cap" }, { status: 400 });
     }
-    patch.author_avatar_url = body.author_avatar_url;
+    // Validated first, then hosted — the avatar renders under every post and at the foot of
+    // the index, so it is on every blog page load.
+    patch.author_avatar_url = await uploadImageRef(
+      createAdminClient(),
+      body.author_avatar_url,
+      CLD_FOLDER.blogAuthor,
+      { workspaceId: ws, userId: user.id }
+    );
   }
 
   const { data, error } = await admin

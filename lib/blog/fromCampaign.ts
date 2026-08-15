@@ -15,7 +15,7 @@ import {
   renderBlockTree,
   slugify,
 } from "@/lib/blog";
-import { isValidImageDataUrl } from "@/lib/images/validate";
+import { isValidImageRef } from "@/lib/images/validate";
 import { keywordsOf, type PageBlockTree } from "@/lib/engine/renderPages";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -139,7 +139,7 @@ export async function createPostFromCampaign(
   // The post inherits the campaign's product shot as its featured image — a sensible default the
   // tenant can replace (upload) or regenerate (AI) from the editor.
   const img = campaign.embedded_image_data_url as string | null;
-  const featuredImage = img && isValidImageDataUrl(img, MAX_FEATURED_IMAGE_CHARS) ? img : null;
+  const featuredImage = img && isValidImageRef(img, MAX_FEATURED_IMAGE_CHARS) ? img : null;
 
   const product = campaign.products as unknown as { product_title: string; niche: string | null } | null;
   const categoryId = await categoryForNiche(admin, workspaceId, campaign.user_id as string, product?.niche);

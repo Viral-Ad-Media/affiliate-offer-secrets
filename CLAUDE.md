@@ -2331,6 +2331,89 @@ after this contact signed up", never a shared calendar date). Reuses the existin
   abuse protection on the unsubscribe endpoint (same accepted v1 gap as `/api/public/leads`); no
   manual "send this step now" override or drag-and-drop step reordering.
 
+## Images live on Cloudinary, not inline in the HTML
+
+Every image was a base64 `data:` URI inlined into the page. Measured before changing anything: a
+blog index at **4,136,287 bytes**, a post at **1,232,113** (98% base64, the same image present
+twice), `campaigns.bridge_html` averaging 105 kB, a full `campaigns` row averaging 300 kB.
+`blog_posts.featured_image_url` alone averaged 598 kB and reached 1,172 kB. Base64 also inflates
+~33% over binary and can never be cached separately from the HTML.
+
+**The stored value now holds a delivery URL, in the SAME columns as before.** No new `*_public_id`
+columns: all eleven render sites keep working, and both shapes stay valid indefinitely, which is
+what let this ship without a flag day. `cloudinary_assets` (0092) is the one new table — it exists
+so account deletion can answer "what does this workspace own remotely", the question the image
+columns cannot.
+
+**`isOwnCloudinaryUrl` is the security boundary and it is anchored to OUR cloud name.** Until this
+change a stored image could only be bytes we already held, so an `<img src>` on a page served to
+anonymous ad traffic could not point anywhere — that property came free from the data:-only rule
+and had to survive. Accepting any https URL would hand every tenant hotlinking, a tracking pixel on
+a page carrying someone else's disclosure, and a way to make our pages fetch a host of their
+choosing. `isValidImageRef` = data URI OR our URL, and it replaced `isValidImageDataUrl` at the 14
+call sites that can receive an already-migrated value. **The three kie.ai jobs deliberately still
+use `isValidImageDataUrl`** — they validate freshly-fetched bytes *before* uploading, where a URL
+would be wrong. The cloud name is `NEXT_PUBLIC_` because it appears in every delivery URL a browser
+loads; the key and secret are server-only. **Unconfigured, it fails CLOSED** — no URL is accepted,
+data URIs still work.
+
+**Transformation syntax is not guessable and the first attempt was wrong.** Cloudinary's own
+reference states it three times: `f_` and `q_` are separate ACTIONS needing separate
+slash-delimited components (`f_auto/q_auto`, never `f_auto,q_auto`), they belong at the END so the
+format is chosen for the final pixels, and `w_`/`h_` must never appear without a crop mode.
+Verified against the live API — `c_fill,g_auto,h_300,w_400/f_auto/q_auto` took a 110,287-byte
+original to **17,386 bytes**; `c_limit,w_1200/f_auto/q_auto` to **56,800**. Honest caveat from the
+control: the comma form is *accepted*, not rejected, so this was a correctness-of-output fix rather
+than a broken-URL one. Presets live in `lib/cloudinary/url.ts`; that module is ISOMORPHIC (no
+crypto, no secrets) because the renderers import it. **`lib/cloudinary/client.ts` must never reach
+a client bundle** — `node:crypto` there is the trap that passes `tsc` and fails `next build`.
+
+**Uploads happen in routes and engine jobs, never in the browser.** The editors are unchanged: they
+still post a data URI to the same endpoints and the endpoint uploads. `uploadTreeImages` walks a
+block tree AFTER `validatePageBlockTree` (it is not a validation step) and BEFORE the render,
+because `bridge_html` / `funnel_steps.html` / `blog_posts.html` are baked at write time — uploading
+after would leave the served page carrying base64 while `page_copy` claimed otherwise. Every upload
+path degrades to storing the original value on failure or when unconfigured: a save must not fail
+over an image host.
+
+**Meta still receives BYTES.** Content rule 9 has not moved. `resolveImageHash` pulls our URL back
+through `imageRefToDataUrl` before `uploadAdImage`. `fetchImageAsDataUrl` gained an explicit
+`maxBytes` argument rather than a raised shared constant — the 200 kB default protects the
+*vendor sales-page* path where the URL is untrusted, and relaxing it globally to serve a trusted
+path would have been the wrong trade. Instagram is the opposite case: it needs a fetchable URL, so
+it now gets the Cloudinary URL directly rather than depending on its fetcher following our 302.
+`servePublicCampaignImage` stays — it still serves legacy data URIs, and redirects for hosted ones.
+
+**`og:image` came back on its own.** `lib/blog.ts` already gated it on the value not starting with
+`data:`, so a hosted featured image makes the tag emit again and `twitter:card` flip back to
+`summary_large_image`, with no change at that call site.
+
+**`profiles.avatar_url` is deliberately NOT migrated.** It is app-internal — never rendered into a
+public page, so it carries no visitor bandwidth — and `update_profile()` (0040:66) refuses anything
+that is not a data URI, so a hosted value would be rejected the next time someone saved their
+profile. Migrating it means widening a deliberate security check for no measured gain.
+
+**Two failure modes the client handles, both hit for real rather than imagined.**
+
+- **Clock skew.** A signed upload carries a `timestamp` and Cloudinary refuses one more than an hour
+  from its own time with `Stale request`. A laptop that had slept was **9.8 hours** behind, and every
+  upload failed with an error that reads like a signing bug. The client now learns the offset from
+  the rejected response's `Date` header and retries once. Any long-running server with drift would
+  have hit the same thing. (A skew that size also breaks JWT validation, OAuth state and Stripe
+  signature checks — if uploads start failing this way, fix the machine clock too.)
+- **Transport flap.** `fetch` REJECTS rather than returning a status for DNS/connection failures, and
+  `api.cloudinary.com` was observed failing and recovering on a seconds timescale. `fetchWithRetry`
+  retries three times with backoff — **only** for a rejected fetch. A resolved 400/401 is never
+  retried: re-sending a bad key just fails twice and hides the real cause.
+
+**The backfill re-renders, and that is the half that is easy to miss.**
+`scripts/migrate-images-to-cloudinary.ts` (`npm run migrate-images`, dry run by default) rewrites
+the columns and then calls the existing `rerenderFunnelSequence` per campaign rather than writing a
+second render path. It is idempotent — anything not starting with `data:` is skipped — so a partial
+run is safe to repeat. **It fetches ids first and then reads one row at a time**: selecting
+`ad_creative_image_data_url` (up to ~10 MB) for every campaign at once drops the connection with
+`ECONNRESET`, which the first dry run found before any writes.
+
 ## Blog (sidebar)
 
 Tenant blog manager (`/blog`) — posts written from scratch or imported from a campaign's

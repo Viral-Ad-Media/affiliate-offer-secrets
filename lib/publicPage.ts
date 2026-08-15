@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publicNotFound } from "@/lib/notFoundPage";
 import { classifyHost } from "@/lib/host";
-import { IMAGE_DATA_URL_RE } from "@/lib/images/validate";
+import { IMAGE_DATA_URL_RE, isOwnCloudinaryUrl } from "@/lib/images/validate";
 import { pickWeightedVariant, readStickyVariantId, buildStickyVariantCookie } from "@/lib/bridgeVariants";
 
 // Which workspace's content a PUBLIC request's host is allowed to serve. Campaign UUIDs are
@@ -189,6 +189,27 @@ export async function servePublicCampaignImage(campaignId: string, req?: Request
     if (scopeRejects(scope, campaign.workspace_id as string)) {
       return new Response("Not found", { status: 404 });
     }
+  }
+
+  // Read into its own const rather than reusing `dataUrl` below: isOwnCloudinaryUrl is a type
+  // predicate, so a negative result would narrow the shared variable to `never` and the data-URI
+  // branch would stop compiling. "Not one of our URLs" plainly does not mean "not a string".
+  const stored = campaign?.embedded_image_data_url as string | null | undefined;
+
+  // Migrated campaigns hold a Cloudinary URL here rather than bytes. Redirect instead of 404ing:
+  // this route's whole reason to exist is that Instagram's media-creation endpoint needs a
+  // FETCHABLE url (lib/meta/client.ts documents that it has no byte-upload path), and a campaign
+  // whose hero moved to Cloudinary would otherwise stop being postable.
+  //
+  // isOwnCloudinaryUrl, not a bare startsWith — this value becomes a Location header, so the same
+  // anchored check that guards it as an <img src> guards it here. Callers that can use the URL
+  // directly should prefer it (app/api/instagram/post/route.ts does) and never reach this branch;
+  // the redirect is what keeps every other consumer working.
+  if (isOwnCloudinaryUrl(stored)) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: stored, "Cache-Control": "no-store", "X-Robots-Tag": "noindex" },
+    });
   }
 
   const dataUrl = campaign?.embedded_image_data_url as string | null | undefined;

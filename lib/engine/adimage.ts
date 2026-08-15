@@ -1,4 +1,5 @@
 import { db } from "./core";
+import { uploadImageRef, CLD_FOLDER } from "@/lib/cloudinary/upload";
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { createKieTask, getKieTaskStatus, downloadKieResult } from "@/lib/kieai/client";
 import { isValidImageDataUrl, MAX_AD_IMAGE_DATA_URL_CHARS } from "@/lib/images/validate";
@@ -24,7 +25,8 @@ export type AdImageStageOutput = {
 // API route that queues the job. Same pattern as adlaunch.ts's stageVerify.
 async function stageVerify(
   payload: GenerateAdImagePayload,
-  workspaceId: string
+  workspaceId: string,
+  userId: string
 ): Promise<AdImageStageOutput> {
   const { data: campaign } = await db
     .from("campaigns")
@@ -35,7 +37,7 @@ async function stageVerify(
   if (!campaign) throw new Error("Campaign not found for this account");
 
   return {
-    stageData: { product_id: campaign.product_id, fb_ads_md: campaign.fb_ads_md ?? "" },
+    stageData: { workspace_id: workspaceId, user_id: userId, product_id: campaign.product_id, fb_ads_md: campaign.fb_ads_md ?? "" },
   };
 }
 
@@ -94,7 +96,14 @@ async function stageFinalize(stageData: Record<string, unknown>): Promise<AdImag
     throw new Error(`Generated image failed validation (content-type: ${contentType}, size: ${bytes.length} bytes)`);
   }
 
-  return { stageData, campaignPatch: { ad_creative_image_data_url: dataUrl } };
+  // Hosted before it is written — an AI creative is full-resolution and was the largest thing
+  // this app stored inline. Falls back to the data URI on failure.
+  const hosted = (await uploadImageRef(db, dataUrl, CLD_FOLDER.creative, {
+    workspaceId: stageData.workspace_id as string,
+    userId: stageData.user_id as string,
+  })) ?? dataUrl;
+
+  return { stageData, campaignPatch: { ad_creative_image_data_url: hosted } };
 }
 
 export async function runGenerateAdImageStage(
@@ -109,7 +118,7 @@ export async function runGenerateAdImageStage(
   const usage: UsageContext = { ...usageCtx, jobType: "generate_ad_image", stage };
   switch (stage) {
     case "verify":
-      return stageVerify(payload, workspaceId);
+      return stageVerify(payload, workspaceId, userId);
     case "prompt":
       return stagePrompt(stageData, usage);
     case "submit":

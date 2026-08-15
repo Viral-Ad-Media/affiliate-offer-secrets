@@ -40,7 +40,7 @@ import {
   VIEWPORTS,
   type Viewport,
 } from "./blockTree";
-import { isValidImageDataUrl } from "@/lib/images/validate";
+import { isValidImageRef } from "@/lib/images/validate";
 import { parseVideoUrl, sourceToDisplayUrl } from "@/lib/engine/videoEmbed";
 import { isValidRedirectUrl } from "@/lib/validate";
 import { sanitizeTheme } from "./pageTheme";
@@ -206,7 +206,7 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
       return { id, type: "paragraph", style, content: { text: clampStr(content.text, MAX_TEXT_LONG) } };
     case "image": {
       const dataUrl = typeof content.dataUrl === "string" && content.dataUrl ? content.dataUrl : null;
-      if (dataUrl && !isValidImageDataUrl(dataUrl)) throw new Error("invalid image data url");
+      if (dataUrl && !isValidImageRef(dataUrl)) throw new Error("invalid image data url");
       return { id, type: "image", style, content: { dataUrl, alt: clampStr(content.alt, MAX_TEXT_SHORT) } };
     }
     case "bullet_list": {
@@ -257,7 +257,7 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
           brand: clampStr(content.brand, MAX_TEXT_SHORT),
           brandImageDataUrl: (() => {
             const u = typeof content.brandImageDataUrl === "string" && content.brandImageDataUrl ? content.brandImageDataUrl : null;
-            if (u && !isValidImageDataUrl(u)) throw new Error("invalid nav logo data url");
+            if (u && !isValidImageRef(u)) throw new Error("invalid nav logo data url");
             return u;
           })(),
           // A link whose action can't be resolved is DROPPED, like a footer link with no href —
@@ -328,7 +328,7 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
           items: items.slice(0, MAX_LIST_ITEMS).map((raw) => {
             const it = (raw ?? {}) as Record<string, unknown>;
             const dataUrl = typeof it.imageDataUrl === "string" && it.imageDataUrl ? it.imageDataUrl : null;
-            if (dataUrl && !isValidImageDataUrl(dataUrl)) throw new Error("invalid image data url");
+            if (dataUrl && !isValidImageRef(dataUrl)) throw new Error("invalid image data url");
             return { imageDataUrl: dataUrl, caption: clampStr(it.caption, MAX_TEXT_MEDIUM) };
           }),
         },
@@ -421,7 +421,7 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
             const it = (r ?? {}) as Record<string, unknown>;
             const dataUrl = typeof it.imageDataUrl === "string" && it.imageDataUrl ? it.imageDataUrl : null;
             // Same allowlist and same throw as every other image in this codebase.
-            if (dataUrl && !isValidImageDataUrl(dataUrl)) throw new Error("invalid image data url");
+            if (dataUrl && !isValidImageRef(dataUrl)) throw new Error("invalid image data url");
             return { imageDataUrl: dataUrl, caption: clampStr(it.caption, MAX_TEXT_MEDIUM) };
           }),
         },
@@ -476,7 +476,7 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
         // testimonial avatar is no more trusted than a hero image, and consistency here matters
         // more than being lenient about one field.
         const dataUrl = typeof rawMedia?.dataUrl === "string" && rawMedia.dataUrl ? rawMedia.dataUrl : null;
-        if (dataUrl && !isValidImageDataUrl(dataUrl)) throw new Error("invalid image data url");
+        if (dataUrl && !isValidImageRef(dataUrl)) throw new Error("invalid image data url");
         media = { kind: "image", dataUrl };
       } else if (kind === "video") {
         // Re-parsed from the display URL, never trusted as stored — identical reasoning to the

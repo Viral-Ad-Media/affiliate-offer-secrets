@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderBridgeHtml, buildHoplink } from "@/lib/engine/renderPages";
 import { validatePageBlockTree } from "@/lib/engine/validatePageBlockTree";
-import { isValidImageDataUrl } from "@/lib/images/validate";
+import { isValidImageRef } from "@/lib/images/validate";
+import { uploadImageRef, uploadTreeImages, CLD_FOLDER } from "@/lib/cloudinary/upload";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   let imageDataUrl: string | null = null;
   const rawImage = body.image_data_url;
   if (typeof rawImage === "string" && rawImage.length > 0) {
-    if (!isValidImageDataUrl(rawImage)) {
+    if (!isValidImageRef(rawImage)) {
       return NextResponse.json({ error: "invalid image" }, { status: 400 });
     }
     imageDataUrl = rawImage;
@@ -66,6 +67,18 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 
   const admin = createAdminClient();
+
+  // Images move to Cloudinary BEFORE anything is rendered or stored. bridge_html is baked at write
+  // time, so uploading after the render would leave the served page carrying base64 while page_copy
+  // claimed the image lived elsewhere — the two would disagree about the same page.
+  //
+  // The hero column is uploaded separately from the tree because it is a separate value with its
+  // own consumers (Instagram posting, the ad-creative fallback chain, servePublicCampaignImage).
+  await uploadTreeImages(admin, tree, CLD_FOLDER.page, { workspaceId: ws, userId: user.id });
+  imageDataUrl = await uploadImageRef(admin, imageDataUrl, CLD_FOLDER.campaign, {
+    workspaceId: ws,
+    userId: user.id,
+  });
 
   const { data: campaign, error: campaignErr } = await admin
     .from("campaigns")

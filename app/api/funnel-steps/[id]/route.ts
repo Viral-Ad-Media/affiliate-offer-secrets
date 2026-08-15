@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rerenderFunnelSequence } from "@/lib/funnelSteps";
 import { validatePageBlockTree } from "@/lib/engine/validatePageBlockTree";
-import { isValidImageDataUrl } from "@/lib/images/validate";
+import { isValidImageRef } from "@/lib/images/validate";
+import { uploadImageRef, uploadTreeImages, CLD_FOLDER } from "@/lib/cloudinary/upload";
 import { isValidRedirectUrl } from "@/lib/validate";
 import { seoPatchFrom } from "@/lib/seo";
 
@@ -73,13 +74,21 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   let imageDataUrl: string | null = null;
   const rawImage = body.image_data_url;
   if (typeof rawImage === "string" && rawImage.length > 0) {
-    if (!isValidImageDataUrl(rawImage)) {
+    if (!isValidImageRef(rawImage)) {
       return NextResponse.json({ error: "invalid image" }, { status: 400 });
     }
     imageDataUrl = rawImage;
   } else if (rawImage !== null && rawImage !== undefined) {
     return NextResponse.json({ error: "invalid image" }, { status: 400 });
   }
+
+  // Before the re-render below: funnel_steps.html is baked at write time like every other page
+  // here, so the upload has to happen while the tree is still the thing about to be rendered.
+  await uploadTreeImages(admin, tree, CLD_FOLDER.page, { workspaceId: ws, userId: user.id });
+  imageDataUrl = await uploadImageRef(admin, imageDataUrl, CLD_FOLDER.page, {
+    workspaceId: ws,
+    userId: user.id,
+  });
 
   const ctaAction = parseAction(body.cta_action, "hoplink");
   let redirectUrl: string | null = null;

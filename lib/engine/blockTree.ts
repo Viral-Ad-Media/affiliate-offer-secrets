@@ -14,6 +14,12 @@ import type { PageTheme } from "./pageTheme";
 // Defined here (not renderPages.ts) so blockTree.ts has zero dependency on renderPages.ts —
 // renderPages.ts imports/re-exports this instead, keeping the dependency one-directional even
 // though renderPages.ts otherwise depends heavily on this module.
+// Delivery-URL helper. lib/cloudinary/url.ts is ISOMORPHIC by design — it is the safe half of
+// the Cloudinary integration. Never import lib/cloudinary/client.ts here: this module is
+// bundled into five client editors, and node:crypto reaching one of them fails `next build`
+// while `tsc` stays clean.
+import { cloudinaryTransform, IMG_BLOCK } from "@/lib/cloudinary/url";
+
 export function escapeHtml(s: string): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -1048,7 +1054,7 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       return `<p${styleAttr(block.style, TEXT_STYLE_KEYS)}>${renderInline(block.content.text)}</p>`;
     case "image": {
       if (!block.content.dataUrl) return "";
-      const img = `<img src="${escapeHtml(block.content.dataUrl)}" alt="${escapeHtml(
+      const img = `<img src="${escapeHtml(cloudinaryTransform(block.content.dataUrl, IMG_BLOCK))}" alt="${escapeHtml(
         block.content.alt || ctx.productTitle
       )}"${styleAttr(block.style, IMAGE_STYLE_KEYS)} class="block-img" />`;
       // A CLASS, not an inline text-align: the image is display:block, so text-align on a parent
@@ -1077,7 +1083,7 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
         .map(
           (i) =>
             `<div class="image-list-item">${
-              i.imageDataUrl ? `<img src="${escapeHtml(i.imageDataUrl)}" alt="" />` : ""
+              i.imageDataUrl ? `<img src="${escapeHtml(cloudinaryTransform(i.imageDataUrl, IMG_BLOCK))}" alt="" />` : ""
             }<span>${escapeHtml(i.caption)}</span></div>`
         )
         .join("")}</div>`;
@@ -1159,7 +1165,7 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
         })
         .join("");
       const brandHtml = brandImageDataUrl
-        ? `<img class="page-nav-logo" src="${escapeHtml(brandImageDataUrl)}" alt="${escapeHtml(brand)}" />`
+        ? `<img class="page-nav-logo" src="${escapeHtml(cloudinaryTransform(brandImageDataUrl, IMG_BLOCK))}" alt="${escapeHtml(brand)}" />`
         : brand.trim()
           ? `<span class="page-nav-brand">${escapeHtml(brand)}</span>`
           : "";
@@ -1214,7 +1220,7 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
 
       let mediaHtml = "";
       if (media.kind === "image" && media.dataUrl) {
-        mediaHtml = `<div class="tm-media tm-avatar"><img src="${escapeHtml(media.dataUrl)}" alt="${escapeHtml(
+        mediaHtml = `<div class="tm-media tm-avatar"><img src="${escapeHtml(cloudinaryTransform(media.dataUrl, IMG_BLOCK))}" alt="${escapeHtml(
           name
         )}" /></div>`;
       } else if (media.kind === "video" && media.source) {
@@ -1253,7 +1259,7 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
         .map(
           (s, i) =>
             `<figure class="slide" aria-label="${i + 1} of ${slides.length}"><img src="${escapeHtml(
-              s.imageDataUrl as string
+              cloudinaryTransform(s.imageDataUrl as string, IMG_BLOCK)
             )}" alt="${escapeHtml(s.caption)}" loading="lazy" />${
               s.caption.trim() ? `<figcaption>${escapeHtml(s.caption)}</figcaption>` : ""
             }</figure>`

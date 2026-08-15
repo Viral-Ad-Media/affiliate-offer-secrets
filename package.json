@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 3400",
     "engine": "tsx scripts/engine.ts",
-    "import-csv": "tsx scripts/import-csv.ts"
+    "import-csv": "tsx scripts/import-csv.ts",
+    "migrate-images": "tsx --env-file=.env.local scripts/migrate-images-to-cloudinary.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.114.0",

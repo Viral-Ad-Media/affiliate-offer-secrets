@@ -5,7 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { MAX_POST_TITLE, MAX_POST_EXCERPT, MAX_FEATURED_IMAGE_CHARS, blogRenderCtx, renderBlockTree, slugify } from "@/lib/blog";
 import { validatePageBlockTree } from "@/lib/engine/validatePageBlockTree";
 import { seoPatchFrom } from "@/lib/seo";
-import { isValidImageDataUrl } from "@/lib/images/validate";
+import { isValidImageRef } from "@/lib/images/validate";
+import { uploadImageRef, uploadTreeImages, CLD_FOLDER } from "@/lib/cloudinary/upload";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (Array.isArray(body.blocks)) {
     const result = validatePageBlockTree({ blocks: body.blocks, contentWidth: body.contentWidth, theme: body.theme }, { pageKind: "blog" });
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+    // Upload the tree's inline images BEFORE rendering. html is baked at write time here, exactly
+    // as campaigns.bridge_html is, so uploading afterwards would store hosted URLs in page_copy
+    // while the served html kept the base64 — the page would stay heavy and the two would disagree
+    // about what it contains.
+    await uploadTreeImages(createAdminClient(), result.tree, CLD_FOLDER.blog, {
+      workspaceId: ws,
+      userId: user.id,
+    });
     patch.page_copy = result.tree;
     patch.html = renderBlockTree(result.tree, blogRenderCtx());
   }
@@ -70,10 +79,23 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     patch.featured_image_url = null;
     patch.featured_image_status = "none";
   } else if (typeof body.featured_image_url === "string") {
-    if (!isValidImageDataUrl(body.featured_image_url, MAX_FEATURED_IMAGE_CHARS)) {
+    if (!isValidImageRef(body.featured_image_url, MAX_FEATURED_IMAGE_CHARS)) {
       return NextResponse.json({ error: "featured image must be a PNG/JPEG/WebP/GIF under the size cap" }, { status: 400 });
     }
-    patch.featured_image_url = body.featured_image_url;
+    // Validate first, upload second. The uploader is not a validation step and must never be
+    // handed anything the allowlist hasn't already cleared.
+    //
+    // A featured image is the single biggest thing this app serves — measured at 598 kB average
+    // and 1,172 kB worst case, inlined into the post AND into every card on the index. Hosting it
+    // is what turns a 4.1 MB index into a page of 17 kB thumbnails. Falls back to storing the data
+    // URI unchanged if Cloudinary is unconfigured or the upload fails, so a save never fails over
+    // this and a deployment without keys behaves exactly as it did before.
+    patch.featured_image_url = await uploadImageRef(
+      createAdminClient(),
+      body.featured_image_url,
+      CLD_FOLDER.blog,
+      { workspaceId: ws, userId: user.id }
+    );
     patch.featured_image_status = "ready";
     patch.featured_image_error = null;
   }

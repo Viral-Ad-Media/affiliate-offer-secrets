@@ -1,7 +1,7 @@
 import { completeJSON, type UsageContext } from "./anthropic";
 import { BROWSER_UA } from "./clickbank";
 import type { ImageCandidate } from "./salespage";
-import { ALLOWED_IMAGE_CONTENT_TYPES } from "../images/validate";
+import { ALLOWED_IMAGE_CONTENT_TYPES, isOwnCloudinaryUrl } from "../images/validate";
 
 const MAX_IMAGE_BYTES = 200 * 1024; // keep pages well under 200KB per content rule
 // Across ALL images on one page. See fetchImagesWithBudget.
@@ -94,7 +94,22 @@ export async function fetchImagesWithBudget(
   return out;
 }
 
-export async function fetchImageAsDataUrl(url: string): Promise<string | null> {
+/**
+ * `maxBytes` is an explicit argument rather than a bumped shared constant, and the distinction
+ * matters. The 200 KB default protects the path this function was written for: fetching an image
+ * off a VENDOR's sales page, where the URL is untrusted and the size is unknown, and where a
+ * generous ceiling would let a hostile page push megabytes into a job.
+ *
+ * The caller that needs more is the opposite case — pulling one of OUR OWN Cloudinary images back
+ * so Meta can be handed real bytes (content rule 9: ad creatives are uploaded, never hotlinked).
+ * That URL is ours, its size is known, and it has already passed isOwnCloudinaryUrl. Raising the
+ * shared constant would have quietly relaxed the untrusted path to buy something only the trusted
+ * one needed.
+ */
+export async function fetchImageAsDataUrl(
+  url: string,
+  maxBytes: number = MAX_IMAGE_BYTES
+): Promise<string | null> {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": BROWSER_UA },
@@ -107,9 +122,26 @@ export async function fetchImageAsDataUrl(url: string): Promise<string | null> {
     const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     if (!ALLOWED_IMAGE_CONTENT_TYPES.includes(contentType)) return null;
     const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.byteLength === 0 || buf.byteLength > MAX_IMAGE_BYTES) return null;
+    if (buf.byteLength === 0 || buf.byteLength > maxBytes) return null;
     return `data:${contentType};base64,${buf.toString("base64")}`;
   } catch {
     return null;
   }
+}
+
+/**
+ * Turns whatever an image column holds into BYTES, for the paths that must upload rather than link.
+ *
+ * A data URI is already bytes and comes back unchanged; one of our Cloudinary URLs is fetched. Any
+ * other value returns null rather than being fetched — this must not become a general URL fetcher,
+ * or a stored value could make the server issue a request to a host of someone else's choosing.
+ */
+export async function imageRefToDataUrl(
+  value: string | null | undefined,
+  maxBytes: number
+): Promise<string | null> {
+  if (!value) return null;
+  if (value.startsWith("data:")) return value;
+  if (!isOwnCloudinaryUrl(value)) return null;
+  return fetchImageAsDataUrl(value, maxBytes);
 }

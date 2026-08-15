@@ -4,6 +4,7 @@ import { pickProductImages, fetchImagesWithBudget } from "./images";
 import { renderBridgeHtml, buildHoplink, normalizePageCopy, keywordsOf, type PageBlockTree, type PageCopy, type Network, type TrackingSettings } from "./renderPages";
 import { themeFromBrandColors, applySectionBands } from "./pageTheme";
 import { db } from "./core";
+import { uploadImageRef, CLD_FOLDER } from "@/lib/cloudinary/upload";
 import type { FbAdAngle, SocialPost } from "@/lib/shared";
 import { wants, type KitAssetKey, type CountableKitAssetKey } from "@/lib/kitAssets";
 
@@ -244,7 +245,27 @@ Also plan the search targeting for this offer: one primary keyword a real buyer 
   });
 
   const byChannel = (prior.hoplink_by_channel as Record<string, string>) ?? {};
-  const imageDataUrl = (prior.image_data_url as string | null) ?? null;
+  // The hero picked in the image stage, hosted rather than inlined. It is written into
+  // embedded_image_data_url AND baked into bridge_html, so uploading it here — before the render
+  // below — is what stops a freshly built campaign from being born with base64 in three places.
+  //
+  // The workspace comes from the campaign row rather than being threaded through
+  // runBuildCampaignStage's already long signature: it is the authoritative owner of this asset,
+  // and letting stamp_workspace_id infer it from user_id would file it under the user's FIRST
+  // workspace, which CLAUDE.md records going wrong for real elsewhere.
+  const rawImageDataUrl = (prior.image_data_url as string | null) ?? null;
+  const { data: campaignOwner } = await db
+    .from("campaigns")
+    .select("workspace_id, user_id")
+    .eq("id", campaignId)
+    .maybeSingle();
+  const imageDataUrl =
+    campaignOwner
+      ? await uploadImageRef(db, rawImageDataUrl, CLD_FOLDER.campaign, {
+          workspaceId: campaignOwner.workspace_id as string,
+          userId: campaignOwner.user_id as string,
+        })
+      : rawImageDataUrl;
   const hoplink = byChannel.page ?? product.hoplink ?? "#";
   // The Anthropic structured-output schema above stays the permanent flat authoring shape (see
   // lib/engine/renderPages.ts's header comment) — normalize it into a block tree once here so

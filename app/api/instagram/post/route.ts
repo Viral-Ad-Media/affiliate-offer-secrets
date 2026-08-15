@@ -3,6 +3,7 @@ import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isTokenError, createIgMediaContainer, publishIgMedia } from "@/lib/meta/client";
+import { isOwnCloudinaryUrl } from "@/lib/images/validate";
 
 export const dynamic = "force-dynamic";
 
@@ -86,7 +87,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "no image available for this campaign" }, { status: 400 });
   }
 
-  const imageUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/public/campaign-image/${campaignId}`;
+  // A migrated campaign already has a public, fetchable image URL — hand Instagram that directly
+  // rather than proxying our own origin through to a redirect. The /api/public/campaign-image
+  // route still exists and still works (it redirects for Cloudinary values), but going straight to
+  // the CDN removes a hop and, more importantly, removes any dependence on Instagram's fetcher
+  // following a 302 — behaviour this codebase has not verified and should not assume.
+  //
+  // Legacy campaigns whose hero is still inline bytes keep using the proxy route, which is the
+  // only thing that can turn a data: URI into something Instagram can fetch.
+  const stored = campaign.embedded_image_data_url as string;
+  const imageUrl = isOwnCloudinaryUrl(stored)
+    ? stored
+    : `${process.env.NEXT_PUBLIC_APP_URL}/api/public/campaign-image/${campaignId}`;
 
   try {
     const container = await createIgMediaContainer(igUserId, pageToken, imageUrl, caption);
