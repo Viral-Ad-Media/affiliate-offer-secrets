@@ -210,6 +210,8 @@ async function stagePages(
     system: COMPLIANCE_SYSTEM,
     prompt: `${ctx}\n\nWrite bridge (landing) page copy: a headline, a lead paragraph, a "mechanism" explanation (why/how it works), 3-5 benefit bullets, a short proof/credibility paragraph, 3-4 FAQ pairs, and a short CTA button label.
 
+Do NOT include an affiliate-disclosure sentence anywhere in this copy — the page template appends its own code-owned disclosure automatically, and a second one written into the lead paragraph renders as one dense block that says the same thing twice.
+
 Also plan the search targeting for this offer: one primary keyword a real buyer would type, 3-6 secondary/semantic keywords, and the search intent (informational, commercial or transactional). Base them on the sales page's own language — do not invent volume figures or difficulty scores, which you cannot know.`,
     schema: {
       type: "object",

@@ -5,6 +5,7 @@ import { originFromHost } from "@/lib/host";
 import { createClient } from "@/lib/supabase/server";
 import { currentWorkspaceId } from "@/lib/workspace";
 import NewFunnelButton from "@/components/NewFunnelButton";
+import LoadFailed from "@/components/LoadFailed";
 import { Radio, ExternalLink, Inbox, Beaker, Layers } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +31,10 @@ export default async function FunnelsPage() {
   const ws = await currentWorkspaceId();
   if (!ws) redirect("/login");
 
-  const [{ data: campaigns }, { data: routes }, { data: statRows }] = await Promise.all([
+  // The MAIN list query's error is captured, not discarded. A failed query rendering the ordinary
+  // empty state is how the Domains page hid a broken embed for weeks (see components/LoadFailed) —
+  // an empty state is a claim about the data, and a failed query can't support it.
+  const [{ data: campaigns, error: campaignsError }, { data: routes }, { data: statRows }] = await Promise.all([
       supabase
         .from("campaigns")
         .select("id, product_id, name, bridge_published, updated_at, products(product_title)")
@@ -100,7 +104,11 @@ export default async function FunnelsPage() {
       </header>
 
       <Card as="section" className="overflow-hidden">
-        {funnels.length === 0 ? (
+        {campaignsError ? (
+          <div className="p-4">
+            <LoadFailed what="your funnels" detail={campaignsError.message} />
+          </div>
+        ) : funnels.length === 0 ? (
           <EmptyState icon={Inbox} title="No funnels yet" action={{ href: "/marketplace", label: "Browse the marketplace" }}>
             Use <span className="text-zinc-400">New funnel</span> to build one by hand, or promote
             an offer from the{" "}

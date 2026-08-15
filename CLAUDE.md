@@ -358,7 +358,14 @@ must never be lost. Read-only Supabase queries (via the `mcp__supabase__execute_
 2. Health/wealth niches are heavily policed on Meta/TikTok: prefer curiosity + mechanism angles
    over promise angles; no personal-attribute callouts; flag products whose own sales pages make
    claims that will get ads rejected (note it in `angle_notes`).
-3. The bridge (landing) page and blog articles always include an affiliate disclosure.
+3. The bridge (landing) page and blog articles always include an affiliate disclosure — via the
+   code-owned locked `disclosure` block, never written into the COPY. `stagePages`' prompt
+   explicitly forbids the model adding its own disclosure sentence: observed live, it prepended
+   "Affiliate Disclosure: …" to the lead paragraph on 3 of 15 campaigns (plus 2 split-test
+   variants), rendering as one dense block that duplicated the locked footer. Those stored leads
+   were stripped surgically (guarded regex on the exact prefix, previewed before writing, then
+   re-rendered) — the blog prompt legitimately asks for an in-copy disclosure line and is
+   unchanged.
 4. Hoplinks are built by `buildHoplink(network, affiliateId, vendorId, tid)`
    (`lib/engine/renderPages.ts`) with per-channel tids (fb, tt, blog, email, page) — ClickBank's
    format is `https://hop.clickbank.net/?affiliate=ID&vendor=VENDORID&tid=<channel>`, Digistore24's
@@ -4531,6 +4538,18 @@ managed yet — so it should always answer "what now", and the answer should be 
 merely named. The Contacts one names all three ways a lead can arrive (opt-in form, Add contact,
 CSV import) because two of them aren't discoverable from that page; the tag-filtered variant is its
 own state, since "no leads carry this tag" wants *clear the filter*, not *go make a funnel*.
+
+**Failed loads — `components/LoadFailed.tsx` — are the state EmptyState must never be asked to
+play.** An empty state is a claim about the data ("you have none"); a failed query cannot support
+that claim, and rendering one anyway is how a bug hides as normalcy. The incident that forced this:
+the Domains page's embed broke (PGRST201 after 0088), the page destructured `{ data }` discarding
+the error, and it showed "no domains yet" over a live domain serving five funnels — so the operator
+re-added the domain and hit a duplicate-claim dead end. The four list pages (Domains, Funnels,
+Contacts, Blog posts) now capture their MAIN query's error and render LoadFailed instead of the
+list. **Domains hides the whole panel on error, add form included** — an add form over a failed
+list is exactly the re-add trap. Any new server page with a list query should follow: check the
+error, don't hand the component an empty array. Deliberately no retry button — these are server
+components, so reloading IS the retry, and the copy says so.
 
 **Setup checklist — `components/SetupChecklist.tsx`, `0073`.** Four steps: connect a network, find
 products, build a kit, publish a funnel.

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import BlogManager from "@/components/BlogManager";
+import LoadFailed from "@/components/LoadFailed";
 import Pager, { PAGE_SIZE, pageFromParam, pageRange } from "@/components/Pager";
 import { analyzePostSeo } from "@/lib/blogSeo";
 
@@ -26,7 +27,9 @@ export default async function BlogPage({ searchParams }: { searchParams: { page?
   const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
   const [from, to] = pageRange(page);
 
-  const [{ data: posts }, { data: categories }, { data: settings }] = await Promise.all([
+  // Error captured, not discarded — a failed query must render as a failure, never as the "no
+  // posts yet" empty state (see components/LoadFailed.tsx for the Domains-page incident).
+  const [{ data: posts, error: postsError }, { data: categories }, { data: settings }] = await Promise.all([
     supabase
       .from("blog_posts")
       .select("id, title, slug, excerpt, html, status, category_id, campaign_id, published_at, updated_at, seo_title, seo_description, featured_image_url, blog_categories(slug)")
@@ -36,6 +39,14 @@ export default async function BlogPage({ searchParams }: { searchParams: { page?
     supabase.from("blog_categories").select("id, name").eq("workspace_id", ws).order("name"),
     supabase.from("blog_settings").select("slug, permalink_style").eq("workspace_id", ws).maybeSingle(),
   ]);
+
+  if (postsError) {
+    return (
+      <div className="space-y-4">
+        <LoadFailed what="your posts" detail={postsError.message} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

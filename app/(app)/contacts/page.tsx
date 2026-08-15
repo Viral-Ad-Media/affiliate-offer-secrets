@@ -3,6 +3,7 @@ import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import type { Contact, ContactTag } from "@/lib/shared";
 import ContactsTable from "@/components/ContactsTable";
+import LoadFailed from "@/components/LoadFailed";
 import ContactErasePanel from "@/components/ContactErasePanel";
 import Pager, { PAGE_SIZE, pageFromParam, pageRange } from "@/components/Pager";
 
@@ -96,7 +97,9 @@ export default async function ContactsPage({
     ? `${baseCols}, f:contact_tag_links!inner(tag_id), ${tagEmbed}`
     : `${baseCols}, ${tagEmbed}`;
 
-  const { data: rows } = await withTagFilter(
+  // Error captured, not discarded — a failed query must render as a failure, never as the "no
+  // leads yet" empty state (see components/LoadFailed.tsx for the Domains-page incident).
+  const { data: rows, error: rowsError } = await withTagFilter(
     supabase
       .from("contacts")
       .select(rowSelect)
@@ -141,21 +144,27 @@ export default async function ContactsPage({
           Leads captured from your bridge pages' opt-in forms.
         </p>
       </header>
-      <ContactsTable
-        contacts={contacts}
-        allTags={tags}
-        activeTag={tagFilter}
-        total={total}
-        campaigns={campaignOptions}
-        attributeLabels={attributeLabels}
-      />
-      <Pager
-        page={page}
-        total={total}
-        basePath="/contacts"
-        label="contacts"
-        preserve={{ tag: tagFilter ?? undefined }}
-      />
+      {rowsError ? (
+        <LoadFailed what="your leads" detail={rowsError.message} />
+      ) : (
+        <>
+          <ContactsTable
+            contacts={contacts}
+            allTags={tags}
+            activeTag={tagFilter}
+            total={total}
+            campaigns={campaignOptions}
+            attributeLabels={attributeLabels}
+          />
+          <Pager
+            page={page}
+            total={total}
+            basePath="/contacts"
+            label="contacts"
+            preserve={{ tag: tagFilter ?? undefined }}
+          />
+        </>
+      )}
       <ContactErasePanel workspaceId={ws} />
     </main>
   );
