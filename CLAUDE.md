@@ -192,6 +192,18 @@ design rationale. Mechanics:
 - **Content generation** (`lib/engine/anthropic.ts`, `COMPLIANCE_SYSTEM`) calls the Anthropic
   Messages API directly (`claude-sonnet-5`) with the content rules below as a cached system
   prompt, using forced tool-use for structured JSON output (`completeJSON()`).
+  **Forced tool-use is not a guarantee that the values match the schema, and assuming it was cost a
+  real build.** Observed live against ProstaVive: with `fb_ad_angles` declared an array of 3, the
+  model returned `{"fb_ad_angles": "{\"fb_ad_angles\":[{…},{…},{…}]}"}` — the whole object
+  re-encoded as a *string* under its own key. All three angles were there and perfectly good; the
+  stage still threw "Model did not return exactly 3 ad angles", which is both wrong and unhelpful,
+  and did so on **all five attempts** because the behaviour was deterministic for that prompt. The
+  build ended as a terminal error with nothing written. `repairDoubleEncoded()` now unwraps both
+  observed shapes (the value re-encoded, and the whole object re-encoded under its own key).
+  It is deliberately conservative — a string is only replaced when it starts with `{`/`[` AND parses
+  AND yields an object or array — so a markdown field opening with a `[link](…)` is untouched.
+  **Do not "simplify" it back to `return block.input`.** Note this is prompt-specific, not
+  universal: other products built fine on the same code path the same week.
 - **How MANY of each is chosen too** (`KIT_ASSET_COUNTS`, `jobs.payload.counts`). The four
   countable assets are ad angles, TikTok scripts, social captions and emails, 1-10 each; the funnel
   page and the blog article are absent because one is a page and the other writes a single
