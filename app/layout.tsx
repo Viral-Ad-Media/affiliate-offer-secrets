@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Lexend, Source_Sans_3 } from "next/font/google";
 import "./globals.css";
+import { APP_URL } from "@/lib/appUrl";
 import ThemeScript from "@/components/ThemeScript";
 import Toaster from "@/components/Toaster";
 
@@ -18,7 +19,6 @@ const sourceSans = Source_Sans_3({
   display: "swap",
 });
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.affiliateoffersecrets.com";
 const DESCRIPTION =
   "Affiliate Offer Secrets researches the marketplace, writes your ads, funnels, blog and emails, hosts them on your own domain, and launches real ad campaigns — all from one dashboard.";
 

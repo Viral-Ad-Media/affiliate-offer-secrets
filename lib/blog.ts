@@ -1,6 +1,7 @@
 import { marked } from "marked";
 import { themeToCssVars } from "@/lib/engine/pageTheme";
 import { cloudinaryTransform, IMG_CARD, IMG_HERO, IMG_AVATAR } from "@/lib/cloudinary/url";
+import { APP_URL } from "@/lib/appUrl";
 import {
   escapeHtml,
   renderBlockTree,
@@ -706,8 +707,7 @@ export function renderPublicPostHtml(post: {
   /** From the post's page_copy.theme. Absent → the pre-theme look, unchanged. */
   theme?: unknown;
 }): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.affiliateoffersecrets.com";
-  const origin = post.siteOrigin || appUrl;
+  const origin = post.siteOrigin || APP_URL;
   // On a custom domain the blog lives at the root, so paths drop the /b/{blogSlug} prefix.
   const onDomain = !!post.siteOrigin;
   // In preview, every internal link has to stay inside the preview. Pointing them at the real
@@ -827,9 +827,8 @@ export function renderBlogIndexHtml(
     totalPages?: number;
   }
 ): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.affiliateoffersecrets.com";
   const onDomain = !!opts?.siteOrigin;
-  const origin = opts?.siteOrigin || appUrl;
+  const origin = opts?.siteOrigin || APP_URL;
   const previewBase = opts?.previewBase || null;
   const base = previewBase ?? (onDomain ? "" : blogIndexPath(settings.slug) ?? "");
   const page = Math.max(1, opts?.page ?? 1);

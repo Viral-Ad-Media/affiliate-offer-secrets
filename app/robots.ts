@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.affiliateoffersecrets.com";
+import { APP_URL } from "@/lib/appUrl";
 
 // Crawl policy: marketing pages and public blog posts (/b/) are indexable; everything auth-gated
 // or tenant-specific is disallowed. Funnel pages (/p/, /d/) additionally send X-Robots-Tag:

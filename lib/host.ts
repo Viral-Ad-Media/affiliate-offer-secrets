@@ -11,6 +11,8 @@
 // middleware already pays a network round trip for getUser() on every request. An unknown slug is
 // resolved (and refused) where the workspace is resolved, in lib/workspace.ts.
 
+import { APP_HOST } from "./appUrl";
+
 export type HostKind =
   | { kind: "app" }
   | { kind: "workspace"; slug: string }
@@ -29,15 +31,14 @@ export type HostConfig = { appHost: string; rootDomain: string };
 
 // Read as separate statically-analyzable expressions: NEXT_PUBLIC_* is inlined at build time, so
 // process.env can't be indexed dynamically here.
+//
+// appHost comes from lib/appUrl.ts, which REPAIRS a malformed value rather than discarding it.
+// This used to parse NEXT_PUBLIC_APP_URL inline and fall back to "" on any error — which reads as
+// safe and is the opposite: an empty appHost matches no incoming Host, so classifyHost answers
+// "custom" for every request, middleware rewrites every path to /d, and the entire app 404s. A
+// value missing its scheme was enough to trigger it.
 export function hostConfigFromEnv(): HostConfig {
-  const appHost = (() => {
-    try {
-      return new URL(process.env.NEXT_PUBLIC_APP_URL!).host.toLowerCase();
-    } catch {
-      return "";
-    }
-  })();
-  return { appHost, rootDomain: (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "").toLowerCase() };
+  return { appHost: APP_HOST, rootDomain: (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "").toLowerCase() };
 }
 
 function stripPort(host: string): string {

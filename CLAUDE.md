@@ -71,6 +71,26 @@ custom-domain serving), so pointing it at the wrong host doesn't degrade gracefu
 every page of the app. Confirmed live: the domain returned a bare "Not found" for its entire
 first day, purely because this var still named the old Vercel host.
 
+**A MALFORMED value is worse than a wrong one, and `lib/appUrl.ts` now repairs it.** Set without a
+scheme (`affiliateoffersecrets.com`), the value did two things: `app/layout.tsx`'s
+`metadataBase: new URL(APP_URL)` runs at module scope, so `next build` died collecting page data
+for `/dashboard` with `TypeError: Invalid URL` and `input: '****'` — the host masking the value, so
+the error named neither the variable nor the problem. And had it built, `hostConfigFromEnv()`
+CAUGHT the same error and returned an empty `appHost`, which matches no incoming Host, so
+`classifyHost` answered `custom` for every request and middleware 404'd the entire app — the
+day-long outage above, from a different cause. A `catch → ""` that reads as safe was the more
+dangerous half.
+
+`normalizeAppUrl` adds a missing scheme (http for localhost/127.0.0.1, https otherwise), keeps only
+the origin, and falls back to the canonical host for anything still unusable — so it never throws
+and never yields an empty host. **Do not strip a trailing slash before testing for a scheme**: that
+turns `https://` into `https:`, which then looks scheme-less and becomes `https://https`. Caught by
+a test, not by review; taking the origin drops the slash anyway. Verified by building with the
+exact value that broke the deploy, and by confirming `classifyHost` returns `app` for the app's own
+host where it previously returned `custom`. The OAuth config modules keep their own "is not set"
+throw on purpose — a redirect URI silently defaulting to the wrong host fails at the provider,
+which is far harder to diagnose.
+
 Multi-tenant affiliate SaaS. The Next.js app (deployed on Vercel) is the visual
 dashboard; **Supabase (Postgres + Auth) is the database**, with every tenant-owned table scoped
 by Row Level Security to `auth.uid() = user_id`. **`lib/engine/*` is the research/generation
