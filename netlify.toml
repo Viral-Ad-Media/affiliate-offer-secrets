@@ -16,6 +16,13 @@
   command = "npm run build"
   publish = ".next"
 
+  # Skip the build entirely when a push changes nothing the deployed app is built from — docs,
+  # plans, agent config, database migrations (applied via execute_sql, never read at build time),
+  # local scripts. Exit 0 = skip, exit 1 = build; a push where CACHED_COMMIT_REF is unavailable
+  # (first build, cleared cache) diffs nothing and MUST build, hence the `|| exit 1` guard.
+  # Every skipped build is credits not spent on a deploy that would have been byte-identical.
+  ignore = "if [ -z \"$CACHED_COMMIT_REF\" ] || [ \"$CACHED_COMMIT_REF\" = \"$COMMIT_REF\" ]; then exit 1; fi; git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- ':(exclude)*.md' ':(exclude).claude' ':(exclude)supabase/migrations' ':(exclude)scripts' ':(exclude).env.local.example'"
+
   # Netlify's secrets scanner fails a build when a value marked "secret" appears in the deploy
   # output — and every NEXT_PUBLIC_* value is INLINED into the client JS bundle by design. So a
   # NEXT_PUBLIC_* var marked secret in the Netlify UI guarantees a failed build with
