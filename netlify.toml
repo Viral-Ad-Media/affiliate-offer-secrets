@@ -16,6 +16,20 @@
   command = "npm run build"
   publish = ".next"
 
+  # Netlify's secrets scanner fails a build when a value marked "secret" appears in the deploy
+  # output — and every NEXT_PUBLIC_* value is INLINED into the client JS bundle by design. So a
+  # NEXT_PUBLIC_* var marked secret in the Netlify UI guarantees a failed build with
+  # "Secrets scanning found secrets in build output", which reads like a leak but is the intended
+  # behaviour of the framework.
+  #
+  # These five are public by construction: the anon key and publishable key are meant to ship to
+  # browsers, the cloud name appears in every delivery URL, and the app URL is the site's own
+  # address. Omitting them from the scan is correct rather than a suppression — the scanner should
+  # still fail the build if a genuinely private value (the service-role key, Stripe secret) ever
+  # reaches the bundle.
+  [build.environment]
+    SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_APP_URL,NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME"
+
 # The plugin is also enabled in the Netlify UI (the failing build logged `origin: ui`). Declaring it
 # here as well is idempotent and makes the dependency visible in the repo rather than only in
 # somebody's dashboard.
