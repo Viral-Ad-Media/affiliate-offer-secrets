@@ -39,6 +39,25 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
 
+  // Re-adding a domain this workspace already holds returns the EXISTING row instead of inserting
+  // a duplicate claim. Cross-tenant duplicate pending claims are by design (ownership is proven by
+  // DNS, and a squatter's abandoned claim must not block the real owner) — but a second claim in
+  // the SAME workspace is never useful, and it produced a real dead end: the domain was already
+  // verified and serving five funnels, someone added it again from the panel, and pressing Verify
+  // on the fresh pending row collided with their own verified one — surfacing as "already verified
+  // on another account", which reads as someone else squatting your live domain.
+  const { data: existing } = await admin
+    .from("custom_domains")
+    .select()
+    .eq("workspace_id", ws)
+    .eq("domain", domain)
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  if (existing) {
+    return NextResponse.json({ domain: existing, verification: [], existed: true });
+  }
+
   try {
     // The ROW goes in first, then Netlify is reconciled from the table. Reversed — attach remotely,
     // then insert — a failed insert would leave an alias on the site that nothing in this app knows
@@ -72,8 +91,15 @@ export async function POST(req: Request) {
     // not pointed their DNS yet. The UI shows the records to add and they press Verify after.
     const verified = await isDomainFullyVerified(domain);
     if (verified) {
-      await admin.from("custom_domains").update({ status: "verified" }).eq("id", row.id);
-      row.status = "verified";
+      // CHECK the error: this update can legitimately fail on the one-verified-claim-per-domain
+      // partial unique index (another tenant holds the verified claim while this DNS check passes —
+      // e.g. mid-transfer). Unchecked, the row silently stayed pending while the response claimed
+      // verified, and the panel then disagreed with the toast.
+      const { error: verifyErr } = await admin
+        .from("custom_domains")
+        .update({ status: "verified" })
+        .eq("id", row.id);
+      if (!verifyErr) row.status = "verified";
     }
 
     return NextResponse.json({ domain: row, verification: [] });

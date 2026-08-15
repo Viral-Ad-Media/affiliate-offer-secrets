@@ -1441,12 +1441,46 @@ product rather than a moved value. Current targets: A `75.2.60.5`, apex ALIAS/AN
 `NEXT_PUBLIC_NETLIFY_SITE_HOSTNAME`. Unconfigured, tenants can still add domain rows — they simply
 are not attached, and `syncDomainAliases` returns null rather than throwing.
 
-**Not yet exercised against the live API.** `api.netlify.com` is unreachable from the sandbox this
-was written in (0/6, while Cloudinary and GitHub answered), so the request shapes come from
-Netlify's OpenAPI spec rather than a probe — the one place in this integration that departs from
-the standing verify-before-writing rule, and it is flagged rather than hidden. The DNS half IS
-verified live: 10 assertions including that the app's own domain correctly reads NOT verified while
-its records still point at Vercel. **Run one real add → verify → remove cycle before trusting it.**
+**Exercised against the live API on 2026-08-15** (the request shapes were originally written from
+Netlify's OpenAPI spec because `api.netlify.com` was unreachable from that sandbox — flagged at the
+time as the one departure from the verify-before-writing rule). Restoring `1800mastercard.com`
+proved: `GET /sites/{id}` reads `custom_domain`/`domain_aliases` as coded, the reconciling `PATCH`
+attached the alias, Netlify then auto-issued the Let's Encrypt certificate WITHOUT the explicit
+`/ssl` nudge (~3 minutes after attach, DNS already pointing), and all five funnel routes served 200
+on the domain. **The REMOVE path is the one shape still never exercised live** — the only tenant
+domain is in active use, so nothing safe existed to remove.
+
+**The dry run for the destructive call is `POST /api/domains/reconcile-preview`**
+(`x-engine-secret`, read-only). The reconciling PATCH is the one call in this integration that can
+break the LIVE SITE rather than just fail — the alias list is a single site-level array shared by
+every tenant and by our own names — so `previewDomainAliases()` computes the plan and
+`reconcileDomainAliases()` delegates to it; the preview can never disagree with what the write
+sends. It reports would-add/would-remove/preserved-as-ours plus each domain's live DNS answer, and
+doubles as a deploy probe (a new route 404s on an old build — and on THIS route's own first deploy
+the old build answered **405**, the `/d` GET-only catch-all, because the old bundle's
+`PUBLIC_API_PREFIXES` didn't list it yet). Run it after any change to the reconciler, before the
+real sweep.
+
+**`isSiteOwnName()` exists because the first reconciler would have deleted the app's own names.**
+`domain_aliases` holds OUR names (a www redirect alias, any `*.{root}` wildcard, `*.netlify.app`)
+alongside tenant domains, and deriving the whole list from `custom_domains` — which holds only
+tenant domains — would have PATCHed ours away on the first run. Own names are preserved untouched;
+only tenant domains reconcile. Measured while fixing: the live site's aliases were EMPTY (Netlify's
+primary-domain setting, not an alias, produces the www→apex redirect), so the guard protects the
+future wildcard rather than a current name — but with a wildcard attached it becomes the thing
+keeping workspace subdomains alive.
+
+**Re-adding a domain the workspace already holds returns the existing row** (`existed: true`), and
+the add route's auto-verify UPDATE checks its error instead of claiming verified while the row
+stayed pending. Both halves of a real dead end hit 2026-08-15: the domain was verified and serving
+five funnels, it was added again from the panel, and Verify on the fresh pending row collided with
+the tenant's own verified row — surfacing as "already verified on another account", which reads as
+a squatter holding your live domain. Cross-tenant duplicate pending claims remain by design.
+
+**`www.{tenant-domain}` has never worked, under Vercel or Netlify** — both integrations attach only
+the exact string in `custom_domains`, so www has no certificate and would miss the `/d` host lookup
+anyway. Not a regression; building it means attaching the www counterpart AND teaching the lookup
+(or a redirect) about it, together.
 
 ## Custom domains
 
