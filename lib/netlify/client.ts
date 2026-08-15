@@ -159,5 +159,37 @@ export async function isDomainFullyVerified(domain: string): Promise<boolean> {
   const a = await dns.resolve4(name).catch(() => [] as string[]);
   if (a.includes(NETLIFY_DNS_A_RECORD)) return true;
 
-  return false;
+  // A record checks alone are NOT enough, and assuming they were is a bug this caught in
+  // production. 75.2.60.5 is the address Netlify documents for EXTERNAL DNS; a domain hosted on
+  // Netlify DNS gets regional edge addresses instead — this app's own domain resolves to
+  // 63.176.8.218 and 35.157.26.135, both answering `server: Netlify` with a valid certificate.
+  // Checking only the documented IP would have reported every Netlify-DNS domain as unverified
+  // forever, which is the worst shape of wrong here: the tenant's setup is correct and the product
+  // says it isn't.
+  //
+  // So fall back to asking the domain itself. `server: Netlify` proves the name reaches Netlify's
+  // edge whatever address it resolved to. It does NOT prove the domain reaches THIS site — but
+  // that half is already guaranteed by construction, because syncDomainAliases is what put the
+  // domain on this site's alias list and Netlify only serves a name from the site holding it.
+  return await reachesNetlifyEdge(name);
+}
+
+/**
+ * Does an HTTPS request to this domain land on Netlify's edge?
+ *
+ * HEAD, short timeout, redirects not followed — the status is irrelevant (an unattached domain
+ * answers 404 from the same edge), only the `server` header matters. Fails closed on any error,
+ * same as the DNS checks above: the reverify cron walks every domain and must not abort on one.
+ */
+async function reachesNetlifyEdge(domain: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://${domain}/`, {
+      method: "HEAD",
+      redirect: "manual",
+      signal: AbortSignal.timeout(8_000),
+    });
+    return (res.headers.get("server") ?? "").toLowerCase().includes("netlify");
+  } catch {
+    return false;
+  }
 }

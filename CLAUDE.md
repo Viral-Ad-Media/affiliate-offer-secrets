@@ -1390,6 +1390,17 @@ check: it asks whether the name reaches us *right now* rather than what a provid
 It **fails closed** — NXDOMAIN, timeout, no records all read as not-verified and never throw,
 because the cron loops over every domain and one bad name must not abort the sweep.
 
+**An A-record check alone is WRONG, and this was caught in production.** `75.2.60.5` is the address
+Netlify documents for EXTERNAL DNS; a domain hosted on Netlify DNS gets regional edge addresses
+instead — this app's own domain resolves to `63.176.8.218`/`35.157.26.135`, both answering
+`server: Netlify` with a valid certificate. Checking only the documented IP reports every
+Netlify-DNS domain as unverified forever, which is the worst shape of wrong available here: the
+tenant's setup is correct and the product tells them it isn't. So the check falls back to a HEAD
+request and reads the `server` header. That proves the name reaches Netlify's edge whatever it
+resolved to; that it reaches THIS site is already guaranteed by construction, since
+`syncDomainAliases` is what put the domain on this site's alias list and Netlify only serves a name
+from the site holding it.
+
 **Match the CNAME target exactly, never `*.netlify.app`.** A loose suffix match would mark a domain
 verified while it points at somebody else's Netlify site, and the app would then claim to serve a
 name that resolves elsewhere. With `NEXT_PUBLIC_NETLIFY_SITE_HOSTNAME` unset, subdomain-CNAME
