@@ -3617,6 +3617,33 @@ the app behaves exactly as pre-Phase-3, which is also how dev runs by default.
   GoDaddy's zone (email MX/SPF/DKIM, verification TXTs) must be re-created in Vercel DNS or it is
   silently gone.
 
+**MAIL DNS IS CURRENTLY GONE — the nameserver move to Netlify DNS wiped it (2026-08-15).**
+Verified against the authoritative nameserver (`dns1.p07.nsone.net`): the apex SPF, `_dmarc`,
+`s1`/`s2._domainkey`, `em2078` and `url7871` are all ABSENT. A new DNS zone starts with only the
+provider's system records, so everything that lived in the old zone vanished with the delegation —
+exactly the failure this file already warned about when the zone last moved, and it happened
+anyway. SendGrid cannot authenticate as this domain until they are restored, so mail fails SPF and
+DKIM and is rejected or spam-foldered, silently and with nothing in the app to show for it.
+
+SendGrid still reported `valid=true` for all of them while they were missing — that is its cached
+last-validation, not a live check, so **do not read the SendGrid dashboard as evidence the records
+exist.** Resolve them.
+
+The records to restore, read from SendGrid's own API rather than remembered (account id 52358906):
+
+| Type | Name | Value |
+|---|---|---|
+| CNAME | `em2078` | `u52358906.wl157.sendgrid.net` |
+| CNAME | `s1._domainkey` | `s1.domainkey.u52358906.wl157.sendgrid.net` |
+| CNAME | `s2._domainkey` | `s2.domainkey.u52358906.wl157.sendgrid.net` |
+| CNAME | `url7871` | `sendgrid.net` |
+| CNAME | `52358906` | `sendgrid.net` |
+| TXT | `@` | `v=spf1 include:sendgrid.net ~all` |
+| TXT | `_dmarc` | `v=DMARC1; p=none;` |
+
+The description below is what SHOULD be true and was true before the move. Restore it, then delete
+this banner rather than leaving two accounts of the same zone.
+
 **Mail DNS, as of 2026-08-04.** Present: SendGrid's full domain authentication (`em2078`
 return-path, `s1`/`s2._domainkey`, `url7871` link branding), a `_dmarc` TXT at `p=none`
 (monitoring), and an apex SPF — `v=spf1 include:sendgrid.net ~all`, verified resolving with the
