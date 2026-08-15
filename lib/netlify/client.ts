@@ -22,6 +22,7 @@
 // update self-heals the next time anything reconciles — including the 6-hourly reverify cron.
 
 import { promises as dns } from "node:dns";
+import { APP_HOST } from "../appUrl";
 import { NETLIFY_DNS_A_RECORD, NETLIFY_DNS_APEX_TARGET, netlifyCnameTarget } from "./dns";
 
 const API_BASE = "https://api.netlify.com/api/v1";
@@ -84,18 +85,52 @@ async function getSiteDomains(): Promise<SiteDomains> {
 }
 
 /**
- * Sets the site's alias list to exactly `domains`.
+ * Is this alias one of OUR OWN names rather than a tenant's bring-your-own domain?
  *
- * Callers pass the FULL desired set derived from custom_domains, never a delta — see the header.
- * The site's own primary custom_domain is filtered out: Netlify rejects a name that is both the
- * primary and an alias, and it is not a tenant domain anyway.
+ * The distinction is load-bearing and was very nearly missed. `domain_aliases` is a single site
+ * level list holding BOTH kinds of name: `www.affiliateoffersecrets.com` (which is what produces
+ * the www → apex redirect), a `*.affiliateoffersecrets.com` wildcard for workspace subdomains, and
+ * the site's own `*.netlify.app` hostname — alongside every tenant domain. Reconciling the whole
+ * list from `custom_domains`, which by definition contains only tenant domains, would DELETE all of
+ * ours on the first run. With one tenant domain in the table that is not a subtle degradation: www
+ * and every workspace subdomain stop resolving.
+ *
+ * Ours = the app's own host, the root domain, anything under it (including the wildcard), or a
+ * netlify.app name. A tenant can never bring one of those, so the test cannot swallow a real
+ * tenant domain.
+ */
+export function isSiteOwnName(host: string): boolean {
+  const h = host.trim().toLowerCase().replace(/\.$/, "");
+  if (!h) return false;
+  if (h.endsWith(".netlify.app")) return true;
+
+  // Prefer the explicit root domain; fall back to the app host with any leading www stripped, so
+  // this still protects www/apex before NEXT_PUBLIC_ROOT_DOMAIN is set.
+  const root = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "").trim().toLowerCase()
+    || APP_HOST.split(":")[0].replace(/^www\./, "");
+  if (!root) return false;
+
+  return h === root || h === `*.${root}` || h.endsWith(`.${root}`);
+}
+
+/**
+ * Brings the site's alias list in line with `custom_domains`, without touching our own names.
+ *
+ * Callers pass the FULL desired set of TENANT domains derived from the table, never a delta — see
+ * the header. Two classes of name are then filtered or preserved rather than reconciled: the
+ * site's own primary custom_domain (Netlify rejects a name that is both primary and an alias) and
+ * anything isSiteOwnName() claims, which is carried across untouched.
  */
 export async function reconcileDomainAliases(domains: string[]): Promise<string[]> {
   const site = await getSiteDomains();
   const primary = (site.custom_domain ?? "").toLowerCase();
-  const desired = Array.from(
-    new Set(domains.map((d) => d.trim().toLowerCase()).filter((d) => d && d !== primary))
-  ).sort();
+
+  const tenant = domains.map((d) => d.trim().toLowerCase()).filter((d) => d && d !== primary);
+  const preserved = site.domain_aliases
+    .map((d) => d.trim().toLowerCase())
+    .filter((d) => d && d !== primary && isSiteOwnName(d));
+
+  const desired = Array.from(new Set([...preserved, ...tenant])).sort();
 
   // Skip the write when nothing changes. This runs on a 6-hourly cron over every domain, and a
   // no-op PATCH would rewrite the site record — and bump its updated_at — on every tick.
