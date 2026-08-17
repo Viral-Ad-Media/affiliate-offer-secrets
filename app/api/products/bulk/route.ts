@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { PRODUCT_STATUSES } from "@/lib/shared";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sweepDeletedCampaignVideos } from "@/lib/supabase/campaignVideos";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +68,18 @@ export async function POST(req: Request) {
       // means no client can arrive here by getting an action string slightly wrong.
       return NextResponse.json({ error: "delete needs confirmation" }, { status: 400 });
     }
+    // Captured BEFORE the delete: campaigns cascade from products, so afterwards there is nothing
+    // left to tell us which campaigns existed — and their stored videos would be orphaned with no
+    // way to find them again.
+    const { data: doomed } = await supabase
+      .from("products")
+      .select("campaigns(id)")
+      .eq("workspace_id", ws)
+      .in("id", ids);
+    const campaignIds = (doomed ?? [])
+      .flatMap((r: any) => (Array.isArray(r.campaigns) ? r.campaigns : r.campaigns ? [r.campaigns] : []))
+      .map((c: any) => c.id as string);
+
     const { data, error } = await supabase
       .from("products")
       .delete()
@@ -73,7 +87,20 @@ export async function POST(req: Request) {
       .in("id", ids)
       .select("id");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, affected: data?.length ?? 0 });
+
+    // Storage is the one store no foreign key reaches. Needs the admin client — Storage has no RLS
+    // policies at all (default-deny, the meta_pages shape), so the user-scoped client cannot touch
+    // it. Best-effort: the products are already gone.
+    let videosRemoved = 0;
+    if (campaignIds.length > 0) {
+      const sweep = await sweepDeletedCampaignVideos(createAdminClient(), campaignIds);
+      videosRemoved = sweep.removed;
+      if (sweep.failures.length > 0) {
+        console.error("[products/bulk] video sweep:", sweep.failures.join("; "));
+      }
+    }
+
+    return NextResponse.json({ ok: true, affected: data?.length ?? 0, videos_removed: videosRemoved });
   }
 
   const { data, error } = await supabase

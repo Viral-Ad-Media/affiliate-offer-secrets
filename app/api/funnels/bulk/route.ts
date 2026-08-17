@@ -6,6 +6,7 @@ import { rerenderFunnelSequence } from "@/lib/funnelSteps";
 import { funnelPublishBlockers } from "@/lib/funnelPublishGate";
 import { themePresetById, sanitizeTheme, THEME_PRESETS } from "@/lib/engine/pageTheme";
 import { contentWidthOf } from "@/lib/engine/blockTree";
+import { sweepDeletedCampaignVideos } from "@/lib/supabase/campaignVideos";
 
 export const dynamic = "force-dynamic";
 // Restyle re-renders every page of every selected funnel; publish runs a checklist plus a step
@@ -119,15 +120,26 @@ export async function POST(req: Request) {
     // social_drafts, custom_domain_routes. SET NULL: contacts, blog_posts, broadcast_*, and every
     // posting/sending audit table — so captured leads and published articles survive as the
     // history they are. That split is the schema's decision; nothing here overrides it.
-    //
-    // KNOWN GAP: campaign_creatives cascades its ROWS, but the mp4s those rows point at live in
-    // the private `campaign-videos` Storage bucket and are not reachable by an FK, so they are
-    // orphaned. The account-deletion route sweeps Storage explicitly for exactly this reason; a
-    // per-campaign sweep belongs here too and is not built. Wasted bytes only — nothing is served
-    // from an orphaned object, since every URL for one is minted on demand from a live row.
+
     const { error } = await admin.from("campaigns").delete().in("id", ids);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, action, updated: ids.length, skipped: [] });
+
+    // Storage is the one thing no FK reaches: campaign_creatives cascades its ROWS, but the mp4s
+    // they point at would survive forever with nothing referencing them. Runs AFTER the delete and
+    // re-verifies each campaign is really gone, so a bad id list can't destroy a live funnel's
+    // video. Best-effort — the campaigns are already deleted, and reporting failure here would
+    // invite a retry of something that already happened.
+    const sweep = await sweepDeletedCampaignVideos(admin, ids);
+    if (sweep.failures.length > 0) {
+      console.error("[funnels/bulk] video sweep:", sweep.failures.join("; "));
+    }
+    return NextResponse.json({
+      ok: true,
+      action,
+      updated: ids.length,
+      videos_removed: sweep.removed,
+      skipped: [],
+    });
   }
 
   if (action === "publish") {

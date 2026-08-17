@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { CAMPAIGN_VIDEOS_BUCKET } from "@/lib/supabase/storage";
+import { sweepDeletedCampaignVideos } from "@/lib/supabase/campaignVideos";
 import { syncDomainAliases } from "@/lib/netlify/domains";
 import { destroyImage } from "@/lib/cloudinary/client";
 
@@ -387,39 +387,10 @@ export async function POST(req: Request) {
     .map((campaign) => campaign.id);
 
   if (candidateCampaignIds.length > 0) {
-    const liveCampaignResult = await admin
-      .from("campaigns")
-      .select("id", { count: "exact" })
-      .in("id", candidateCampaignIds);
-    if (
-      liveCampaignResult.error ||
-      liveCampaignResult.count !== (liveCampaignResult.data ?? []).length
-    ) {
-      console.error("Campaign storage cleanup verification failed", liveCampaignResult.error);
-      cleanupFailures.push("storage cleanup skipped: campaign verification failed");
-    } else {
-      const liveCampaignIds = new Set(
-        (liveCampaignResult.data ?? []).map((campaign) => campaign.id as string)
-      );
-      const deletedCampaignIds = candidateCampaignIds.filter((id) => !liveCampaignIds.has(id));
-      const videoPaths = new Set(deletedCampaignIds.map((id) => `${id}.mp4`));
-      for (const campaignId of deletedCampaignIds) {
-        const { data: listed, error: listError } = await admin.storage
-          .from(CAMPAIGN_VIDEOS_BUCKET)
-          .list(campaignId);
-        if (listError) {
-          cleanupFailures.push(`storage folder ${campaignId}`);
-          continue;
-        }
-        for (const object of listed ?? []) videoPaths.add(`${campaignId}/${object.name}`);
-      }
-      if (videoPaths.size > 0) {
-        const { error: removeError } = await admin.storage
-          .from(CAMPAIGN_VIDEOS_BUCKET)
-          .remove(Array.from(videoPaths));
-        if (removeError) cleanupFailures.push(`storage: ${removeError.message}`);
-      }
-    }
+    // Shared with the funnels bulk delete — see lib/supabase/campaignVideos.ts. It re-verifies each
+    // campaign is really gone before removing anything, which is what this block did inline.
+    const sweep = await sweepDeletedCampaignVideos(admin, candidateCampaignIds);
+    cleanupFailures.push(...sweep.failures);
   }
 
   const candidateDomains = customDomains.filter((domain) =>
