@@ -24,7 +24,10 @@ export async function GET(
     .from("campaigns")
     .select("id, workspace_id")
     .eq("id", params.campaignId)
-    .eq("status", "ready")
+    // Same reasoning as lib/publicPage.ts: `status` describes the last BUILD, not the page. A
+    // failed rebuild must not break the middle of a funnel a visitor is already walking through —
+    // that would be worse here than on the opt-in page, since the lead has already been captured.
+    // bridge_published stays the tenant-controlled switch.
     .eq("bridge_published", true)
     .maybeSingle();
   if (!campaign) {

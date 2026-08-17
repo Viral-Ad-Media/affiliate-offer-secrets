@@ -57,11 +57,24 @@ export async function servePublicCampaignPage(
   requiredWorkspaceId?: string
 ): Promise<Response> {
   const admin = createAdminClient();
+  // PUBLISHED + has HTML is the gate. `status` is deliberately NOT part of it.
+  //
+  // `campaigns.status` describes the last BUILD, not the page. A rebuild that fails — most often
+  // because the Anthropic account ran out of credit — sets status='error' while leaving the
+  // existing bridge_html completely intact, and gating on 'ready' therefore took a live funnel
+  // offline over a failure that had nothing to do with the page being served. That happened here:
+  // a regenerate of a published funnel failed and 404'd real ad traffic for a page whose HTML was
+  // 33,943 bytes of perfectly serveable content.
+  //
+  // Removing it costs nothing this gate was providing. A campaign that has never finished a build
+  // has no bridge_html (so the check below refuses it), and a draft has bridge_published=false —
+  // which remains the real, tenant-controlled switch for pulling a page down. Stage output is
+  // committed per stage, so a failed rebuild leaves the PREVIOUS render in place rather than a
+  // half-written one.
   let campaignQuery = admin
     .from("campaigns")
     .select("bridge_html, workspace_id")
     .eq("id", campaignId)
-    .eq("status", "ready")
     .eq("bridge_published", true);
   if (requiredWorkspaceId) {
     campaignQuery = campaignQuery.eq("workspace_id", requiredWorkspaceId);
