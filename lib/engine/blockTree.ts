@@ -545,6 +545,8 @@ export type ElementBlock =
  * `first_name`/`email` are deliberately absent: the form renders those itself and they can't be
  * removed, so offering them would create a duplicate that silently overwrites the real one.
  */
+import { SMS_CONSENT_FIELD_KEY } from "@/lib/sms";
+
 export const FORM_FIELD_PRESETS: {
   id: string;
   label: string;
@@ -561,6 +563,9 @@ export const FORM_FIELD_PRESETS: {
   { id: "budget", label: "Budget", fieldKey: "budget", fieldType: "number", placeholder: "Budget" },
   { id: "message", label: "Message", fieldKey: "message", fieldType: "textarea", placeholder: "Your message" },
   { id: "consent", label: "Checkbox", fieldKey: "consent", fieldType: "checkbox" },
+  // The SMS pair. Separate from the generic checkbox because the KEY is what the leads route
+  // looks for — a box labelled "text me" with any other key records nothing. See lib/sms.ts.
+  { id: "sms_consent", label: "SMS consent", fieldKey: SMS_CONSENT_FIELD_KEY, fieldType: "checkbox" },
   { id: "choice", label: "Choose one", fieldKey: "choice", fieldType: "radio" },
   { id: "dropdown", label: "Dropdown", fieldKey: "dropdown", fieldType: "select", placeholder: "Select one…" },
   { id: "custom", label: "Something else", fieldKey: "custom", fieldType: "text", placeholder: "" },

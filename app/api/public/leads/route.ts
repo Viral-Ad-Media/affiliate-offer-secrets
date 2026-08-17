@@ -4,6 +4,8 @@ import { isValidEmail, clampName } from "@/lib/validate";
 import { readStickyVariantId } from "@/lib/bridgeVariants";
 import { normalizePageCopy, type PageBlockTree } from "@/lib/engine/renderPages";
 import { extractLeadFormFields } from "@/lib/engine/validatePageBlockTree";
+import { SMS_PHONE_FIELD_KEY, SMS_CONSENT_FIELD_KEY, isAffirmativeConsent } from "@/lib/sms";
+import { toE164 } from "@/lib/twilio/client";
 
 export const dynamic = "force-dynamic";
 
@@ -141,6 +143,20 @@ export async function POST(req: Request) {
   const tree = normalizePageCopy(variantPageCopy ?? campaign.page_copy, null);
   const extraFields = filterExtraFields(body.extra_fields, tree);
 
+  // The two reserved keys that make a contact textable. Both halves required, and consent is only
+  // recorded from an explicitly TICKED box carrying the reserved key — a phone field alone records
+  // a number and nothing else, which is the whole point of keeping them separate (see 0097).
+  //
+  // The phone is promoted OUT of extra_fields so it has exactly one home; the consent value is
+  // deliberately LEFT in extra_fields as well, because "they ticked a box reading <this label> at
+  // <this time> from <this IP>" is the evidence of consent, and sms_consent_at alone doesn't carry it.
+  const rawPhone = extraFields[SMS_PHONE_FIELD_KEY];
+  const phone = typeof rawPhone === "string" ? toE164(rawPhone) : null;
+  if (SMS_PHONE_FIELD_KEY in extraFields) delete extraFields[SMS_PHONE_FIELD_KEY];
+  const smsConsentAt = isAffirmativeConsent(extraFields[SMS_CONSENT_FIELD_KEY])
+    ? new Date().toISOString()
+    : null;
+
   await admin
     .from("contacts")
     .upsert(
@@ -150,6 +166,9 @@ export async function POST(req: Request) {
         bridge_variant_id: bridgeVariantId,
         first_name: firstName || null,
         email,
+        phone,
+        // NULL unless the box was ticked. Never inferred from the presence of a number.
+        sms_consent_at: smsConsentAt,
         extra_fields: extraFields,
         ip_address: ipAddress,
         user_agent: userAgent,
