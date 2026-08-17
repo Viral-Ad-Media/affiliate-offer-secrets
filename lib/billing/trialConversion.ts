@@ -68,32 +68,68 @@ function cardLabel(p: ProfileRow): string {
 const PRICE = `$${(ACCESS_FEE_CENTS / 100).toFixed(2)}`;
 
 /**
+ * "Couldn't reach Stripe" is NOT "this person has no card", and conflating them is expensive.
+ *
+ * Found the hard way while testing: a transient StripeConnectionError made resolvePaymentMethod
+ * return null, which the sweep read as "no saved payment method" and used to mark the account
+ * ABANDONED — permanently giving up on charging someone whose card was fine, and telling them
+ * their trial had ended with no payment method. Lost revenue and a false statement to a customer,
+ * from a blip that would have cleared on the next tick.
+ *
+ * So the result is three-valued. Only `none` is a decision; `unavailable` means try again later.
+ */
+type PaymentMethodLookup =
+  | { kind: "found"; id: string }
+  | { kind: "none" }
+  | { kind: "unavailable"; reason: string };
+
+/** Errors where the answer is genuinely unknown, rather than known to be "no card". */
+function isTransientStripeError(err: any): boolean {
+  const t = err?.type ?? err?.raw?.type;
+  return (
+    t === "StripeConnectionError" ||
+    t === "StripeAPIError" ||
+    t === "StripeRateLimitError" ||
+    t === "api_connection_error" ||
+    t === "api_error" ||
+    t === "rate_limit_error"
+  );
+}
+
+/**
  * The payment method to charge.
  *
- * Prefers the id stored at signup, but falls back to whatever cards the Customer actually has —
- * because a card can be removed or replaced at Stripe without this app hearing about it, and the
- * stored id would then be a stale pointer that fails with a confusing error rather than a decline.
- * Returns null when there is genuinely nothing to charge, which is a skip, not a failure.
+ * Prefers the id stored at signup, but falls back to the Customer's real card list — a card can be
+ * removed or replaced at Stripe without this app hearing about it, and the stored id would then be
+ * a stale pointer that fails with a confusing error rather than a clean decline.
  */
-async function resolvePaymentMethod(stripe: Stripe, profile: ProfileRow): Promise<string | null> {
+async function resolvePaymentMethod(stripe: Stripe, profile: ProfileRow): Promise<PaymentMethodLookup> {
   if (profile.stripe_payment_method_id) {
     try {
       const pm = await stripe.paymentMethods.retrieve(profile.stripe_payment_method_id);
-      if (pm && !("deleted" in pm)) return pm.id;
-    } catch {
-      // Detached or unknown — fall through to the customer's real list rather than failing here.
+      if (pm && !("deleted" in pm)) return { kind: "found", id: pm.id };
+    } catch (err: any) {
+      // A transient failure must not be read as "the card is gone" — bail out and retry later.
+      if (isTransientStripeError(err)) {
+        return { kind: "unavailable", reason: err?.raw?.message ?? err?.message ?? "stripe unreachable" };
+      }
+      // Anything else (detached, unknown id) is a real answer: fall through to the customer's list.
     }
   }
-  if (!profile.stripe_customer_id) return null;
+  if (!profile.stripe_customer_id) return { kind: "none" };
   try {
     const list = await stripe.paymentMethods.list({
       customer: profile.stripe_customer_id,
       type: "card",
       limit: 1,
     });
-    return list.data[0]?.id ?? null;
-  } catch {
-    return null;
+    const id = list.data[0]?.id;
+    return id ? { kind: "found", id } : { kind: "none" };
+  } catch (err: any) {
+    if (isTransientStripeError(err)) {
+      return { kind: "unavailable", reason: err?.raw?.message ?? err?.message ?? "stripe unreachable" };
+    }
+    return { kind: "none" };
   }
 }
 
@@ -223,6 +259,14 @@ export async function runTrialConversionSweep(admin: AdminClient): Promise<Sweep
       continue;
     }
 
+    // Resolved BEFORE the claim, deliberately: an unavailable lookup must burn no attempt and
+    // leave no claim behind, and doing it in this order means there is nothing to roll back.
+    const lookup = await resolvePaymentMethod(stripe, profile);
+    if (lookup.kind === "unavailable") {
+      result.skipped.push({ userId: profile.id, reason: `stripe unavailable: ${lookup.reason}` });
+      continue;
+    }
+
     const attempts = priorAttempts + 1;
 
     // Claim the attempt BEFORE talking to Stripe. Two overlapping sweeps would otherwise both read
@@ -246,8 +290,7 @@ export async function runTrialConversionSweep(admin: AdminClient): Promise<Sweep
       continue;
     }
 
-    const paymentMethod = await resolvePaymentMethod(stripe, profile);
-    if (!profile.stripe_customer_id || !paymentMethod) {
+    if (!profile.stripe_customer_id || lookup.kind !== "found") {
       // No card is not a failure to retry — nothing will change without the person acting. Recorded
       // as abandoned so the sweep stops looking at them, and the billing page still offers checkout.
       await admin
@@ -275,7 +318,7 @@ export async function runTrialConversionSweep(admin: AdminClient): Promise<Sweep
           amount: ACCESS_FEE_CENTS,
           currency: "usd",
           customer: profile.stripe_customer_id,
-          payment_method: paymentMethod,
+          payment_method: lookup.id,
           // off_session + confirm is what makes this a charge rather than a checkout. Stripe will
           // decline with `authentication_required` where the card needs 3DS, which the catch below
           // turns into the same dunning path as any other decline — the person is not at their

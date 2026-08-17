@@ -66,6 +66,20 @@ export async function POST(req: Request) {
     // one state worth being noisy about.
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    // The SAME qualifying event as a Checkout access payment: the referred account has now paid
+    // the access fee. Without this a referral converted by trial would pay in full and the referrer
+    // would silently earn nothing — the payout path only ever ran on the Checkout branch, which is
+    // the one a converting trial never takes. Idempotent, and non-2xx on failure so Stripe's retry
+    // repairs a transient error, exactly as the Checkout path does.
+    const { error: rewardError } = await adminClient.rpc("reward_referral", {
+      p_referred_user_id: uid,
+      p_points: REFERRAL_REWARD_POINTS,
+    });
+    if (rewardError) {
+      console.error("reward_referral failed (trial conversion)", rewardError.message);
+      return NextResponse.json({ error: "referral reward failed" }, { status: 500 });
+    }
+
     await notify(adminClient, uid, {
       kind: "billing_succeeded",
       title: "Payment received — your access is active",
