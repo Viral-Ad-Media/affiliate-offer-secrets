@@ -95,10 +95,12 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
   }
 
   const rows = tab === "top" ? top : tab === "trending" ? trending : fresh;
+  // Reference point for the gravity bar — the strongest item currently listed.
+  const topGravity = rows.reduce((m, r) => Math.max(m, r.gravity ?? 0), 0);
 
   return (
     <Card as="section" className="overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-700 px-4 py-3">
+      <div className="space-y-2 border-b border-ink-700 px-4 py-3">
         <div className="flex flex-wrap items-center gap-1">
           {TABS.map((t) => (
             <button
@@ -115,7 +117,9 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
             </button>
           ))}
         </div>
-        <span className="text-xs text-zinc-500">{TABS.find((t) => t.key === tab)?.blurb}</span>
+        {/* Under the tabs, not beside them: at narrow widths the two competed and the blurb —
+            which is what explains the difference between these three lists — lost. */}
+        <p className="text-xs text-zinc-500">{TABS.find((t) => t.key === tab)?.blurb}</p>
       </div>
 
       {loading ? (
@@ -138,71 +142,125 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-ink-800">
-          {rows.map((h) => (
-            <li key={`${h.network}:${h.vendor_id}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-zinc-100" title={h.product_title}>
-                  {h.product_title}
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                  <span className="font-mono">{h.vendor_id}</span>
-                  {h.sub_category || h.category ? <span>· {h.sub_category || h.category}</span> : null}
-                  <span>· grav {h.gravity?.toFixed(1) ?? "—"}</span>
-                  <span>· {fmtMoney(h.avg_sale)}/sale</span>
-                  {h.recurring ? <span>· rebill {fmtMoney(h.recurring)}</span> : null}
-                </div>
-              </div>
-
-              {tab === "fresh" && h.days_known != null && (
-                <Badge className="border-sky-500/30 bg-sky-500/15 text-sky-300">
-                  <Sparkles className="h-3 w-3" />
-                  {h.days_known === 0 ? "New today" : `${h.days_known}d ago`}
-                </Badge>
-              )}
-
-              {tab === "trending" && h.gravity_change != null && (
-                <Badge className="border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
-                  {/* Sign comes from the number, not a hardcoded "+" — a negative would
-                      otherwise render as "+-20.0". */}
-                  <TrendingUp className="h-3 w-3" />
-                  {h.gravity_change > 0 ? "+" : ""}
-                  {h.gravity_change.toFixed(1)}
-                  {h.gravity_change_pct != null ? ` (${h.gravity_change_pct}%)` : ""}
-                </Badge>
-              )}
-
-              <div className="flex items-center gap-1.5">
-                {h.sales_page_url && (
-                  <a
-                    href={h.sales_page_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Open sales page"
-                    className={cn(buttonVariants({ variant: "outline" }), "!px-2")}
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                )}
-                {h.owned ? (
-                  <Badge className="border-ink-600 bg-ink-800 text-zinc-400">
-                    <Check className="h-3 w-3" /> Added
-                  </Badge>
-                ) : (
-                  <Button
-                    onClick={() => add(h)}
-                    disabled={adding === h.vendor_id} variant="outline" className="text-xs">
-                    {adding === h.vendor_id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Plus className="h-3.5 w-3.5" />
+        <ul className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+          {rows.map((h, i) => {
+            // Gravity relative to the strongest item in THIS list. A raw gravity number means
+            // nothing without a reference point — 42 is huge in a small subcategory and ordinary
+            // in a crowded one — so the bar compares against what's actually on screen rather
+            // than an absolute scale that would be wrong for both.
+            const pct = topGravity > 0 ? Math.max(3, Math.round(((h.gravity ?? 0) / topGravity) * 100)) : 0;
+            return (
+              <li
+                key={`${h.network}:${h.vendor_id}`}
+                className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-900 p-3 transition-colors hover:border-emerald-500/40"
+              >
+                <div className="flex items-start gap-2.5">
+                  {/* It is a leaderboard, so it should be ranked. The top three carry the accent;
+                      past that the position is informative but not a recommendation. */}
+                  <span
+                    className={cn(
+                      "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+                      i < 3 ? "bg-emerald-600 text-white" : "border border-ink-600 text-zinc-500"
                     )}
-                    Add
-                  </Button>
-                )}
-              </div>
-            </li>
-          ))}
+                  >
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    {/* Two lines' worth of space whether the title needs one or two, so the
+                        metric rows line up across a grid row instead of stepping up and down. */}
+                    <div
+                      className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-snug text-zinc-100"
+                      title={h.product_title}
+                    >
+                      {h.product_title}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {(h.sub_category || h.category) && (
+                        <Badge className="border-ink-600 bg-ink-800 text-[10px] text-zinc-400">
+                          {h.sub_category || h.category}
+                        </Badge>
+                      )}
+                      <span className="font-mono text-[10px] text-zinc-600">{h.vendor_id}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* The number that decides whether this is worth promoting, given its own line and
+                    a label — it used to sit mid-sentence in a run-on metadata string. */}
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <div className="text-sm font-bold text-zinc-100">{h.gravity?.toFixed(1) ?? "—"}</div>
+                    <div className="text-[10px] uppercase tracking-wide text-zinc-600">Gravity</div>
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-zinc-100">{fmtMoney(h.avg_sale)}</div>
+                    <div className="text-[10px] uppercase tracking-wide text-zinc-600">Per sale</div>
+                  </div>
+                  <div>
+                    <div className={cn("text-sm font-bold", h.recurring ? "text-emerald-300" : "text-zinc-600")}>
+                      {h.recurring ? fmtMoney(h.recurring) : "—"}
+                    </div>
+                    <div className="text-[10px] uppercase tracking-wide text-zinc-600">Rebill</div>
+                  </div>
+                </div>
+
+                <div className="h-1 overflow-hidden rounded-full bg-ink-800" title={`${pct}% of the top product's gravity`}>
+                  <div className="h-full rounded-full bg-emerald-500/70" style={{ width: `${pct}%` }} />
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {/* The metric that earned this row its place on THIS tab. Top needs none — the
+                      rank and the bar already say it. */}
+                  <div className="min-h-[1.25rem]">
+                    {tab === "trending" && h.gravity_change != null && (
+                      <Badge className="border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
+                        <TrendingUp className="h-3 w-3" />
+                        {/* Sign comes from the number, not a hardcoded "+" — a negative would
+                            otherwise render as "+-20.0". */}
+                        {h.gravity_change > 0 ? "+" : ""}
+                        {h.gravity_change.toFixed(1)} this week
+                        {h.gravity_change_pct != null ? ` (${h.gravity_change_pct}%)` : ""}
+                      </Badge>
+                    )}
+                    {tab === "fresh" && h.days_known != null && (
+                      <Badge className="border-sky-500/30 bg-sky-500/15 text-sky-300">
+                        <Sparkles className="h-3 w-3" />
+                        {h.days_known === 0 ? "New today" : `First seen ${h.days_known}d ago`}
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {h.sales_page_url && (
+                      <a
+                        href={h.sales_page_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Open sales page"
+                        className={cn(buttonVariants({ variant: "outline" }), "!px-2")}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                    {h.owned ? (
+                      <Badge className="border-ink-600 bg-ink-800 text-zinc-400">
+                        <Check className="h-3 w-3" /> Added
+                      </Badge>
+                    ) : (
+                      <Button onClick={() => add(h)} disabled={adding === h.vendor_id} variant="outline" className="text-xs">
+                        {adding === h.vendor_id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="h-3.5 w-3.5" />
+                        )}
+                        Add
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </Card>
