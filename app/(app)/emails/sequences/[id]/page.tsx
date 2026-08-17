@@ -123,7 +123,13 @@ export default function BroadcastSequencePage({ params }: { params: { id: string
 
       <BroadcastActivateControl sequence={sequence} stepCount={steps.length} selectedContactCount={selectedContactIds.length} stats={stats} onChanged={load} />
 
-      <BroadcastStepsEditor sequenceId={sequence.id} steps={steps} editable={stepsEditable} onChanged={load} />
+      <BroadcastStepsEditor
+        sequenceId={sequence.id}
+        steps={steps}
+        editable={stepsEditable}
+        channel={(sequence as { channel?: "email" | "sms" }).channel ?? "email"}
+        onChanged={load}
+      />
 
       {sequence.audience_type === "manual" && (
         <BroadcastContactPicker

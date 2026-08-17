@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import EmptyState from "@/components/EmptyState";
 import LoadFailed from "@/components/LoadFailed";
+import NewSmsSequenceButton from "@/components/NewSmsSequenceButton";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -60,14 +61,19 @@ export default async function SmsPage() {
 
   return (
     <main className="space-y-6">
-      <header>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-zinc-100">
-          <MessageSquare className="h-6 w-6 text-emerald-400" /> SMS
-        </h1>
-        <p className="text-sm text-zinc-400">
-          Text drips to leads who explicitly opted in. Message copy is generated with a campaign kit;
-          sending runs on the same schedule engine as email.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-zinc-100">
+            <MessageSquare className="h-6 w-6 text-emerald-400" /> SMS
+          </h1>
+          <p className="text-sm text-zinc-400">
+            Text drips to leads who explicitly opted in. Message copy is generated with a campaign
+            kit; sending runs on the same schedule engine as email.
+          </p>
+        </div>
+        {/* Disabled rather than hidden without a sender: someone looking for this button should
+            learn why it can't be used, not wonder where it went. */}
+        <NewSmsSequenceButton disabled={!smsStatus.connected} />
       </header>
 
       <section className="grid gap-3 sm:grid-cols-3">
@@ -134,7 +140,7 @@ export default async function SmsPage() {
           <ul className="divide-y divide-ink-700">
             {(sequences ?? []).map((s) => (
               <li key={s.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                <Link href={`/broadcast/${s.id}`} className="min-w-0 flex-1 truncate text-sm text-zinc-100 hover:underline">
+                <Link href={`/emails/sequences/${s.id}`} className="min-w-0 flex-1 truncate text-sm text-zinc-100 hover:underline">
                   {s.name}
                 </Link>
                 <Badge

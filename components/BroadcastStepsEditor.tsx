@@ -9,6 +9,7 @@ import type { BroadcastStep } from "@/lib/shared";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { composeSms, smsSegments, MAX_SMS_BODY } from "@/lib/sms";
 import { cn } from "@/lib/utils";
 
 type DraftStep = Partial<BroadcastStep> & { key: string; step_index: number; delay_days: number; subject: string; body_md: string };
@@ -21,15 +22,19 @@ export default function BroadcastStepsEditor({
   sequenceId,
   steps,
   editable,
+  channel = "email",
   onChanged,
 }: {
   sequenceId: string;
   steps: BroadcastStep[];
   editable: boolean;
   onChanged: () => void;
+  /** SMS steps have no subject and a hard character budget. */
+  channel?: "email" | "sms";
 }) {
   const [drafts, setDrafts] = useState<DraftStep[]>(steps.map(toDraft));
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const isSms = channel === "sms";
   const [error, setError] = useState<string | null>(null);
 
   // Re-sync local drafts whenever the parent's steps prop changes (after a save/delete reload).
@@ -48,7 +53,18 @@ export default function BroadcastStepsEditor({
 
   function addStep() {
     const nextIndex = drafts.length > 0 ? Math.max(...drafts.map((d) => d.step_index)) + 1 : 0;
-    setDrafts((cur) => [...cur, { key: `new-${nextIndex}`, step_index: nextIndex, delay_days: nextIndex === 0 ? 0 : 3, subject: "", body_md: "" }]);
+    setDrafts((cur) => [
+      ...cur,
+      {
+        key: `new-${nextIndex}`,
+        step_index: nextIndex,
+        delay_days: nextIndex === 0 ? 0 : 3,
+        // broadcast_steps.subject is NOT NULL and is never sent for sms — an internal label keeps
+        // the column honest without widening it (see 0098).
+        subject: channel === "sms" ? `Message ${nextIndex}` : "",
+        body_md: "",
+      },
+    ]);
   }
 
   async function saveStep(draft: DraftStep) {
@@ -113,32 +129,60 @@ export default function BroadcastStepsEditor({
                 />
                 <span className="text-xs text-zinc-400">days after enrollment</span>
               </div>
-              <input
-                value={d.subject}
-                onChange={(e) => updateDraft(d.key, { subject: e.target.value })}
-                placeholder="Subject"
-                disabled={!editable}
-                className="mb-2 w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-emerald-500 disabled:opacity-50"
-              />
+              {isSms ? null : (
+                <input
+                  value={d.subject}
+                  onChange={(e) => updateDraft(d.key, { subject: e.target.value })}
+                  placeholder="Subject"
+                  disabled={!editable}
+                  className="mb-2 w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-emerald-500 disabled:opacity-50"
+                />
+              )}
               <textarea
                 value={d.body_md}
                 onChange={(e) => updateDraft(d.key, { body_md: e.target.value })}
-                rows={5}
-                placeholder="Email body (markdown)"
+                rows={isSms ? 3 : 5}
+                maxLength={isSms ? MAX_SMS_BODY : undefined}
+                placeholder={isSms ? "Message text" : "Email body (markdown)"}
                 disabled={!editable}
                 className="w-full rounded-lg border border-ink-600 bg-ink-900 p-3 text-sm outline-none focus:border-emerald-500 disabled:opacity-50"
               />
+              {isSms && (
+                // Shown as it will actually send — composeSms adds the code-owned STOP line to the
+                // first message, so the character budget only balances if the preview includes it.
+                <div className="mt-1.5 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-zinc-600">
+                      {d.body_md.length}/{MAX_SMS_BODY} characters
+                    </span>
+                    <span
+                      className={
+                        smsSegments(composeSms(d.body_md, i)).segments > 1 ? "text-amber-300" : "text-zinc-600"
+                      }
+                    >
+                      {smsSegments(composeSms(d.body_md, i)).segments} segment
+                      {smsSegments(composeSms(d.body_md, i)).segments === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <p className="rounded-lg border border-ink-700 bg-ink-900/60 p-2 text-xs text-zinc-300">
+                    {composeSms(d.body_md || "…", i)}
+                  </p>
+                </div>
+              )}
               {editable && (
                 <div className="mt-2 flex items-center gap-2">
-                  <EditorPreviewButton
-                    className={cn(buttonVariants({ variant: "outline" }), "flex items-center gap-1.5 text-xs")}
-                    label="Preview"
-                    title={`Preview — ${d.subject || "email"}`}
-                    render={() => renderEmailPreviewHtml({ subject: d.subject, body_md: d.body_md })}
-                  />
+                  {/* SMS previews inline above — there is no document to open. */}
+                  {!isSms && (
+                    <EditorPreviewButton
+                      className={cn(buttonVariants({ variant: "outline" }), "flex items-center gap-1.5 text-xs")}
+                      label="Preview"
+                      title={`Preview — ${d.subject || "email"}`}
+                      render={() => renderEmailPreviewHtml({ subject: d.subject, body_md: d.body_md })}
+                    />
+                  )}
                   <Button
                     onClick={() => saveStep(d)}
-                    disabled={busyKey === d.key || !d.subject.trim()} variant="outline" className="!py-1 text-xs">
+                    disabled={busyKey === d.key || (isSms ? !d.body_md.trim() : !d.subject.trim())} variant="outline" className="!py-1 text-xs">
                     {busyKey === d.key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                     Save
                   </Button>

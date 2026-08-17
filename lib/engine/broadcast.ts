@@ -3,6 +3,7 @@ import { db } from "./core";
 import { sendViaActiveSender, isSendFailure } from "@/lib/mail/send";
 import { sendSmsToContact } from "@/lib/sms/send";
 import { composeSms } from "@/lib/sms";
+import { checkSendWindow } from "@/lib/sms/window";
 import { renderUnsubscribeFooterHtml } from "./broadcastEmail";
 import { EMAIL_SETTINGS_COLUMNS } from "@/lib/emailSettings";
 
@@ -174,6 +175,16 @@ async function stageSend(stageData: Record<string, unknown>, userId: string, wor
   if (!isSms && (await workspaceSendCapReached(workspaceId))) return { stageData: {}, retry: true };
 
   if (isSms) {
+    // Clock-based gates BEFORE the contact-based ones, and they RETRY rather than skip: quiet
+    // hours and throughput are both temporary, so the step waits for a later sweep tick instead
+    // of being marked skipped forever. heartbeatRetry keeps the attempts cap from eating the job
+    // while it waits — the same mechanic a not-ready video poll uses.
+    const window = await checkSendWindow(db, workspaceId);
+    if (!window.ok) {
+      if (window.reason === "no_connection") throw new Error("No SMS provider connected");
+      return { stageData: {}, retry: true };
+    }
+
     // The step's body IS the message; `subject` is an internal label for sms steps and is never
     // sent. composeSms adds the code-owned STOP line to the first message of the sequence, which
     // is why step_index matters here — the same function the kit preview renders through, so what
