@@ -29,6 +29,16 @@ export async function GET(req: Request) {
     .getAll("status")
     .filter((s) => (PRODUCT_STATUSES as readonly string[]).includes(s));
 
+  // Sorting is SERVER-side because the list is paged: sorting the current page in the browser
+  // would silently reorder 50 rows and leave the other 45 where they were, which is the same
+  // class of bug as the old client-side status filter. Allowlisted rather than passed through —
+  // this string reaches .order(), so an arbitrary value is an injection surface and a typo is a
+  // 500. Anything unrecognised falls back to the default ordering.
+  const SORTABLE = ["score", "gravity", "avg_sale", "recurring", "created_at", "product_title"] as const;
+  const rawSort = url.searchParams.get("sort");
+  const sort = (SORTABLE as readonly string[]).includes(rawSort ?? "") ? (rawSort as string) : null;
+  const asc = url.searchParams.get("dir") === "asc";
+
   const scoped = () => {
     const q = supabase
       .from("products")
@@ -57,11 +67,15 @@ export async function GET(req: Request) {
   const { data: products, error } =
     total === 0
       ? { data: [], error: null }
-      : await scoped()
-          .order("score", { ascending: false, nullsFirst: false })
-          .order("gravity", { ascending: false, nullsFirst: false })
-          // Two products can tie on both score and gravity; without a unique tiebreaker the same
-          // row can appear on two pages, or on none.
+      : await (sort
+          ? scoped().order(sort, { ascending: asc, nullsFirst: false })
+          : // Default, byte-identical to before sorting existed.
+            scoped()
+              .order("score", { ascending: false, nullsFirst: false })
+              .order("gravity", { ascending: false, nullsFirst: false })
+        )
+          // Two products can tie on any sort key; without a unique tiebreaker the same row can
+          // appear on two pages, or on none. Applies to every ordering, not just the default.
           .order("id", { ascending: false })
           .range(from, to);
 

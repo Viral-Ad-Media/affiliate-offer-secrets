@@ -12,6 +12,7 @@ import {
   Loader2,
   RefreshCw,
   Rocket,
+  ArrowUpDown,
 } from "lucide-react";
 import PromoteKitDialog from "@/components/PromoteKitDialog";
 import BuildProgressDialog from "@/components/BuildProgressDialog";
@@ -54,6 +55,50 @@ const STATUS_OPTIONS: FilterOption[] = [
 
 const fmtMoney = (v: number | null) => (v == null ? "—" : `$${v.toFixed(2)}`);
 const fmtNum = (v: number | null) => (v == null ? "—" : v.toFixed(1));
+
+/**
+ * A sortable column header.
+ *
+ * Sorting is applied by the SERVER (see /api/products): the list is paged, so sorting in the
+ * browser would reorder the 50 rows on screen and leave the rest of the set untouched — the same
+ * class of bug as filtering one page client-side.
+ *
+ * Module scope, not defined inside ProductsPanel, so it keeps a stable identity across the panel's
+ * 5s poll re-renders.
+ */
+function SortBtn({
+  label,
+  k,
+  sort,
+  onSort,
+  align = "left",
+}: {
+  label: string;
+  k: string;
+  sort: { key: string; asc: boolean } | null;
+  onSort: (s: { key: string; asc: boolean } | null) => void;
+  align?: "left" | "right" | "center";
+}) {
+  const active = sort?.key === k;
+  return (
+    <button
+      type="button"
+      // Third click clears back to the default ordering rather than cycling forever — the default
+      // (score, then gravity) is the useful one, and without this there's no way back to it.
+      onClick={() => onSort(!active ? { key: k, asc: false } : sort!.asc ? null : { key: k, asc: true })}
+      aria-sort={active ? (sort!.asc ? "ascending" : "descending") : "none"}
+      className={cn(
+        "inline-flex w-full items-center gap-1 hover:text-zinc-200",
+        align === "right" && "justify-end",
+        align === "center" && "justify-center",
+        active && "text-emerald-300"
+      )}
+    >
+      {label}
+      <ArrowUpDown className={cn("h-3 w-3 shrink-0", !active && "opacity-30")} />
+    </button>
+  );
+}
 
 export default function ProductsPanel({
   basePath,
@@ -111,12 +156,21 @@ export default function ProductsPanel({
   // than every build in the workspace.
   const [progress, setProgress] = useState<{ jobIds: string[]; titles: Record<string, string> } | null>(null);
 
+  // Sort lives in component state rather than the URL: unlike `page`, it isn't something you'd
+  // link someone to, and putting it in the URL would make every header click a navigation that
+  // remounts the panel mid-poll.
+  const [sort, setSort] = useState<{ key: string; asc: boolean } | null>(null);
+
   const statusKey = statusFilters.join(",");
   const { refresh: refreshCredits } = useCredits();
 
   const load = useCallback(async () => {
     const params = new URLSearchParams({ page: String(page) });
     for (const s of statusKey ? statusKey.split(",") : []) params.append("status", s);
+    if (sort) {
+      params.set("sort", sort.key);
+      params.set("dir", sort.asc ? "asc" : "desc");
+    }
     // Both endpoints answer `{error}` on 401/500, and this poll runs every 5s for as long as the
     // tab is open — so a session that expires mid-session WILL hit it. Storing that object where an
     // array belongs used to crash the whole page on the next render ("A.filter is not a function"),
@@ -145,7 +199,7 @@ export default function ProductsPanel({
     // onData is deliberately not a dependency — a host passing an inline arrow would otherwise
     // rebuild `load` every render and restart the poll interval on every tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, statusKey]);
+  }, [page, statusKey, sort]);
 
   // Poll fast only while work is actually in flight.
   //
@@ -338,7 +392,9 @@ export default function ProductsPanel({
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        {/* Below md the 9-column table becomes a sideways-scrolling strip nobody reads, so the
+            same rows render as cards. One source of data, two layouts — not a second query. */}
+        <div className="hidden overflow-x-auto md:block">
           <Table className="w-full text-sm">
             <TableHeader>
               <tr>
@@ -357,12 +413,25 @@ export default function ProductsPanel({
                     className="accent-emerald-500"
                   />
                 </TableHead>
-                <TableHead>Product</TableHead>
+                <TableHead>
+                  <SortBtn label="Product" k="product_title" sort={sort} onSort={setSort} />
+                </TableHead>
                 <TableHead>Niche</TableHead>
-                <TableHead className="text-right">Gravity</TableHead>
-                <TableHead className="text-right">Avg $/sale</TableHead>
-                <TableHead className="text-right">Rebill</TableHead>
-                <TableHead className="text-center">Score</TableHead>
+                <TableHead className="text-right">
+                  <SortBtn label="Gravity" k="gravity" sort={sort} onSort={setSort} align="right" />
+                </TableHead>
+                <TableHead className="text-right">
+                  <SortBtn label="Avg $/sale" k="avg_sale" sort={sort} onSort={setSort} align="right" />
+                </TableHead>
+                <TableHead className="text-right">
+                  <SortBtn label="Rebill" k="recurring" sort={sort} onSort={setSort} align="right" />
+                </TableHead>
+                <TableHead className="text-center">
+                  {/* A bare coloured number told you nothing about what it measured. */}
+                  <span title="How well this offer fits the promote-ability rules: gravity, payout, rebill and whether the sales page verified. 7+ is strong.">
+                    <SortBtn label="Score" k="score" sort={sort} onSort={setSort} align="center" />
+                  </span>
+                </TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead edge className="text-right">Actions</TableHead>
               </tr>
@@ -493,6 +562,73 @@ export default function ProductsPanel({
             </TableBody>
           </Table>
         </div>
+
+        <ul className="divide-y divide-ink-700 md:hidden">
+          {products.map((p) => (
+            <li key={p.id} className="space-y-2 px-3 py-3">
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={selected.has(p.id)}
+                  onChange={() => toggle(p.id)}
+                  aria-label={`Select ${p.product_title}`}
+                  className="mt-1 h-4 w-4 shrink-0 accent-emerald-500"
+                />
+                <Link href={`/product/${p.id}`} className="min-w-0 flex-1 text-sm font-medium text-zinc-100">
+                  {p.product_title}
+                </Link>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-md px-1.5 text-xs font-bold leading-6",
+                    (p.score ?? 0) >= 7
+                      ? "bg-emerald-500/20 text-emerald-300"
+                      : (p.score ?? 0) >= 5
+                        ? "bg-amber-500/20 text-amber-300"
+                        : "bg-red-500/20 text-red-300"
+                  )}
+                  title="Promote-ability score"
+                >
+                  {p.score ?? "—"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div className="text-sm font-semibold text-zinc-100">{fmtNum(p.gravity)}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-zinc-600">Gravity</div>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-zinc-100">{fmtMoney(p.avg_sale)}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-zinc-600">Per sale</div>
+                </div>
+                <div>
+                  <div className={cn("text-sm font-semibold", p.recurring ? "text-emerald-300" : "text-zinc-600")}>
+                    {p.recurring ? fmtMoney(p.recurring) : "—"}
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-zinc-600">Rebill</div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <ProductStatusSelect productId={p.id} status={p.status} onChanged={load} />
+                <div className="flex items-center gap-1.5">
+                  <Button onClick={() => copyHoplink(p)} title="Copy hoplink" variant="outline" className="!px-2">
+                    {copied === p.id ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                  {p.campaign_status === "ready" ? (
+                    <Link href={`/product/${p.id}`} className={buttonVariants({ variant: "outline" })}>
+                      View kit
+                    </Link>
+                  ) : (
+                    <Button onClick={() => openPromote([p.id])} disabled={bulkBusy}>
+                      <Rocket className="h-4 w-4" /> Promote
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
         {total > 0 && (
           <div className="border-t border-ink-700 px-4 py-2.5">
             <Pager page={page} total={total} basePath={basePath} label="products" />
