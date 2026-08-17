@@ -1,3 +1,4 @@
+import { NETWORKS as NETWORK_CATALOGUE } from "@/lib/networks";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -6,7 +7,8 @@ import { rerenderFunnelSequence } from "@/lib/funnelSteps";
 
 export const dynamic = "force-dynamic";
 
-const NETWORKS = ["clickbank", "digistore24"] as const;
+// From the catalogue — see lib/networks.ts.
+const NETWORK_IDS = NETWORK_CATALOGUE.map((n) => n.id);
 // The same charset network_connections' CHECK enforces, restated so a bad value comes back as a
 // sentence instead of a constraint violation.
 const AFFILIATE_ID_RE = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -44,7 +46,7 @@ export async function POST(req: Request) {
   const network = typeof body.network === "string" ? body.network : "";
   const affiliateId = typeof body.affiliate_id === "string" ? body.affiliate_id.trim() : "";
 
-  if (!(NETWORKS as readonly string[]).includes(network)) {
+  if (!(NETWORK_IDS as readonly string[]).includes(network)) {
     return NextResponse.json({ error: "Unknown network" }, { status: 400 });
   }
   if (!AFFILIATE_ID_RE.test(affiliateId)) {

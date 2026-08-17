@@ -35,6 +35,7 @@ import {
 } from "./blockTree";
 import { renderTrackingHtml, type TrackingSettings } from "./tracking";
 import { themeToCssVars } from "./pageTheme";
+import type { NetworkId } from "@/lib/networks";
 
 export { escapeHtml };
 export * from "./blockTree";
@@ -72,7 +73,9 @@ export type PageCopy = {
 
 export type ProductLike = { product_title: string };
 
-export type Network = "clickbank" | "digistore24";
+// Re-exported from the isomorphic catalogue so the type and the network list can't drift — adding
+// an entry there is what forces buildHoplink's switch to handle it.
+export type Network = NetworkId;
 
 export const DISCLOSURE =
   "This page contains affiliate links. If you purchase through them, I may earn a commission at no extra cost to you.";
@@ -83,41 +86,39 @@ export const DISCLOSURE =
 // stays their responsibility, same division DISCLOSURE already establishes for affiliate links.
 export const LEAD_CONSENT_TEXT = "By submitting, you agree to be contacted about this offer.";
 
-// Shared with lib/engine/build.ts's buildHoplinks() and the page-copy editor routes, so both
-// always derive the identical "tid=page" link. Every dynamic segment is URL-encoded —
-// affiliateId is self-service, free-text user input, not admin-set data. Callers must still route
-// the returned hoplink through escapeHtml() before interpolating it into an href attribute —
-// encodeURIComponent() alone doesn't escape HTML-significant characters like `"`.
 /**
- * The affiliate link for one channel.
+ * The affiliate link for a product — whatever the operator pasted, or nothing.
  *
- * `override` is a tenant-supplied link (products.hoplink_override) that replaces the derived one
- * wholesale — used when the constructed link is wrong for a given offer. It is returned VERBATIM,
- * including for per-channel calls, which means the per-channel `tid` is deliberately lost while an
- * override is set. That is the honest behaviour: the tid convention is specific to each network's
- * own URL shape (ClickBank's `tid` query param, Digistore24's campaignkey path segment), and an
- * arbitrary pasted URL gives no reliable way to know where — or whether — a tracking token belongs.
- * Guessing would produce links that look tracked and silently aren't. The UI says so at the point
- * of entry.
+ * THIS APP NO LONGER CONSTRUCTS AFFILIATE LINKS, for any network. It used to assemble them from
+ * (network, affiliateId, vendorId): `hop.clickbank.net/?affiliate=…&vendor=…&tid=…` and the
+ * Digistore24, Awin and ShareASale equivalents. Every one of those shapes was probed live and
+ * every one of them was still a guess about the *account* — whether the vendor id read out of a
+ * marketplace feed is the one that offer actually pays on, whether the affiliate is approved for
+ * that merchant, whether the network issues per-advertiser link ids at all (CJ and Impact do, so
+ * they were never constructible in the first place — that asymmetry is what made the whole idea
+ * look wrong).
  *
- * The value is scheme-constrained at the database (0064) and escapeHtml'd at every interpolation
- * point, same three-layer treatment as the derived link.
+ * A link that is merely PLAUSIBLE is the most expensive thing this codebase can emit. It resolves,
+ * it looks tracked, the ad spends real money, and the network records the click against nobody.
+ * Nothing in the app can detect that — only a missing commission weeks later can. An empty link is
+ * a dead button someone fixes in a minute; a wrong link is a silent leak.
+ *
+ * So the only source is `products.hoplink_override`: the real link, copied out of the network's own
+ * dashboard, where it is already correct by construction. The UI prompts for it as soon as a kit
+ * exists (components/OfferLinkPrompt.tsx) and NeedsAttention surfaces any funnel still missing one.
+ *
+ * The per-channel `tid` is gone with the construction, and that is the real cost: per-channel
+ * attribution (fb / tt / blog / email / page) can no longer be added, because the token's name and
+ * position are specific to each network's URL shape and an arbitrary pasted URL gives no reliable
+ * place to put one. Appending a guess is the same failure one layer down. An operator who wants the
+ * breakdown pastes a link that already carries their own tracking token.
+ *
+ * The value is scheme-constrained at the database (0064, `^https?://`) — `products` RLS is `for all`
+ * and directly PATCH-able through PostgREST, so the route is not the only check — and escapeHtml'd
+ * at every interpolation point.
  */
-export function buildHoplink(
-  network: Network,
-  affiliateId: string,
-  vendorId: string,
-  tid: string,
-  override?: string | null
-): string {
-  if (typeof override === "string" && override.trim()) return override.trim();
-  const aff = encodeURIComponent(affiliateId);
-  const vid = encodeURIComponent(vendorId);
-  const channel = encodeURIComponent(tid);
-  if (network === "digistore24") {
-    return `https://www.checkout-ds24.com/redir/${vid}/${aff}/${channel}`;
-  }
-  return `https://hop.clickbank.net/?affiliate=${aff}&vendor=${vid}&tid=${channel}`;
+export function affiliateLink(override?: string | null): string {
+  return typeof override === "string" ? override.trim() : "";
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Bell, Check, Loader2, Minus } from "lucide-react";
+import { AlertTriangle, Bell, Check, Link2, Loader2, Minus } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { buildSteps, buildPercent, type BuildStep } from "@/lib/buildProgress";
 import type { Job } from "@/lib/shared";
@@ -57,6 +57,14 @@ export default function BuildProgressDialog({
   }, [open, load]);
 
   const settled = jobs.length > 0 && jobs.every((j) => j.status === "done" || j.status === "error");
+
+  // Products whose kit actually built. Read off the job payload rather than threaded in as a prop:
+  // every caller already queues per product and the payload is in the poll response anyway, so a
+  // second parameter would only be a second thing to keep in step.
+  const builtJobs = jobs.filter((j) => j.status === "done" && typeof j.payload?.product_id === "string");
+  const builtProductIds = Array.from(new Set(builtJobs.map((j) => j.payload.product_id as string)));
+  const jobIdByProductId: Record<string, string> = {};
+  for (const j of builtJobs) jobIdByProductId[j.payload.product_id as string] = j.id;
   useEffect(() => {
     if (settled) onAllDone?.();
   }, [settled, onAllDone]);
@@ -114,6 +122,37 @@ export default function BuildProgressDialog({
               </div>
             );
           })}
+
+          {/* The one thing a finished kit still needs from a person. This app does not build
+              affiliate links (see affiliateLink in lib/engine/renderPages.ts), so every page, ad
+              and email in a fresh kit points at nothing until the real link is pasted — and a
+              funnel that looks finished and converts nothing is exactly the failure worth
+              interrupting for. Shown only once the build settles, so it never competes with the
+              progress it would be read over. */}
+          {settled && builtProductIds.length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2.5">
+              <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+              <div className="min-w-0 text-xs text-zinc-300">
+                <p className="font-medium text-amber-200">Add your affiliate link</p>
+                <p className="mt-0.5 leading-relaxed text-zinc-400">
+                  We don&apos;t generate one — a guessed link can resolve, look tracked and credit
+                  nobody. Paste the real link from your network and every page, ad and article in
+                  this kit updates.
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                  {builtProductIds.map((id) => (
+                    <a
+                      key={id}
+                      href={`/product/${id}`}
+                      className="text-emerald-300 hover:underline"
+                    >
+                      {titleByJobId[jobIdByProductId[id]] ?? "Open kit"} →
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-start gap-2 rounded-lg border border-ink-700 bg-ink-800/40 px-3 py-2.5">
             <Bell className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />

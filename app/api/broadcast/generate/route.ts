@@ -45,12 +45,12 @@ export async function POST(req: Request) {
   if (campaignId) {
     const { data: campaign } = await supabase
       .from("campaigns")
-      .select("email_md, products(product_title, hoplink)")
+      .select("email_md, products(product_title, hoplink_override)")
       .eq("id", campaignId)
       .maybeSingle();
     const product = (campaign as any)?.products;
     productTitle = product?.product_title ?? null;
-    hoplink = product?.hoplink ?? null;
+    hoplink = product?.hoplink_override ?? null;
     // The kit's existing email sequence is the best available guide to this offer's voice.
     toneReference = campaign?.email_md ? String(campaign.email_md).slice(0, 4000) : null;
   }

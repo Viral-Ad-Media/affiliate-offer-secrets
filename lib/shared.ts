@@ -1,3 +1,4 @@
+import type { NetworkId } from "@/lib/networks";
 // Types and constants shared with client components — must stay free of Node/DB imports.
 
 import type { PageBlockTree } from "@/lib/engine/renderPages";
@@ -5,7 +6,7 @@ import type { PageBlockTree } from "@/lib/engine/renderPages";
 export type Product = {
   id: string;
   user_id: string;
-  network: "clickbank" | "digistore24";
+  network: NetworkId;
   vendor_id: string;
   niche: string;
   product_title: string;
@@ -17,9 +18,12 @@ export type Product = {
   commission_pct: number | null;
   sales_page_url: string | null;
   affiliate_page_url: string | null;
+  // DEAD COLUMN. Holds links this app used to derive from (network, affiliate id, vendor id).
+  // Nothing reads it anymore — see affiliateLink() in lib/engine/renderPages.ts for why nothing
+  // derives a link. Kept rather than dropped, the profiles.nickname precedent.
   hoplink: string | null;
-  // Tenant-supplied link that replaces the derived one (0064). Null until someone sets it;
-  // buildHoplink returns it verbatim when present.
+  // THE affiliate link (0064). Pasted from the network's own dashboard; null until someone does,
+  // which is a normal state for a freshly discovered product and even for a freshly built kit.
   hoplink_override: string | null;
   score: number | null;
   angle_notes: string | null;
@@ -148,7 +152,7 @@ export type Job = {
     niche?: string;
     vendor_id?: string;
     product_id?: string;
-    network?: "clickbank" | "digistore24";
+    network?: NetworkId;
     [k: string]: unknown;
   };
   status: "pending" | "running" | "done" | "error";

@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/server";
 import { CLICKBANK_CATEGORIES } from "@/lib/categories";
 import { getCachedMarketplaceHits } from "@/lib/engine/marketplaceCache";
 import { upsertProduct } from "@/lib/engine/core";
-import { buildHoplink } from "@/lib/engine/renderPages";
 import type { DiscoverPayload } from "@/lib/engine/clickbank";
 
 export const dynamic = "force-dynamic";
@@ -77,18 +76,10 @@ export async function POST(req: Request) {
   // rather than trusting client input for a value the UI doesn't actually let a user set.
   const network = "clickbank";
 
-  const { data: connection } = await supabase
-    .from("network_connections")
-    .select("affiliate_id")
-    .eq("workspace_id", ws)
-    .eq("network", network)
-    .maybeSingle();
-  if (!connection?.affiliate_id) {
-    return NextResponse.json(
-      { error: `Connect your ${network} affiliate ID first` },
-      { status: 400 }
-    );
-  }
+  // No affiliate-connection gate here anymore. It existed because discovery baked a derived
+  // hoplink into every row it saved; nothing derives a link now, so the check could only ever
+  // block work it can no longer affect — and it is exactly the shape that took every build down
+  // for two days when it and the worker disagreed about which column to scope on.
 
   let payload: Record<string, unknown>;
   if (mode === "keyword") {
@@ -153,7 +144,7 @@ export async function POST(req: Request) {
           recurring: hit.marketplaceStats?.totalRebill ?? null,
           sales_page_url: hit.url,
           affiliate_page_url: hit.affiliateToolsUrl,
-          hoplink: buildHoplink(network, connection.affiliate_id, hit.site, "page"),
+          hoplink: "",
           status: "New",
           page_verified: false,
         })

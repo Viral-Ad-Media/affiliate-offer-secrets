@@ -1,10 +1,12 @@
+import { NETWORKS as NETWORK_CATALOGUE, type NetworkId } from "@/lib/networks";
 import { NextResponse } from "next/server";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-const KNOWN_NETWORKS = ["clickbank", "digistore24"];
+// From the catalogue — see lib/networks.ts.
+const KNOWN_NETWORKS = NETWORK_CATALOGUE.map((n) => n.id);
 const MAX_SHORT = 200;
 const MAX_LONG = 3000;
 
@@ -47,7 +49,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
   }
 
-  const network = clampStr(body.network, 20);
+  // Narrowed via the catalogue rather than cast: the value reaches buildHoplink's exhaustive
+  // switch, so "it's a string that looked fine" is not good enough.
+  const network = clampStr(body.network, 20) as NetworkId;
   if (!KNOWN_NETWORKS.includes(network)) {
     return NextResponse.json({ error: "unknown network" }, { status: 400 });
   }

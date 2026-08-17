@@ -3,7 +3,7 @@ import { getCachedMarketplaceHits, getStoredMarketplaceHits } from "./marketplac
 import { fetchSalesPage } from "./salespage";
 import { completeJSON, COMPLIANCE_SYSTEM } from "./anthropic";
 import { upsertProduct, db } from "./core";
-import { buildHoplink, type Network } from "./renderPages";
+import { type Network } from "./renderPages";
 
 export type DiscoverJobPayload = DiscoverPayload & { niche: string };
 
@@ -21,7 +21,6 @@ export async function runDiscoverProducts(
   workspaceId: string,
   jobId: string,
   network: Network,
-  affiliateId: string,
   payload: DiscoverJobPayload
 ): Promise<{ saved: number }> {
   // Three sources, in this order — the database is always tried first, the network is the top-up,
@@ -56,7 +55,6 @@ export async function runDiscoverProducts(
   for (const hit of hits) {
     const vendorId = hit.site;
     if (!vendorId || !hit.title) continue;
-    const hoplink = buildHoplink(network, affiliateId, vendorId, "page");
     await upsertProduct(userId, {
       network,
       vendor_id: vendorId,
@@ -69,7 +67,9 @@ export async function runDiscoverProducts(
       recurring: hit.marketplaceStats?.totalRebill ?? null,
       sales_page_url: hit.url,
       affiliate_page_url: hit.affiliateToolsUrl,
-      hoplink,
+      // Discovery no longer derives a link — see affiliateLink(). The operator pastes the real one
+      // from the network onto the product once they decide to promote it.
+      hoplink: "",
       status: "New",
       page_verified: false,
     });

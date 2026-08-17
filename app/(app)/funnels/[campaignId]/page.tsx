@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Campaign, FunnelStep, BridgeVariant } from "@/lib/shared";
 import PublishBridge from "@/components/PublishBridge";
 import OfferLinkPanel from "@/components/OfferLinkPanel";
+import AffiliateLinkField from "@/components/AffiliateLinkField";
 import PageEditor from "@/components/PageEditor";
 import PromoteKitDialog from "@/components/PromoteKitDialog";
 import { ALL_KIT_ASSETS } from "@/lib/kitAssets";
@@ -79,7 +80,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
       .select(
         "id, product_id, workspace_id, name, status, cta_url, bridge_published, bridge_html, " +
           "page_copy, page_copy_edited_at, embedded_image_data_url, tracking, created_at, updated_at, " +
-          "products(product_title)"
+          "products(id, product_title, network, hoplink_override)"
       )
       .eq("id", params.campaignId)
       .maybeSingle();
@@ -391,9 +392,22 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
         </p>
       ) : (
         <>
-          {/* Only without a product: with one, the affiliate hoplink is the destination and this
-              would be a second control claiming to set the same thing. */}
-          {!(campaign as any).product_id && (
+          {/* Exactly one destination control, decided by whether the funnel has a product.
+              WITH a product, the destination is the affiliate link pasted onto that product —
+              which the funnel map is a reasonable place to set, because "where does this funnel
+              send people" is a funnel-level question even though the value lives on the product.
+              WITHOUT one there is no affiliate link at all and campaigns.cta_url is the answer.
+              Rendering both would be two controls claiming to set the same thing. */}
+          {(campaign as any).product_id ? (
+            (campaign as any).products && (
+              <AffiliateLinkField
+                productId={(campaign as any).products.id}
+                network={(campaign as any).products.network ?? null}
+                initialLink={(campaign as any).products.hoplink_override ?? null}
+                hasKit={!!campaign.bridge_html}
+              />
+            )
+          ) : (
             <OfferLinkPanel
               campaignId={campaign.id}
               initialUrl={(campaign as any).cta_url ?? null}

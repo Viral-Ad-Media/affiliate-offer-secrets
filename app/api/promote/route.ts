@@ -36,18 +36,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "product not found" }, { status: 404 });
   }
 
-  const { data: connection } = await supabase
-    .from("network_connections")
-    .select("affiliate_id")
-    .eq("workspace_id", ws)
-    .eq("network", product.network)
-    .maybeSingle();
-  if (!connection?.affiliate_id) {
-    return NextResponse.json(
-      { error: `Connect your ${product.network} affiliate ID first` },
-      { status: 400 }
-    );
-  }
+  // Deliberately no affiliate-connection gate. A kit no longer contains a derived link, so
+  // requiring an affiliate ID before building one would refuse real work over a value that
+  // reaches no output. The link is prompted for after the build instead, where it is pasted from
+  // the network's own dashboard — see components/OfferLinkPrompt.tsx.
 
   const { data: open } = await supabase
     .from("jobs")

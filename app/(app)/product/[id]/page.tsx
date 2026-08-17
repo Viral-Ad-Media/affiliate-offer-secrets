@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import HoplinkOverride from "@/components/HoplinkOverride";
+import AffiliateLinkField from "@/components/AffiliateLinkField";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { marked } from "marked";
@@ -112,9 +112,9 @@ export default function ProductPage({ params }: { params: { id: string } }) {
   }
 
   function copyHoplink() {
-    // The custom link wins here too — copying the generated one while the kit uses an override
-    // would hand out a link that credits nobody.
-    const link = product?.hoplink_override || product?.hoplink;
+    // products.hoplink is a dead column holding links this app used to derive; only the pasted one
+    // is real. Falling back to it would hand out a link nobody verified.
+    const link = product?.hoplink_override;
     if (!link) return;
     navigator.clipboard.writeText(link);
     setCopied(true);
@@ -197,16 +197,19 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         {product.angle_notes && (
           <p className="mt-4 rounded-lg bg-ink-800 p-3 text-sm text-zinc-300">{product.angle_notes}</p>
         )}
-        <HoplinkOverride
+        <AffiliateLinkField
           productId={product.id}
-          derived={product.hoplink}
-          initialOverride={product.hoplink_override}
+          network={product.network}
+          initialLink={product.hoplink_override}
+          hasKit={!!campaign}
         />
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button onClick={copyHoplink}>
-            {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            Copy hoplink
-          </Button>
+          {product.hoplink_override && (
+            <Button onClick={copyHoplink}>
+              {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              Copy affiliate link
+            </Button>
+          )}
           {product.sales_page_url && (
             <a href={product.sales_page_url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline" })}>
               <ExternalLink className="h-4 w-4" /> Sales page

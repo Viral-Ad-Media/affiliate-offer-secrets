@@ -1,5 +1,7 @@
 "use client";
 
+import { NETWORKS, networkInfo, type NetworkId } from "@/lib/networks";
+
 import { useState } from "react";
 import { Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +14,7 @@ const NETWORK_OPTIONS = [
 
 export default function ManualAddProduct({ onAdded }: { onAdded: () => void }) {
   const [open, setOpen] = useState(false);
-  const [network, setNetwork] = useState<"clickbank" | "digistore24">("digistore24");
+  const [network, setNetwork] = useState<NetworkId>("digistore24");
   const [vendorId, setVendorId] = useState("");
   const [productTitle, setProductTitle] = useState("");
   const [niche, setNiche] = useState("");

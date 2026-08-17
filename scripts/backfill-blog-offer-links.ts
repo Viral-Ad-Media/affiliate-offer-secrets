@@ -17,7 +17,7 @@
  *       npx tsx scripts/backfill-blog-offer-links.ts --apply
  */
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildHoplink, newBlockId, type PageBlockTree } from "@/lib/engine/renderPages";
+import { affiliateLink, newBlockId, type PageBlockTree } from "@/lib/engine/renderPages";
 import { withOfferLinks } from "@/lib/engine/build";
 import { blogRenderCtx, renderBlockTree } from "@/lib/blog";
 
@@ -33,11 +33,6 @@ async function main() {
     .not("blog_md", "is", null);
   if (error) throw error;
 
-  // Affiliate ids are per (workspace, network) — resolve once rather than per row.
-  const { data: conns } = await db.from("network_connections").select("workspace_id, network, affiliate_id");
-  const affiliateFor = (ws: string, network: string) =>
-    (conns ?? []).find((c: any) => c.workspace_id === ws && c.network === network)?.affiliate_id ?? null;
-
   let planned = 0;
   let skipped = 0;
 
@@ -51,14 +46,12 @@ async function main() {
       skipped++;
       continue;
     }
-    const affiliateId = affiliateFor(c.workspace_id, product.network);
-    if (!affiliateId) {
-      console.log(`SKIP  campaign ${c.id} — no ${product.network} connection for its workspace`);
+    const hoplink = affiliateLink(product.hoplink_override);
+    if (!hoplink) {
+      console.log(`SKIP  campaign ${c.id} — no affiliate link pasted on ${product.vendor_id} yet`);
       skipped++;
       continue;
     }
-
-    const hoplink = buildHoplink(product.network, affiliateId, product.vendor_id, "blog", product.hoplink_override);
 
     // ---- campaigns.blog_md -------------------------------------------------------------------
     if (!md.includes(hoplink)) {

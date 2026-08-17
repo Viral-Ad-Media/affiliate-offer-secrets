@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { renderBridgeHtml, buildHoplink } from "@/lib/engine/renderPages";
+import { renderBridgeHtml, affiliateLink } from "@/lib/engine/renderPages";
 import { validatePageBlockTree } from "@/lib/engine/validatePageBlockTree";
 import { isValidImageRef } from "@/lib/images/validate";
 import { uploadImageRef, uploadTreeImages, CLD_FOLDER } from "@/lib/cloudinary/upload";
@@ -111,25 +111,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     hoplink_override: null as string | null,
   };
 
-  const { data: connection } = product.network
-    ? await admin
-        .from("network_connections")
-        .select("affiliate_id")
-        .eq("workspace_id", ws)
-        .eq("network", product.network)
-        .maybeSingle()
-    : { data: null };
-  if (product.network && !connection?.affiliate_id) {
-    return NextResponse.json(
-      { error: `Connect your ${product.network} affiliate ID first` },
-      { status: 400 }
-    );
-  }
-
+  // The pasted affiliate link, or the funnel's own cta_url when it has no product. Saving a page
+  // is never blocked on either being present — a page with nowhere to go yet is a normal state
+  // while someone is still writing it, and refusing the save would strand the copy.
   const hoplink =
-    product.network && connection?.affiliate_id
-      ? buildHoplink(product.network as any, connection.affiliate_id, product.vendor_id, "page", product.hoplink_override)
-      : ((campaign.cta_url as string | null) ?? "#");
+    affiliateLink(product.hoplink_override) || ((campaign.cta_url as string | null) ?? "#");
 
   // Variants serve at the same URL as the control, so they carry the same post-submit
   // redirect (multi-step funnels) and the same tracking snippets — part of the same gap fix as

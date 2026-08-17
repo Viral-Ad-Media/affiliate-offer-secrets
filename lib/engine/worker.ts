@@ -1,4 +1,5 @@
 import { db } from "./core";
+import { NETWORKS } from "@/lib/networks";
 import { notify, jobLabel } from "@/lib/notifications";
 import { createPostFromCampaign } from "@/lib/blog/fromCampaign";
 import { createSequenceFromCampaign } from "@/lib/broadcast/fromCampaign";
@@ -108,7 +109,9 @@ async function claimJob(): Promise<JobRow | null> {
   return job && job.id ? job : null;
 }
 
-const KNOWN_NETWORKS = ["clickbank", "digistore24"] as const;
+// Read from the catalogue rather than restated — six places listed networks independently, and a
+// new one has to be accepted by every one of them or it is refused somewhere nobody looks.
+const KNOWN_NETWORKS = NETWORKS.map((n) => n.id);
 
 // Reads the caller's self-service network_connections row (see 0015_network_generalization.sql —
 // not a secret, plain owner-scoped RLS, no Vault). Throws rather than falling back to a
@@ -257,13 +260,11 @@ async function processDiscover(job: JobRow) {
   if (network !== "clickbank") {
     throw new Error(`Automated discovery for ${network} isn't available yet.`);
   }
-  const affiliateId = await getAffiliateId(job.workspace_id, network);
   const result = await runDiscoverProducts(
     job.user_id,
     job.workspace_id,
     job.id,
     network as "clickbank",
-    affiliateId,
     job.payload as DiscoverJobPayload
   );
   await markDone(job.id, `${result.saved} products saved`);
@@ -328,7 +329,6 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
   // connection found" no matter how the connection was set up, while the promote route's own
   // (correctly workspace-scoped) check passed and let the job through. Both arguments are
   // strings, so tsc had nothing to catch. Same slip as rerenderFunnelSequence's five call sites.
-  const affiliateId = await getAffiliateId(job.workspace_id, product.network);
   // Absent means everything — see normalizeKitAssets. That keeps jobs queued before this shipped,
   // and any direct API caller, behaving exactly as they did.
   const assets = normalizeKitAssets(job.payload?.assets);
@@ -338,7 +338,6 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
   const { stageData, campaignPatch } = await runBuildCampaignStage(
     job.stage,
     product as any,
-    affiliateId,
     job.stage_data ?? {},
     { userId: job.user_id, jobId: job.id },
     campaignRow.id,

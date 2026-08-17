@@ -53,6 +53,7 @@ export async function getAttentionItems(
     draftPosts,
     launchesAwaitingReview,
     { data: variantRows },
+    { data: linklessRows },
   ] = await Promise.all([
     supabase
       .from("campaigns")
@@ -89,6 +90,16 @@ export async function getAttentionItems(
       .select("campaign_id, views, leads, status")
       .eq("workspace_id", ws)
       .eq("status", "active"),
+    // Built kits whose product has no affiliate link pasted. Read rather than counted with `head`
+    // because the condition spans the join: a campaign with a product but no hoplink_override.
+    // Not expressible as an `is null` filter on the embed — PostgREST would return the campaign
+    // with a null product rather than excluding it — so the null test happens here.
+    supabase
+      .from("campaigns")
+      .select("id, product_id, products(hoplink_override)")
+      .eq("workspace_id", ws)
+      .not("product_id", "is", null)
+      .not("bridge_html", "is", null),
   ]);
 
   // A test is decidable on exactly the gate VariantConfidence already uses — the THINNER arm past
@@ -107,7 +118,24 @@ export async function getAttentionItems(
     (e) => e.views.length >= 2 && Math.min(...e.views) >= MIN_VISITORS_PER_ARM && e.leads >= MIN_CONVERSIONS_TOTAL
   ).length;
 
+  // A funnel that exists, has a product, and has no pasted affiliate link sends every click to
+  // campaigns.cta_url or to nothing. Nothing derives a link anymore (see affiliateLink), so this
+  // is a normal state right after a build — and the single most expensive one to leave sitting,
+  // because a live funnel taking paid traffic converts nothing and looks fine while doing it.
+  const linklessFunnels = (linklessRows ?? []).filter((c: any) => {
+    const p = Array.isArray(c.products) ? c.products[0] : c.products;
+    return !p?.hoplink_override?.trim();
+  }).length;
+
   const items: AttentionItem[] = [
+    {
+      key: "missing-affiliate-link",
+      label: "Funnels with no affiliate link",
+      detail: "Built, but nowhere to send the click — paste the link from your network.",
+      count: linklessFunnels,
+      href: "/products",
+      tone: "warn",
+    },
     {
       key: "split-tests",
       label: "Split tests ready to call",

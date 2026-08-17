@@ -1,7 +1,7 @@
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { fetchSalesPage, type ImageCandidate, type BrandStyle } from "./salespage";
 import { pickProductImages, fetchImagesWithBudget } from "./images";
-import { renderBridgeHtml, buildHoplink, normalizePageCopy, keywordsOf, type PageBlockTree, type PageCopy, type Network, type TrackingSettings } from "./renderPages";
+import { renderBridgeHtml, affiliateLink, normalizePageCopy, keywordsOf, type PageBlockTree, type PageCopy, type Network, type TrackingSettings } from "./renderPages";
 import { themeFromBrandColors, applySectionBands } from "./pageTheme";
 import { db } from "./core";
 import { uploadImageRef, CLD_FOLDER } from "@/lib/cloudinary/upload";
@@ -55,20 +55,24 @@ function productContext(product: ProductRow, salesText: string | null): string {
     .join("\n");
 }
 
-function buildHoplinks(network: Network, affiliateId: string, vendorId: string, override?: string | null) {
+// Every channel resolves to the SAME URL now — the operator's pasted link, used verbatim. The
+// per-channel map survives only because a dozen downstream shapes read `hoplink_by_channel.fb` and
+// friends; collapsing it would be a wide rename for no behaviour change. See affiliateLink() for
+// why the per-channel tid is gone.
+function buildHoplinks(override?: string | null) {
   const tids = ["fb", "tt", "blog", "email", "page"] as const;
-  // With an override set every channel resolves to the same URL — see buildHoplink. The per-channel
-  // map is still built so downstream shapes are unchanged, it just stops being per-channel.
-  const link = (tid: string) => buildHoplink(network, affiliateId, vendorId, tid, override);
-  const byChannel = Object.fromEntries(tids.map((t) => [t, link(t)])) as Record<
+  const link = affiliateLink(override);
+  const byChannel = Object.fromEntries(tids.map((t) => [t, link])) as Record<
     (typeof tids)[number],
     string
   >;
-  const text = tids.map((t) => `${t}: ${link(t)}`).join("\n");
+  // Empty when nothing is pasted yet, and the prompt says so rather than the model inventing one:
+  // stagePages/stageContent are told to use this value and nothing else (content rule 4).
+  const text = link ? tids.map((t) => `${t}: ${link}`).join("\n") : "";
   return { text, byChannel };
 }
 
-async function stageContext(product: ProductRow, affiliateId: string): Promise<StageOutput> {
+async function stageContext(product: ProductRow): Promise<StageOutput> {
   const page = product.sales_page_url
     ? await fetchSalesPage(product.sales_page_url)
     : {
@@ -78,7 +82,7 @@ async function stageContext(product: ProductRow, affiliateId: string): Promise<S
         brandColors: [] as string[],
         brandStyle: {} as BrandStyle,
       };
-  const hoplinks = buildHoplinks(product.network, affiliateId, product.vendor_id, product.hoplink_override);
+  const hoplinks = buildHoplinks(product.hoplink_override);
   return {
     stageData: {
       sales_text: page.text,
@@ -505,7 +509,6 @@ async function stageSocial(
 export async function runBuildCampaignStage(
   stageIndex: number,
   product: ProductRow,
-  affiliateId: string,
   priorStageData: Record<string, unknown>,
   usageCtx: { userId: string; jobId: string },
   campaignId: string,
@@ -519,7 +522,7 @@ export async function runBuildCampaignStage(
       // Always runs. It fetches the sales page and builds the hoplinks — every other stage reads
       // its output, and the hoplinks are the product's tracking links regardless of what else was
       // asked for. It also makes no Anthropic call, so there is nothing to save by skipping it.
-      return stageContext(product, affiliateId);
+      return stageContext(product);
     case "image":
       // The picked product image is only ever embedded into the bridge page, so with no funnel
       // there is nothing to embed it in — and this stage DOES make an Anthropic call to choose

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidRedirectUrl } from "@/lib/validate";
 import { rerenderFunnelSequence } from "@/lib/funnelSteps";
+import { applyOfferLinksToCampaign } from "@/lib/blog/offerLinks";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -34,8 +35,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const body = await req.json().catch(() => ({}));
   const raw = typeof body.hoplink_override === "string" ? body.hoplink_override.trim() : null;
 
-  // Empty string means "clear it and go back to the derived link" — a distinct, intentional action,
-  // not a validation failure.
+  // Empty string means "clear it" — a distinct, intentional action, not a validation failure.
+  // Nothing derives a replacement anymore, so clearing leaves the funnel with campaigns.cta_url or
+  // a dead "#" and the UI says so; that is the honest state, not a silent fallback to a guess.
   const override = raw ? raw : null;
   if (override && !isValidRedirectUrl(override)) {
     return NextResponse.json(
@@ -64,6 +66,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .eq("product_id", params.id);
 
   let rerendered = 0;
+  let blogUpdated = 0;
   const failed: string[] = [];
   for (const c of campaigns ?? []) {
     try {
@@ -73,12 +76,25 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       failed.push(c.id as string);
       console.error(`[hoplink] re-render failed for campaign ${c.id}:`, err?.message ?? err);
     }
+    // Blog copy is the other half, and it does NOT re-render from page_copy the way a funnel does.
+    // A kit built before the link was pasted had its {{OFFER_LINK}} placeholder stripped, so the
+    // article is unmonetized and nothing would ever repair it. Additive and idempotent, so this is
+    // safe to run on every save. Best-effort for the same reason the re-render is: the override is
+    // already stored, and failing the request here would invite a destructive retry.
+    if (override) {
+      try {
+        blogUpdated += await applyOfferLinksToCampaign(admin, c.id as string, override);
+      } catch (err: any) {
+        console.error(`[hoplink] blog link insert failed for campaign ${c.id}:`, err?.message ?? err);
+      }
+    }
   }
 
   return NextResponse.json({
     ok: true,
     hoplink_override: updated[0].hoplink_override,
     rerendered,
+    blog_updated: blogUpdated,
     // Surfaced so the UI can say "saved, but N pages still show the old link" rather than implying
     // everything is consistent when it isn't.
     failed_campaigns: failed.length,

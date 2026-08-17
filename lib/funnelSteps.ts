@@ -3,7 +3,7 @@ import { slugify } from "@/lib/blog";
 import {
   renderBridgeHtml,
   renderFunnelStepHtml,
-  buildHoplink,
+  affiliateLink,
   type FunnelStepType,
   type TrackingSettings,
 } from "@/lib/engine/renderPages";
@@ -75,23 +75,14 @@ export async function rerenderFunnelSequence(
     hoplink_override: null as string | null,
   };
 
-  const { data: connection } = product.network
-    ? await admin
-        .from("network_connections")
-        .select("affiliate_id")
-        .eq("workspace_id", workspaceId)
-        .eq("network", product.network)
-        .maybeSingle()
-    : { data: null };
-  const affiliateId = connection?.affiliate_id ?? null;
-
-  // The opt-in page's primary destination: the product's hoplink when there is one, otherwise the
-  // funnel's own cta_url. One source of truth, never two competing ones.
+  // The opt-in page's primary destination: the affiliate link the operator pasted onto the product,
+  // otherwise the funnel's own cta_url. One source of truth, never two competing ones.
+  //
+  // The `network_connections` lookup that used to sit here is gone with link construction — the
+  // affiliate id no longer participates in any URL, so reading it would only be a way to fail.
+  // `tid` is likewise gone: a pasted link has no reliable place to carry a channel token.
   const fallbackHref = (campaign.cta_url as string | null) ?? "#";
-  const offerHref = (tid: string) =>
-    product.network && affiliateId
-      ? buildHoplink(product.network as any, affiliateId, product.vendor_id, tid, product.hoplink_override)
-      : fallbackHref;
+  const offerHref = () => affiliateLink(product.hoplink_override) || fallbackHref;
 
   const { data: stepsRaw } = await admin
     .from("funnel_steps")
@@ -112,7 +103,7 @@ export async function rerenderFunnelSequence(
   // Opt-in page: redirect to step 1 if any steps exist, else today's in-place reveal (unchanged
   // behavior for the ~100% of campaigns with no added funnel steps).
   if (campaign.page_copy) {
-    const hoplink = offerHref("page");
+    const hoplink = offerHref();
     const nextStepUrl = steps.length > 0 ? stepUrl(campaignId, steps[0].step_index) : null;
     const bridgeHtml = renderBridgeHtml(
       product,
@@ -169,10 +160,11 @@ export async function rerenderFunnelSequence(
       } else if (step.cta_action === "next_step" && nextUrl) {
         acceptHref = nextUrl;
       } else {
-        // 'hoplink' (explicit or fallback) — resolve the target product/connection, only when
-        // actually needed (skipped entirely for the redirect_url/next_step branches above).
+        // 'hoplink' (explicit or fallback) — resolve the cross-sell target's own affiliate link,
+        // only when actually needed (skipped entirely for the redirect_url/next_step branches
+        // above). Still workspace-scoped: target_product_id is caller-supplied through the
+        // funnel-step editor, and this runs on the admin client.
         const targetProductId = step.target_product_id ?? campaign.product_id;
-        let targetAffiliateId = affiliateId;
         if (targetProductId !== campaign.product_id) {
           const { data: tp } = await admin
             .from("products")
@@ -180,38 +172,18 @@ export async function rerenderFunnelSequence(
             .eq("id", targetProductId)
             .eq("workspace_id", workspaceId)
             .maybeSingle();
-          if (tp) {
-            targetProduct = tp;
-            if (tp.network !== product.network) {
-              const { data: tc } = await admin
-                .from("network_connections")
-                .select("affiliate_id")
-                .eq("workspace_id", workspaceId)
-                .eq("network", tp.network)
-                .maybeSingle();
-              targetAffiliateId = tc?.affiliate_id ?? null;
-            }
-          }
+          if (tp) targetProduct = tp;
         }
-        acceptHref =
-          targetAffiliateId && targetProduct.network
-            ? buildHoplink(
-                targetProduct.network as any,
-                targetAffiliateId,
-                targetProduct.vendor_id,
-                `step-${step.step_index}-upsell`,
-                targetProduct.hoplink_override
-              )
-            : fallbackHref;
+        acceptHref = affiliateLink(targetProduct.hoplink_override) || fallbackHref;
       }
 
       let declineHref: string;
       if (step.decline_action === "redirect_url" && step.decline_redirect_url) {
         declineHref = step.decline_redirect_url;
       } else if (step.decline_action === "hoplink") {
-        declineHref = offerHref(`step-${step.step_index}-decline`);
+        declineHref = offerHref();
       } else {
-        declineHref = nextUrl ?? offerHref(`step-${step.step_index}-decline`);
+        declineHref = nextUrl ?? offerHref();
       }
 
       const html = renderFunnelStepHtml(
@@ -233,7 +205,7 @@ export async function rerenderFunnelSequence(
       } else if (step.cta_action === "next_step" && nextUrl) {
         primaryHref = nextUrl;
       } else {
-        primaryHref = offerHref(`step-${step.step_index}`);
+        primaryHref = offerHref();
       }
       const html = renderFunnelStepHtml(
         product,

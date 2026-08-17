@@ -29,6 +29,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { networkLabel } from "@/lib/networks";
 
 /**
  * The tracked-products table, with its filter, bulk bar, status editing and Promote flow.
@@ -41,7 +42,7 @@ import { cn } from "@/lib/utils";
 
 export type ProductStats = { total: number; promoting: number; selected: number; avg_gravity: number };
 
-const NETWORK_LABELS: Record<string, string> = { clickbank: "ClickBank", digistore24: "Digistore24" };
+
 
 // Empty selection means "no filter applied" (show every status) — matches the old "All" pill's
 // behavior without needing a literal "All" entry in the option list.
@@ -317,8 +318,11 @@ export default function ProductsPanel({
   }
 
   function copyHoplink(p: Product) {
-    if (!p.hoplink) return;
-    navigator.clipboard.writeText(p.hoplink);
+    // hoplink_override only: products.hoplink holds derived links this app no longer builds, and
+    // copying one out to paste into an ad would be the exact silent-misattribution failure that
+    // removing construction was meant to end.
+    if (!p.hoplink_override) return;
+    navigator.clipboard.writeText(p.hoplink_override);
     setCopied(p.id);
     setTimeout(() => setCopied(null), 1500);
   }
@@ -457,7 +461,7 @@ export default function ProductsPanel({
                     </Link>
                     <div className="flex items-center gap-2 text-xs text-zinc-500">
                       <Badge className="!py-0 !px-1.5 text-[11px] uppercase tracking-wide">
-                        {NETWORK_LABELS[p.network] ?? p.network}
+                        {networkLabel(p.network)}
                       </Badge>
                       <span>{p.vendor_id}</span>
                       {p.page_verified ? (
@@ -495,7 +499,7 @@ export default function ProductsPanel({
                     <div className="flex items-center justify-end gap-1.5">
                       <Button
                         onClick={() => copyHoplink(p)}
-                        title="Copy hoplink" variant="outline" className="!px-2">
+                        title="Copy affiliate link" variant="outline" className="!px-2">
                         {copied === p.id ? (
                           <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                         ) : (
@@ -612,7 +616,7 @@ export default function ProductsPanel({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <ProductStatusSelect productId={p.id} status={p.status} onChanged={load} />
                 <div className="flex items-center gap-1.5">
-                  <Button onClick={() => copyHoplink(p)} title="Copy hoplink" variant="outline" className="!px-2">
+                  <Button onClick={() => copyHoplink(p)} title="Copy affiliate link" variant="outline" className="!px-2">
                     {copied === p.id ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
                   </Button>
                   {p.campaign_status === "ready" ? (
