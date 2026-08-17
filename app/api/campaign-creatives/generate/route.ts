@@ -8,7 +8,10 @@ import type { FbAdAngle, SocialPost } from "@/lib/shared";
 
 export const dynamic = "force-dynamic";
 
-const KNOWN_SOURCES = ["fb_ad_angle", "social_post"] as const;
+// Must stay in step with CreativeSource (lib/shared.ts) and the campaign_creatives CHECK
+// constraint. All three list the same values; miss one and the Generate button 400s with a
+// validation error that says nothing about which layer refused.
+const KNOWN_SOURCES = ["fb_ad_angle", "social_post", "tiktok_script"] as const;
 const KNOWN_KINDS = ["image", "video"] as const;
 
 // Nominal runaway-loop backstops, not real budget controls yet — the user is testing solo and

@@ -43,14 +43,22 @@ async function stageVerify(
 
   const { data: campaign } = await db
     .from("campaigns")
-    .select("product_id, fb_ad_angles, social_posts")
+    .select("product_id, fb_ad_angles, social_posts, tiktok_scripts")
     .eq("id", creative.campaign_id)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!campaign) throw new Error("Campaign not found for this account");
 
   let toneText: string;
-  if (creative.source === "fb_ad_angle") {
+  if (creative.source === "tiktok_script") {
+    // A TikTok script's own hook and body seed the prompt, exactly as an angle's copy does — the
+    // creative machinery is source-agnostic, which is why structuring the scripts was the only
+    // thing standing between TikTok and per-item video.
+    const scripts = (campaign.tiktok_scripts as { hook: string; script: string }[] | null) ?? [];
+    const s = scripts[creative.item_index];
+    if (!s) throw new Error(`No TikTok script at index ${creative.item_index} — campaign may have been rebuilt`);
+    toneText = `Hook: ${s.hook}\nScript: ${s.script}`;
+  } else if (creative.source === "fb_ad_angle") {
     const angles = (campaign.fb_ad_angles as FbAdAngle[] | null) ?? [];
     const angle = angles[creative.item_index];
     if (!angle) throw new Error(`No ad angle at index ${creative.item_index} — campaign may have been rebuilt`);

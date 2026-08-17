@@ -18,6 +18,7 @@ import GenerateVideo from "@/components/GenerateVideo";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
 import SocialPostsPanel from "@/components/SocialPostsPanel";
 import SmsSequencePanel from "@/components/SmsSequencePanel";
+import TiktokScriptsPanel from "@/components/TiktokScriptsPanel";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -106,6 +107,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     if (key === "fb_ads_md") return !!campaign.fb_ad_angles || !!campaign.fb_ads_md;
     if (key === "social_md") return !!campaign.social_posts || !!campaign.social_md;
     if (key === "sms_messages") return !!campaign.sms_messages?.length;
+    if (key === "tiktok_md") return !!campaign.tiktok_scripts?.length || !!campaign.tiktok_md;
     return !!(campaign as any)[key];
   }
 
@@ -294,6 +296,12 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                 />
               ) : !content ? (
                 <p className="py-6 text-center text-sm text-zinc-500">Not generated yet.</p>
+              ) : tab === "tiktok_md" ? (
+                <TiktokScriptsPanel
+                  campaignId={campaign.id}
+                  scripts={campaign.tiktok_scripts}
+                  legacyMarkdown={campaign.tiktok_md}
+                />
               ) : tab === "sms_messages" ? (
                 <SmsSequencePanel messages={campaign.sms_messages} />
               ) : tab === "bridge_html" ? (
@@ -337,15 +345,6 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   {tab === "email_md" && (
                     <div className="mt-4">
                       <SendEmail campaignId={campaign!.id} defaultBody={content} />
-                    </div>
-                  )}
-                  {tab === "tiktok_md" && (
-                    <div className="mt-4">
-                      <GenerateVideo
-                        campaignId={campaign!.id}
-                        productTitle={product.product_title}
-                        defaultCaption={product.product_title}
-                      />
                     </div>
                   )}
                 </>

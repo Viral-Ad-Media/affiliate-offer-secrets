@@ -59,6 +59,8 @@ export type Campaign = {
   blog_md: string | null;
   social_md: string | null;
   /** Generated SMS sequence. The STOP line is appended by lib/sms.ts, never stored. */
+  /** Structured TikTok scripts; legacy rows carry tiktok_md instead. */
+  tiktok_scripts: { hook: string; script: string }[] | null;
   sms_messages: { body: string }[] | null;
   social_posts: SocialPost[] | null;
   email_md: string | null;
@@ -109,7 +111,9 @@ export type FunnelStep = {
   updated_at: string;
 };
 
-export type CreativeSource = "fb_ad_angle" | "social_post";
+// tiktok_script joined these once scripts became a structured array — a creative needs an
+// item_index to key on, which a markdown blob never had.
+export type CreativeSource = "fb_ad_angle" | "social_post" | "tiktok_script";
 export type CreativeKind = "image" | "video";
 export type CreativeStatus = "none" | "generating" | "ready" | "failed";
 

@@ -176,15 +176,31 @@ async function stageAds(
     budget.push({ perItem: 280, count: counts.fb_ads });
   }
   if (wantTiktok) {
-    properties.tiktok_md = { type: "string" };
-    required.push("tiktok_md");
+    // STRUCTURED, not a markdown blob. Each script has to be individually addressable so it can own
+    // a generated video the way an ad angle does — campaign_creatives keys on item_index, and a
+    // blob has no index. The legacy tiktok_md column is simply no longer written; old rows keep
+    // theirs and the panel falls back to rendering it (the fb_ads_md / social_md precedent).
+    properties.tiktok_scripts = {
+      type: "array",
+      minItems: counts.tiktok,
+      maxItems: counts.tiktok,
+      items: {
+        type: "object",
+        properties: { hook: { type: "string" }, script: { type: "string" } },
+        required: ["hook", "script"],
+      },
+    };
+    required.push("tiktok_scripts");
     asks.push(
-      `tiktok_md — ${counts.tiktok} short one-line hooks plus ${counts.tiktok} full 30-45s UGC-style video scripts (spoken lines + shot notes) for the same product, as a Markdown string.`
+      `tiktok_scripts — exactly ${counts.tiktok} TikTok concepts, each an object with a "hook" (one spoken opening line, under 15 words) and a "script" (the full 30-45s UGC-style script: spoken lines plus bracketed shot notes).`
     );
     budget.push({ perItem: 380, count: counts.tiktok });
   }
 
-  const result = await completeJSON<{ fb_ad_angles?: FbAdAngle[]; tiktok_md?: string }>({
+  const result = await completeJSON<{
+    fb_ad_angles?: FbAdAngle[];
+    tiktok_scripts?: { hook: string; script: string }[];
+  }>({
     system: COMPLIANCE_SYSTEM,
     prompt: `${ctx}\n\nWrite:\n${asks.map((a, i) => `${i + 1}. ${a}`).join("\n")}`,
     schema: { type: "object", properties, required },
@@ -196,6 +212,9 @@ async function stageAds(
   // retry/attempts-cap machinery handles it) rather than persist bad data.
   if (wantFb && (!Array.isArray(result.fb_ad_angles) || result.fb_ad_angles.length !== counts.fb_ads)) {
     throw new Error(`Model did not return exactly ${counts.fb_ads} ad angles`);
+  }
+  if (wantTiktok && (!Array.isArray(result.tiktok_scripts) || result.tiktok_scripts.length !== counts.tiktok)) {
+    throw new Error(`Model did not return exactly ${counts.tiktok} TikTok scripts`);
   }
   return { stageData: prior, campaignPatch: result };
 }
