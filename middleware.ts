@@ -84,6 +84,12 @@ const PUBLIC_PREFIX_PATHS = [
   // Meta's Data Deletion Request Callback. Unauthenticated by definition — Meta calls it
   // server-to-server — and authenticated instead by the signed_request HMAC inside the handler.
   "/api/meta/data-deletion",
+  // Twilio's inbound-SMS webhook (STOP/HELP). Unauthenticated by definition — Twilio POSTs it
+  // server-to-server — and authenticated instead by the X-Twilio-Signature HMAC inside the
+  // handler. Missing from this list, the auth gate 307s it to /login and STOP is never honoured:
+  // the same failure /api/domains/reverify-all had silently for weeks, on a route where the
+  // consequence is continuing to text people who asked you to stop.
+  "/api/sms/inbound",
   "/p/", // public bridge (lead-capture landing) pages — real ad destinations, no auth
   "/api/public/campaign-image/", // public campaign product images — needed for Instagram posting
   "/api/public/leads", // bridge-page lead capture — anonymous visitors, no auth
