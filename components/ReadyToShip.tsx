@@ -67,6 +67,10 @@ export default function ReadyToShip({
   openGroups?: number;
 }) {
   const groups = groupByCampaign(items);
+  // When every campaign contributes exactly one item, grouping conveys nothing and the collapsible
+  // nesting is pure noise — one asset per campaign (a TikTok script blob) is a flat list wearing a
+  // tree's clothes. Detected rather than configured, so a caller can't get it wrong.
+  const flat = groups.length > 0 && groups.every((g) => g.items.length === 1);
 
   return (
     <Card as="section" className="overflow-hidden">
@@ -75,7 +79,9 @@ export default function ReadyToShip({
           <Icon className="h-4 w-4 text-emerald-400" /> {title}
           {items.length > 0 && (
             <Badge className="border border-emerald-500/40 bg-emerald-500/10 text-emerald-300">
-              {items.length} across {groups.length} {groups.length === 1 ? "campaign" : "campaigns"}
+              {flat
+                ? `${items.length} ${items.length === 1 ? "campaign" : "campaigns"}`
+                : `${items.length} across ${groups.length} ${groups.length === 1 ? "campaign" : "campaigns"}`}
             </Badge>
           )}
         </h2>
@@ -84,6 +90,21 @@ export default function ReadyToShip({
 
       {groups.length === 0 ? (
         <p className="px-4 py-6 text-sm text-zinc-500">{emptyNote}</p>
+      ) : flat ? (
+        <ul className="divide-y divide-ink-700">
+          {items.map((it) => (
+            <li key={it.key} className="flex flex-wrap items-start gap-3 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium text-zinc-400">{it.campaignTitle}</p>
+                <p className="mt-0.5 line-clamp-2 text-sm text-zinc-200">{it.preview}</p>
+                {it.meta ? <p className="mt-0.5 text-xs text-zinc-500">{it.meta}</p> : null}
+              </div>
+              <Link href={it.href} className={cn(buttonVariants({ variant: "outline" }), "text-xs")}>
+                {actionLabel}
+              </Link>
+            </li>
+          ))}
+        </ul>
       ) : (
         <ul className="divide-y divide-ink-700">
           {groups.map((group, gi) => (

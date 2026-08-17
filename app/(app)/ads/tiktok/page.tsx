@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import EmptyState from "@/components/EmptyState";
 import LoadFailed from "@/components/LoadFailed";
+import ReadyToShip, { type ReadyItem } from "@/components/ReadyToShip";
 import { tiktokAdsConfigured } from "@/lib/tiktok/adsConfig";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +46,7 @@ export default async function TiktokAdsPage({
   if (!ws) redirect("/login");
 
   // Sanitized read — the RPC returns advertiser id/name/status and never the token.
-  const [{ data: accounts }, { data: launches, error: launchError }] = await Promise.all([
+  const [{ data: accounts }, { data: launches, error: launchError }, { data: scriptRows }] = await Promise.all([
     supabase.rpc("get_tiktok_ad_accounts", { p_workspace_id: ws }),
     supabase
       .from("tiktok_ad_launches")
@@ -53,6 +54,19 @@ export default async function TiktokAdsPage({
       .eq("workspace_id", ws)
       .order("created_at", { ascending: false })
       .limit(100),
+    // Generated TikTok scripts. 14 campaigns carry these and they appeared on no sidebar page —
+    // the same invisibility /socials and /ads had. Unlike fb_ad_angles, tiktok_md is a single
+    // markdown blob rather than a structured array, so this lists one entry per CAMPAIGN. It is
+    // deliberately not parsed into individual hooks: email_md taught that lesson, where the model
+    // emitted two different heading shapes and a parser tuned to one silently mangled half the
+    // rows. A blob that opens in the campaign is honest; a mis-split one is not.
+    supabase
+      .from("campaigns")
+      .select("id, name, product_id, tiktok_md, products(product_title)")
+      .eq("workspace_id", ws)
+      .not("tiktok_md", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(50),
   ]);
 
   const connected = (accounts ?? []) as {
@@ -63,6 +77,27 @@ export default async function TiktokAdsPage({
   }[];
   const rows = (launches ?? []) as { id: string; status: string; headline: string | null }[];
   const notice = searchParams.connect ? CONNECT_MESSAGES[searchParams.connect] : undefined;
+
+  const readyScripts: ReadyItem[] = ((scriptRows ?? []) as any[])
+    .filter((c) => String(c.tiktok_md ?? "").trim().length > 0)
+    .map((c) => {
+      const md = String(c.tiktok_md);
+      // First meaningful line as the preview — enough to recognise which offer it is, without
+      // pretending to have parsed the document's structure.
+      const firstLine =
+        md
+          .split("\n")
+          .map((l: string) => l.replace(/^[#>*\-\s]+/, "").trim())
+          .find((l: string) => l.length > 0) ?? "";
+      return {
+        key: c.id as string,
+        campaignTitle: (c.products?.product_title as string | undefined) ?? (c.name as string | null) ?? "Untitled",
+        preview: firstLine.slice(0, 160) || "(empty script)",
+        meta: `${Math.round(md.length / 100) / 10}k characters of hooks and scripts`,
+        href: c.product_id ? `/product/${c.product_id}` : "/products",
+      };
+    });
+
 
   // Same three figures /ads reports for Meta, so the two sibling pages answer the same questions.
   // Budget is a DAILY authorization per launch, so summing across active ones is the real daily
@@ -122,6 +157,19 @@ export default async function TiktokAdsPage({
       )}
 
       {launchError && <LoadFailed what="your TikTok ad launches" detail={launchError.message} />}
+
+      {/* "Ready to use", NOT "ready to launch": launching TikTok ads from here is not built (the
+          Marketing API's create endpoints could not be verified without a real advertiser account,
+          and writing them unverified is how you spend money wrongly). Promising a button that does
+          not exist would be worse than saying what these are — copy you can take to TikTok now. */}
+      <ReadyToShip
+        icon={Music2}
+        title="Scripts ready to use"
+        blurb="Generated with a campaign kit"
+        items={readyScripts}
+        actionLabel="Open campaign"
+        emptyNote="Nothing waiting — tick TikTok scripts when you build a kit and they show up here."
+      />
 
       {tiktokAdsConfigured() && (
         <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
