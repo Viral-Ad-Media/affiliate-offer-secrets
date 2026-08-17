@@ -124,7 +124,7 @@ export async function createPostFromCampaign(
 
   const { data: campaign } = await admin
     .from("campaigns")
-    .select("id, user_id, blog_md, page_copy, embedded_image_data_url, products(product_title, niche)")
+    .select("id, user_id, blog_md, blog_excerpt, blog_seo_title, blog_seo_description, page_copy, embedded_image_data_url, products(product_title, niche)")
     .eq("id", campaignId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -170,6 +170,14 @@ export async function createPostFromCampaign(
       html,
       featured_image_url: featuredImage,
       featured_image_status: featuredImage ? "ready" : "none",
+      // Written by stageContent alongside the article, in the same Anthropic call. Nullable, and
+      // every consumer already falls back to postExcerpt() over the body — so a post generated
+      // before these existed, or one whose model skipped the optional fields, behaves as it always
+      // did. A written excerpt beats a 155-character cut of the opening paragraph, which regularly
+      // stops mid-thought and is what the blog index has been showing until now.
+      excerpt: (campaign.blog_excerpt as string | null) ?? null,
+      seo_title: (campaign.blog_seo_title as string | null) ?? null,
+      seo_description: (campaign.blog_seo_description as string | null) ?? null,
     })
     .select("id")
     .single();

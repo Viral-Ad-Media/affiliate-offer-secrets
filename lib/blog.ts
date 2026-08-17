@@ -1,4 +1,5 @@
 import { marked } from "marked";
+import { isDisclosureText } from "@/lib/disclosure";
 import { themeToCssVars } from "@/lib/engine/pageTheme";
 import { cloudinaryTransform, IMG_CARD, IMG_HERO, IMG_AVATAR } from "@/lib/cloudinary/url";
 import { APP_URL } from "@/lib/appUrl";
@@ -601,14 +602,25 @@ function authorBox(settings: BlogSettings | null | undefined): string {
 }
 
 // Meta-description excerpt: first ~155 chars of readable text, markdown/HTML syntax stripped.
+//
+// Disclosure paragraphs are skipped, not truncated around. Posts written before the blog prompt
+// forbade an in-copy disclosure regularly open with one, and taking the first 155 characters of
+// those published "This post contains affiliate links…" as the search-result snippet and the
+// index card blurb — a real, live instance of the least useful sentence in the most valuable slot.
 function postExcerpt(post: { content_md: string; html?: string | null }): string {
-  const source = post.content_md?.trim()
-    ? post.content_md
-        .replace(/^#{1,6}\s+.*$/gm, "")
-        .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-        .replace(/[*_>`#-]/g, "")
-    : (post.html ?? "").replace(/<[^>]*>/g, " ");
-  const text = source.replace(/\s+/g, " ").trim();
+  const clean = (v: string) =>
+    v
+      .replace(/^#{1,6}\s+.*$/gm, "")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/[*_>`#-]/g, "");
+  const blocks = post.content_md?.trim()
+    ? clean(post.content_md).split(/\n{2,}/)
+    : (post.html ?? "").replace(/<[^>]*>/g, " ").split(/\n{2,}/);
+  const text = blocks
+    .filter((b) => !isDisclosureText(b))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
   return text.length > 155 ? `${text.slice(0, 152)}…` : text;
 }
 

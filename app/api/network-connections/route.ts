@@ -19,7 +19,7 @@ const AFFILIATE_ID_RE = /^[A-Za-z0-9_.-]{1,64}$/;
  *
  * `NetworkConnectionsPanel` used to upsert `network_connections` directly from the browser. The
  * row updated, the UI said "Connected", and every already-built page kept the OLD affiliate id:
- * hoplinks are baked into stored HTML at write time (buildHoplink runs during render, not at
+ * hoplinks are baked into stored HTML at write time (the link is resolved during render, not at
  * serve time), so nothing re-reads this table until something re-renders. Correcting a nickname
  * silently did nothing to the pages that use it, which is worse than failing — the operator has
  * every reason to believe it took effect, and the pages keep crediting the wrong account.

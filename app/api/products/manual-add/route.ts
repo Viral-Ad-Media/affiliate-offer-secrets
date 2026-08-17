@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
   }
 
-  // Narrowed via the catalogue rather than cast: the value reaches buildHoplink's exhaustive
+  // Narrowed via the catalogue rather than cast: the value reaches the renderer's
   // switch, so "it's a string that looked fine" is not good enough.
   const network = clampStr(body.network, 20) as NetworkId;
   if (!KNOWN_NETWORKS.includes(network)) {

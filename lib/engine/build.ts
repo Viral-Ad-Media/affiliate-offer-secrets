@@ -9,6 +9,7 @@ import type { FbAdAngle, SocialPost } from "@/lib/shared";
 import { MAX_SMS_BODY, SMS_OPT_OUT } from "@/lib/sms";
 import { META_HEADLINE_RECOMMENDED, META_PRIMARY_TEXT_RECOMMENDED } from "@/lib/adCompliance";
 import { wants, type KitAssetKey, type CountableKitAssetKey } from "@/lib/kitAssets";
+import { stripDisclosureParagraphs, stripDisclosureFromCopy, isDisclosureText } from "@/lib/disclosure";
 
 // Re-exported so every existing server-side importer keeps working; the list itself is
 // isomorphic (see lib/buildStages.ts) because the progress checklist reads it in the browser.
@@ -70,6 +71,23 @@ function buildHoplinks(override?: string | null) {
   // stagePages/stageContent are told to use this value and nothing else (content rule 4).
   const text = link ? tids.map((t) => `${t}: ${link}`).join("\n") : "";
   return { text, byChannel };
+}
+
+/**
+ * One line of meta text, cut to a real limit on a word boundary.
+ *
+ * The model is ASKED for a length in the prompt, which is a request rather than a guarantee, and
+ * the consumer of an over-long value is a search engine or a link preview that truncates silently
+ * — so the visible failure is ours. Cutting mid-word looks like corrupt data, hence the boundary;
+ * an empty result is returned as "" so callers can distinguish "not generated" from "generated
+ * and blank" and fall back rather than storing nothing meaningfully different from nothing.
+ */
+function clampMeta(raw: unknown, max: number): string {
+  const text = (typeof raw === "string" ? raw : "").replace(/\s+/g, " ").trim();
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > max * 0.5 ? cut.slice(0, lastSpace) : cut).trimEnd()}\u2026`;
 }
 
 async function stageContext(product: ProductRow): Promise<StageOutput> {
@@ -238,7 +256,9 @@ async function stagePages(
 
 Do NOT include an affiliate-disclosure sentence anywhere in this copy — the page template appends its own code-owned disclosure automatically, and a second one written into the lead paragraph renders as one dense block that says the same thing twice.
 
-Also plan the search targeting for this offer: one primary keyword a real buyer would type, 3-6 secondary/semantic keywords, and the search intent (informational, commercial or transactional). Base them on the sales page's own language — do not invent volume figures or difficulty scores, which you cannot know.`,
+Also plan the search targeting for this offer: one primary keyword a real buyer would type, 3-6 secondary/semantic keywords, and the search intent (informational, commercial or transactional). Base them on the sales page's own language — do not invent volume figures or difficulty scores, which you cannot know.
+
+Finally, write the page's own meta tags: seo_title (max 60 characters, so it isn't truncated in a result or a link preview) and seo_description (max 155 characters, one sentence that would make someone click). The description must not simply repeat the headline — a description that restates the title is treated as no description at all.`,
     schema: {
       type: "object",
       properties: {
@@ -265,9 +285,15 @@ Also plan the search targeting for this offer: one primary keyword a real buyer 
           },
         },
         cta: { type: "string" },
+        seo_title: { type: "string" },
+        seo_description: { type: "string" },
       },
       required: ["headline", "lead", "mechanism", "benefits", "proof", "faq", "cta"],
     },
+    // seo_* stay OUT of `required` deliberately. They are the least important field in the object
+    // and the model returning the whole payload one field short is a stage failure that costs the
+    // entire page; a missing description falls back to the lead paragraph (descriptionOf) and
+    // nobody notices. Never make a nice-to-have field mandatory in a call this expensive to lose.
     maxTokens: 3000,
     usage,
   });
@@ -294,12 +320,26 @@ Also plan the search targeting for this offer: one primary keyword a real buyer 
           userId: campaignOwner.user_id as string,
         })
       : rawImageDataUrl;
-  const hoplink = byChannel.page ?? product.hoplink ?? "#";
+  // `|| "#"`, not `??`: byChannel.page is now the empty string when nothing has been pasted, which
+  // `??` would happily pass through as an href. products.hoplink is deliberately not a fallback —
+  // it holds links this app used to derive and must never be resurrected.
+  const hoplink = byChannel.page || "#";
   // The Anthropic structured-output schema above stays the permanent flat authoring shape (see
   // lib/engine/renderPages.ts's header comment) — normalize it into a block tree once here so
   // every newly-built campaign persists version-2 page_copy going forward, rather than relying on
   // renderBridgeHtml's own internal (idempotent) normalization at every future read.
-  let tree = normalizePageCopy(copy, imageDataUrl, {
+  // The prompt tells the model not to write a disclosure; this is what happens when it does
+  // anyway, which it has on live pages in three different shapes. Applied BEFORE normalizePageCopy
+  // so the duplicate never reaches the tree — and so it can never become the meta description,
+  // which is what a disclosure in a lead paragraph turns into. Empty proof/mechanism sections are
+  // dropped by the renderer, so a field that was ONLY a disclosure leaves no hole.
+  const cleaned = {
+    ...copy,
+    lead: stripDisclosureFromCopy(copy.lead),
+    mechanism: stripDisclosureFromCopy(copy.mechanism),
+    proof: stripDisclosureFromCopy(copy.proof),
+  };
+  let tree = normalizePageCopy(cleaned, imageDataUrl, {
     siteName: product.product_title,
     extraImages: (prior.image_data_urls as string[] | undefined)?.slice(1) ?? [],
   });
@@ -327,7 +367,18 @@ Also plan the search targeting for this offer: one primary keyword a real buyer 
   // fresh builds just read null here (the column defaults to null until funnel settings set it).
   const { data: trackingRow } = await db.from("campaigns").select("tracking").eq("id", campaignId).maybeSingle();
   const tracking = (trackingRow?.tracking ?? null) as TrackingSettings | null;
-  const bridgeHtml = renderBridgeHtml(product, tree, hoplink, imageDataUrl, campaignId, null, tracking);
+  // Clamped here rather than trusted: these are the two values that end up in a <title> and a
+  // meta tag, the model is asked for a length rather than held to one, and an over-long title is
+  // silently truncated by the consumer — which reads as our bug, not as a long title.
+  // A disclosure is never a description. The model has been observed writing one into copy it was
+  // told not to, and a meta description reading "This page contains affiliate links" is the least
+  // useful sentence available in the one place that decides whether anyone clicks.
+  const seoDesc = clampMeta((copy as any).seo_description, 155);
+  const seo = {
+    seo_title: clampMeta((copy as any).seo_title, 60),
+    seo_description: isDisclosureText(seoDesc) ? "" : seoDesc,
+  };
+  const bridgeHtml = renderBridgeHtml(product, tree, hoplink, imageDataUrl, campaignId, null, tracking, seo);
 
   return {
     // Carried forward so the blog stage can write TO the plan rather than inventing its own
@@ -337,6 +388,10 @@ Also plan the search targeting for this offer: one primary keyword a real buyer 
       bridge_html: bridgeHtml,
       page_copy: tree,
       embedded_image_data_url: imageDataUrl,
+      // Only written when the model actually produced one — a rebuild must not blank a description
+      // the operator wrote by hand in the funnel's SEO panel.
+      ...(seo.seo_title ? { seo_title: seo.seo_title } : {}),
+      ...(seo.seo_description ? { seo_description: seo.seo_description } : {}),
     },
   };
 }
@@ -401,21 +456,53 @@ async function stageContent(
   const byChannel = (prior.hoplink_by_channel ?? {}) as Record<string, string>;
   const blogHoplink = typeof byChannel.blog === "string" && byChannel.blog ? byChannel.blog : null;
 
-  const result = await completeJSON<{ blog_md: string }>({
+  const result = await completeJSON<{
+    blog_md: string;
+    excerpt?: string;
+    seo_title?: string;
+    seo_description?: string;
+  }>({
     system: COMPLIANCE_SYSTEM,
-    prompt: `${ctx}${keywordBrief}\n\nWrite a 1200-1800 word SEO-style blog article about this niche/product for the "tid=blog" traffic channel, in Markdown, with a clear intro/body/conclusion, natural keyword usage, and an affiliate disclosure line near the top or bottom.
+    prompt: `${ctx}${keywordBrief}\n\nWrite a 1200-1800 word SEO-style blog article about this niche/product for the "tid=blog" traffic channel, in Markdown, with a clear intro/body/conclusion and natural keyword usage.
 
-Link to the offer 2-3 times where it reads naturally — once early, once in the body, once in the conclusion — as Markdown links whose target is exactly the placeholder ${OFFER_LINK_TOKEN}, e.g. "[see the full programme](${OFFER_LINK_TOKEN})". Never write a real URL, a domain, or any other link target: the placeholder is substituted for the reader's tracked affiliate link afterwards, and anything else you invent would not track and may not resolve.`,
+Do NOT write an affiliate-disclosure sentence anywhere in the article. The post template appends its own code-owned disclosure at the very bottom of every page, so one written into the copy renders the same notice twice — and if it lands near the top it becomes the article's meta description and search-result snippet, which is the least useful sentence you could put there.
+
+Link to the offer 2-3 times where it reads naturally — once early, once in the body, once in the conclusion — as Markdown links whose target is exactly the placeholder ${OFFER_LINK_TOKEN}, e.g. "[see the full programme](${OFFER_LINK_TOKEN})". Never write a real URL, a domain, or any other link target: the placeholder is substituted for the reader's tracked affiliate link afterwards, and anything else you invent would not track and may not resolve.
+
+Also write the article's own metadata, as separate fields — never inside blog_md:
+- excerpt: 1-2 sentences (max 200 characters) summarising what the reader gets. This is the card blurb on the blog index, so it has to make sense with no article around it.
+- seo_title: max 60 characters, so search results and link previews don't truncate it. Include the primary keyword.
+- seo_description: max 155 characters, one sentence written to earn a click. Do not restate seo_title — a description that repeats the title is treated as no description at all.`,
     schema: {
       type: "object",
-      properties: { blog_md: { type: "string" } },
+      properties: {
+        blog_md: { type: "string" },
+        excerpt: { type: "string" },
+        seo_title: { type: "string" },
+        seo_description: { type: "string" },
+      },
+      // Only the article is required. The three metadata fields are the cheapest thing in this
+      // object and the article is the most expensive — making them mandatory would let a missing
+      // one-line description throw away 1800 words. Every consumer already derives a fallback.
       required: ["blog_md"],
     },
     maxTokens: 6000,
     usage,
   });
 
-  return { stageData: prior, campaignPatch: { blog_md: withOfferLinks(result.blog_md, blogHoplink) } };
+  return {
+    stageData: prior,
+    campaignPatch: {
+      blog_md: withOfferLinks(stripDisclosureParagraphs(result.blog_md), blogHoplink),
+      // Written only when produced, for the same reason the funnel's are: a rebuild must not blank
+      // metadata someone edited by hand. createPostFromCampaign copies these onto the post.
+      ...(clampMeta(result.excerpt, 200) ? { blog_excerpt: clampMeta(result.excerpt, 200) } : {}),
+      ...(clampMeta(result.seo_title, 60) ? { blog_seo_title: clampMeta(result.seo_title, 60) } : {}),
+      ...(clampMeta(result.seo_description, 155)
+        ? { blog_seo_description: clampMeta(result.seo_description, 155) }
+        : {}),
+    },
+  };
 }
 
 async function stageSocial(

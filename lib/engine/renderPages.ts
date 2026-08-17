@@ -36,6 +36,7 @@ import {
 import { renderTrackingHtml, type TrackingSettings } from "./tracking";
 import { themeToCssVars } from "./pageTheme";
 import type { NetworkId } from "@/lib/networks";
+import { isDisclosureText } from "@/lib/disclosure";
 
 export { escapeHtml };
 export * from "./blockTree";
@@ -74,7 +75,7 @@ export type PageCopy = {
 export type ProductLike = { product_title: string };
 
 // Re-exported from the isomorphic catalogue so the type and the network list can't drift — adding
-// an entry there is what forces buildHoplink's switch to handle it.
+// an entry there is what forces every network-shaped switch in the app to handle it.
 export type Network = NetworkId;
 
 export const DISCLOSURE =
@@ -105,7 +106,7 @@ export const LEAD_CONSENT_TEXT = "By submitting, you agree to be contacted about
  *
  * So the only source is `products.hoplink_override`: the real link, copied out of the network's own
  * dashboard, where it is already correct by construction. The UI prompts for it as soon as a kit
- * exists (components/OfferLinkPrompt.tsx) and NeedsAttention surfaces any funnel still missing one.
+ * exists (components/AffiliateLinkField.tsx) and NeedsAttention surfaces any funnel still missing one.
  *
  * The per-channel `tid` is gone with the construction, and that is the real cost: per-channel
  * attribution (fb / tt / blog / email / page) can no longer be added, because the token's name and
@@ -747,7 +748,7 @@ export function renderBridgeHtml(
     steps,
     productTitle: product.product_title,
   };
-  const meta = seoMetaTags(seo, titleOf(tree));
+  const meta = seoMetaTags(seo, titleOf(tree), descriptionOf(tree));
   const body = renderBlockTree(tree, ctx);
   const t = renderTrackingHtml(tracking);
 
@@ -839,9 +840,19 @@ export type SeoMeta = { seo_title?: string | null; seo_description?: string | nu
 // Per-page SEO overrides (0032_seo_meta.sql). Funnel pages stay noindex regardless — these only
 // control how the page presents when a tenant shares the URL directly (title, social preview).
 // Every value is escapeHtml'd; empty falls back to the page's own first heading.
-export function seoMetaTags(seo: SeoMeta | null | undefined, fallbackTitle: string): { title: string; head: string } {
+export function seoMetaTags(
+  seo: SeoMeta | null | undefined,
+  fallbackTitle: string,
+  fallbackDescription = ""
+): { title: string; head: string } {
   const title = (seo?.seo_title || "").trim() || fallbackTitle;
-  const description = (seo?.seo_description || "").trim();
+  // Falls back to the page's own opening copy. Until this, a funnel with no stored
+  // seo_description emitted NO description and NO og:description at all — so sharing the URL
+  // anywhere (a DM, a Slack, a retargeting preview) rendered a bare title over blank space. The
+  // blog has always derived one this way (postExcerpt in lib/blog.ts); funnel pages simply never
+  // did. Generated copy is better and stagePages now writes it, but a fallback is what fixes
+  // every page that already exists without re-running anything.
+  const description = (seo?.seo_description || "").trim() || fallbackDescription.trim();
   const head = [
     description ? `<meta name="description" content="${escapeHtml(description)}" />` : "",
     `<meta property="og:title" content="${escapeHtml(title)}" />`,
@@ -851,6 +862,44 @@ export function seoMetaTags(seo: SeoMeta | null | undefined, fallbackTitle: stri
     .filter(Boolean)
     .join("\n");
   return { title, head };
+}
+
+/**
+ * The page's opening prose, trimmed to meta-description length.
+ *
+ * Deliberately the first PARAGRAPH, not the first text of any kind: a heading is already the
+ * title, and repeating it as the description is what search engines treat as no description at
+ * all. Cuts on a word boundary — a description ending mid-word reads as broken data rather than
+ * as truncation.
+ */
+const META_DESCRIPTION_MAX = 155;
+function descriptionOf(tree: PageBlockTree): string {
+  const walk = (blocks: any[]): string => {
+    for (const b of blocks) {
+      // Skips a disclosure paragraph rather than stopping at it. The model has written one into
+      // the lead before (3 of 15 campaigns, per CLAUDE.md), and a page whose description is
+      // "This page contains affiliate links" is worse than one with no description at all.
+      if (
+        b?.type === "paragraph" &&
+        typeof b.content?.text === "string" &&
+        b.content.text.trim() &&
+        !isDisclosureText(b.content.text)
+      ) {
+        return b.content.text.trim();
+      }
+      const kids = b?.children ?? b?.content?.children;
+      if (Array.isArray(kids)) {
+        const found = walk(kids);
+        if (found) return found;
+      }
+    }
+    return "";
+  };
+  const text = walk(tree.blocks ?? []).replace(/\s+/g, " ");
+  if (text.length <= META_DESCRIPTION_MAX) return text;
+  const cut = text.slice(0, META_DESCRIPTION_MAX - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 60 ? cut.slice(0, lastSpace) : cut).trimEnd()}\u2026`;
 }
 
 function titleOf(tree: PageBlockTree): string {
@@ -894,7 +943,7 @@ export function renderFunnelStepHtml(
     steps,
     productTitle: product.product_title,
   };
-  const meta = seoMetaTags(seo, titleOf(tree));
+  const meta = seoMetaTags(seo, titleOf(tree), descriptionOf(tree));
   const body = renderBlockTree(tree, ctx);
   const t = renderTrackingHtml(tracking);
 
