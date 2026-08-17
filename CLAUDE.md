@@ -3952,6 +3952,46 @@ and says plainly when the app isn't configured. Finishing it needs a real TikTok
 advertiser account to probe against — then `lib/engine/tiktokadlaunch.ts` mirrors `adlaunch.ts`,
 including a stage-0 verify that re-checks ownership before any spend.
 
+## Generated work is visible where it belongs, not only after you ship it
+
+A finished kit produces a funnel page, a blog article, email swipes, social captions and ad angles.
+Two of those had a home and three did not: `stagePages` writes the bridge page (it appears on
+Funnels) and `createPostFromCampaign` writes a draft post (it appears on Blog) — while `email_md`,
+`social_posts` and `fb_ad_angles` sat on the campaign row, reachable only by knowing to open a
+product's tabs. `/socials` read `audit_events` (posts already PUBLISHED) and `/ads` read
+`ad_launches` (ads already LAUNCHED), so both pages were empty for anyone who had built kits but
+not yet spent money — exactly when you want to see what's ready. Measured at the time: **65
+captions across 13 campaigns and 40 unlaunched angles, none of them on either page.**
+
+- **`components/ReadyToShip.tsx`** renders the drafts above the shipped history on both pages,
+  shared so the two can't drift into different vocabularies for the same state (the
+  `FunnelNodeCard` precedent). Deliberately NOT an action surface: posting and launching stay on
+  the product page where the copy and its generated creative are together, because both spend money
+  or publish under the tenant's name. Ads filters out any angle that already has an `ad_launches`
+  row, keyed on the same `(campaign_id, angle_index)` pair that table is unique on.
+- **A kit's emails now become a DRAFT sequence** (`lib/broadcast/fromCampaign.ts`), the treatment
+  the article already got. Draft, never active — machine-written copy aimed at real inboxes, so
+  activating stays an explicit action. Written with the ADMIN client and explicit
+  `workspace_id`/`user_id` because the sequence RPCs are `authenticated`-facing and key off
+  `auth.uid()`, which is NULL for the service-role worker.
+- **`parseEmailMd` was written against the real stored copy, not a guessed format**, and that
+  mattered: the model emits TWO shapes — `## Email 2 — Subject: …` (subject on the heading) and
+  `## Email 1\n\n**Subject:** …` (subject on the next line) — plus mixed `##`/`###` levels. A parser
+  tuned to the first would have produced one malformed email for 7 of 14 campaigns. Anything it
+  can't find a subject for still becomes an email with a derived one; silently dropping generated
+  copy is the worse failure.
+- **`source_campaign_id` (0094) is provenance and is NOT the existing `campaign_id`**, which is the
+  AUDIENCE scope. An auto-created sequence sets both and they agree; a hand-made sequence can target
+  a campaign's contacts without having been generated from it, and must not be mistaken for one and
+  overwritten on the next rebuild. Partial unique index, so hand-made rows (all NULL) are untouched.
+  A rebuild refreshes a draft's steps but **never touches a sequence that is active or paused** —
+  contacts are already enrolled against those exact steps.
+- **`npm run backfill-email-sequences`** covers kits built before this existed (dry run by default).
+  Run once: 14 sequences created, 0 skipped.
+- **My Products opens filtered** to Selected/Promoting/Paused. Discovery writes every marketplace
+  hit as `New`, so the page listed 95 products of which 77 were untouched and only 18 had a kit.
+  A default, not a lock — clearing the chips shows everything.
+
 ## Socials
 
 `/socials` — every organic post across Facebook, Instagram, TikTok and YouTube, with a platform

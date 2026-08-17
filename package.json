@@ -9,7 +9,8 @@
     "engine": "tsx scripts/engine.ts",
     "import-csv": "tsx scripts/import-csv.ts",
     "migrate-images": "tsx --env-file=.env.local scripts/migrate-images-to-cloudinary.ts",
-    "rerender-funnels": "tsx --env-file=.env.local scripts/rerender-funnels.ts"
+    "rerender-funnels": "tsx --env-file=.env.local scripts/rerender-funnels.ts",
+    "backfill-email-sequences": "tsx --env-file=.env.local scripts/backfill-email-sequences.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.114.0",

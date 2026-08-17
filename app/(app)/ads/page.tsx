@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import ReadyToShip, { type ReadyItem } from "@/components/ReadyToShip";
 import EmptyState from "@/components/EmptyState";
 
 export const dynamic = "force-dynamic";
@@ -75,7 +76,7 @@ export default async function AdsPage() {
 
   const ws = await currentWorkspaceId();
 
-  const [{ data: launches }, metaStatus] = await Promise.all([
+  const [{ data: launches }, metaStatus, { data: angleRows }] = await Promise.all([
     // Membership RLS is the scoping; .eq("workspace_id") is kept explicit to match the style of
     // every other list page here, and to keep a member of two workspaces from seeing both merged.
     supabase
@@ -89,6 +90,16 @@ export default async function AdsPage() {
     supabase
       .rpc("get_meta_connection_status", { p_workspace_id: ws })
       .then((r) => r.data ?? { connected: false }),
+    // Generated ad angles. Like the captions on /socials, these existed only inside a product's
+    // Ads tab — this page listed what had been LAUNCHED and so was empty for anyone who had built
+    // kits but not yet spent money, which is exactly when you want to see what's ready.
+    supabase
+      .from("campaigns")
+      .select("id, name, product_id, fb_ad_angles, products(product_title)")
+      .eq("workspace_id", ws)
+      .not("fb_ad_angles", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(50),
   ]);
 
   const rows = ((launches ?? []) as any[]).map((l) => ({
@@ -112,6 +123,26 @@ export default async function AdsPage() {
   const dailyCredits = active.reduce((sum, r) => sum + (r.budget ?? 0), 0);
   const awaitingReview = rows.filter((r) => r.status === "paused_review").length;
 
+  // An angle already launched isn't "ready" — it's on the list below. Keyed on the same
+  // (campaign_id, angle_index) pair ad_launches is unique on.
+  const launched = new Set(rows.map((r) => `${r.campaignId}-${r.angleIndex}`));
+  const readyAngles: ReadyItem[] = ((angleRows ?? []) as any[]).flatMap((c) => {
+    const angles = Array.isArray(c.fb_ad_angles) ? c.fb_ad_angles : [];
+    const title = (c.products?.product_title as string | undefined) ?? (c.name as string | null) ?? "Untitled";
+    return angles
+      .map((a: { headline?: string; primary_text?: string; cta?: string }, i: number) => ({ a, i }))
+      .filter(({ i }: { i: number }) => !launched.has(`${c.id}-${i}`))
+      .map(({ a, i }: { a: any; i: number }) => ({
+        key: `${c.id}-${i}`,
+        campaignTitle: title,
+        preview: String(a?.headline ?? "").trim() || String(a?.primary_text ?? "").trim() || "(empty angle)",
+        meta: [`Angle ${i + 1} of ${angles.length}`, a?.cta ? `CTA: ${a.cta}` : null].filter(Boolean).join(" · "),
+        // Launching lives on the product page's Ads tab, where the angle's own generated creative
+        // and the credit cost are in front of you — this page stays read-only on purpose.
+        href: c.product_id ? `/product/${c.product_id}` : "/products",
+      }));
+  });
+
   const adsReady = Boolean((metaStatus as any)?.connected && (metaStatus as any)?.ads_management_granted);
 
   return (
@@ -121,7 +152,8 @@ export default async function AdsPage() {
           <Megaphone className="h-6 w-6 text-emerald-400" /> Ads Manager
         </h1>
         <p className="text-sm text-zinc-400">
-          Every Meta ad you&apos;ve launched, per campaign and per angle. Launch and activate from
+          What&apos;s ready to launch, and every Meta ad you&apos;ve launched, per campaign and per
+          angle. Launch and activate from
           an angle&apos;s own card on its campaign page — delivery, spend and results stay in
           Meta&apos;s own Ads Manager, billed to your ad account.
         </p>
@@ -165,6 +197,15 @@ export default async function AdsPage() {
           <div className="mt-1 text-xs text-zinc-500">Paused drafts you haven&apos;t activated</div>
         </Card>
       </div>
+
+      <ReadyToShip
+        icon={Megaphone}
+        title="Ready to launch"
+        blurb="Generated angles with no ad yet"
+        items={readyAngles}
+        actionLabel="Open campaign"
+        emptyNote="Nothing waiting — ad angles generated with a campaign kit show up here until they're launched."
+      />
 
       <Card as="section" className="overflow-hidden">
         {rows.length === 0 ? (

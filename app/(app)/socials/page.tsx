@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import ReadyToShip, { type ReadyItem } from "@/components/ReadyToShip";
 import EmptyState from "@/components/EmptyState";
 import Pager, { PAGE_SIZE, pageFromParam, pageRange } from "@/components/Pager";
 
@@ -76,6 +77,31 @@ export default async function SocialsPage({
     ? await scoped().order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to)
     : { data: [] };
 
+  // Generated captions that haven't been posted anywhere yet. These live on the campaign as
+  // `social_posts` and, before this, appeared on no sidebar page at all — only inside a product's
+  // Social tab, which you had to already know to open.
+  const { data: generated } = await supabase
+    .from("campaigns")
+    .select("id, name, product_id, social_posts, products(product_title)")
+    .eq("workspace_id", ws)
+    .not("social_posts", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(50);
+
+  const readyPosts: ReadyItem[] = ((generated ?? []) as any[]).flatMap((c) => {
+    const posts = Array.isArray(c.social_posts) ? c.social_posts : [];
+    const title = (c.products?.product_title as string | undefined) ?? (c.name as string | null) ?? "Untitled";
+    return posts.map((p: { caption?: string }, i: number) => ({
+      key: `${c.id}-${i}`,
+      campaignTitle: title,
+      preview: String(p?.caption ?? "").trim() || "(empty caption)",
+      meta: `Caption ${i + 1} of ${posts.length}`,
+      // The product page is where PostToFacebook/PostToInstagram live, beside the caption's own
+      // generated creative. Keyed by PRODUCT id — /product/[id] takes a product, not a campaign.
+      href: c.product_id ? `/product/${c.product_id}` : "/products",
+    }));
+  });
+
   const rows = (data ?? []) as {
     id: string;
     platform: string;
@@ -93,10 +119,20 @@ export default async function SocialsPage({
           <Share2 className="h-5 w-5 text-emerald-400" /> Socials
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Every organic post published from this workspace. Posting itself runs from a campaign&apos;s
-          Social tab.
+          What&apos;s ready to post, and everything already published from this workspace. Posting
+          itself runs from a campaign&apos;s Social tab, where the caption and its creative are
+          together.
         </p>
       </header>
+
+      <ReadyToShip
+        icon={Share2}
+        title="Ready to post"
+        blurb="Generated captions not yet published"
+        items={readyPosts}
+        actionLabel="Open campaign"
+        emptyNote="Nothing waiting — captions generated with a campaign kit show up here until they're posted."
+      />
 
       <div className="flex flex-wrap gap-1.5">
         <Link

@@ -1,6 +1,7 @@
 import { db } from "./core";
 import { notify, jobLabel } from "@/lib/notifications";
 import { createPostFromCampaign } from "@/lib/blog/fromCampaign";
+import { createSequenceFromCampaign } from "@/lib/broadcast/fromCampaign";
 import { runBuildCampaignStage, BUILD_CAMPAIGN_STAGES } from "./build";
 import { normalizeKitAssets, normalizeKitCounts } from "@/lib/kitAssets";
 import { runDiscoverProducts, type DiscoverJobPayload } from "./discover";
@@ -437,6 +438,24 @@ async function finalizeBuildCampaign(job: JobRow, productId: string): Promise<vo
         title: "Blog post wasn't created",
         body: "The kit built fine, but its article couldn't be turned into a draft post.",
         href: "/blog/posts",
+      });
+    }
+
+    // The kit's email swipes become a DRAFT sequence, same treatment as its article. Independent
+    // try/catch on purpose: a parse problem in the emails must not cost the blog post its own
+    // error handling, and vice versa — one best-effort extra failing should never take the other
+    // down with it.
+    try {
+      await createSequenceFromCampaign(db, job.workspace_id, builtCampaign.id as string);
+    } catch (err) {
+      // Visible, not swallowed — the lesson the blog auto-create taught when a NOT NULL violation
+      // meant it had never once worked and nothing anywhere said so.
+      console.error("auto email sequence failed", err);
+      await notify(db, job.user_id, {
+        kind: "job_failed",
+        title: "Email sequence wasn't created",
+        body: "The kit built fine, but its email swipes couldn't be turned into a draft sequence.",
+        href: "/emails/sequences",
       });
     }
   }
