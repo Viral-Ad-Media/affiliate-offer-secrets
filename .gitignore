@@ -23,3 +23,8 @@ next-env.d.ts
 
 # netlify
 .netlify/
+
+# Internal engineering notes — kept local, not published.
+# Adding a path here does NOT untrack a file that is already tracked; this was paired with
+# `git rm --cached CLAUDE.md`, which stops tracking it while leaving the local copy alone.
+CLAUDE.md

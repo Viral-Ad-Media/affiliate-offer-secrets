@@ -157,6 +157,6 @@ These aren't style preferences; each one exists because getting it wrong caused 
 
 ## Further reading
 
-[`CLAUDE.md`](CLAUDE.md) is the long-form engineering document: the reasoning behind each subsystem,
-the failures that shaped it, and the traps that are easy to walk back into. It is the place to look
-before changing anything non-obvious.
+A long-form engineering document (`CLAUDE.md`) holds the reasoning behind each subsystem, the
+failures that shaped it, and the traps that are easy to walk back into. It is kept out of this
+repository and shared with contributors directly — ask for it before changing anything non-obvious.
