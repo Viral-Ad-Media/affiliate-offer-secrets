@@ -20,6 +20,7 @@ import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { NETLIFY_DNS_A_RECORD, netlifyCnameTarget } from "@/lib/netlify/dns";
+import DomainSslStatus from "@/components/DomainSslStatus";
 import { Badge } from "@/components/ui/badge";
 import EmptyState from "@/components/EmptyState";
 
@@ -388,6 +389,11 @@ function DomainRow({
             copiedId={copiedId}
             onCopy={copyUrl}
           />
+
+          {/* Directly under the DNS records, because the two are one story: the certificate is
+              issued off the back of those records resolving, so a failure here is almost always a
+              DNS answer that hasn't propagated yet. */}
+          <DomainSslStatus domainId={domain.id} />
 
           {domain.status === "verified" && (
             <div className="space-y-2 rounded-lg border border-ink-700 p-3">
