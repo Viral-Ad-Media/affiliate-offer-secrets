@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { currentWorkspaceId } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
-import { Music2, Link2, CircleAlert, ExternalLink } from "lucide-react";
+import { Music2, Link2, CircleAlert, ExternalLink, Radio, Coins, PauseCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import EmptyState from "@/components/EmptyState";
+import LoadFailed from "@/components/LoadFailed";
 import { tiktokAdsConfigured } from "@/lib/tiktok/adsConfig";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,7 @@ export default async function TiktokAdsPage({
   if (!ws) redirect("/login");
 
   // Sanitized read — the RPC returns advertiser id/name/status and never the token.
-  const [{ data: accounts }, { data: launches }] = await Promise.all([
+  const [{ data: accounts }, { data: launches, error: launchError }] = await Promise.all([
     supabase.rpc("get_tiktok_ad_accounts", { p_workspace_id: ws }),
     supabase
       .from("tiktok_ad_launches")
@@ -63,15 +64,23 @@ export default async function TiktokAdsPage({
   const rows = (launches ?? []) as { id: string; status: string; headline: string | null }[];
   const notice = searchParams.connect ? CONNECT_MESSAGES[searchParams.connect] : undefined;
 
+  // Same three figures /ads reports for Meta, so the two sibling pages answer the same questions.
+  // Budget is a DAILY authorization per launch, so summing across active ones is the real daily
+  // number rather than a lifetime total.
+  const active = rows.filter((r) => r.status === "active");
+  const dailyCredits = active.reduce((sum, r) => sum + Number((r as { budget_credits?: number }).budget_credits ?? 0), 0);
+  const awaitingReview = rows.filter((r) => r.status === "paused_review").length;
+
   return (
-    <main className="space-y-4">
+    <main className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold text-zinc-100">
-            <Music2 className="h-5 w-5 text-emerald-400" /> TikTok Ads
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-zinc-100">
+            <Music2 className="h-6 w-6 text-emerald-400" /> TikTok Ads
           </h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="text-sm text-zinc-400">
             Ad accounts connected through TikTok for Business, and every launch made against them.
+            Delivery, spend and results stay in TikTok&apos;s own Ads Manager, billed to your ad account.
           </p>
         </div>
         {tiktokAdsConfigured() && (
@@ -110,6 +119,49 @@ export default async function TiktokAdsPage({
             </p>
           </div>
         </Card>
+      )}
+
+      {launchError && <LoadFailed what="your TikTok ad launches" detail={launchError.message} />}
+
+      {tiktokAdsConfigured() && (
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="stat-tile">
+            <div className="rounded-lg border border-ink-700 bg-ink-800 p-2.5 text-emerald-400">
+              <Music2 className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="stat-tile-value">{connected.length}</div>
+              <div className="stat-tile-label">Ad accounts</div>
+            </div>
+          </div>
+          <div className="stat-tile">
+            <div className="rounded-lg border border-ink-700 bg-ink-800 p-2.5 text-emerald-400">
+              <Radio className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="stat-tile-value">{active.length}</div>
+              <div className="stat-tile-label">Active ads</div>
+            </div>
+          </div>
+          <div className="stat-tile">
+            <div className="rounded-lg border border-ink-700 bg-ink-800 p-2.5 text-emerald-400">
+              <Coins className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="stat-tile-value">{dailyCredits}</div>
+              <div className="stat-tile-label">Daily credits authorized</div>
+            </div>
+          </div>
+          <div className="stat-tile">
+            <div className="rounded-lg border border-ink-700 bg-ink-800 p-2.5 text-emerald-400">
+              <PauseCircle className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="stat-tile-value">{awaitingReview}</div>
+              <div className="stat-tile-label">Awaiting review</div>
+            </div>
+          </div>
+        </section>
       )}
 
       {tiktokAdsConfigured() && connected.length > 0 && (

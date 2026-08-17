@@ -18,7 +18,10 @@ export default async function BroadcastPage({ searchParams }: { searchParams: { 
     .from("broadcast_sequences")
     .select("id", { count: "exact", head: true })
     .eq("workspace_id", ws)
-    .eq("kind", "sequence");
+    .eq("kind", "sequence")
+      // channel filter, not cosmetic: SMS drips live in this same table (0098) and would
+      // otherwise be listed here — and editable — as if they were email.
+      .eq("channel", "email");
   const total = count ?? 0;
   const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
   const [from, to] = pageRange(page);
@@ -30,6 +33,9 @@ export default async function BroadcastPage({ searchParams }: { searchParams: { 
       .eq("workspace_id", ws)
       // Only multi-step drips — one-off sends (kind='broadcast', 0035) have their own page.
       .eq("kind", "sequence")
+      // channel filter, not cosmetic: SMS drips live in this same table (0098) and would
+      // otherwise be listed here — and editable — as if they were email.
+      .eq("channel", "email")
       .order("created_at", { ascending: false })
       .range(from, to),
     supabase.from("campaigns").select("id, products(product_title)"),

@@ -96,7 +96,7 @@ const NAV: NavItem[] = [
       { href: "/emails/settings", label: "Settings", match: (p: string) => p === "/emails/settings" },
     ],
   },
-  { href: "/sms", label: "SMS", icon: MessageSquare, match: () => false, soon: true },
+  { href: "/sms", label: "SMS", icon: MessageSquare, match: (p: string) => p === "/sms" || p.startsWith("/sms/") },
   {
     // The section's own first child, not /blog — /blog IS the Posts page, so clicking the parent
     // used to land on the second item in its own submenu. Every other section here points at the

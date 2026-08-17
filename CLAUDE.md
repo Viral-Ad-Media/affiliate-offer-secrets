@@ -2363,7 +2363,7 @@ without per-component recoloring:
   install` — the CSS variable mapping above means no manual re-theming should be needed for
   components that use standard shadcn semantic classes.
 
-## SMS is part of the kit (generation only — nothing sends yet)
+## SMS: generation, consent, sending and drips
 
 `sms` is the seventh entry in `KIT_ASSETS`, generated inside the existing social/email stage rather
 than a new one — that stage is already one Anthropic call whose schema and prompt are built from
@@ -2394,11 +2394,60 @@ different heading shapes the model emits), and there is no reason to repeat that
   any future sending path must use — so the opt-out is visible in the preview instead of appearing
   later. Same "what you see is what publishes" guarantee the page editor gets.
 
-**Nothing sends.** There is no provider, no credentials, no `sms_sends` table and no rate cap. That
-is a separate piece of work with its own compliance surface (per-tenant Twilio-style credentials in
-Vault, a STOP/HELP inbound webhook that must actually honour opt-outs, quiet-hours rules, and
-per-number throughput limits). The sidebar's SMS entry stays `soon: true` until it exists — the kit
-tab is where the copy lives today.
+### Sending (0097) and drips (0098)
+
+**Consent is three separate facts, not one flag** — `contacts.phone`, `sms_consent_at`,
+`sms_opted_out_at`. A phone number is NOT consent to text it, and email's `unsubscribed_at` says
+nothing about SMS: the two are legally distinct, so a contact who unsubscribed from email can still
+be a valid SMS recipient. Consent is set ONLY by a ticked checkbox carrying the reserved
+`sms_consent` field key (`lib/sms.ts`); `isAffirmativeConsent` is strict rather than truthy, because
+a checkbox arriving as `"false"` is a non-empty string. The consent VALUE stays in `extra_fields`
+even though the phone is promoted out of it — a timestamp isn't evidence, "they ticked a box reading
+<label> at <time> from <IP>" is.
+
+**`lib/sms/send.ts` is the only send path** and records refusals as `sms_sends.status='skipped'`
+rather than dropping them. Twilio's own 21610 ("this number opted out") is written back locally,
+because relying on provider-side state loses every opt-out the day the provider changes.
+
+**Twilio's shapes were probed live with a known-bad control**: a malformed SID answers
+`20003 "Authentication Error - invalid username"` while a well-formed SID with a bad token answers
+`20003 "Authenticate"` — two distinct refusals, so the probe measured the request rather than
+refusing everything identically. `verifyTwilioSignature` is checked against Twilio's OWN documented
+worked example. **The first run of that test FAILED and the failure was the test** — the expected
+signature had been written from memory with the wrong host and digits. Fetching the real example
+showed the implementation was correct. Do not "fix" that function against a remembered constant.
+
+**`/api/sms/inbound`'s signature check is its entire trust boundary**, and the risk is a forged
+PRESENCE, not absence: without it anyone could POST "STOP" for guessed numbers and destroy a
+tenant's list. Verification needs the tenant's own token, so the account is identified from the
+payload's `AccountSid` first; an unknown account is refused identically to a bad signature so it
+can't enumerate connections. It is in `PUBLIC_PREFIX_PATHS` — missing from that list the auth gate
+307s Twilio to `/login` and STOP is never honoured, the exact silent failure
+`/api/domains/reverify-all` had for weeks.
+
+**Drips add ONE column, `broadcast_sequences.channel`** — they do NOT get parallel tables. `channel`
+is to delivery what `kind` is to presentation; the enrollment rows, the precomputed `due_at` that
+keeps an un-due step out of the jobs queue, the sweep's admission control and the attempts cap are
+all already correct, and a second set of tables would mean a second scheduler. Consequences:
+- **Enrollment is where consent is enforced** (`enroll_broadcast_sequence_contacts` branches on
+  channel), so an ineligible contact never gets a row — no due step, no job. The sender re-checks
+  anyway.
+- **The pooled daily cap is skipped for SMS.** It exists to stop a personal MAILBOX being flagged
+  and says nothing about texts, which the provider throttles per number.
+- **A consent failure is TERMINAL, not retried** — no number of attempts turns "they opted out"
+  into a send.
+- **The Emails pages must filter `channel='email'`.** SMS drips live in the same table and would
+  otherwise be listed, and editable, as if they were email.
+- `broadcast_steps.subject` stays NOT NULL: SMS steps store an internal label there rather than the
+  column being widened, which would let an EMAIL step be created without a subject.
+
+Verified against the live database with five contacts covering every consent combination — 9/9,
+including that an email-unsubscribed contact still receives SMS and that email enrollment ignores
+phone and SMS consent entirely.
+
+**Still not built**: quiet-hours rules, per-number throughput limits, and a UI for composing an SMS
+drip (the detail page at `/broadcast/[id]` is email-shaped). `/sms` is a read surface — sequences,
+textable-contact count, and the delivery log.
 
 **`campaigns.sms_messages` had to be added to the explicit column list in
 `app/api/products/[id]/route.ts`.** That route stopped using `select("*")` for payload reasons, so a

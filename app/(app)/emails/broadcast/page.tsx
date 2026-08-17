@@ -25,6 +25,7 @@ export default async function BroadcastPage() {
       .select("id, name, status, audience_type, created_at")
       .eq("workspace_id", ws)
       .eq("kind", "broadcast")
+      .eq("channel", "email")
       .order("created_at", { ascending: false })
       .limit(25),
     supabase.from("workspaces").select("active_mail_provider").eq("id", ws).maybeSingle(),

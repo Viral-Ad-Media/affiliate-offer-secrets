@@ -56,6 +56,7 @@ const PROTECTED_PREFIXES = [
   "/funnels",
   "/contacts",
   "/emails",
+  "/sms",
   "/blog",
   "/ads",
   "/socials",
