@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { queueChargedJob } from "@/lib/credits";
+import { resolveGenerationModel } from "@/lib/generationSettings";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -98,9 +99,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "This creative is already generating" }, { status: 409 });
   }
 
+  // Resolved HERE, not in the worker: a job must describe the model it was queued with, so a
+  // settings change (or a fallback to a second provider) can't silently repoint it mid-flight.
+  // An unrecognised body.model falls through to the workspace default rather than 400ing.
+  const model = await resolveGenerationModel(supabase, ws, kind as "image" | "video", body.model);
+
   const queued = await queueChargedJob(
     supabase,
-    { workspace_id: ws, type: jobType, payload: { campaign_creative_id: creativeId } },
+    { workspace_id: ws, type: jobType, payload: { campaign_creative_id: creativeId, model_id: model.id } },
     {
       // Roll back the claim if the insert failed OR the charge was declined, so the row isn't
       // stuck "generating" forever — authenticated has no UPDATE grant on campaign_creatives, so

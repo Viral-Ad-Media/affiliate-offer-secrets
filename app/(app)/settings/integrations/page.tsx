@@ -7,6 +7,8 @@ import MailProvidersPanel, { type MailProvidersStatus } from "@/components/MailP
 import ConnectionsPanel from "@/components/ConnectionsPanel";
 import TikTokPanel from "@/components/TikTokPanel";
 import NetworkConnectionsPanel from "@/components/NetworkConnectionsPanel";
+import GenerationModelsPanel from "@/components/GenerationModelsPanel";
+import { getWorkspaceGenerationDefaults } from "@/lib/generationSettings";
 
 const PROVIDER_LABELS: Record<string, string> = {
   meta: "Facebook",
@@ -28,7 +30,7 @@ export default async function ConnectionsPage({
   // not whichever workspace profiles.active_workspace_id happens to hold in another tab.
   const ws = await currentWorkspaceId();
 
-  const [metaStatus, tiktokStatus, mailProviders, networkRows] = await Promise.all([
+  const [metaStatus, tiktokStatus, mailProviders, networkRows, genDefaults] = await Promise.all([
     supabase
       .rpc("get_meta_connection_status", { p_workspace_id: ws })
       .then((r) => r.data ?? { connected: false }),
@@ -42,6 +44,7 @@ export default async function ConnectionsPage({
       .from("network_connections")
       .select("network, affiliate_id")
       .then((r) => r.data ?? []),
+    getWorkspaceGenerationDefaults(supabase, ws!),
   ]);
   const networkConnections = Object.fromEntries(networkRows.map((r) => [r.network, r.affiliate_id]));
 
@@ -114,6 +117,16 @@ export default async function ConnectionsPage({
           kind of thing as a Facebook token. Sender IDENTITY (reply-to, business name, the postal
           address the footer needs) is a marketing decision that outlives any one provider, so it
           lives on Emails → Settings instead. */}
+      {/* AI generation providers sit with the other connections: choosing which model spends your
+          kie.ai / Google credit is the same class of decision as which mail provider sends. */}
+      <div>
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">AI generation</h2>
+        <GenerationModelsPanel
+          initialImage={genDefaults.image}
+          initialVideo={genDefaults.video}
+        />
+      </div>
+
       <div className="space-y-3">
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Email</h2>
         <MailProvidersPanel status={mailProviders} />

@@ -1,4 +1,5 @@
 import { db } from "./core";
+import { resolveModel } from "@/lib/generationModels";
 import { uploadImageRef, CLD_FOLDER } from "@/lib/cloudinary/upload";
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { createKieTask, getKieTaskStatus, downloadKieResult } from "@/lib/kieai/client";
@@ -14,6 +15,8 @@ export type GenerateCreativeImageStage = (typeof GENERATE_CREATIVE_IMAGE_STAGES)
 
 export type GenerateCreativeImagePayload = {
   campaign_creative_id: string;
+  /** Chosen model, resolved at queue time. Absent (old jobs, direct API callers) = the default. */
+  model_id?: string | null;
 };
 
 export type CreativeImageStageOutput = {
@@ -60,7 +63,14 @@ async function stageVerify(
   }
 
   return {
-    stageData: { workspace_id: workspaceId, user_id: userId, product_id: campaign.product_id, tone_text: toneText },
+    stageData: {
+      workspace_id: workspaceId,
+      user_id: userId,
+      product_id: campaign.product_id,
+      tone_text: toneText,
+      // Carried from the payload: stageSubmit runs on a later invocation and sees only stage_data.
+      model_id: payload.model_id ?? null,
+    },
   };
 }
 
@@ -91,7 +101,10 @@ async function stagePrompt(
 }
 
 async function stageSubmit(stageData: Record<string, unknown>): Promise<CreativeImageStageOutput> {
-  const taskId = await createKieTask("nano-banana-2", {
+  // The selected image model's own provider slug — never a literal, so adding a model to the
+  // catalog is the only edit needed. Falls back to the default when unset or unrecognised.
+  const model = resolveModel("image", stageData.model_id);
+  const taskId = await createKieTask(model.apiModel, {
     prompt: stageData.image_prompt,
     aspect_ratio: "1:1",
     output_format: "png",
@@ -122,7 +135,15 @@ async function stageFinalize(stageData: Record<string, unknown>): Promise<Creati
     userId: stageData.user_id as string,
   })) ?? dataUrl;
 
-  return { stageData, creativePatch: { image_data_url: hosted, status: "ready", error: null } };
+  return {
+    stageData,
+    creativePatch: {
+      image_data_url: hosted,
+      status: "ready",
+      error: null,
+      model: resolveModel("image", stageData.model_id).id,
+    },
+  };
 }
 
 export async function runGenerateCreativeImageStage(
