@@ -2,6 +2,7 @@ import { db } from "./core";
 import { uploadImageRef, CLD_FOLDER } from "@/lib/cloudinary/upload";
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
 import { createKieTask, getKieTaskStatus, downloadKieResult } from "@/lib/kieai/client";
+import { resolveModel } from "@/lib/generationModels";
 import { isValidImageDataUrl, ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/images/validate";
 import { MAX_FEATURED_IMAGE_CHARS } from "@/lib/blog";
 
@@ -13,7 +14,11 @@ export { GENERATE_BLOG_IMAGE_STAGES } from "@/lib/generationStages";
 import { GENERATE_BLOG_IMAGE_STAGES } from "@/lib/generationStages";
 export type GenerateBlogImageStage = (typeof GENERATE_BLOG_IMAGE_STAGES)[number];
 
-export type GenerateBlogImagePayload = { post_id: string };
+export type GenerateBlogImagePayload = {
+  post_id: string;
+  /** Chosen model, resolved at queue time. Absent = the workspace/catalog default. */
+  model_id?: string | null;
+};
 
 export type BlogImageStageOutput = {
   stageData: Record<string, unknown>;
@@ -42,7 +47,9 @@ async function stageVerify(payload: GenerateBlogImagePayload, workspaceId: strin
     .trim()
     .slice(0, 1500);
 
-  return { stageData: { title: post.title, body, workspace_id: workspaceId, user_id: userId } };
+  return {
+    stageData: { title: post.title, body, workspace_id: workspaceId, user_id: userId, model_id: payload.model_id ?? null },
+  };
 }
 
 async function stagePrompt(stageData: Record<string, unknown>, usage: UsageContext): Promise<BlogImageStageOutput> {
@@ -83,7 +90,7 @@ async function stageSubmit(stageData: Record<string, unknown>): Promise<BlogImag
   // 1K is the right size, not a workaround: this image is a blog hero rendered at ~1200px at most
   // and a small card thumbnail on the index, and it ships base64-inlined in the HTML of every page
   // that shows it. 2K/4K would buy detail nobody sees and re-send it on every page load.
-  const taskId = await createKieTask("nano-banana-2", {
+  const taskId = await createKieTask(resolveModel("image", stageData.model_id).apiModel, {
     prompt: stageData.image_prompt,
     aspect_ratio: "16:9",
     output_format: "jpg",

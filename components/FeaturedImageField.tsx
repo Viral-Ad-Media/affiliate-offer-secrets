@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useCredits } from "@/components/CreditsProvider";
 import CostBadge from "@/components/CostBadge";
+import ModelPicker from "@/components/ModelPicker";
 import { ImagePlus, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import GenerationProgress from "@/components/GenerationProgress";
@@ -72,11 +73,17 @@ export default function FeaturedImageField({
 
   const { refresh: refreshCredits } = useCredits();
 
+  const [imageModel, setImageModel] = useState("");
+
   async function generate() {
     setBusy(true);
     setLocalError(null);
     try {
-      const res = await fetch(`/api/blog/posts/${postId}/generate-image`, { method: "POST" });
+      const res = await fetch(`/api/blog/posts/${postId}/generate-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(imageModel ? { model: imageModel } : {}),
+      });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? "Could not start generation");
       refreshCredits();
@@ -116,6 +123,7 @@ export default function FeaturedImageField({
               disabled={busy || generating} variant="outline" className="text-xs">
               <ImagePlus className="h-3.5 w-3.5" /> Upload
             </Button>
+            <ModelPicker kind="image" value={imageModel} onChange={setImageModel} disabled={busy || generating} />
             <Button type="button" onClick={generate} disabled={busy || generating} variant="outline" className="text-xs">
               {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               {generating ? "Generating…" : "Generate with AI"}

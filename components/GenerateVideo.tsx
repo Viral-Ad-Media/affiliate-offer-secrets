@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useCredits } from "@/components/CreditsProvider";
 import CostBadge from "@/components/CostBadge";
+import ModelPicker from "@/components/ModelPicker";
 import { Video, Loader2, Instagram, Music2, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -91,10 +92,17 @@ export default function GenerateVideo({
 
   const { refresh: refreshCredits } = useCredits();
 
+  const [videoModel, setVideoModel] = useState("");
+
   async function generate() {
     setBusy("generate");
     setVideoError(null);
-    const res = await fetch(`/api/campaigns/${campaignId}/generate-video`, { method: "POST" });
+    const res = await fetch(`/api/campaigns/${campaignId}/generate-video`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // "" = no override; the server resolves the workspace default at queue time.
+      body: JSON.stringify(videoModel ? { model: videoModel } : {}),
+    });
     const data = await res.json();
     setBusy(null);
     if (!res.ok) {
@@ -141,11 +149,14 @@ export default function GenerateVideo({
           {status === "failed" && videoError && (
             <p className="mb-2 text-sm text-red-300">Generation failed: {videoError}</p>
           )}
-          <Button onClick={generate} disabled={busy === "generate"}>
-            {busy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            Generate video
-            <CostBadge jobType="generate_video" />
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={generate} disabled={busy === "generate"}>
+              {busy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              Generate video
+              <CostBadge jobType="generate_video" />
+            </Button>
+            <ModelPicker kind="video" value={videoModel} onChange={setVideoModel} disabled={busy === "generate"} />
+          </div>
         </>
       ) : status === "generating" ? (
         <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3">

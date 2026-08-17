@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { queueChargedJob } from "@/lib/credits";
+import { resolveGenerationModel } from "@/lib/generationSettings";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 // testing solo) — revisit before opening this beyond solo testing.
 const MAX_VIDEO_GENERATIONS_PER_DAY = 100;
 
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
   const {
     data: { user },
@@ -63,9 +64,19 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     );
   }
 
+  // Resolved at QUEUE time so the job records the model it was queued with — the worker
+  // re-runs stages on retry, and reading settings there could repoint a job mid-flight.
+  // Body is optional on these routes — they were POST-with-no-body until models became
+  // selectable, and every existing caller still sends none. A parse failure means "no override".
+  const overrideModel: unknown = await req
+    .json()
+    .then((b: unknown) => (b as { model?: unknown } | null)?.model)
+    .catch(() => undefined);
+  const chosenModel = await resolveGenerationModel(supabase, ws, "video", overrideModel);
+
   const queued = await queueChargedJob(
     supabase,
-    { workspace_id: ws, type: "generate_video", payload: { campaign_id: params.id } },
+    { workspace_id: ws, type: "generate_video", payload: { campaign_id: params.id, model_id: chosenModel.id } },
     {
       // Roll back the claim if the insert failed OR the charge was declined, so the campaign
       // isn't stuck "generating" forever after a job that will never run.

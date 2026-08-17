@@ -1,6 +1,7 @@
 import { db } from "./core";
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
-import { startVeoGeneration, getVeoOperation, downloadVeoVideo } from "@/lib/gemini/client";
+import { fallbackChain, resolveModel } from "@/lib/generationModels";
+import { submitVideoWithFallback, pollVideo, downloadVideo } from "@/lib/generation/video";
 import { uploadCampaignVideo } from "@/lib/supabase/storage";
 
 export { GENERATE_VIDEO_STAGES } from "@/lib/generationStages";
@@ -63,22 +64,23 @@ async function stageScript(
 }
 
 async function stageSubmit(stageData: Record<string, unknown>): Promise<VideoStageOutput> {
-  const operationName = await startVeoGeneration({
+  // Same provider chain the per-item generator uses — an account-level failure (quota, billing,
+  // auth) moves to the other provider instead of burning this job's five attempts.
+  const { ref, model } = await submitVideoWithFallback(fallbackChain("video", stageData.model_id), {
     prompt: stageData.video_prompt as string,
     aspectRatio: "9:16",
-    durationSeconds: 8,
-    resolution: "720p",
   });
-  return { stageData: { ...stageData, operation_name: operationName } };
+  // The model that ACCEPTED it — poll/download run later with only stage_data to go on.
+  return { stageData: { ...stageData, operation_name: ref, model_id: model.id } };
 }
 
 async function stagePoll(stageData: Record<string, unknown>): Promise<VideoStageOutput> {
-  const result = await getVeoOperation(stageData.operation_name as string);
+  const result = await pollVideo(resolveModel("video", stageData.model_id), stageData.operation_name as string);
   if (!result.done) return { stageData, retry: true };
-  if (result.filtered || !result.videoUri) {
-    throw new Error("Video generation was blocked by safety filtering — try a different product/angle");
+  if (result.error || !result.url) {
+    throw new Error(result.error ?? "Video generation finished without producing a video");
   }
-  return { stageData: { ...stageData, video_uri: result.videoUri } };
+  return { stageData: { ...stageData, video_uri: result.url } };
 }
 
 async function stageDownload(
@@ -87,7 +89,7 @@ async function stageDownload(
 ): Promise<VideoStageOutput> {
   // Download immediately — Google's own docs say this URI shouldn't be treated as a durable
   // long-term reference. Persisted into our own private Storage bucket, not stored as-is.
-  const bytes = await downloadVeoVideo(stageData.video_uri as string);
+  const bytes = await downloadVideo(resolveModel("video", stageData.model_id), stageData.video_uri as string);
   const path = `${payload.campaign_id}.mp4`;
   await uploadCampaignVideo(path, bytes, "video/mp4");
   return { stageData: { ...stageData, video_path: path } };

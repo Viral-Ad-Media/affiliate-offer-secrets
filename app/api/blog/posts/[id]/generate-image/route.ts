@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { queueChargedJob } from "@/lib/credits";
+import { resolveGenerationModel } from "@/lib/generationSettings";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -12,7 +13,7 @@ const MAX_BLOG_IMAGES_PER_DAY = 100;
 
 // Queues a generate_blog_image job (lib/engine/blogimage.ts). The existing pg_net insert trigger
 // + pg_cron backstop pick up any jobs row generically, so nothing new is needed to drain it.
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createClient();
   const {
     data: { user },
@@ -56,9 +57,19 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     .maybeSingle();
   if (!claimed) return NextResponse.json({ error: "an image is already generating for this post" }, { status: 409 });
 
+  // Resolved at QUEUE time so the job records the model it was queued with — the worker
+  // re-runs stages on retry, and reading settings there could repoint a job mid-flight.
+  // Body is optional on these routes — they were POST-with-no-body until models became
+  // selectable, and every existing caller still sends none. A parse failure means "no override".
+  const overrideModel: unknown = await req
+    .json()
+    .then((b: unknown) => (b as { model?: unknown } | null)?.model)
+    .catch(() => undefined);
+  const chosenModel = await resolveGenerationModel(supabase, ws, "image", overrideModel);
+
   const queued = await queueChargedJob(
     supabase,
-    { workspace_id: ws, type: "generate_blog_image", payload: { post_id: params.id } },
+    { workspace_id: ws, type: "generate_blog_image", payload: { post_id: params.id, model_id: chosenModel.id } },
     {
       onRollback: async () => {
         await admin.from("blog_posts").update({ featured_image_status: "none" }).eq("id", params.id);

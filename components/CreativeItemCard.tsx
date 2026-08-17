@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useCredits } from "@/components/CreditsProvider";
 import CostBadge from "@/components/CostBadge";
+import ModelPicker from "@/components/ModelPicker";
 import { Image as ImageIcon, Video, Loader2, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { CreativeKind, CreativeSource, CreativeStatus } from "@/lib/shared";
@@ -82,13 +83,25 @@ export default function CreativeItemCard({
   }, [video.status, videoCreativeId]);
 
   const { refresh: refreshCredits } = useCredits();
+  // A one-off override per kind. "" means send nothing and let the server resolve the workspace
+  // default at queue time — so changing that default takes effect for anyone who never touched
+  // this, rather than being frozen into whatever was current when the page rendered.
+  const [imageModel, setImageModel] = useState("");
+  const [videoModel, setVideoModel] = useState("");
 
   async function generate(kind: CreativeKind) {
     setBusy(kind);
+    const model = kind === "image" ? imageModel : videoModel;
     const res = await fetch("/api/campaign-creatives/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ campaign_id: campaignId, source, item_index: itemIndex, kind }),
+      body: JSON.stringify({
+        campaign_id: campaignId,
+        source,
+        item_index: itemIndex,
+        kind,
+        ...(model ? { model } : {}),
+      }),
     });
     const data = await res.json();
     setBusy(null);
@@ -138,11 +151,14 @@ export default function CreativeItemCard({
             {image.status === "failed" && image.error && (
               <p className="mb-1.5 text-xs text-red-300">{image.error}</p>
             )}
-            <Button onClick={() => generate("image")} disabled={busy === "image"} variant="outline" className="!py-1 text-xs">
-              {busy === "image" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-              Generate image
-              <CostBadge jobType="generate_creative_image" />
-            </Button>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button onClick={() => generate("image")} disabled={busy === "image"} variant="outline" className="!py-1 text-xs">
+                {busy === "image" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                Generate image
+                <CostBadge jobType="generate_creative_image" />
+              </Button>
+              <ModelPicker kind="image" value={imageModel} onChange={setImageModel} disabled={busy === "image"} />
+            </div>
           </>
         )}
       </div>
@@ -178,11 +194,14 @@ export default function CreativeItemCard({
             {video.status === "failed" && video.error && (
               <p className="mb-1.5 text-xs text-red-300">{video.error}</p>
             )}
-            <Button onClick={() => generate("video")} disabled={busy === "video"} variant="outline" className="!py-1 text-xs">
-              {busy === "video" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-              Generate video
-              <CostBadge jobType="generate_creative_video" />
-            </Button>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button onClick={() => generate("video")} disabled={busy === "video"} variant="outline" className="!py-1 text-xs">
+                {busy === "video" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                Generate video
+                <CostBadge jobType="generate_creative_video" />
+              </Button>
+              <ModelPicker kind="video" value={videoModel} onChange={setVideoModel} disabled={busy === "video"} />
+            </div>
           </>
         )}
       </div>

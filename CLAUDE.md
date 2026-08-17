@@ -3952,6 +3952,56 @@ and says plainly when the app isn't configured. Finishing it needs a real TikTok
 advertiser account to probe against — then `lib/engine/tiktokadlaunch.ts` mirrors `adlaunch.ts`,
 including a stage-0 verify that re-checks ownership before any spend.
 
+## Choosing the generation model, and falling over when a provider won't run
+
+Two jobs died in a week on Google's "You exceeded your current quota", each burning all five
+attempts first — `worker.ts` cannot tell an exhausted account from a flaky one, and no number of
+retries fixes billing. kie.ai resells the same Veo model on separate billing, which is what makes
+it the right second choice rather than merely an available one.
+
+- **`lib/generationModels.ts` is the catalog and is ISOMORPHIC** — no SDKs, no `node:*`. The
+  settings panel and the per-generation pickers import it; pulling the list out of an engine module
+  would drag the Gemini/kie.ai clients into a client bundle, which `tsc` passes and `next build`
+  fails. Same rule as `lib/buildStages.ts` and `lib/generationStages.ts`.
+- **Every model id was probed live, with a known-bad control.** kie.ai answers 422 "The model name
+  you specified is not supported" for an unsupported model and 500 "This field is required" for a
+  real one with empty input — which is how guessed slugs were caught. **Veo on kie.ai is NOT a model
+  on the Jobs API**: it is `POST /api/v1/veo/generate` with `veo3`/`veo3_fast` (underscore, not
+  hyphen), polled by `GET /api/v1/veo/record-info` (POST → 404). Every field name was then confirmed
+  by its own distinct rejection ("Invalid model", "Ratio error") **without completing a
+  generation**, so pinning the contract cost zero credits. Balance lives at
+  `GET /api/v1/chat/credit`. The one piece NOT verified against a finished render is the SUCCESS
+  payload of `record-info`, read defensively and treated as a failure if it reports success with no
+  URL — a job claiming success with nothing to download would strand the row in `generating`.
+- **Fallback fires ONLY on account-level failures** (`isAccountLevelFailure`): quota, billing, auth,
+  or a key that isn't set. A content refusal or a bad prompt is rethrown, because the second
+  provider would refuse it too and retrying there spends real credits to fail twice. The chain is
+  the preferred model plus ONE model per OTHER provider, never a second model on the same
+  account — falling from Veo 3 to Veo 3 Fast on an exhausted kie.ai balance fails identically.
+  **Consequence, stated in the UI rather than left to be discovered: images have NO fallback,**
+  because kie.ai is the only image provider wired up.
+- **The model resolves at QUEUE time into the job payload, never in the worker.** The worker
+  re-runs stages on retry, so reading settings there would let a mid-flight settings change repoint
+  a running job — or re-resolve a job that already fell back onto the provider it fled. The model
+  that ACCEPTED the work is written to `stage_data` (so poll/download reach the provider that
+  issued the reference) and to `campaign_creatives.model` (so the operator can see which account
+  was billed).
+- **Precedence is per-generation override → workspace default → catalog default**, and the empty
+  override means "use the default" rather than naming one — so changing the workspace default takes
+  effect immediately for anyone who never touched a picker. Verified live against the real database
+  across all seven combinations, including a garbage override degrading to the default.
+- **Storage is unvalidated `text` by design** (0093): no CHECK, no DB allowlist. The catalog is a
+  product decision; a constraint would need a migration per model and would make rows unreadable
+  the day one is retired. `resolveModel()` skips an unknown id, so the worst a bad value does is
+  select the default — the `blog_settings.index_layout` precedent, clamped on read.
+- **`workspaces` stays SELECT-only.** The write goes through `set_workspace_generation_models`, a
+  narrow SECURITY DEFINER RPC touching only those two columns on a workspace the caller belongs to
+  — the `update_profile()` / `dismiss_workspace_setup()` shape. Do not add a broad update policy.
+- UI: `components/GenerationModelsPanel.tsx` (Settings → Integrations) for the default;
+  `components/ModelPicker.tsx` beside every Generate button for the one-off. All four job types
+  (`generate_creative_video`, `generate_video`, `generate_creative_image`, `generate_blog_image`)
+  and all three queueing routes honour it.
+
 ## Generated work is visible where it belongs, not only after you ship it
 
 A finished kit produces a funnel page, a blog article, email swipes, social captions and ad angles.
