@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export const dynamic = "force-dynamic";
 
 const MAX_BATCH = 200;
-const ACTIONS = ["publish", "unpublish", "delete", "set_category"] as const;
+const ACTIONS = ["publish", "unpublish", "delete", "set_category", "archive", "unarchive"] as const;
 type Action = (typeof ACTIONS)[number];
 
 /**
@@ -21,6 +21,11 @@ type Action = (typeof ACTIONS)[number];
  * and in the feeds exactly as a single publish would. There is no separate "bulk publish" path
  * with different semantics — that divergence is how a bulk action ends up quietly doing less than
  * the single one.
+ *
+ * ARCHIVE (0103) is a separate axis from `status`, and deliberately so: status decides whether the
+ * public route serves the post, archive decides whether it clutters the author's list. Folding the
+ * two together would make archiving an old post silently unpublish it and break every link to it.
+ * An archived post that is still published keeps serving, and the list says so.
  */
 export async function POST(req: Request) {
   const supabase = createClient();
@@ -63,6 +68,16 @@ export async function POST(req: Request) {
 
   if (action === "delete") {
     const { error } = await admin.from("blog_posts").delete().eq("workspace_id", ws).in("id", owned);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, affected: owned.length });
+  }
+
+  if (action === "archive" || action === "unarchive") {
+    const { error } = await admin
+      .from("blog_posts")
+      .update({ archived_at: action === "archive" ? new Date().toISOString() : null })
+      .eq("workspace_id", ws)
+      .in("id", owned);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, affected: owned.length });
   }

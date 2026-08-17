@@ -5,7 +5,12 @@ import type { BroadcastSequence } from "@/lib/shared";
 import BroadcastSequenceList from "@/components/BroadcastSequenceList";
 import Pager, { PAGE_SIZE, pageFromParam, pageRange } from "@/components/Pager";
 
-export default async function BroadcastPage({ searchParams }: { searchParams: { page?: string } }) {
+export default async function BroadcastPage({
+  searchParams,
+}: {
+  searchParams: { page?: string; archived?: string };
+}) {
+  const showingArchived = searchParams.archived === "1";
   const supabase = createClient();
   const {
     data: { user },
@@ -21,7 +26,9 @@ export default async function BroadcastPage({ searchParams }: { searchParams: { 
     .eq("kind", "sequence")
       // channel filter, not cosmetic: SMS drips live in this same table (0098) and would
       // otherwise be listed here — and editable — as if they were email.
-      .eq("channel", "email");
+      .eq("channel", "email")
+      // Same filter as the list below, or the pager offers pages the list can't fill.
+      .filter("archived_at", showingArchived ? "not.is" : "is", null);
   const total = count ?? 0;
   const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
   const [from, to] = pageRange(page);
@@ -36,6 +43,8 @@ export default async function BroadcastPage({ searchParams }: { searchParams: { 
       // channel filter, not cosmetic: SMS drips live in this same table (0098) and would
       // otherwise be listed here — and editable — as if they were email.
       .eq("channel", "email")
+      // `is`/`not.is`, never eq(col, null) — PostgREST sends the string "null" at a timestamptz.
+      .filter("archived_at", showingArchived ? "not.is" : "is", null)
       .order("created_at", { ascending: false })
       .range(from, to),
     supabase.from("campaigns").select("id, products(product_title)"),
@@ -78,8 +87,16 @@ export default async function BroadcastPage({ searchParams }: { searchParams: { 
           own signup. For a single email sent now, use Broadcast.
         </p>
       </header>
-      <BroadcastSequenceList rows={rows} campaignOptions={campaignOptions} />
-      <Pager page={page} total={total} basePath="/emails/sequences" label="sequences" />
+      <BroadcastSequenceList rows={rows} campaignOptions={campaignOptions} showingArchived={showingArchived} />
+      {/* preserve, NOT a basePath with a query string — Pager builds `${basePath}?${qs}`, so a
+          basePath already carrying one yields "?archived=1?page=2". */}
+      <Pager
+        page={page}
+        total={total}
+        basePath="/emails/sequences"
+        label="sequences"
+        preserve={{ archived: showingArchived ? "1" : undefined }}
+      />
     </main>
   );
 }

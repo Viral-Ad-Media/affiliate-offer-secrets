@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Rocket,
   ArrowUpDown,
+  Trash2,
 } from "lucide-react";
 import PromoteKitDialog from "@/components/PromoteKitDialog";
 import BuildProgressDialog from "@/components/BuildProgressDialog";
@@ -254,6 +255,38 @@ export default function ProductsPanel({
     await load();
   }
 
+  async function bulkDelete() {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    // campaigns.product_id CASCADES, so this is not "remove these rows from my list" for anything
+    // that has been promoted — it takes the whole kit. Counted and named rather than warned about
+    // in the abstract, because the common case (untouched discovery rows) really is harmless and a
+    // blanket scary dialog is one people learn to click through.
+    const withKits = ids.filter((id) => products.find((p) => p.id === id)?.campaign_status);
+    const ok = window.confirm(
+      `Delete ${ids.length} product${ids.length === 1 ? "" : "s"}?\n\n` +
+        (withKits.length > 0
+          ? `${withKits.length} of them ${withKits.length === 1 ? "has" : "have"} a built kit — deleting also removes ${
+              withKits.length === 1 ? "its" : "their"
+            } funnel, ad angles, TikTok scripts, emails, blog source, generated images and videos, and any ad drafts. Captured leads and published blog posts are kept.\n\n`
+          : `None of them have a kit, so this only removes the marketplace rows.\n\n`) +
+        `There is no undo. Set them to Dead instead to file them away without deleting.`
+    );
+    if (!ok) return;
+    setBulkBusy(true);
+    const res = await fetch("/api/products/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", confirm: true, product_ids: ids }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setBulkBusy(false);
+    if (!res.ok) return toast.error(data.error ?? "Something went wrong");
+    toast.success(`${data.affected} product(s) deleted`);
+    setSelected(new Set());
+    await load();
+  }
+
   // Both entry points — the row button and the bulk bar — open the same dialog. It's the only
   // place the asset choice is made, so the two can't offer different options.
   function openPromote(ids: string[]) {
@@ -385,6 +418,14 @@ export default function ProductsPanel({
               disabled={bulkBusy} variant="outline" className="text-xs">
               <RefreshCw className="h-3.5 w-3.5" /> Regenerate kit
               <CostBadge jobType="build_campaign" />
+            </Button>
+            <Button
+              onClick={bulkDelete}
+              disabled={bulkBusy}
+              variant="outline"
+              className="border-red-500/40 text-xs text-red-300 hover:border-red-500/60"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete
             </Button>
             {bulkBusy && <RefreshCw className="h-3.5 w-3.5 animate-spin text-zinc-400" />}
             <button

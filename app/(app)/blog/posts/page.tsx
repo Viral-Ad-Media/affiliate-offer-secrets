@@ -10,7 +10,12 @@ export const dynamic = "force-dynamic";
 
 // Blog manager: posts imported from campaigns' generated blog_md (or written from scratch),
 // organized into user-created categories, published at public /b/{postId} URLs.
-export default async function BlogPage({ searchParams }: { searchParams: { page?: string } }) {
+export default async function BlogPage({
+  searchParams,
+}: {
+  searchParams: { page?: string; archived?: string };
+}) {
+  const showingArchived = searchParams.archived === "1";
   const supabase = createClient();
   const {
     data: { user },
@@ -19,10 +24,13 @@ export default async function BlogPage({ searchParams }: { searchParams: { page?
 
   const ws = await currentWorkspaceId();
 
+  // The count has to carry the same archive filter as the list, or the pager offers pages the
+  // list can't fill — the shape of bug pageFromParam's clamp exists to survive rather than mask.
   const { count } = await supabase
     .from("blog_posts")
     .select("id", { count: "exact", head: true })
-    .eq("workspace_id", ws);
+    .eq("workspace_id", ws)
+    .filter("archived_at", showingArchived ? "not.is" : "is", null);
   const total = count ?? 0;
   const page = pageFromParam(searchParams.page, Math.ceil(total / PAGE_SIZE));
   const [from, to] = pageRange(page);
@@ -32,8 +40,10 @@ export default async function BlogPage({ searchParams }: { searchParams: { page?
   const [{ data: posts, error: postsError }, { data: categories }, { data: settings }] = await Promise.all([
     supabase
       .from("blog_posts")
-      .select("id, title, slug, excerpt, html, status, category_id, campaign_id, published_at, updated_at, seo_title, seo_description, featured_image_url, blog_categories(slug)")
+      .select("id, title, slug, excerpt, html, status, category_id, campaign_id, published_at, updated_at, archived_at, seo_title, seo_description, featured_image_url, blog_categories(slug)")
       .eq("workspace_id", ws)
+      // `is`/`not.is`, never eq(col, null) — PostgREST sends the string "null" at a timestamptz.
+      .filter("archived_at", showingArchived ? "not.is" : "is", null)
       .order("updated_at", { ascending: false })
       .range(from, to),
     supabase.from("blog_categories").select("id, name").eq("workspace_id", ws).order("name"),
@@ -71,8 +81,15 @@ export default async function BlogPage({ searchParams }: { searchParams: { page?
         categories={categories ?? []}
         blogSlug={settings?.slug ?? null}
         permalinkStyle={settings?.permalink_style ?? null}
+        showingArchived={showingArchived}
       />
-      <Pager page={page} total={total} basePath="/blog/posts" label="posts" />
+      <Pager
+        page={page}
+        total={total}
+        basePath="/blog/posts"
+        label="posts"
+        preserve={{ archived: showingArchived ? "1" : undefined }}
+      />
     </div>
   );
 }

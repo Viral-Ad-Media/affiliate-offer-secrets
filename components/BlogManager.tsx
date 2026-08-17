@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Newspaper, Plus, Loader2, Tag, ExternalLink, Trash2, Eye, Pencil, FileText } from "lucide-react";
+import { Newspaper, Plus, Loader2, Tag, ExternalLink, Trash2, Eye, Pencil, FileText, Archive } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
 import { blogPostPath, type PermalinkStyle } from "@/lib/blog";
@@ -24,6 +24,7 @@ type PostRow = {
   campaign_id: string | null;
   published_at: string | null;
   updated_at: string;
+  archived_at?: string | null;
 };
 type Category = { id: string; name: string };
 
@@ -34,11 +35,13 @@ export default function BlogManager({
   categories,
   blogSlug,
   permalinkStyle,
+  showingArchived = false,
 }: {
   posts: PostRow[];
   categories: Category[];
   blogSlug: string | null;
   permalinkStyle: string | null;
+  showingArchived?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -188,6 +191,18 @@ export default function BlogManager({
 
         {error && <p className="mb-2 text-sm text-red-300">{error}</p>}
 
+        {/* A real URL, not a client toggle — a different list deserves a bookmarkable address and
+            a working back button. Same call as the funnels list. */}
+        <div className="flex justify-end px-4 pt-3">
+          <Link
+            href={showingArchived ? "/blog/posts" : "/blog/posts?archived=1"}
+            className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-emerald-300"
+          >
+            <Archive className="h-3.5 w-3.5" />
+            {showingArchived ? "Active posts" : "Archived posts"}
+          </Link>
+        </div>
+
         {selected.size > 0 && (
           <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-ink-700 bg-ink-800/40 px-3 py-2">
             <span className="text-xs text-zinc-300">{selected.size} selected</span>
@@ -216,6 +231,14 @@ export default function BlogManager({
                 </option>
               ))}
             </select>
+            <Button
+              onClick={() => bulk(showingArchived ? "unarchive" : "archive")}
+              disabled={bulkBusy}
+              variant="outline"
+              className="text-xs"
+            >
+              <Archive className="h-3.5 w-3.5" /> {showingArchived ? "Restore" : "Archive"}
+            </Button>
             <Button
               onClick={() => bulk("delete")}
               disabled={bulkBusy} variant="outline" className="text-xs text-red-300 hover:text-red-200">

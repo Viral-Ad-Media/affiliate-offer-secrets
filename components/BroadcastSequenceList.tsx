@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
-import { Plus, Loader2, Send , Layers} from "lucide-react";
+import { Plus, Loader2, Send, Layers, Archive, ArchiveRestore, Trash2 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { createClient } from "@/lib/supabase/client";
 import type { BroadcastSequence } from "@/lib/shared";
@@ -34,9 +34,11 @@ type Row = {
 export default function BroadcastSequenceList({
   rows,
   campaignOptions,
+  showingArchived = false,
 }: {
   rows: Row[];
   campaignOptions: { id: string; title: string }[];
+  showingArchived?: boolean;
 }) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
@@ -46,6 +48,59 @@ export default function BroadcastSequenceList({
   const [campaignId, setCampaignId] = useState(campaignOptions[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  async function bulk(action: "archive" | "unarchive" | "delete", extra: Record<string, unknown> = {}) {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    const res = await fetch("/api/broadcast/sequences/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, sequence_ids: ids, ...extra }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setBulkBusy(false);
+    if (!res.ok) {
+      toast.error(data.error ?? "Something went wrong");
+      return;
+    }
+    const skipped = (data.skipped ?? []) as { id: string; reason: string }[];
+    if (skipped.length > 0) {
+      const name = rows.find((r) => r.sequence.id === skipped[0].id)?.sequence.name ?? "One sequence";
+      toast.error(`${data.updated} updated. ${skipped.length} skipped — ${name}: ${skipped[0].reason}`);
+    } else {
+      toast.success(`${data.updated} sequence(s) updated`);
+    }
+    setSelected(new Set());
+    router.refresh();
+  }
+
+  function confirmDelete() {
+    const ids = Array.from(selected);
+    const active = ids.filter((id) => rows.find((r) => r.sequence.id === id)?.sequence.status === "active");
+    // The active ones are refused server-side regardless; saying so here means nobody presses
+    // delete expecting a running drip to stop and then has to work out why it didn't.
+    const ok = window.confirm(
+      `Delete ${ids.length} sequence${ids.length === 1 ? "" : "s"}?\n\n` +
+        (active.length > 0
+          ? `${active.length} of them ${active.length === 1 ? "is" : "are"} still sending and will be skipped — pause or archive ${
+              active.length === 1 ? "it" : "them"
+            } instead.\n\n`
+          : "") +
+        `This removes their steps and every contact's remaining schedule. The record of mail already sent is kept.\n\nThere is no undo.`
+    );
+    if (ok) bulk("delete", { confirm: true });
+  }
 
   async function create() {
     setBusy(true);
@@ -171,10 +226,58 @@ export default function BroadcastSequenceList({
         </p>
       ) : (
         <div className="overflow-x-auto">
+          {selected.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-ink-800 bg-ink-800/40 px-4 py-2">
+              <span className="text-xs text-zinc-300">{selected.size} selected</span>
+              <button onClick={() => setSelected(new Set())} className="text-xs text-zinc-500 hover:text-zinc-300">
+                Clear
+              </button>
+              <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                <Button
+                  onClick={() => bulk(showingArchived ? "unarchive" : "archive")}
+                  disabled={bulkBusy}
+                  variant="outline"
+                  className="text-xs"
+                >
+                  {showingArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+                  {showingArchived ? "Restore" : "Archive"}
+                </Button>
+                <Button
+                  onClick={confirmDelete}
+                  disabled={bulkBusy}
+                  variant="outline"
+                  className="border-red-500/40 text-xs text-red-300 hover:border-red-500/60"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </Button>
+                {bulkBusy && <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400" />}
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end px-4 pt-2">
+            <Link
+              href={showingArchived ? "/emails/sequences" : "/emails/sequences?archived=1"}
+              className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-emerald-300"
+            >
+              <Archive className="h-3.5 w-3.5" />
+              {showingArchived ? "Active sequences" : "Archived"}
+            </Link>
+          </div>
           <Table className="text-sm">
             <TableHeader>
               <tr>
-                <TableHead edge>Name</TableHead>
+                <TableHead edge className="w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all sequences"
+                    className="h-3.5 w-3.5 accent-emerald-500"
+                    checked={rows.length > 0 && selected.size === rows.length}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? new Set(rows.map((r) => r.sequence.id)) : new Set())
+                    }
+                  />
+                </TableHead>
+                <TableHead>Name</TableHead>
                 <TableHead>Audience</TableHead>
                 <TableHead className="text-right">Steps</TableHead>
                 <TableHead className="text-right">Enrolled</TableHead>
@@ -185,6 +288,15 @@ export default function BroadcastSequenceList({
               {rows.map(({ sequence, campaignTitle, stepCount, enrolledCount }) => (
                 <TableRow key={sequence.id}>
                   <td className="px-4 py-2.5">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${sequence.name}`}
+                      className="h-3.5 w-3.5 accent-emerald-500"
+                      checked={selected.has(sequence.id)}
+                      onChange={() => toggle(sequence.id)}
+                    />
+                  </td>
+                  <td className="px-2 py-2.5">
                     <Link href={`/emails/sequences/${sequence.id}`} className="font-medium text-zinc-100 hover:text-emerald-400">
                       <span className="inline-flex items-center gap-1.5">
                         <Send className="h-3.5 w-3.5 text-zinc-500" /> {sequence.name}
