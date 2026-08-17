@@ -5,6 +5,8 @@ import type { FbAdAngle } from "@/lib/shared";
 import CreativeItemCard from "./CreativeItemCard";
 import LaunchAd from "./LaunchAd";
 import { Badge } from "@/components/ui/badge";
+import AdPreview from "./AdPreview";
+import AdCompliancePanel from "./AdCompliancePanel";
 
 // Structured card-per-angle view, replacing the old single marked.parse() blob for fb_ads_md.
 // Falls back to that exact old render for campaigns built before fb_ad_angles existed — same
@@ -18,11 +20,14 @@ export default function AdAnglesPanel({
   angles,
   legacyMarkdown,
   bridgePublished,
+  previewImageUrl,
 }: {
   campaignId: string;
   angles: FbAdAngle[] | null;
   legacyMarkdown: string | null;
   bridgePublished: boolean;
+  /** The campaign's hero image, so the feed mock isn't an empty grey box. */
+  previewImageUrl?: string | null;
 }) {
   if (!angles && legacyMarkdown) {
     return (
@@ -51,6 +56,18 @@ export default function AdAnglesPanel({
           <p className="mt-1 text-sm text-zinc-300">{angle.primary_text}</p>
           <p className="mt-1 text-xs text-zinc-500">{angle.description}</p>
           <Badge className="mt-2 inline-block !py-0.5 text-[12px]">{angle.cta}</Badge>
+
+          {/* Preview and checks sit ABOVE the creative and launch controls, in the order the
+              decision is actually made: see how it reads, see what might be refused, then spend. */}
+          <AdPreview
+            headline={angle.headline}
+            primaryText={angle.primary_text}
+            description={angle.description}
+            cta={angle.cta}
+            imageUrl={previewImageUrl}
+          />
+          <AdCompliancePanel angle={angle} destinationPublished={bridgePublished} />
+
           <CreativeItemCard campaignId={campaignId} source="fb_ad_angle" itemIndex={i} />
           <LaunchAd
             campaignId={campaignId}

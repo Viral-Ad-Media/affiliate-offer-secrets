@@ -284,6 +284,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   campaignId={campaign.id}
                   angles={campaign.fb_ad_angles}
                   legacyMarkdown={campaign.fb_ads_md}
+                  previewImageUrl={campaign.embedded_image_data_url}
                   bridgePublished={campaign.bridge_published}
                 />
               ) : tab === "social_md" ? (

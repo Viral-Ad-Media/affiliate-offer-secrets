@@ -7,6 +7,7 @@ import { db } from "./core";
 import { uploadImageRef, CLD_FOLDER } from "@/lib/cloudinary/upload";
 import type { FbAdAngle, SocialPost } from "@/lib/shared";
 import { MAX_SMS_BODY, SMS_OPT_OUT } from "@/lib/sms";
+import { META_HEADLINE_RECOMMENDED, META_PRIMARY_TEXT_RECOMMENDED } from "@/lib/adCompliance";
 import { wants, type KitAssetKey, type CountableKitAssetKey } from "@/lib/kitAssets";
 
 // Re-exported so every existing server-side importer keeps working; the list itself is
@@ -169,7 +170,8 @@ async function stageAds(
     };
     required.push("fb_ad_angles");
     asks.push(
-      `fb_ad_angles — exactly ${counts.fb_ads} distinct Meta-compliant ad angles for this product, each as a structured object with a headline, primary_text, description, and cta.`
+      `Keep each headline at or under ${META_HEADLINE_RECOMMENDED} characters and each primary_text at or under ${META_PRIMARY_TEXT_RECOMMENDED}: Meta's own Ads Guide recommends those, and longer copy is silently truncated mid-sentence in the feed so the hook never lands. ` +
+        `fb_ad_angles — exactly ${counts.fb_ads} distinct Meta-compliant ad angles for this product, each as a structured object with a headline, primary_text, description, and cta.`
     );
     // A Facebook primary text alone runs to 100-150 words, so this is per-angle headroom rather
     // than a measurement of the average.

@@ -158,25 +158,35 @@ export function checkAdAngle(
     });
   }
 
-  // --- how it will actually read -----------------------------------------------------------------
-  if (headline.length > META_HEADLINE_RECOMMENDED) {
-    findings.push({
-      severity: "info",
-      field: "headline",
-      title: `Headline is ${headline.length} characters`,
-      detail: `Meta recommends ${META_HEADLINE_RECOMMENDED}. Longer is accepted, then cut short in the feed — see the preview.`,
-    });
-  }
-  if (primary.length > META_PRIMARY_TEXT_RECOMMENDED) {
-    findings.push({
-      severity: "info",
-      field: "primary_text",
-      title: `Primary text is ${primary.length} characters`,
-      detail: `Meta recommends 50-${META_PRIMARY_TEXT_RECOMMENDED}. Past that it collapses behind "See more", so the hook has to land before the cut.`,
-    });
-  }
-
   return findings;
+}
+
+/**
+ * Character counts against Meta's recommendations.
+ *
+ * Deliberately NOT findings. Run over the 41 real generated angles, EVERY one exceeded both
+ * numbers — because the generator was never told them — so as checklist items they fired 100% of
+ * the time and buried the 9 angles with genuine rejection risk. A warning that always fires is one
+ * people learn to scroll past, which is the exact trap this codebase already documents for the
+ * "ads without a funnel" notice.
+ *
+ * Length is better SHOWN than listed: AdPreview strikes through the truncated tail, which answers
+ * "does my hook survive the cut" in a way a number never does.
+ */
+export function measureAdAngle(angle: AdAngleLike): {
+  headline: number;
+  primaryText: number;
+  headlineOver: boolean;
+  primaryOver: boolean;
+} {
+  const headline = (angle.headline ?? "").trim().length;
+  const primaryText = (angle.primary_text ?? "").trim().length;
+  return {
+    headline,
+    primaryText,
+    headlineOver: headline > META_HEADLINE_RECOMMENDED,
+    primaryOver: primaryText > META_PRIMARY_TEXT_RECOMMENDED,
+  };
 }
 
 export function hasBlockers(findings: Finding[]): boolean {
