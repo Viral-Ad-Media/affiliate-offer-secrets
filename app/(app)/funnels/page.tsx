@@ -6,12 +6,10 @@ import { createClient } from "@/lib/supabase/server";
 import { currentWorkspaceId } from "@/lib/workspace";
 import NewFunnelButton from "@/components/NewFunnelButton";
 import LoadFailed from "@/components/LoadFailed";
-import { Radio, ExternalLink, Inbox, Beaker, Layers } from "lucide-react";
+import { Inbox, Archive } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead } from "@/components/ui/table";
-import { buttonVariants } from "@/components/ui/button";
 import EmptyState from "@/components/EmptyState";
+import FunnelsTable from "@/components/FunnelsTable";
 
 // A "funnel" isn't its own entity — it's a derived view over campaigns that already have a bridge
 // (lead-capture) page generated. A funnel appears here automatically the moment stagePages
@@ -19,7 +17,8 @@ import EmptyState from "@/components/EmptyState";
 // in sync. Editing/publishing/split-testing/adding steps all happen on the funnel's own
 // /funnels/[campaignId] page — this list page is read-only, not a second place that writes state.
 // The product page's Bridge tab is preview-only, linking here to actually manage anything.
-export default async function FunnelsPage() {
+export default async function FunnelsPage({ searchParams }: { searchParams?: { archived?: string } }) {
+  const showingArchived = searchParams?.archived === "1";
   const supabase = createClient();
   const {
     data: { user },
@@ -37,9 +36,13 @@ export default async function FunnelsPage() {
   const [{ data: campaigns, error: campaignsError }, { data: routes }, { data: statRows }] = await Promise.all([
       supabase
         .from("campaigns")
-        .select("id, product_id, name, bridge_published, updated_at, products(product_title)")
+        .select("id, product_id, name, bridge_published, archived_at, updated_at, products(product_title)")
         .eq("workspace_id", ws)
         .not("bridge_html", "is", null)
+        // Archived funnels are hidden by default rather than deleted — the whole point of the
+        // action. `is`, not `eq`: PostgREST needs the null test, and eq("archived_at", null) would
+        // send the string "null" at a timestamptz.
+        .filter("archived_at", showingArchived ? "not.is" : "is", null)
         .order("updated_at", { ascending: false }),
       supabase
         .from("custom_domain_routes")
@@ -88,6 +91,7 @@ export default async function FunnelsPage() {
     url: domainUrlByCampaign.get(c.id) ?? `${appUrl}/p/${c.id}/bridge`,
     variantCount: variantCounts.get(c.id) ?? 0,
     stepCount: stepCounts.get(c.id) ?? 0,
+    archived: !!c.archived_at,
   }));
 
   return (
@@ -100,7 +104,18 @@ export default async function FunnelsPage() {
             kit finishes building — or build one by hand.
           </p>
         </div>
-        <NewFunnelButton />
+        <div className="flex items-center gap-2">
+          {/* A plain link, not a client toggle: it is a different list, so it deserves a URL that
+              can be bookmarked and a back button that works. */}
+          <Link
+            href={showingArchived ? "/funnels" : "/funnels?archived=1"}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-ink-600 px-3 py-1.5 text-xs text-zinc-400 hover:border-emerald-500/50 hover:text-emerald-300"
+          >
+            <Archive className="h-3.5 w-3.5" />
+            {showingArchived ? "Active funnels" : "Archived"}
+          </Link>
+          <NewFunnelButton />
+        </div>
       </header>
 
       <Card as="section" className="overflow-hidden">
@@ -109,6 +124,11 @@ export default async function FunnelsPage() {
             <LoadFailed what="your funnels" detail={campaignsError.message} />
           </div>
         ) : funnels.length === 0 ? (
+          showingArchived ? (
+            <EmptyState icon={Archive} title="Nothing archived" action={{ href: "/funnels", label: "Back to your funnels" }}>
+              Archiving a funnel takes it out of the main list without deleting its campaign kit.
+            </EmptyState>
+          ) : (
           <EmptyState icon={Inbox} title="No funnels yet" action={{ href: "/marketplace", label: "Browse the marketplace" }}>
             Use <span className="text-zinc-400">New funnel</span> to build one by hand, or promote
             an offer from the{" "}
@@ -117,82 +137,9 @@ export default async function FunnelsPage() {
             </Link>{" "}
             — a generated kit&apos;s bridge page becomes a funnel here automatically.
           </EmptyState>
+          )
         ) : (
-          <div className="overflow-x-auto">
-            <Table className="w-full text-sm">
-              <TableHeader>
-                <tr>
-                  <TableHead edge>Funnel</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Link</TableHead>
-                  <TableHead className="text-right">Steps</TableHead>
-                  <TableHead className="text-right">Leads</TableHead>
-                  <TableHead edge className="text-right">Actions</TableHead>
-                </tr>
-              </TableHeader>
-              <TableBody>
-                {funnels.map((f) => (
-                  <TableRow key={f.id}>
-                    <td className="px-4 py-2.5 font-medium text-zinc-100">{f.title}</td>
-                    <td className="px-2 py-2.5">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Badge
-                          className={
-                            f.published
-                              ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
-                              : "border-ink-600 bg-ink-800 text-zinc-400"
-                          }>
-                          <Radio className="h-3 w-3" /> {f.published ? "Published" : "Draft"}
-                        </Badge>
-                        {f.variantCount > 0 && (
-                          <Badge className="border-sky-500/30 bg-sky-500/15 text-sky-300">
-                            <Beaker className="h-3 w-3" /> Testing ({f.variantCount})
-                          </Badge>
-                        )}
-                      </div>
-                    </td>
-                    <td className="max-w-xs px-2 py-2.5 text-xs text-zinc-400">
-                      {f.published ? (
-                        <a
-                          href={f.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 truncate hover:text-emerald-400"
-                        >
-                          <span className="truncate">{f.url}</span>
-                          <ExternalLink className="h-3 w-3 shrink-0" />
-                        </a>
-                      ) : (
-                        // A draft has a link from the moment it's generated — it just isn't the
-                        // PUBLIC one. /preview is signed-in only and workspace-scoped, so this
-                        // shows the real page without making an unfinished funnel reachable by ad
-                        // traffic or a crawler. The public URL appears here once it's published.
-                        <a
-                          href={`/preview/funnel/${f.id}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 truncate hover:text-emerald-400"
-                          title="Private preview — only people signed in to this workspace can open it"
-                        >
-                          <span className="truncate">Preview draft</span>
-                          <ExternalLink className="h-3 w-3 shrink-0" />
-                        </a>
-                      )}
-                    </td>
-                    <td className="px-2 py-2.5 text-right tabular-nums text-zinc-400">
-                      {f.stepCount > 0 ? `+${f.stepCount}` : "—"}
-                    </td>
-                    <td className="px-2 py-2.5 text-right tabular-nums">{f.leads}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <Link href={`/funnels/${f.id}`} className={buttonVariants({ variant: "outline" })}>
-                        <Layers className="h-3.5 w-3.5" /> Manage
-                      </Link>
-                    </td>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <FunnelsTable funnels={funnels} showingArchived={showingArchived} />
         )}
       </Card>
     </main>
