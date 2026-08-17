@@ -8,6 +8,7 @@ import ConnectionsPanel from "@/components/ConnectionsPanel";
 import TikTokPanel from "@/components/TikTokPanel";
 import NetworkConnectionsPanel from "@/components/NetworkConnectionsPanel";
 import GenerationModelsPanel from "@/components/GenerationModelsPanel";
+import SmsConnectionPanel, { type SmsStatus } from "@/components/SmsConnectionPanel";
 import { getWorkspaceGenerationDefaults } from "@/lib/generationSettings";
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -30,7 +31,7 @@ export default async function ConnectionsPage({
   // not whichever workspace profiles.active_workspace_id happens to hold in another tab.
   const ws = await currentWorkspaceId();
 
-  const [metaStatus, tiktokStatus, mailProviders, networkRows, genDefaults] = await Promise.all([
+  const [metaStatus, tiktokStatus, mailProviders, networkRows, genDefaults, smsStatus] = await Promise.all([
     supabase
       .rpc("get_meta_connection_status", { p_workspace_id: ws })
       .then((r) => r.data ?? { connected: false }),
@@ -45,6 +46,9 @@ export default async function ConnectionsPage({
       .select("network, affiliate_id")
       .then((r) => r.data ?? []),
     getWorkspaceGenerationDefaults(supabase, ws!),
+    supabase
+      .rpc("get_sms_connection_status", { p_workspace_id: ws })
+      .then((r) => (r.data ?? { connected: false }) as SmsStatus),
   ]);
   const networkConnections = Object.fromEntries(networkRows.map((r) => [r.network, r.affiliate_id]));
 
@@ -125,6 +129,13 @@ export default async function ConnectionsPage({
           initialImage={genDefaults.image}
           initialVideo={genDefaults.video}
         />
+      </div>
+
+      {/* SMS sits beside Email: both are outbound messaging with per-tenant credentials, and both
+          carry a consent obligation the app has to respect. */}
+      <div>
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">SMS</h2>
+        <SmsConnectionPanel status={smsStatus} />
       </div>
 
       <div className="space-y-3">

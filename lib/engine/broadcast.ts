@@ -1,6 +1,8 @@
 import { marked } from "marked";
 import { db } from "./core";
 import { sendViaActiveSender, isSendFailure } from "@/lib/mail/send";
+import { sendSmsToContact } from "@/lib/sms/send";
+import { composeSms } from "@/lib/sms";
 import { renderUnsubscribeFooterHtml } from "./broadcastEmail";
 import { EMAIL_SETTINGS_COLUMNS } from "@/lib/emailSettings";
 
@@ -27,8 +29,9 @@ const MAX_SENDS_PER_DAY = 300;
 type BroadcastSendContext = {
   enrollmentStep: { id: string; enrollment_id: string; step_id: string };
   enrollment: { id: string; sequence_id: string; contact_id: string; status: string };
-  step: { subject: string; body_md: string };
-  sequence: { id: string; campaign_id: string | null; status: string };
+  // step_index drives which message carries the code-owned STOP line (sms only).
+  step: { subject: string; body_md: string; step_index: number };
+  sequence: { id: string; campaign_id: string | null; status: string; channel: string };
   contact: { email: string; unsubscribed_at: string | null; unsub_token: string };
 };
 
@@ -57,13 +60,13 @@ async function loadBroadcastSendContext(
   const [stepResult, sequenceResult, contactResult] = await Promise.all([
     db
       .from("broadcast_steps")
-      .select("subject, body_md")
+      .select("subject, body_md, step_index")
       .eq("id", enrollmentStep.step_id)
       .eq("workspace_id", workspaceId)
       .maybeSingle(),
     db
       .from("broadcast_sequences")
-      .select("id, campaign_id, status")
+      .select("id, campaign_id, status, channel")
       .eq("id", enrollment.sequence_id)
       .eq("workspace_id", workspaceId)
       .maybeSingle(),
@@ -155,12 +158,43 @@ async function stageSend(stageData: Record<string, unknown>, userId: string, wor
   const enrollmentStepId = stageData.enrollment_step_id as string;
   const context = await loadBroadcastSendContext(enrollmentStepId, workspaceId);
   if (!context) return { stageData: {}, skip: true };
-  if (context.enrollment.status !== "active" || context.contact.unsubscribed_at) {
+  const isSms = context.sequence.channel === "sms";
+
+  // Lifecycle checks are shared; the CONSENT check is not. An email unsubscribe must not stop an
+  // SMS step (0097: the two consents are legally distinct), and SMS eligibility is re-checked
+  // inside sendSmsToContact against the columns that actually govern it.
+  if (context.enrollment.status !== "active" || (!isSms && context.contact.unsubscribed_at)) {
     return { stageData: {}, skip: true, enrollmentStepPatch: { status: "skipped" } };
   }
   if (context.sequence.status === "paused") return { stageData: {}, retry: true };
   if (context.sequence.status !== "active") return { stageData: {}, skip: true };
-  if (await workspaceSendCapReached(workspaceId)) return { stageData: {}, retry: true };
+  // The pooled daily cap exists to protect a personal MAILBOX from being flagged; it counts
+  // mail_sends + broadcast_sends and is keyed on the mail sender's host. It has nothing to say
+  // about SMS, which is governed by the provider's own per-number throughput.
+  if (!isSms && (await workspaceSendCapReached(workspaceId))) return { stageData: {}, retry: true };
+
+  if (isSms) {
+    // The step's body IS the message; `subject` is an internal label for sms steps and is never
+    // sent. composeSms adds the code-owned STOP line to the first message of the sequence, which
+    // is why step_index matters here — the same function the kit preview renders through, so what
+    // was previewed is what sends.
+    const result = await sendSmsToContact(db, {
+      workspaceId,
+      userId,
+      contactId: context.enrollment.contact_id as string,
+      body: composeSms(context.step.body_md, context.step.step_index - 1),
+      campaignId: context.sequence.campaign_id,
+    });
+
+    if (!result.ok) {
+      // A consent problem is TERMINAL for this step, not a retry: no amount of trying again turns
+      // "they opted out" or "no number on file" into a send, and retrying would burn the attempts
+      // cap to reach the same answer. Only a provider/transport failure is worth another go.
+      if (result.reason === "failed") throw new Error(result.message);
+      return { stageData: {}, skip: true, enrollmentStepPatch: { status: "skipped" } };
+    }
+    return { stageData: {}, enrollmentStepPatch: { status: "sent", sent_at: new Date().toISOString() } };
+  }
 
   // One final contact read immediately before dispatch. This closes the persisted-stage gap and
   // reduces an unavoidable already-in-flight unsubscribe race to the provider-call boundary.
