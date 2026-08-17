@@ -60,6 +60,7 @@ export default function ProductsPanel({
   emptyHint,
   refreshKey = 0,
   onData,
+  defaultStatuses,
 }: {
   /** Where the pager links and the filter-reset navigate — the page hosting this panel. */
   basePath: string;
@@ -69,6 +70,15 @@ export default function ProductsPanel({
   refreshKey?: number;
   /** Lets the host page render stat tiles / a jobs count without fetching the same data twice. */
   onData?: (d: { stats: ProductStats; openJobs: Job[] }) => void;
+  /**
+   * Statuses ticked on first render. A DEFAULT, not a lock — the filter chips still clear it.
+   *
+   * My Products uses it to mean "offers I'm actually working on": discovery writes every hit as
+   * `New`, so without it that page listed 95 products of which 77 were untouched marketplace rows
+   * and only 18 had a kit, burying the ones being promoted. Marketplace passes nothing and shows
+   * everything, which is what discovery is for.
+   */
+  defaultStatuses?: string[];
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -88,7 +98,7 @@ export default function ProductsPanel({
   // the second it is up. The empty state is a claim about the data; it must not be made before
   // the first response lands.
   const [loaded, setLoaded] = useState(false);
-  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [statusFilters, setStatusFilters] = useState<string[]>(defaultStatuses ?? []);
   const [copied, setCopied] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);

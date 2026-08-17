@@ -2,23 +2,30 @@
 
 import ProductsPanel from "@/components/ProductsPanel";
 
-// The offers this workspace is tracking, on their own page — the same table Marketplace shows
+// The offers this workspace is working on, on their own page — the same table Marketplace shows
 // under its discovery form, without the discovery form. Marketplace answers "what should I
 // promote"; this answers "what am I already working on".
+//
+// Which is why it opens FILTERED. Discovery writes every marketplace hit as `New`, so an unfiltered
+// list is mostly other people's suggestions: measured here at 95 products, of which 77 were `New`
+// with no kit and only 18 were being promoted. Defaulting the filter to the statuses that mean "I
+// acted on this" makes the page match its own heading. It is a default, not a lock — clearing the
+// status chips shows everything, including `New` and `Dead`.
 export default function MyProductsPage() {
   return (
     <main className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold text-zinc-100">My Products</h1>
         <p className="text-sm text-zinc-400">
-          Every offer you&apos;re tracking. Set a status, copy an affiliate link, or build a
-          campaign kit.
+          The offers you&apos;re promoting. Set a status, copy an affiliate link, or build a
+          campaign kit — clear the status filter to see every product you&apos;ve ever discovered.
         </p>
       </header>
 
       <ProductsPanel
         basePath="/products"
-        emptyHint="Find offers on the Marketplace page, or add one by hand above."
+        defaultStatuses={["Selected", "Promoting", "Paused"]}
+        emptyHint="Nothing in progress yet — promote an offer from the Marketplace, or clear the status filter to see everything you've discovered."
       />
     </main>
   );
