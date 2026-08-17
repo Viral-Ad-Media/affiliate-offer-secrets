@@ -142,6 +142,13 @@ function sanitizeStyle(raw: unknown): BlockStyle {
   const fg = num(s.fieldGap, 0, 40);
   if (fg !== undefined) style.fieldGap = fg;
 
+  // Contents-list link colours. Same rebuild-not-filter trap as everything above — omitted here,
+  // the colour picker would appear to work in the editor and forget itself on save.
+  const lc = hex(s.linkColor);
+  if (lc) style.linkColor = lc;
+  const lac = hex(s.linkActiveColor);
+  if (lac) style.linkActiveColor = lac;
+
   // Image resize/crop. Same rebuild-not-filter trap as everything above: a key missing here is
   // dropped on every save, so the control would appear to work in the editor and forget itself
   // the moment the page was saved.
@@ -244,6 +251,20 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
           // refuse to save because someone typed 120 into a percentage field.
           percent: num(content.percent, 0, 100) ?? 0,
           caption: clampStr(content.caption, MAX_TEXT_MEDIUM),
+        },
+      };
+    }
+    case "table_of_contents": {
+      return {
+        id,
+        type: "table_of_contents",
+        style,
+        content: {
+          title: clampStr(content.title, MAX_TEXT_SHORT),
+          numbered: content.numbered === true,
+          // Anything that isn't the one other allowed value is 2, rather than a rejection: the
+          // depth is a presentation choice and a page must not refuse to save over one.
+          depth: content.depth === 3 ? 3 : 2,
         },
       };
     }

@@ -97,6 +97,14 @@ export type BlockStyle = {
    * declaration cannot express a pseudo-class.
    */
   fieldFocusBorderColor?: HexColor;
+  /**
+   * Table-of-contents link colours. Emitted as CSS custom properties, not declarations, because a
+   * link's resting and hover/current colours cannot both be expressed in one inline `style`
+   * attribute — the second needs a pseudo-class, which only a stylesheet can carry. Same technique
+   * the form's field colours already use.
+   */
+  linkColor?: HexColor;
+  linkActiveColor?: HexColor;
   fieldFocusBackgroundColor?: HexColor;
 
   /**
@@ -259,6 +267,8 @@ export function styleToInlineCss(style: BlockStyle | undefined, allowed: readonl
     ["fieldBorderColor", "--f-bc"],
     ["fieldFocusBorderColor", "--f-focus-bc"],
     ["fieldFocusBackgroundColor", "--f-focus-bg"],
+    ["linkColor", "--toc-link"],
+    ["linkActiveColor", "--toc-active"],
   ] as const) {
     if (has(key)) {
       const v = hex(style[key]);
@@ -532,7 +542,8 @@ export type ElementBlock =
   | FooterBlock
   | ProgressBlock
   | NavigationBlock
-  | IconBlock;
+  | IconBlock
+  | TableOfContentsBlock;
 
 /**
  * What a form field COLLECTS, as a named list rather than an input type.
@@ -592,6 +603,7 @@ export const ELEMENT_BLOCK_TYPES = [
   "progress",
   "navigation",
   "icon",
+  "table_of_contents",
 ] as const;
 
 // Only ever a child of a lead_capture_form block — never part of ElementBlock, so a Column's
@@ -727,6 +739,33 @@ export const MAX_ICON_SIZE = 160;
 export type ProgressBlock = Base & {
   type: "progress";
   content: { label: string; percent: number; caption: string };
+};
+
+/**
+ * A contents list built FROM THE PAGE, never typed by hand.
+ *
+ * The entries are derived at render time from the headings already on the page, so a contents list
+ * can never disagree with the article above it — the failure every hand-maintained one eventually
+ * has, and one nobody notices because both halves look fine in isolation.
+ *
+ * Zero script, on every page kind. Entries are plain `<a href="#id">`, which the browser resolves
+ * natively, so a blog post keeps the property that it ships no JavaScript at all (the reason the
+ * carousel is CSS-only and the countdown is the single deliberate exception).
+ *
+ * `linkActiveColor` is therefore hover/focus, NOT a scroll-spy "currently reading" highlight —
+ * that needs an IntersectionObserver, and buying it would cost the zero-JS guarantee on exactly
+ * the page kind where it matters most. Named for what it does rather than what a reader might
+ * hope; the settings panel says so too.
+ */
+export type TableOfContentsBlock = Base & {
+  type: "table_of_contents";
+  content: {
+    title: string;
+    /** Numbered list rather than bulleted. */
+    numbered: boolean;
+    /** 2 = top-level headings only; 3 = include subheadings, indented. */
+    depth: 2 | 3;
+  };
 };
 
 export type ColumnBlock = Base & { type: "column"; children: ElementBlock[] };
@@ -906,6 +945,12 @@ export type RenderCtx = {
    */
   steps?: { id: string; url: string }[];
   productTitle: string;
+  /**
+   * Every heading on the page, in document order — set by renderBlockTree from the tree itself,
+   * never passed in, exactly like `hasForm`. A caller supplying it could disagree with what
+   * actually rendered, which is the one thing a contents list must never do.
+   */
+  headings?: { id: string; text: string; level: 1 | 2 }[];
   /** Set by renderBlockTree from the tree itself — never passed in. See the CTA's reveal. */
   /**
    * Whether the page has ANY form — the locked opt-in one or a droppable `form` block, at any
@@ -1000,6 +1045,9 @@ export const IMAGE_PANEL_STYLE_KEYS = [...IMAGE_STYLE_KEYS, ...IMAGE_WRAP_STYLE_
 export const BUTTON_PANEL_STYLE_KEYS = [...BUTTON_STYLE_KEYS, ...BUTTON_WRAP_STYLE_KEYS] as const;
 export const DIVIDER_STYLE_KEYS = ["borderColor", "borderWidth", "marginTop", "marginBottom"] as const;
 /** A form: the box (BOX keys) plus its inputs' own look and spacing. */
+/** A contents list: ordinary text styling plus the two link colours only it uses. */
+export const TOC_STYLE_KEYS = [...TEXT_STYLE_KEYS, "linkColor", "linkActiveColor"] as const;
+
 export const FORM_STYLE_KEYS = [
   ...BOX_STYLE_KEYS,
   "align",
@@ -1035,6 +1083,7 @@ export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readon
   form: FORM_STYLE_KEYS,
   footer: TEXT_STYLE_KEYS,
   progress: TEXT_STYLE_KEYS,
+  table_of_contents: TOC_STYLE_KEYS,
   navigation: TEXT_STYLE_KEYS,
   icon: TEXT_STYLE_KEYS,
   button: BUTTON_PANEL_STYLE_KEYS,
@@ -1051,10 +1100,17 @@ export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readon
 
 function renderElement(block: ElementBlock, ctx: RenderCtx): string {
   switch (block.type) {
+    // Headings carry their block id so a contents entry (and a `scroll` button action) can link to
+    // them. Visually inert, ID_RE-validated, and safe to add to pages already taking traffic —
+    // sections have rendered theirs for the same reason since scroll actions shipped.
     case "heading":
-      return `<h1${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(block.content.text)}</h1>`;
+      return `<h1 id="${escapeHtml(block.id)}"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(
+        block.content.text
+      )}</h1>`;
     case "subheading":
-      return `<h2${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(block.content.text)}</h2>`;
+      return `<h2 id="${escapeHtml(block.id)}"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(
+        block.content.text
+      )}</h2>`;
     case "paragraph":
       return `<p${styleAttr(block.style, TEXT_STYLE_KEYS)}>${renderInline(block.content.text)}</p>`;
     case "image": {
@@ -1136,6 +1192,29 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       return `<div class="video-wrap"${styleAttr(block.style, BOX_STYLE_KEYS)}><iframe src="${escapeHtml(
         embedUrl(src)
       )}" title="${label}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+    }
+    case "table_of_contents": {
+      const all = ctx.headings ?? [];
+      const depth = block.content.depth === 3 ? 3 : 2;
+      // The page's own H1 is its title, not a section — listing it would make the first entry a
+      // link back to the top of the page the reader is already on.
+      const items = all.filter((h) => (depth === 3 ? true : h.level === 1)).slice(depth === 3 ? 1 : 1);
+      // Nothing to list is not an empty box: a heading-less page would otherwise ship a titled
+      // panel containing nothing, which reads as a rendering failure.
+      if (items.length === 0) return "";
+      const tag = block.content.numbered ? "ol" : "ul";
+      const lis = items
+        .map(
+          (h) =>
+            `<li class="toc-l${h.level}"><a href="#${escapeHtml(h.id)}">${escapeHtml(h.text)}</a></li>`
+        )
+        .join("");
+      const title = typeof block.content.title === "string" ? block.content.title.trim() : "";
+      return `<nav class="toc${block.content.numbered ? " toc-numbered" : ""}" aria-label="${escapeHtml(
+        title || "Table of contents"
+      )}"${styleAttr(block.style, TOC_STYLE_KEYS)}>${
+        title ? `<p class="toc-title">${escapeHtml(title)}</p>` : ""
+      }<${tag} class="toc-list">${lis}</${tag}></nav>`;
     }
     case "progress": {
       const { label, caption } = block.content;
@@ -1854,6 +1933,29 @@ function renderLockedBlock(block: LockedBlock, ctx: RenderCtx): string {
 
 // Returns a body-fragment string — renderBridgeHtml/renderFunnelStepHtml in renderPages.ts own
 // the outer <!doctype>/<head>/<style>/submit-script and splice this in unchanged.
+/**
+ * Every heading on the page, in document order, for the contents block.
+ *
+ * Walks sections, rows and columns, because a heading inside a two-column row is still a heading a
+ * reader would expect to find listed. Blank headings are skipped — a contents entry with no text
+ * is an unlabelled link, which is worse than a missing one.
+ */
+function collectHeadings(blocks: any[]): { id: string; text: string; level: 1 | 2 }[] {
+  const out: { id: string; text: string; level: 1 | 2 }[] = [];
+  const walk = (list: any[]) => {
+    for (const b of list ?? []) {
+      if (b?.type === "heading" || b?.type === "subheading") {
+        const text = typeof b.content?.text === "string" ? b.content.text.trim() : "";
+        if (text) out.push({ id: b.id, text, level: b.type === "heading" ? 1 : 2 });
+      }
+      if (Array.isArray(b?.children)) walk(b.children);
+      if (Array.isArray(b?.columns)) for (const c of b.columns) walk(c?.children ?? []);
+    }
+  };
+  walk(blocks);
+  return out;
+}
+
 export function renderBlockTree(tree: PageBlockTree, ctx: RenderCtx): string {
   // The affiliate disclosure always renders LAST, wherever it sits in the block order. It's a
   // footer notice by convention — every network and ad reviewer expects it there — and it was
@@ -1869,6 +1971,7 @@ export function renderBlockTree(tree: PageBlockTree, ctx: RenderCtx): string {
   const ctxWithForm: RenderCtx = {
     ...ctx,
     hasForm: treeHasForm(tree.blocks),
+    headings: collectHeadings(tree.blocks),
   };
   return [...rest, ...disclosure]
     .map((b) =>
@@ -2102,6 +2205,10 @@ function defaultElementContent(type: (typeof ELEMENT_BLOCK_TYPES)[number]): Elem
   switch (type) {
     case "progress":
       return { label: "Your progress", percent: 60, caption: "" };
+    case "table_of_contents":
+      // Depth 2 by default: a contents list that mirrors every sub-heading is usually longer than
+      // the section it introduces, which is the state in which people stop reading it.
+      return { title: "In this article", numbered: false, depth: 2 };
     case "navigation":
       // Seeded with the brand line and no links: which sections exist is the next decision, and a
       // nav pointing at ids that aren't on the page yet would render dead buttons.

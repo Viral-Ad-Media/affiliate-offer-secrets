@@ -537,6 +537,18 @@ const PUBLIC_CSS = `
   .aos-form-popup .aos-form { position:relative; width:100%; }
   .aos-form-close { position:absolute; top:8px; right:10px; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; color:var(--t-muted,#888); }
   /* Progress bar, nav bar and standalone icon. DUPLICATED in the other stylesheet; change both. */
+  /* Table of contents. No script anywhere: entries are plain anchors the browser resolves, so a
+     blog post keeps its zero-JS property. --toc-active is therefore hover/focus, not a scroll-spy
+     "currently reading" highlight — that needs an IntersectionObserver. Duplicated in
+     lib/blog.ts's PUBLIC_CSS; THESE TWO STYLESHEETS MUST NOT DRIFT. */
+  .toc { margin:0 0 20px; padding:16px 18px; border:1px solid rgba(0,0,0,.10); border-radius:10px; background:rgba(0,0,0,.02); }
+  .toc-title { margin:0 0 8px; font-weight:700; font-size:.95em; }
+  .toc-list { margin:0; padding-left:1.25em; }
+  .toc-list li { margin:.28em 0; }
+  .toc-list li.toc-l2 { margin-left:1em; font-size:.95em; opacity:.9; }
+  .toc:not(.toc-numbered) .toc-list { list-style:disc; }
+  .toc a { color:var(--toc-link, var(--t-link, #1a56db)); text-decoration:none; }
+  .toc a:hover, .toc a:focus-visible { color:var(--toc-active, var(--t-primary, #1a56db)); text-decoration:underline; }
   .progress-block { margin:0 0 18px; }
   .progress-label { display:flex; justify-content:space-between; gap:12px; font-size:14px; font-weight:600; margin-bottom:6px; }
   .progress-track { height:10px; border-radius:999px; background:var(--t-field-border,#e5e5e5); overflow:hidden; }

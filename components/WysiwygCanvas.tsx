@@ -32,6 +32,7 @@ import {
   Columns2,
   Rows3,
   PanelBottom,
+  ListOrdered,
   PanelTop,
   BarChart3,
   Sparkle,
@@ -217,6 +218,7 @@ const ELEMENT_PALETTE: { type: PaletteType; label: string; icon: any }[] = [
   { type: "progress", label: "Progress bar", icon: BarChart3 },
   { type: "icon", label: "Icon", icon: Sparkle },
   { type: "footer", label: "Footer", icon: PanelBottom },
+  { type: "table_of_contents", label: "Contents", icon: ListOrdered },
 ];
 
 /**
@@ -1715,6 +1717,48 @@ export default function WysiwygCanvas({
               className="mt-1.5 block w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
             />
           </div>
+        );
+      }
+      case "table_of_contents": {
+        // Mirrors the renderer's own rules (first heading skipped as the page title, depth filter,
+        // blank headings dropped) so the canvas shows what really publishes. Read-only: the entries
+        // come from the page's headings, so editing them here would edit the wrong thing — the
+        // heading blocks themselves are already editable in place.
+        const headings: { id: string; text: string; level: 1 | 2 }[] = [];
+        const walkH = (list: any[]) => {
+          for (const b of list ?? []) {
+            if (b?.type === "heading" || b?.type === "subheading") {
+              const t = typeof b.content?.text === "string" ? b.content.text.trim() : "";
+              if (t) headings.push({ id: b.id, text: t, level: b.type === "heading" ? 1 : 2 });
+            }
+            if (Array.isArray(b?.children)) walkH(b.children);
+            if (Array.isArray(b?.columns)) for (const c of b.columns) walkH(c?.children ?? []);
+          }
+        };
+        walkH(tree.blocks);
+        const items = headings.filter((h) => (el.content.depth === 3 ? true : h.level === 1)).slice(1);
+        const ListTag = el.content.numbered ? "ol" : "ul";
+        return (
+          <nav className="mb-4 rounded-[10px] border border-black/10 bg-black/[0.02] px-4 py-3" style={blockInlineStyle(el)}>
+            {el.content.title?.trim() ? (
+              <p className="mb-2 text-[15px] font-bold">{el.content.title}</p>
+            ) : null}
+            {items.length === 0 ? (
+              // Says why rather than rendering an empty box — the published page omits the block
+              // entirely in this state, and "nothing here" without a reason reads as broken.
+              <p className="text-[13px] text-gray-500">
+                Add headings to this page and they&apos;ll be listed here automatically.
+              </p>
+            ) : (
+              <ListTag className={`ml-5 ${el.content.numbered ? "list-decimal" : "list-disc"} text-[14px]`}>
+                {items.map((h) => (
+                  <li key={h.id} className={h.level === 2 ? "ml-4 text-[13px] opacity-90" : ""}>
+                    <span style={{ color: el.style?.linkColor ?? "#1a56db" }}>{h.text}</span>
+                  </li>
+                ))}
+              </ListTag>
+            )}
+          </nav>
         );
       }
       case "progress": {

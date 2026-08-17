@@ -186,6 +186,7 @@ export default function BlockStylePanel({ block, onChange, onVisibilityChange, o
     has("fieldBackgroundColor") || has("fieldTextColor") || has("fieldBorderColor") ||
     has("fieldBorderWidth") || has("fieldBorderRadius") || has("fieldGap");
   const showImage = has("imageWidth") || has("aspectRatio");
+  const showLinks = has("linkColor") || has("linkActiveColor");
 
   // The disclosure is the one block that can't be hidden — content rule 3 makes it mandatory on
   // every page, and "hidden on mobile" would put an undisclosed affiliate page in front of most of
@@ -199,7 +200,7 @@ export default function BlockStylePanel({ block, onChange, onVisibilityChange, o
 
   if (
     !showTypography && !showBackground && !showSpacing && !showBorder && !showLayout && !showFields &&
-    !showImage && !showVisibility
+    !showImage && !showLinks && !showVisibility
   )
     return null;
 
@@ -492,6 +493,26 @@ export default function BlockStylePanel({ block, onChange, onVisibilityChange, o
                 )}
               </>
             )}
+          </div>
+        )}
+
+        {showLinks && (
+          <div className="space-y-2 sm:col-span-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Links</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ColorField label="Link color" value={style.linkColor} onChange={(v) => set({ linkColor: v })} />
+              <ColorField
+                label="Hover / focus color"
+                value={style.linkActiveColor}
+                onChange={(v) => set({ linkActiveColor: v })}
+              />
+            </div>
+            {/* Named for what it does. A "current section" highlight would need a scroll listener,
+                and buying it would cost blog posts their zero-JS property — so it is not offered
+                rather than offered and quietly not working. */}
+            <p className="text-[11px] leading-snug text-zinc-500">
+              The second colour applies while a link is hovered or keyboard-focused.
+            </p>
           </div>
         )}
 

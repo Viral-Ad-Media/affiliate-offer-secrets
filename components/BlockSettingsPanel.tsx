@@ -37,7 +37,8 @@ export function hasContentSettings(block: Block | null): boolean {
     block.type === "button" ||
     block.type === "form" ||
     block.type === "lead_capture_form" ||
-    block.type === "custom_html"
+    block.type === "custom_html" ||
+    block.type === "table_of_contents"
   );
 }
 
@@ -628,6 +629,52 @@ export default function BlockSettingsPanel({
         <p className="text-[11px] leading-snug text-zinc-500">
           Saved as <code className="text-zinc-400">{c.fieldKey}</code> — the CSV column header and
           the key on the contact.
+        </p>
+      </div>
+    );
+  }
+
+  if (block.type === "table_of_contents") {
+    const c = (block as ElementBlock).content as { title: string; numbered: boolean; depth: 2 | 3 };
+    return (
+      <div className="space-y-3">
+        <label className="block">
+          <span className={LABEL}>Heading</span>
+          <input
+            className={INPUT}
+            defaultValue={c.title}
+            placeholder="In this article"
+            onBlur={(e) => set({ title: e.target.value })}
+          />
+        </label>
+
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={c.numbered === true}
+            onChange={(e) => set({ numbered: e.target.checked })}
+            className="h-3.5 w-3.5 accent-emerald-500"
+          />
+          <span className="text-xs text-zinc-300">Number the entries</span>
+        </label>
+
+        <label className="block">
+          <span className={LABEL}>Include</span>
+          <select
+            className={SELECT}
+            value={String(c.depth === 3 ? 3 : 2)}
+            onChange={(e) => set({ depth: e.target.value === "3" ? 3 : 2 })}
+          >
+            <option value="2">Main headings only</option>
+            <option value="3">Headings and subheadings</option>
+          </select>
+        </label>
+
+        <p className="text-[11px] leading-snug text-zinc-500">
+          Built from the headings already on this page, so it can never disagree with the page
+          itself — there is nothing to keep up to date. The page&apos;s own first heading is left
+          out, since it is the title rather than a section. Set the two link colours under Style;
+          the second one applies on hover and keyboard focus.
         </p>
       </div>
     );
