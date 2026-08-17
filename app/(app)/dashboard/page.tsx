@@ -4,6 +4,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SetupChecklist, { type SetupStep } from "@/components/SetupChecklist";
 import MarketplaceHighlights from "@/components/MarketplaceHighlights";
+import NeedsAttention from "@/components/NeedsAttention";
+import OverviewPerformance from "@/components/OverviewPerformance";
+import { getAttentionItems, getCreditRunway, getLeadTrend, getTopFunnels } from "@/lib/overview";
+import { JOB_CREDIT_COST } from "@/lib/credits";
 import {
   Megaphone,
   Link2,
@@ -151,14 +155,27 @@ export default async function Overview() {
     },
   ];
 
+  // The four new panels, fetched together. Deliberately AFTER the counts above rather than folded
+  // into that Promise.all: these are the expensive ones, and keeping them separate makes it obvious
+  // which queries the tiles need and which the panels do.
+  const [attention, runway, leadTrend, topFunnels] = await Promise.all([
+    getAttentionItems(supabase, ws!),
+    getCreditRunway(supabase, ws!, JOB_CREDIT_COST.build_campaign),
+    getLeadTrend(supabase, ws!),
+    getTopFunnels(supabase, ws!),
+  ]);
+
   return (
     <main className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold text-zinc-100">Overview</h1>
-        <p className="text-sm text-zinc-400">A summary of your account and where to go next.</p>
+        <p className="text-sm text-zinc-400">What needs you, how you&apos;re doing, and what to promote next.</p>
       </header>
 
       {!workspace?.setup_dismissed_at && <SetupChecklist steps={setupSteps} workspaceId={ws!} />}
+
+      {/* Above the tiles on purpose: the tiles say what EXISTS, this says what to do about it. */}
+      <NeedsAttention items={attention} />
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatTile icon={<Package className="h-5 w-5" />} label="Products tracked" value={productsCount ?? 0} />
@@ -181,6 +198,8 @@ export default async function Overview() {
           `onAdded` callback: this is a server component, and there's no products table on this
           page to refresh — the panel marks the row added and toasts on its own. The tile counts
           above go stale until the next load, which is the honest trade for putting it here. */}
+      <OverviewPerformance runway={runway} leads={leadTrend} funnels={topFunnels} />
+
       <MarketplaceHighlights />
 
       <section>
