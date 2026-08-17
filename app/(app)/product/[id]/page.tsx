@@ -17,6 +17,7 @@ import BlogPostLink from "@/components/BlogPostLink";
 import GenerateVideo from "@/components/GenerateVideo";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
 import SocialPostsPanel from "@/components/SocialPostsPanel";
+import SmsSequencePanel from "@/components/SmsSequencePanel";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -30,6 +31,7 @@ const TABS = [
   { key: "blog_md", label: "Blog" },
   { key: "social_md", label: "Social" },
   { key: "email_md", label: "Emails" },
+  { key: "sms_messages", label: "SMS" },
   { key: "hoplinks_txt", label: "Hoplinks" },
 ] as const;
 
@@ -103,6 +105,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     if (!campaign) return false;
     if (key === "fb_ads_md") return !!campaign.fb_ad_angles || !!campaign.fb_ads_md;
     if (key === "social_md") return !!campaign.social_posts || !!campaign.social_md;
+    if (key === "sms_messages") return !!campaign.sms_messages?.length;
     return !!(campaign as any)[key];
   }
 
@@ -291,6 +294,8 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                 />
               ) : !content ? (
                 <p className="py-6 text-center text-sm text-zinc-500">Not generated yet.</p>
+              ) : tab === "sms_messages" ? (
+                <SmsSequencePanel messages={campaign.sms_messages} />
               ) : tab === "bridge_html" ? (
                 <>
                   <p className="mb-2 text-xs text-zinc-500">

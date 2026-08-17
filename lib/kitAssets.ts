@@ -15,6 +15,7 @@ export const KIT_ASSETS = [
   { key: "tiktok", label: "TikTok scripts", hint: "Hooks and 30-45s UGC-style video scripts" },
   { key: "social", label: "Social captions", hint: "Short organic posts" },
   { key: "email", label: "Email sequence", hint: "Swipe emails, subject + body" },
+  { key: "sms", label: "SMS sequence", hint: "Short texts for the leads who opted in to messages" },
   { key: "blog", label: "Blog article", hint: "Long-form article, also imported as a draft blog post" },
 ] as const;
 
@@ -41,6 +42,7 @@ export const KIT_ASSET_COUNTS = {
   tiktok: { default: 3, min: 1, max: 10, noun: "scripts" },
   social: { default: 5, min: 1, max: 10, noun: "captions" },
   email: { default: 3, min: 1, max: 10, noun: "emails" },
+  sms: { default: 3, min: 1, max: 10, noun: "messages" },
 } as const;
 
 export type CountableKitAssetKey = keyof typeof KIT_ASSET_COUNTS;

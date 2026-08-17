@@ -6,6 +6,7 @@ import { themeFromBrandColors, applySectionBands } from "./pageTheme";
 import { db } from "./core";
 import { uploadImageRef, CLD_FOLDER } from "@/lib/cloudinary/upload";
 import type { FbAdAngle, SocialPost } from "@/lib/shared";
+import { MAX_SMS_BODY, SMS_OPT_OUT } from "@/lib/sms";
 import { wants, type KitAssetKey, type CountableKitAssetKey } from "@/lib/kitAssets";
 
 // Re-exported so every existing server-side importer keeps working; the list itself is
@@ -433,7 +434,30 @@ async function stageSocial(
     budget.push({ perItem: 450, count: counts.email });
   }
 
-  const result = await completeJSON<{ social_posts?: SocialPost[]; email_md?: string }>({
+  if (wants(assets, "sms")) {
+    properties.sms_messages = {
+      type: "array",
+      minItems: counts.sms,
+      maxItems: counts.sms,
+      items: {
+        type: "object",
+        properties: { body: { type: "string", maxLength: MAX_SMS_BODY } },
+        required: ["body"],
+      },
+    };
+    required.push("sms_messages");
+    asks.push(
+      `sms_messages — exactly ${counts.sms} SMS messages for leads who opted in to texts, each an object with a body field. ` +
+        `HARD LIMIT: each body must be ${MAX_SMS_BODY} characters or fewer, because we append "${SMS_OPT_OUT}" to the first one and the total has to stay inside a single 160-character segment — one character over and the message bills as two. ` +
+        `Do NOT write "${SMS_OPT_OUT}", "Text STOP", "unsubscribe", or any opt-out wording yourself: it is added automatically, and a second copy wastes characters that are being paid for. ` +
+        `No ALL-CAPS words, no more than one exclamation mark across the whole sequence, and no "FREE" or "$$$"-style shouting — carriers filter those before a human ever sees them. ` +
+        `Write like a person texting, not a broadcast: short sentences, one idea per message, and only the claims the sales page itself makes.`
+    );
+    // Short by construction, but the ask above is long, so give the call real headroom.
+    budget.push({ perItem: 90, count: counts.sms });
+  }
+
+  const result = await completeJSON<{ social_posts?: SocialPost[]; email_md?: string; sms_messages?: { body: string }[] }>({
     system: COMPLIANCE_SYSTEM,
     prompt: `${ctx}\n\nWrite:\n${asks.map((a, i) => `${i + 1}. ${a}`).join("\n")}`,
     schema: { type: "object", properties, required },
@@ -442,6 +466,17 @@ async function stageSocial(
   });
   if (wantSocial && (!Array.isArray(result.social_posts) || result.social_posts.length !== counts.social)) {
     throw new Error(`Model did not return exactly ${counts.social} social posts`);
+  }
+  if (wants(assets, "sms")) {
+    if (!Array.isArray(result.sms_messages) || result.sms_messages.length !== counts.sms) {
+      throw new Error(`Model did not return exactly ${counts.sms} SMS messages`);
+    }
+    // maxLength in the schema is a request, not a guarantee — the same lesson repairDoubleEncoded
+    // records about forced tool-use. Truncating here rather than failing the stage: an over-long
+    // text is still usable copy the operator can tighten, whereas failing loses the whole kit.
+    result.sms_messages = result.sms_messages.map((m) => ({
+      body: String(m?.body ?? "").trim().slice(0, MAX_SMS_BODY),
+    }));
   }
   return { stageData: prior, campaignPatch: result };
 }

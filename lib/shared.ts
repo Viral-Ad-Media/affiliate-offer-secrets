@@ -58,6 +58,8 @@ export type Campaign = {
   bridge_published: boolean;
   blog_md: string | null;
   social_md: string | null;
+  /** Generated SMS sequence. The STOP line is appended by lib/sms.ts, never stored. */
+  sms_messages: { body: string }[] | null;
   social_posts: SocialPost[] | null;
   email_md: string | null;
   images_json: { source_images: string[] } | null;

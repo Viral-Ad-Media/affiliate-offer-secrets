@@ -2363,6 +2363,48 @@ without per-component recoloring:
   install` — the CSS variable mapping above means no manual re-theming should be needed for
   components that use standard shadcn semantic classes.
 
+## SMS is part of the kit (generation only — nothing sends yet)
+
+`sms` is the seventh entry in `KIT_ASSETS`, generated inside the existing social/email stage rather
+than a new one — that stage is already one Anthropic call whose schema and prompt are built from
+the selection, which is exactly the shape a seventh asset needs. Stored as
+`campaigns.sms_messages jsonb` (`[{ body }]`), **structured from day one on purpose**: `email_md` is
+a markdown blob whose format had to be reverse-engineered later (`parseEmailMd` handles two
+different heading shapes the model emits), and there is no reason to repeat that.
+
+**SMS is not "email but shorter", and both differences cost money.**
+
+- **The opt-out is CODE-OWNED** (`lib/sms.ts`'s `SMS_OPT_OUT`, appended by `composeSms`), never
+  written by the model and never stored in the row — the same treatment `DISCLOSURE` gets on funnel
+  pages and `renderUnsubscribeFooterHtml` gets on email. A compliance string the generator can
+  paraphrase or an editor can delete is not a compliance string. The prompt explicitly forbids the
+  model writing its own opt-out, because a duplicate wastes characters that are being paid for.
+- **Billing is per SEGMENT, not per message.** GSM-7 gives 160 characters in one segment; at 161 it
+  splits into 153-character segments, so one extra character doubles the cost. `MAX_SMS_BODY` is
+  therefore `160 - opt-out - 1` = **137**, which is what makes a max-length first message land at
+  exactly 160 with our line appended. Verified: 137-char body + opt-out = 160 chars = 1 segment,
+  and one character more = 2.
+- **Unicode is reported, not computed away.** A single emoji or curly quote switches the whole
+  message to UCS-2 and drops the limit to 70 characters. `smsSegments` returns `hasUnicode` and the
+  panel warns, rather than pretending to price it precisely.
+- The model's `maxLength` is a request, not a guarantee (the `repairDoubleEncoded` lesson), so
+  bodies are **clamped on the way in** rather than failing the stage — an over-long text is still
+  usable copy, whereas a thrown stage loses the whole kit.
+- `components/SmsSequencePanel.tsx` previews each message through `composeSms` — the real function
+  any future sending path must use — so the opt-out is visible in the preview instead of appearing
+  later. Same "what you see is what publishes" guarantee the page editor gets.
+
+**Nothing sends.** There is no provider, no credentials, no `sms_sends` table and no rate cap. That
+is a separate piece of work with its own compliance surface (per-tenant Twilio-style credentials in
+Vault, a STOP/HELP inbound webhook that must actually honour opt-outs, quiet-hours rules, and
+per-number throughput limits). The sidebar's SMS entry stays `soon: true` until it exists — the kit
+tab is where the copy lives today.
+
+**`campaigns.sms_messages` had to be added to the explicit column list in
+`app/api/products/[id]/route.ts`.** That route stopped using `select("*")` for payload reasons, so a
+new column is invisible to `tsc` and shows up as a permanently empty tab. Its own comment says so;
+this is the first time that warning was load-bearing.
+
 ## Emails (Broadcast + Sequences)
 
 Sidebar parent **Emails** with two children — **Broadcast** (`/emails/broadcast`, one-off send)
