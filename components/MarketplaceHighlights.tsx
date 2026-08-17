@@ -1,12 +1,46 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Flame, TrendingUp, Sparkles, Plus, Check, ExternalLink, Loader2 } from "lucide-react";
+import { Flame, TrendingUp, Sparkles, Plus, Check, ExternalLink, Loader2, Target, Star } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+
+/**
+ * Fourteen days of gravity as a tiny inline path.
+ *
+ * A single gravity number says where a product is; this says which way it's going, which is the
+ * part that decides whether it's worth promoting NOW. No chart library for ~14 integers.
+ *
+ * Scaled to its OWN min/max, not a shared axis: these cards sit side by side at wildly different
+ * gravities, and a shared scale would flatten every line but the leader's into nothing.
+ */
+function Spark({ values }: { values: number[] }) {
+  const w = 100;
+  const h = 20;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const step = values.length > 1 ? w / (values.length - 1) : w;
+  const d = values
+    .map((v, i) => `${i === 0 ? "M" : "L"}${(i * step).toFixed(1)},${(h - ((v - min) / span) * (h - 3) - 1.5).toFixed(1)}`)
+    .join(" ");
+  const rising = values[values.length - 1] >= values[0];
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="h-5 w-full" preserveAspectRatio="none" aria-hidden>
+      <path
+        d={d}
+        fill="none"
+        strokeWidth={1.5}
+        vectorEffect="non-scaling-stroke"
+        className={rising ? "stroke-emerald-400" : "stroke-zinc-600"}
+      />
+    </svg>
+  );
+}
 
 type Highlight = {
   network: string;
@@ -23,14 +57,20 @@ type Highlight = {
   gravity_change_pct?: number | null;
   first_seen_on?: string;
   days_known?: number;
+  /** Daily gravity for the last fortnight. Null when there aren't two points to draw. */
+  history?: number[] | null;
+  watched?: boolean;
+  gravity_at_add?: number | null;
 };
 
-type Tab = "top" | "trending" | "fresh";
+type Tab = "top" | "trending" | "fresh" | "niche" | "watchlist";
 
 const TABS: { key: Tab; label: string; icon: typeof Flame; blurb: string }[] = [
   { key: "top", label: "Top products", icon: Flame, blurb: "Highest gravity across every category, refreshed daily" },
   { key: "trending", label: "Trending", icon: TrendingUp, blurb: "Biggest gravity gain over the last 7 days" },
   { key: "fresh", label: "New", icon: Sparkles, blurb: "First seen in the marketplace within the last 7 days" },
+  { key: "niche", label: "In your niches", icon: Target, blurb: "Climbing fastest in the categories you already promote" },
+  { key: "watchlist", label: "Watching", icon: Star, blurb: "Products you starred, and what they've done since" },
 ];
 
 const fmtMoney = (v: number | null) => (v == null ? "—" : `$${v.toFixed(0)}`);
@@ -44,6 +84,10 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
   const [tab, setTab] = useState<Tab>("top");
   const [top, setTop] = useState<Highlight[]>([]);
   const [trending, setTrending] = useState<Highlight[]>([]);
+  const [niche, setNiche] = useState<Highlight[]>([]);
+  const [watchlist, setWatchlist] = useState<Highlight[]>([]);
+  const [starring, setStarring] = useState<string | null>(null);
+  const [nicheNames, setNicheNames] = useState<string[]>([]);
   const [fresh, setFresh] = useState<Highlight[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState<string | null>(null);
@@ -55,6 +99,9 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
       const data = await res.json();
       setTop(data.top ?? []);
       setTrending(data.trending ?? []);
+      setNiche(data.niche ?? []);
+      setWatchlist(data.watchlist ?? []);
+      setNicheNames(data.nicheNames ?? []);
       setFresh(data.fresh ?? []);
     } finally {
       setLoading(false);
@@ -94,7 +141,40 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
     }
   }
 
-  const rows = tab === "top" ? top : tab === "trending" ? trending : fresh;
+  // Direct client write: marketplace_watchlist carries a plain workspace-member policy because
+  // starring a public product has no external side effect and stores no secret (the
+  // network_connections case). Optimistic across every loaded tab so the star doesn't wait a
+  // round trip, and reverted if the write fails.
+  async function toggleWatch(h: Highlight) {
+    setStarring(h.vendor_id);
+    const next = !h.watched;
+    const paint = (list: Highlight[]) =>
+      list.map((r) => (r.vendor_id === h.vendor_id ? { ...r, watched: next } : r));
+    setTop(paint); setTrending(paint); setFresh(paint); setNiche(paint);
+
+    const supabase = createClient();
+    const { error } = next
+      ? await supabase.from("marketplace_watchlist").insert({
+          network: h.network,
+          vendor_id: h.vendor_id,
+          gravity_at_add: h.gravity,
+        })
+      : await supabase.from("marketplace_watchlist").delete().eq("vendor_id", h.vendor_id).eq("network", h.network);
+
+    setStarring(null);
+    if (error) {
+      const revert = (list: Highlight[]) =>
+        list.map((r) => (r.vendor_id === h.vendor_id ? { ...r, watched: !next } : r));
+      setTop(revert); setTrending(revert); setFresh(revert); setNiche(revert);
+      return;
+    }
+    // The Watching tab is a server-derived list (it needs gravity_at_add), so refetch rather than
+    // splicing — a locally-built row would be missing the movement figure the tab exists for.
+    load();
+  }
+
+  const rows =
+    tab === "top" ? top : tab === "trending" ? trending : tab === "niche" ? niche : tab === "watchlist" ? watchlist : fresh;
   // Reference point for the gravity bar — the strongest item currently listed.
   const topGravity = rows.reduce((m, r) => Math.max(m, r.gravity ?? 0), 0);
 
@@ -131,14 +211,26 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
               ? "No trend data yet"
               : tab === "fresh"
                 ? "No new products yet"
-                : "No cached products yet"}
+                : tab === "niche"
+                  ? nicheNames.length === 0
+                    ? "No niches yet"
+                    : "Nothing rising in your niches"
+                  : tab === "watchlist"
+                    ? "Nothing on your watchlist"
+                  : "No cached products yet"}
           </p>
           <p className="mt-1 text-xs text-zinc-600">
             {tab === "trending"
               ? "Trending compares gravity between daily snapshots, so it needs a couple of days of history before it can show movement. Today's snapshot is recorded."
               : tab === "fresh"
                 ? "A product counts as new the first time a daily sweep sees it — so this fills in from the next sweep onward. Everything present when tracking started is treated as existing, not new."
-                : "The marketplace cache refreshes daily — check back shortly."}
+                : tab === "niche"
+                  ? nicheNames.length === 0
+                    ? "This list narrows Trending to the categories you already promote in. Add a product and it will start filling in."
+                    : `Nothing in ${nicheNames.slice(0, 3).join(", ")}${nicheNames.length > 3 ? " (and others)" : ""} gained gravity this week. Trending shows what's moving everywhere.`
+                  : tab === "watchlist"
+                    ? "Star a product on any other tab to track its gravity without adding it to My Products. Useful when you want to see whether a climb holds before committing."
+                  : "The marketplace cache refreshes daily — check back shortly."}
           </p>
         </div>
       ) : (
@@ -204,9 +296,15 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
                   </div>
                 </div>
 
-                <div className="h-1 overflow-hidden rounded-full bg-ink-800" title={`${pct}% of the top product's gravity`}>
-                  <div className="h-full rounded-full bg-emerald-500/70" style={{ width: `${pct}%` }} />
-                </div>
+                {h.history ? (
+                  <div title="Gravity over the last 14 days">
+                    <Spark values={h.history} />
+                  </div>
+                ) : (
+                  <div className="h-1 overflow-hidden rounded-full bg-ink-800" title={`${pct}% of the top product's gravity`}>
+                    <div className="h-full rounded-full bg-emerald-500/70" style={{ width: `${pct}%` }} />
+                  </div>
+                )}
 
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   {/* The metric that earned this row its place on THIS tab. Top needs none — the
@@ -222,6 +320,19 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
                         {h.gravity_change_pct != null ? ` (${h.gravity_change_pct}%)` : ""}
                       </Badge>
                     )}
+                    {tab === "watchlist" && h.gravity_change != null && (
+                      <Badge
+                        className={cn(
+                          "border",
+                          h.gravity_change >= 0
+                            ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+                            : "border-red-500/30 bg-red-500/15 text-red-300"
+                        )}
+                      >
+                        {h.gravity_change > 0 ? "+" : ""}
+                        {h.gravity_change.toFixed(1)} since starred
+                      </Badge>
+                    )}
                     {tab === "fresh" && h.days_known != null && (
                       <Badge className="border-sky-500/30 bg-sky-500/15 text-sky-300">
                         <Sparkles className="h-3 w-3" />
@@ -231,6 +342,20 @@ export default function MarketplaceHighlights({ onAdded }: { onAdded?: () => voi
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleWatch(h)}
+                      disabled={starring === h.vendor_id}
+                      aria-pressed={!!h.watched}
+                      title={h.watched ? "Stop watching" : "Watch this product's gravity"}
+                      className={cn(
+                        buttonVariants({ variant: "outline" }),
+                        "!px-2",
+                        h.watched && "border-amber-500/40 text-amber-300"
+                      )}
+                    >
+                      <Star className={cn("h-4 w-4", h.watched && "fill-current")} />
+                    </button>
                     {h.sales_page_url && (
                       <a
                         href={h.sales_page_url}
