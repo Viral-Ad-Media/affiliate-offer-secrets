@@ -91,6 +91,10 @@ const PUBLIC_PREFIX_PATHS = [
   // the same failure /api/domains/reverify-all had silently for weeks, on a route where the
   // consequence is continuing to text people who asked you to stop.
   "/api/sms/inbound",
+  // The trial-conversion sweep, called by pg_cron through pg_net with x-engine-secret. Missing
+  // from this list, the auth gate 307s it to /login and nothing is ever charged — same silent
+  // class as /api/domains/reverify-all, on a route whose failure mode is "no revenue, no error".
+  "/api/billing/charge-trials",
   "/p/", // public bridge (lead-capture landing) pages — real ad destinations, no auth
   "/api/public/campaign-image/", // public campaign product images — needed for Instagram posting
   "/api/public/leads", // bridge-page lead capture — anonymous visitors, no auth

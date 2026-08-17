@@ -7,7 +7,12 @@ export type NotificationKind =
   | "campaign_ready"
   | "referral_rewarded"
   | "domain_error"
-  | "mail_sender_error";
+  | "mail_sender_error"
+  // Billing. The DB CHECK on notifications.kind is an allowlist, so these had to be added there
+  // too — and notify() never throws, so a missing kind fails silently and invisibly.
+  | "trial_ending"
+  | "billing_failed"
+  | "billing_succeeded";
 
 // Server-only notification writer. Every caller runs as service_role (worker, API routes) —
 // `notifications` has no client insert policy, deliberately.
