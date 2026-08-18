@@ -161,3 +161,97 @@ export async function createSequenceFromCampaign(
 
   return { created: !existing, steps: rows.length };
 }
+
+/**
+ * Creates (or refreshes) the draft SMS drip for a campaign's generated messages.
+ *
+ * The exact treatment the kit's emails get above, for the same reason: `campaigns.sms_messages`
+ * (0096) was generated and then sat unreachable outside the product page's SMS tab, while the
+ * whole drip machinery — channel-aware enrollment, consent enforcement, quiet hours — was already
+ * built and waiting for rows. 0105 widened the one-per-source-campaign index to include channel,
+ * so this and the email draft coexist for the same campaign.
+ *
+ * DRAFT, never active, and doubly so here: an unwanted email is an annoyance, an unwanted text is
+ * a TCPA claim. Activating stays the operator's explicit act, behind the Twilio-connection gate.
+ *
+ * No parsing step — sms_messages was structured from day one ([{ body }]) precisely to avoid
+ * repeating the email_md reverse-engineering this file's parseEmailMd exists to do.
+ */
+export async function createSmsSequenceFromCampaign(
+  admin: SupabaseClient,
+  workspaceId: string,
+  campaignId: string
+): Promise<{ created: boolean; steps: number } | null> {
+  const { data: campaign } = await admin
+    .from("campaigns")
+    .select("id, user_id, sms_messages, product_id, name, products(product_title)")
+    .eq("id", campaignId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+
+  const messages = (Array.isArray(campaign?.sms_messages) ? campaign!.sms_messages : []) as {
+    body?: string;
+  }[];
+  const bodies = messages.map((m) => (typeof m?.body === "string" ? m.body.trim() : "")).filter(Boolean);
+  if (bodies.length === 0) return null;
+
+  const title =
+    ((campaign as any).products?.product_title as string | undefined) ??
+    ((campaign as any).name as string | null) ??
+    "Campaign";
+  const name = `${title} — SMS drip`.slice(0, 120);
+
+  const { data: existing } = await admin
+    .from("broadcast_sequences")
+    .select("id, status")
+    .eq("workspace_id", workspaceId)
+    .eq("source_campaign_id", campaignId)
+    .eq("channel", "sms")
+    .maybeSingle();
+
+  // Never touch a sequence that is live or paused mid-flight — contacts are already enrolled
+  // against these exact steps, and for SMS a silently changed step is a compliance problem, not
+  // just a surprise.
+  if (existing && existing.status !== "draft") return { created: false, steps: 0 };
+
+  let sequenceId = existing?.id as string | undefined;
+  if (!sequenceId) {
+    const { data: inserted, error } = await admin
+      .from("broadcast_sequences")
+      .insert({
+        workspace_id: workspaceId,
+        user_id: campaign!.user_id,
+        name,
+        kind: "sequence",
+        channel: "sms",
+        status: "draft",
+        audience_type: "campaign",
+        campaign_id: campaignId,
+        source_campaign_id: campaignId,
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    sequenceId = inserted.id as string;
+  } else {
+    await admin.from("broadcast_steps").delete().eq("sequence_id", sequenceId);
+  }
+
+  const rows = bodies.map((body, i) => ({
+    workspace_id: workspaceId,
+    user_id: campaign!.user_id,
+    sequence_id: sequenceId,
+    step_index: i + 1,
+    // Texts are pushier than email by nature, so the default cadence is SLOWER: day 0, then every
+    // 3 days. A starting point to edit, same as the email default above.
+    delay_days: i === 0 ? 0 : i * 3,
+    // broadcast_steps.subject is NOT NULL and never sent for sms — the internal-label convention
+    // 0098 established.
+    subject: `Message ${i + 1}`,
+    body_md: body,
+  }));
+  const { error: stepErr } = await admin.from("broadcast_steps").insert(rows);
+  if (stepErr) throw stepErr;
+
+  return { created: !existing, steps: rows.length };
+}

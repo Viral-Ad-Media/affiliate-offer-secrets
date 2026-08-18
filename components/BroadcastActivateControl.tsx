@@ -22,16 +22,28 @@ export default function BroadcastActivateControl({
   stats: Stats;
   onChanged: () => void;
 }) {
-  const [mailConnected, setMailConnected] = useState<boolean | null>(null);
+  const [senderConnected, setSenderConnected] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // SMS drips live in the same table (0098) and reach this same control. Gating them on the EMAIL
+  // sender was wrong twice over: a workspace with Twilio but no mail provider couldn't activate an
+  // SMS drip at all, and one with mail but no Twilio could activate a drip whose every send would
+  // then fail not_connected — with a banner telling them to connect SendGrid.
+  const channel = (sequence as { channel?: "email" | "sms" }).channel ?? "email";
 
   useEffect(() => {
-    // Gates on the account's active sender — whichever provider is configured.
-    createClient()
-      .rpc("get_active_mail_sender")
-      .then(({ data }: { data: any }) => setMailConnected(!!data?.connected));
-  }, []);
+    const client = createClient();
+    if (channel === "sms") {
+      client
+        .rpc("get_sms_connection_status")
+        .then(({ data }: { data: any }) => setSenderConnected(!!data?.connected));
+    } else {
+      // The account's active email sender — whichever provider is configured.
+      client
+        .rpc("get_active_mail_sender")
+        .then(({ data }: { data: any }) => setSenderConnected(!!data?.connected));
+    }
+  }, [channel]);
 
   async function activate() {
     setBusy(true);
@@ -97,19 +109,31 @@ export default function BroadcastActivateControl({
         </div>
       </div>
 
-      {mailConnected === false && (
+      {senderConnected === false && (
         <div className="mb-3 rounded-lg border border-ink-700 bg-ink-800/50 p-3 text-xs text-zinc-400">
-          Connect an email sender (Resend, SendGrid, Mailgun, or SMTP) in{" "}
-          <a href="/settings/integrations" className="text-emerald-400 underline">
-            Integrations
-          </a>{" "}
-          before activating a sequence.
+          {channel === "sms" ? (
+            <>
+              Connect Twilio in{" "}
+              <a href="/settings/integrations" className="text-emerald-400 underline">
+                Integrations
+              </a>{" "}
+              before activating an SMS sequence.
+            </>
+          ) : (
+            <>
+              Connect an email sender (Resend, SendGrid, Mailgun, or SMTP) in{" "}
+              <a href="/settings/integrations" className="text-emerald-400 underline">
+                Integrations
+              </a>{" "}
+              before activating a sequence.
+            </>
+          )}
         </div>
       )}
 
       <div className="flex items-center gap-2">
         {sequence.status === "draft" && (
-          <Button onClick={activate} disabled={busy || !canActivate || !mailConnected}>
+          <Button onClick={activate} disabled={busy || !canActivate || !senderConnected}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             Activate
           </Button>
@@ -121,7 +145,7 @@ export default function BroadcastActivateControl({
           </Button>
         )}
         {sequence.status === "paused" && (
-          <Button onClick={resume} disabled={busy || !mailConnected}>
+          <Button onClick={resume} disabled={busy || !senderConnected}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
             Resume
           </Button>

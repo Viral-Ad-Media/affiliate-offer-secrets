@@ -2,7 +2,7 @@ import { db } from "./core";
 import { NETWORKS } from "@/lib/networks";
 import { notify, jobLabel } from "@/lib/notifications";
 import { createPostFromCampaign } from "@/lib/blog/fromCampaign";
-import { createSequenceFromCampaign } from "@/lib/broadcast/fromCampaign";
+import { createSequenceFromCampaign, createSmsSequenceFromCampaign } from "@/lib/broadcast/fromCampaign";
 import { runBuildCampaignStage, BUILD_CAMPAIGN_STAGES } from "./build";
 import { normalizeKitAssets, normalizeKitCounts } from "@/lib/kitAssets";
 import { runDiscoverProducts, type DiscoverJobPayload } from "./discover";
@@ -455,6 +455,21 @@ async function finalizeBuildCampaign(job: JobRow, productId: string): Promise<vo
         title: "Email sequence wasn't created",
         body: "The kit built fine, but its email swipes couldn't be turned into a draft sequence.",
         href: "/emails/sequences",
+      });
+    }
+
+    // And the kit's SMS messages become a draft SMS drip, when the kit asked for them. Its own
+    // try/catch for the same reason as above — the email draft failing must not take this one
+    // down, nor the reverse. Returns null harmlessly for kits built without the sms asset.
+    try {
+      await createSmsSequenceFromCampaign(db, job.workspace_id, builtCampaign.id as string);
+    } catch (err) {
+      console.error("auto sms sequence failed", err);
+      await notify(db, job.user_id, {
+        kind: "job_failed",
+        title: "SMS drip wasn't created",
+        body: "The kit built fine, but its SMS messages couldn't be turned into a draft drip.",
+        href: "/sms",
       });
     }
   }
