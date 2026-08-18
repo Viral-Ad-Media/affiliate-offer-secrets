@@ -157,9 +157,9 @@ const STEP_TEMPLATES: Record<FunnelStepType, Template> = {
 };
 
 // Types where the video IS the page, so the template seeds a video block rather than an image.
-const VIDEO_FIRST_TYPES = new Set(["vsl", "webinar"]);
+export const VIDEO_FIRST_TYPES = new Set(["vsl", "webinar"]);
 // Types whose whole point is the question — same relationship VIDEO_FIRST_TYPES has to the player.
-const SURVEY_TYPES = new Set(["survey"]);
+export const SURVEY_TYPES = new Set(["survey"]);
 
 function fill(t: Template, productTitle: string): PageCopy {
   const sub = (s: string) => s.replaceAll("{PRODUCT}", productTitle);
@@ -273,7 +273,7 @@ function blankTree(stepType?: FunnelStepType): PageBlockTree {
  * It ships with no source: an empty video renders nothing, so an unfinished page never shows a
  * broken player to real traffic.
  */
-function withVideoBlock(tree: PageBlockTree, headline: string): PageBlockTree {
+export function withVideoBlock(tree: PageBlockTree, headline: string): PageBlockTree {
   const first = tree.blocks[0];
   if (!first || first.type !== "section") return tree;
   const video = {
@@ -304,7 +304,7 @@ function withVideoBlock(tree: PageBlockTree, headline: string): PageBlockTree {
  * Marked `stepped` because a survey that asks its question and its email on one screen is a lead
  * form with extra words — the one-at-a-time flow is the shape people recognise.
  */
-function withQuizBlock(tree: PageBlockTree): PageBlockTree {
+export function withQuizBlock(tree: PageBlockTree): PageBlockTree {
   const form = tree.blocks.find(
     (b): b is Extract<(typeof tree.blocks)[number], { locked: "lead_capture_form" }> =>
       "locked" in b && b.locked === "lead_capture_form"

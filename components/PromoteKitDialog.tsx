@@ -14,6 +14,7 @@ import {
   type CountableKitAssetKey,
 } from "@/lib/kitAssets";
 import { creditCostFor, formatCost } from "@/lib/credits";
+import { FUNNEL_TYPES, isBuildable } from "@/lib/funnelTypes";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -46,6 +47,7 @@ export default function PromoteKitDialog({
   mode = "build",
   defaultAssets,
   funnelEditedAt = null,
+  defaultFunnelType = null,
   onRestyle,
 }: {
   open: boolean;
@@ -53,7 +55,7 @@ export default function PromoteKitDialog({
   /** How many products this will run against — 1 for the row button, N for the bulk bar. */
   count: number;
   busy: boolean;
-  onConfirm: (assets: KitAssetKey[], counts: Record<CountableKitAssetKey, number>) => void;
+  onConfirm: (assets: KitAssetKey[], counts: Record<CountableKitAssetKey, number>, funnelType: string) => void;
   /** "regenerate" changes the copy and unticks the funnel page by default. */
   mode?: "build" | "regenerate";
   /**
@@ -65,6 +67,8 @@ export default function PromoteKitDialog({
   defaultAssets?: KitAssetKey[];
   /** ISO date of the last hand edit, when known — sharpens the warning, never gates it. */
   funnelEditedAt?: string | null;
+  /** The funnel's current type, so regenerating doesn't silently retype the page to bridge. */
+  defaultFunnelType?: string | null;
   /** Offered as the non-destructive alternative. Absent in bulk, where there's no one page to restyle. */
   onRestyle?: () => void;
 }) {
@@ -73,6 +77,12 @@ export default function PromoteKitDialog({
     defaultAssets ?? (regenerate ? ALL_KIT_ASSETS.filter((k) => k !== "funnel") : [...ALL_KIT_ASSETS])
   );
   const [counts, setCounts] = useState<Record<CountableKitAssetKey, number>>(() => normalizeKitCounts(undefined));
+  // Bridge stays the default because it is what every build has ever produced — someone who
+  // ignores the new picker gets exactly the kit they got last week.
+  const [funnelType, setFunnelType] = useState(
+    defaultFunnelType && isBuildable(defaultFunnelType) ? defaultFunnelType : "bridge"
+  );
+  const buildableTypes = FUNNEL_TYPES.filter((t) => isBuildable(t.key));
 
   function toggle(key: KitAssetKey) {
     setSelected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
@@ -140,6 +150,26 @@ export default function PromoteKitDialog({
                     <span className="block text-[12px] text-zinc-500">{a.hint}</span>
                   </span>
                 </label>
+
+                {/* The funnel's TYPE. Only on the funnel row and only while it's ticked — the
+                    choice shapes what stagePages writes (advertorial story, squeeze brevity, VSL
+                    copy around a video slot…) and is meaningless for every other asset. Unsupported
+                    types aren't listed here at all: this is a build action, not the browse-the-
+                    catalog moment the NewFunnel dialog is, so a disabled row would just be noise. */}
+                {a.key === "funnel" && on && (
+                  <select
+                    value={funnelType}
+                    onChange={(e) => setFunnelType(e.target.value)}
+                    className="shrink-0 rounded border border-ink-600 bg-ink-800 px-1.5 py-1 text-xs text-zinc-100"
+                    title={FUNNEL_TYPES.find((t) => t.key === funnelType)?.blurb}
+                  >
+                    {buildableTypes.map((t) => (
+                      <option key={t.key} value={t.key}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
 
                 {/* How many. Sits outside the <label> so clicking the number doesn't toggle the
                     checkbox it belongs to. Disabled rather than hidden when the asset is off —
@@ -231,7 +261,7 @@ export default function PromoteKitDialog({
               Cancel
             </Button>
             <Button
-              onClick={() => onConfirm(selected, normalizeKitCounts(counts))}
+              onClick={() => onConfirm(selected, normalizeKitCounts(counts), funnelType)}
               disabled={busy || none}
               title={none ? "Pick at least one thing to generate" : undefined} className="text-sm">
               {busy ? (

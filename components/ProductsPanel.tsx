@@ -317,7 +317,7 @@ export default function ProductsPanel({
   // a second server-side copy of that loop would be a second billing path to keep in step. Stops on
   // the first failure instead of hammering: once credits run out every remaining call fails the
   // same way, and the person needs to know how far it got.
-  async function runPromote(ids: string[], assets: string[], counts: Record<string, number>) {
+  async function runPromote(ids: string[], assets: string[], counts: Record<string, number>, funnelType = "bridge") {
     setBulkBusy(true);
     const jobIds: string[] = [];
     const titles: Record<string, string> = {};
@@ -326,7 +326,7 @@ export default function ProductsPanel({
       const res = await fetch("/api/promote", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ product_id: id, assets, counts }),
+        body: JSON.stringify({ product_id: id, assets, counts, funnel_type: funnelType }),
       });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {

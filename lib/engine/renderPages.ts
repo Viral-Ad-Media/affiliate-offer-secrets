@@ -174,7 +174,13 @@ function splitInto<T>(items: T[], n: number): T[][] {
 export function normalizePageCopy(
   raw: unknown,
   imageDataUrl: string | null,
-  opts?: { stepType?: FunnelStepType; siteName?: string; extraImages?: string[] }
+  opts?: {
+    stepType?: FunnelStepType;
+    siteName?: string;
+    extraImages?: string[];
+    /** false = advertorial shape: no lead-capture form; the locked primary_cta is the way out. */
+    leadForm?: boolean;
+  }
 ): PageBlockTree {
   if (isPageBlockTree(raw)) return raw;
 
@@ -382,6 +388,26 @@ export function normalizePageCopy(
     // `offer` resolves at render time to the next funnel step when one exists, else the hoplink —
     // exactly where the old reveal-and-click CTA pointed, so this changes the number of clicks,
     // not the destination.
+    // An advertorial trades the lead for a shorter path: no form, and the locked primary_cta —
+    // whose destination resolves to the offer at render time, same as a form's `offer` action —
+    // becomes the page's one way onward. Appended HERE, not left to reconcileBridgeCta, so the
+    // freshly built tree is already the shape the validator would settle it into on first save.
+    if (opts?.leadForm === false) {
+      blocks.push({
+        id: legacyId(),
+        type: "primary_cta",
+        locked: "primary_cta",
+        style: {},
+        content: { text: cta },
+      });
+      // Content rule 3: the disclosure is mandatory on EVERY page shape, and this early return
+      // originally skipped the append at the bottom of this function — the validator refused the
+      // tree with "missing required locked block: disclosure", which is the second layer doing
+      // its job. The renderer hoists it last regardless of position.
+      blocks.push({ id: legacyId(), type: "disclosure", locked: "disclosure", style: {}, content: {} });
+      return { version: 2, blocks };
+    }
+
     const form: LockedBlock = {
       id: legacyId(),
       type: "lead_capture_form",
@@ -780,7 +806,13 @@ ${t.bodyStart}
     ${body}
   </div>
   <script>
-    document.getElementById('leadForm').addEventListener('submit', function (e) {
+    // Null-guarded: a bridge page may legitimately have NO lead-capture form (an advertorial, or
+    // any tree the validator's requiredLockedKinds permits form-less) — and this handler used to
+    // attach unconditionally, so such a page threw on every load. Pre-existing bug recorded in
+    // CLAUDE.md when the custom-code block was verified; fixed now that a form-less page is a
+    // first-class build output rather than an edge someone might construct.
+    var aosLeadForm = document.getElementById('leadForm');
+    if (aosLeadForm) aosLeadForm.addEventListener('submit', function (e) {
       e.preventDefault();
       var form = e.target;
       var payload = { campaign_id: form.dataset.campaignId, first_name: '', email: '', extra_fields: {} };

@@ -140,13 +140,20 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
   // hand-built funnels carry no product at all. That is a convention, not a database constraint:
   // if a second campaign is ever allowed to share a product, this button would need to name the
   // campaign instead, and upsertCampaign would start throwing before it got the chance.
-  async function runRegenerate(assets: string[], counts: Record<string, number>) {
+  async function runRegenerate(assets: string[], counts: Record<string, number>, funnelType = "bridge") {
     if (!campaign?.product_id) return;
     setRegenBusy(true);
     const res = await fetch("/api/promote", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ product_id: campaign.product_id, assets, counts }),
+      // Regenerating keeps the funnel's EXISTING type unless the dialog changed it — a page that
+      // is an advertorial should not silently become a bridge because the default won.
+      body: JSON.stringify({
+        product_id: campaign.product_id,
+        assets,
+        counts,
+        funnel_type: funnelType,
+      }),
     });
     const d = await res.json().catch(() => ({}));
     setRegenBusy(false);
@@ -265,6 +272,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
             setRestyleOpen(true);
           }}
           onConfirm={runRegenerate}
+          defaultFunnelType={(campaign as any).funnel_type ?? null}
         />
         <RestyleDialog
           open={restyleOpen}

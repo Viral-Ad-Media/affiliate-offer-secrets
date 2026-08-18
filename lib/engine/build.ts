@@ -9,6 +9,7 @@ import type { FbAdAngle, SocialPost } from "@/lib/shared";
 import { MAX_SMS_BODY, SMS_OPT_OUT } from "@/lib/sms";
 import { META_HEADLINE_RECOMMENDED, META_PRIMARY_TEXT_RECOMMENDED } from "@/lib/adCompliance";
 import { wants, type KitAssetKey, type CountableKitAssetKey } from "@/lib/kitAssets";
+import { withVideoBlock, withQuizBlock, VIDEO_FIRST_TYPES, SURVEY_TYPES } from "@/lib/funnelTemplates";
 import { stripDisclosureParagraphs, stripDisclosureFromCopy, isDisclosureText } from "@/lib/disclosure";
 
 // Re-exported so every existing server-side importer keeps working; the list itself is
@@ -243,16 +244,42 @@ async function stageAds(
   return { stageData: prior, campaignPatch: result };
 }
 
+/**
+ * Per-type authoring brief, spliced into the prompt. The SCHEMA stays the permanent flat shape —
+ * these change what the model writes into it, and the structural differences (video slot, quiz,
+ * no form) are applied as post-passes on the normalized tree using the same helpers hand-built
+ * funnels use, so the two paths cannot drift into different ideas of what a VSL page is.
+ */
+const FUNNEL_TYPE_BRIEFS: Record<string, string> = {
+  bridge: "", // the historical default — the base prompt already describes it
+  advertorial:
+    "\n\nThis page is an ADVERTORIAL: a story-style editorial presell with no opt-in form. Write the lead as a first-person or reported story that earns attention before mentioning the product; the mechanism explains the discovery inside the story; the CTA label invites clicking through to the offer (e.g. \"See the full story\"), never \"submit\" or \"sign up\" language.",
+  squeeze:
+    "\n\nThis page is a SQUEEZE page: short and single-minded. The lead is 2-3 sentences on the single result the free resource delivers; benefits are punchy one-liners; the CTA label asks for the download/access. Total copy should be far shorter than a sales page — brevity is the format.",
+  summit:
+    "\n\nThis page REGISTERS people for an event/summit-style presentation. The lead sells the moment (\"what you'll learn on the day\"), benefits are session takeaways, and the CTA label is registration language (\"Save my seat\").",
+  application:
+    "\n\nThis page starts an APPLICATION. Position the offer as selective: the lead states who this is for and who it is not, the mechanism describes the process after applying, and the CTA label is application language (\"Apply now\").",
+  vsl:
+    "\n\nThis page hosts a VIDEO SALES LETTER. The copy SUPPORTS a video embedded above it, so the headline teases what the video reveals, the lead is 2-3 sentences that make someone press play, and the remaining sections back up the video's claims for people who scroll. Do not describe or narrate the video's content shot-by-shot.",
+  webinar:
+    "\n\nThis page registers people for a WEBINAR. Headline names the training's promise, the lead says what will be taught and how long it runs, benefits are what attendees walk away able to do, and the CTA label is registration language.",
+  survey:
+    "\n\nThis page opens with a short SURVEY/quiz that sorts visitors before the pitch. Write the lead to frame answering the question as the fast way to a personalised answer; keep the sections short — the question is the star of the page.",
+};
+
 async function stagePages(
   product: ProductRow,
   prior: Record<string, unknown>,
   usage: UsageContext,
-  campaignId: string
+  campaignId: string,
+  funnelType: string = "bridge"
 ): Promise<StageOutput> {
   const ctx = productContext(product, (prior.sales_text as string | null) ?? null);
+  const typeBrief = FUNNEL_TYPE_BRIEFS[funnelType] ?? "";
   const copy = await completeJSON<PageCopy>({
     system: COMPLIANCE_SYSTEM,
-    prompt: `${ctx}\n\nWrite bridge (landing) page copy: a headline, a lead paragraph, a "mechanism" explanation (why/how it works), 3-5 benefit bullets, a short proof/credibility paragraph, 3-4 FAQ pairs, and a short CTA button label.
+    prompt: `${ctx}${typeBrief}\n\nWrite bridge (landing) page copy: a headline, a lead paragraph, a "mechanism" explanation (why/how it works), 3-5 benefit bullets, a short proof/credibility paragraph, 3-4 FAQ pairs, and a short CTA button label.
 
 Do NOT include an affiliate-disclosure sentence anywhere in this copy — the page template appends its own code-owned disclosure automatically, and a second one written into the lead paragraph renders as one dense block that says the same thing twice.
 
@@ -342,7 +369,18 @@ Finally, write the page's own meta tags: seo_title (max 60 characters, so it isn
   let tree = normalizePageCopy(cleaned, imageDataUrl, {
     siteName: product.product_title,
     extraImages: (prior.image_data_urls as string[] | undefined)?.slice(1) ?? [],
+    // The advertorial's defining structural difference: no lead-capture form, the locked
+    // primary_cta carries the click to the offer.
+    leadForm: funnelType === "advertorial" ? false : undefined,
   });
+  // Structural passes shared with hand-built funnels (lib/funnelTemplates.ts), so an AI VSL and a
+  // hand-made VSL are the same shape: an empty video slot above the copy (the operator pastes the
+  // video — inventing a source would be worse than a visible empty slot), and the survey types get
+  // the bucket question, unrouted, for exactly the reasons withQuizBlock documents.
+  const headlineText =
+    typeof (copy as { headline?: unknown }).headline === "string" ? (copy as any).headline : product.product_title;
+  if (VIDEO_FIRST_TYPES.has(funnelType)) tree = withVideoBlock(tree, headlineText);
+  if (SURVEY_TYPES.has(funnelType)) tree = withQuizBlock(tree);
   // The plan rides on the tree, like contentWidth and theme — the funnel page, its variants, its
   // steps and the blog post derived from it all read page_copy, so one write covers them.
   const planned = keywordsOf({ keywords: (copy as unknown as { keywords?: unknown }).keywords } as PageBlockTree);
@@ -388,6 +426,10 @@ Finally, write the page's own meta tags: seo_title (max 60 characters, so it isn
       bridge_html: bridgeHtml,
       page_copy: tree,
       embedded_image_data_url: imageDataUrl,
+      // Stored so the publish checklist (funnelPageChecklist takes funnel_type), the funnel map
+      // and the type badge all know what this page IS. AI builds used to leave it null, which
+      // read as "bridge" everywhere by fallback.
+      funnel_type: funnelType,
       // Only written when the model actually produced one — a rebuild must not blank a description
       // the operator wrote by hand in the funnel's SEO panel.
       ...(seo.seo_title ? { seo_title: seo.seo_title } : {}),
@@ -600,7 +642,8 @@ export async function runBuildCampaignStage(
   usageCtx: { userId: string; jobId: string },
   campaignId: string,
   assets: KitAssetKey[],
-  counts: Record<CountableKitAssetKey, number>
+  counts: Record<CountableKitAssetKey, number>,
+  funnelType: string = "bridge"
 ): Promise<StageOutput> {
   const stage = BUILD_CAMPAIGN_STAGES[stageIndex];
   const usage: UsageContext = { ...usageCtx, jobType: "build_campaign", stage };
@@ -621,7 +664,7 @@ export async function runBuildCampaignStage(
       return stageAds(product, priorStageData, usage, assets, counts);
     case "pages":
       return wants(assets, "funnel")
-        ? stagePages(product, priorStageData, usage, campaignId)
+        ? stagePages(product, priorStageData, usage, campaignId, funnelType)
         : { stageData: priorStageData };
     case "content":
       return wants(assets, "blog")

@@ -105,6 +105,18 @@ export const FUNNEL_TYPES: FunnelTypeDef[] = [
     steps: ["thank_you"],
   },
   {
+    key: "advertorial",
+    label: "Advertorial",
+    group: "Paid traffic",
+    blurb: "Story-style presell that sells the click — no opt-in form, the CTA goes straight to the offer.",
+    // Ready because everything it needs already exists: a bridge tree with NO lead-capture form
+    // gets the locked primary_cta appended (reconcileBridgeCta), which resolves to the offer at
+    // render time. What it deliberately does NOT do is capture a lead — that is the trade the
+    // format makes for a shorter path to the sale, and the blurb says so.
+    support: "ready",
+    steps: [],
+  },
+  {
     key: "book",
     label: "Book / free-plus-shipping",
     group: "Low-ticket buyer",

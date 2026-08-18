@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { queueChargedJob } from "@/lib/credits";
+import { isBuildable } from "@/lib/funnelTypes";
 import { normalizeKitAssets, normalizeKitCounts } from "@/lib/kitAssets";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
@@ -25,6 +26,11 @@ export async function POST(req: Request) {
   // route is reachable directly, so the range is enforced where the value is stored, not only
   // where the dialog offers it.
   const counts = normalizeKitCounts(body.counts);
+  // The funnel's TYPE (0084's funnel_type column; picker in PromoteKitDialog). Anything that
+  // isn't a buildable catalog entry falls back to bridge — a stale client naming a type this
+  // build can't deliver should get the historical page, not a 400 that blocks the whole kit.
+  const funnelType =
+    typeof body.funnel_type === "string" && isBuildable(body.funnel_type) ? body.funnel_type : "bridge";
 
   const { data: product, error: productError } = await supabase
     .from("products")
@@ -64,7 +70,7 @@ export async function POST(req: Request) {
     {
       workspace_id: ws,
       type: "build_campaign",
-      payload: { product_id: productId, vendor_id: product.vendor_id, assets, counts },
+      payload: { product_id: productId, vendor_id: product.vendor_id, assets, counts, funnel_type: funnelType },
     },
     {
       // Preserve the pre-existing claim rollback: if the atomic queue/debit is declined, the

@@ -4,6 +4,9 @@ import { notify, jobLabel } from "@/lib/notifications";
 import { createPostFromCampaign } from "@/lib/blog/fromCampaign";
 import { createSequenceFromCampaign, createSmsSequenceFromCampaign } from "@/lib/broadcast/fromCampaign";
 import { runBuildCampaignStage, BUILD_CAMPAIGN_STAGES } from "./build";
+import { isBuildable, funnelType as funnelTypeDef } from "@/lib/funnelTypes";
+import { stepPageCopy } from "@/lib/funnelTemplates";
+import { rerenderFunnelSequence } from "@/lib/funnelSteps";
 import { normalizeKitAssets, normalizeKitCounts } from "@/lib/kitAssets";
 import { runDiscoverProducts, type DiscoverJobPayload } from "./discover";
 import { runLaunchAdStage, LAUNCH_AD_STAGES, type LaunchAdPayload } from "./adlaunch";
@@ -335,6 +338,13 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
   // Same rule for the counts: absent falls back to what each was before they were adjustable, so a
   // job queued before this shipped still produces 3 angles / 3 scripts / 5 captions / 3 emails.
   const counts = normalizeKitCounts(job.payload?.counts);
+  // Absent means bridge — every job queued before types existed, and any direct caller, builds
+  // exactly what it always built. The route validates against isBuildable(); this re-check is the
+  // worker-side belt-and-braces, same split as every payload field: garbage falls back rather
+  // than failing a job five times over a label.
+  const rawFunnelType = (job.payload as any)?.funnel_type;
+  const funnelType =
+    typeof rawFunnelType === "string" && isBuildable(rawFunnelType) ? rawFunnelType : "bridge";
   const { stageData, campaignPatch } = await runBuildCampaignStage(
     job.stage,
     product as any,
@@ -342,7 +352,8 @@ async function processBuildCampaignStage(job: JobRow): Promise<StageResult> {
     { userId: job.user_id, jobId: job.id },
     campaignRow.id,
     assets,
-    counts
+    counts,
+    funnelType
   );
 
   if (campaignPatch && Object.keys(campaignPatch).length > 0) {
@@ -456,6 +467,57 @@ async function finalizeBuildCampaign(job: JobRow, productId: string): Promise<vo
         body: "The kit built fine, but its email swipes couldn't be turned into a draft sequence.",
         href: "/emails/sequences",
       });
+    }
+
+    // The chosen funnel TYPE's template steps, when the type defines any and the funnel has none.
+    // A webinar without its thank-you and order pages isn't a webinar funnel — it's a squeeze page
+    // wearing the label. Template starter copy (the same stepPageCopy hand-built funnels seed
+    // from), never AI: a step page is post-opt-in furniture, and burning a model call per step
+    // would price the type choice differently from what the dialog quoted. Skipped entirely when
+    // steps already exist — a REBUILD must not duplicate or reset pages someone edited.
+    try {
+      const { data: builtCampaignRow } = await db
+        .from("campaigns")
+        .select("id, funnel_type, name, products(product_title)")
+        .eq("workspace_id", job.workspace_id)
+        .eq("product_id", productId)
+        .maybeSingle();
+      const typeDef = builtCampaignRow?.funnel_type ? funnelTypeDef(builtCampaignRow.funnel_type as string) : null;
+      if (builtCampaignRow && typeDef && typeDef.steps.length > 0) {
+        const { count: existingSteps } = await db
+          .from("funnel_steps")
+          .select("id", { count: "exact", head: true })
+          .eq("campaign_id", builtCampaignRow.id);
+        if ((existingSteps ?? 0) === 0) {
+          const title =
+            ((builtCampaignRow as any).products?.product_title as string | undefined) ??
+            ((builtCampaignRow as any).name as string | null) ??
+            "Funnel";
+          const rows = typeDef.steps.map((stepType, i) => ({
+            user_id: job.user_id,
+            workspace_id: job.workspace_id,
+            campaign_id: builtCampaignRow.id,
+            step_type: stepType,
+            step_index: i + 1,
+            page_copy: stepPageCopy(stepType, "direct", title),
+            // Last step sends traffic onward; every earlier one continues the chain — the same
+            // rule /api/funnels applies when hand-building.
+            cta_action: i === typeDef.steps.length - 1 ? "hoplink" : "next_step",
+          }));
+          const { error: stepErr } = await db.from("funnel_steps").insert(rows);
+          if (!stepErr) {
+            // The opt-in page's post-submit destination is baked, so it has to be re-rendered to
+            // point at step 1 instead of the in-place reveal.
+            await rerenderFunnelSequence(db, builtCampaignRow.id as string, job.workspace_id);
+          } else {
+            console.error("funnel step seeding failed", stepErr.message);
+          }
+        }
+      }
+    } catch (err) {
+      // Best-effort like everything else in finalize: a step-seeding problem must not turn a
+      // successfully built kit into a failed job. The map's + connector adds steps by hand.
+      console.error("funnel step seeding threw", err);
     }
 
     // And the kit's SMS messages become a draft SMS drip, when the kit asked for them. Its own
