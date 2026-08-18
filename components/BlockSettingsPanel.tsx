@@ -5,6 +5,7 @@ import {
   FORM_FIELD_PRESETS,
   FORM_FIELD_TYPES,
   CHOICE_FIELD_TYPES,
+  headingLevel,
   type Block,
   type ElementBlock,
   type FormInputBlock,
@@ -38,7 +39,9 @@ export function hasContentSettings(block: Block | null): boolean {
     block.type === "form" ||
     block.type === "lead_capture_form" ||
     block.type === "custom_html" ||
-    block.type === "table_of_contents"
+    block.type === "table_of_contents" ||
+    block.type === "heading" ||
+    block.type === "subheading"
   );
 }
 
@@ -629,6 +632,36 @@ export default function BlockSettingsPanel({
         <p className="text-[11px] leading-snug text-zinc-500">
           Saved as <code className="text-zinc-400">{c.fieldKey}</code> — the CSV column header and
           the key on the contact.
+        </p>
+      </div>
+    );
+  }
+
+  if (block.type === "heading" || block.type === "subheading") {
+    const c = (block as ElementBlock).content as { text: string; level?: number };
+    const fallback = block.type === "heading" ? 1 : 2;
+    const current = headingLevel(c.level, fallback as 1 | 2);
+    return (
+      <div className="space-y-3">
+        <label className="block">
+          <span className={LABEL}>Heading level</span>
+          <select
+            className={SELECT}
+            value={String(current)}
+            onChange={(e) => set({ level: Number(e.target.value) })}
+          >
+            {[1, 2, 3, 4, 5, 6].map((n) => (
+              <option key={n} value={n}>
+                H{n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="text-[11px] leading-snug text-zinc-500">
+          The HTML tag, which is document structure as well as size — search engines and screen
+          readers read the levels as an outline, so keep one H1 per page and don&apos;t skip levels
+          just to change the look. For a purely visual change, set the font size under Style
+          instead.
         </p>
       </div>
     );

@@ -335,8 +335,16 @@ function withVisibility(html: string, block: { hidden?: readonly Viewport[] }): 
   return `${tag} class="${cls}"${html.slice(tagEnd)}`;
 }
 
-export type HeadingBlock = Base & { type: "heading"; content: { text: string } };
-export type SubheadingBlock = Base & { type: "subheading"; content: { text: string } };
+/**
+ * `level` picks the HTML tag (h1–h6). Optional so every stored tree keeps meaning what it meant:
+ * absent = the type's historical tag (heading→h1, subheading→h2). The two types stay distinct
+ * rather than merging into one "heading with a level" — palettes, templates, the TOC's depth
+ * filter and normalizePageCopy all address them by type, and a merge would be a migration of
+ * every stored tree for zero rendered difference.
+ */
+export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+export type HeadingBlock = Base & { type: "heading"; content: { text: string; level?: HeadingLevel } };
+export type SubheadingBlock = Base & { type: "subheading"; content: { text: string; level?: HeadingLevel } };
 export type ParagraphBlock = Base & { type: "paragraph"; content: { text: string } };
 export type ImageBlock = Base & { type: "image"; content: { dataUrl: string | null; alt: string } };
 export type BulletListBlock = Base & { type: "bullet_list"; content: { items: string[] } };
@@ -1103,14 +1111,22 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
     // Headings carry their block id so a contents entry (and a `scroll` button action) can link to
     // them. Visually inert, ID_RE-validated, and safe to add to pages already taking traffic —
     // sections have rendered theirs for the same reason since scroll actions shipped.
-    case "heading":
-      return `<h1 id="${escapeHtml(block.id)}"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(
+    //
+    // The tag comes from headingLevel(), never from the stored value directly: the level is the
+    // one content field that becomes part of an HTML TAG NAME, so it is clamped to 1-6 here as
+    // well as in the validator — the same belt-and-braces every style value gets.
+    case "heading": {
+      const tag = `h${headingLevel(block.content.level, 1)}`;
+      return `<${tag} id="${escapeHtml(block.id)}"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(
         block.content.text
-      )}</h1>`;
-    case "subheading":
-      return `<h2 id="${escapeHtml(block.id)}"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(
+      )}</${tag}>`;
+    }
+    case "subheading": {
+      const tag = `h${headingLevel(block.content.level, 2)}`;
+      return `<${tag} id="${escapeHtml(block.id)}"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${escapeHtml(
         block.content.text
-      )}</h2>`;
+      )}</${tag}>`;
+    }
     case "paragraph":
       return `<p${styleAttr(block.style, TEXT_STYLE_KEYS)}>${renderInline(block.content.text)}</p>`;
     case "image": {
@@ -1933,6 +1949,12 @@ function renderLockedBlock(block: LockedBlock, ctx: RenderCtx): string {
 
 // Returns a body-fragment string — renderBridgeHtml/renderFunnelStepHtml in renderPages.ts own
 // the outer <!doctype>/<head>/<style>/submit-script and splice this in unchanged.
+/** The effective h1-h6 level, clamped. Exported for the canvas preview and the validator. */
+export function headingLevel(raw: unknown, fallback: HeadingLevel): HeadingLevel {
+  const n = typeof raw === "number" ? Math.round(raw) : NaN;
+  return n >= 1 && n <= 6 ? (n as HeadingLevel) : fallback;
+}
+
 /**
  * Every heading on the page, in document order, for the contents block.
  *
@@ -1946,7 +1968,11 @@ function collectHeadings(blocks: any[]): { id: string; text: string; level: 1 | 
     for (const b of list ?? []) {
       if (b?.type === "heading" || b?.type === "subheading") {
         const text = typeof b.content?.text === "string" ? b.content.text.trim() : "";
-        if (text) out.push({ id: b.id, text, level: b.type === "heading" ? 1 : 2 });
+        // The contents block's depth filter stays two-valued (main vs sub) even though levels go
+        // to h6 now: a contents list indented six deep is an outline, not a table of contents.
+        // The REAL level decides the bucket — an h3 typed on a "heading" block lists as a sub.
+        const real = headingLevel(b.content?.level, b.type === "heading" ? 1 : 2);
+        if (text) out.push({ id: b.id, text, level: real <= 2 ? (real as 1 | 2) : 2 });
       }
       if (Array.isArray(b?.children)) walk(b.children);
       if (Array.isArray(b?.columns)) for (const c of b.columns) walk(c?.children ?? []);

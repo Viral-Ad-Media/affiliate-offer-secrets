@@ -83,6 +83,7 @@ import {
   type Block,
   type BlockStyle,
   type ButtonAction,
+  headingLevel,
 } from "@/lib/engine/renderPages";
 import { parseVideoUrl, sourceToDisplayUrl, embedUrl } from "@/lib/engine/videoEmbed";
 import BlockStylePanel from "@/components/BlockStylePanel";
@@ -1405,28 +1406,38 @@ export default function WysiwygCanvas({
 
   const renderElement: RenderElementFn = (el, containerId) => {
     switch (el.type) {
-      case "heading":
+      case "heading": {
+        // Tag and default size follow the chosen level, so the canvas shows the structure the
+        // published page will really have. `as` changing changes the element's KEY implicitly? No
+        // — EditableText keeps a stable React key by block id, but a changed `as` remounts the
+        // node, which is fine: the level changes via the settings panel, never mid-typing.
+        const lvl = headingLevel(el.content.level, 1);
+        const SIZE = ["text-[40px]", "text-[32px]", "text-[26px]", "text-[22px]", "text-[18px]", "text-[16px]"][lvl - 1];
         return (
           <EditableText
-            as="h1"
+            as={`h${lvl}` as keyof JSX.IntrinsicElements}
             value={el.content.text}
             onCommit={(v) => commit(el.id, { text: v })}
             maxLength={200}
-            className="mb-4 block text-[40px] font-bold leading-tight"
+            className={`mb-4 block ${SIZE} font-bold leading-tight`}
             style={blockInlineStyle(el)}
           />
         );
-      case "subheading":
+      }
+      case "subheading": {
+        const lvl = headingLevel(el.content.level, 2);
+        const SIZE = ["text-[40px]", "text-[22px]", "text-[20px]", "text-[18px]", "text-[16px]", "text-[15px]"][lvl - 1];
         return (
           <EditableText
-            as="h2"
+            as={`h${lvl}` as keyof JSX.IntrinsicElements}
             value={el.content.text}
             onCommit={(v) => commit(el.id, { text: v })}
             maxLength={200}
-            className="mb-2 mt-8 block text-[22px] font-semibold"
+            className={`mb-2 mt-8 block ${SIZE} font-semibold`}
             style={blockInlineStyle(el)}
           />
         );
+      }
       case "paragraph": {
         const custom = blockInlineStyle(el);
         return (

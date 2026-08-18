@@ -39,6 +39,7 @@ import {
   type FieldConditionOp,
   VIEWPORTS,
   type Viewport,
+  headingLevel,
 } from "./blockTree";
 import { isValidImageRef } from "@/lib/images/validate";
 import { parseVideoUrl, sourceToDisplayUrl } from "@/lib/engine/videoEmbed";
@@ -207,8 +208,22 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
 
   switch (type as BlockType) {
     case "heading":
-    case "subheading":
-      return { id, type: type as "heading" | "subheading", style, content: { text: clampStr(content.text, MAX_TEXT_SHORT) } };
+    case "subheading": {
+      // The level becomes part of an HTML tag name, so only a clamped 1-6 ever survives — and it
+      // has to be COPIED here at all, because this validator rebuilds the tree and any key it
+      // doesn't carry is silently dropped on every save (the contentWidth trap). Absent stays
+      // absent, so untouched pages keep their historical tags byte-for-byte.
+      const level = headingLevel(content.level, type === "heading" ? 1 : 2);
+      return {
+        id,
+        type: type as "heading" | "subheading",
+        style,
+        content: {
+          text: clampStr(content.text, MAX_TEXT_SHORT),
+          ...(content.level !== undefined ? { level } : {}),
+        },
+      };
+    }
     case "paragraph":
       return { id, type: "paragraph", style, content: { text: clampStr(content.text, MAX_TEXT_LONG) } };
     case "image": {
