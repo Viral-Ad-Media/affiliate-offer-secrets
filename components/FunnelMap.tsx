@@ -2,6 +2,16 @@
 
 import { useState } from "react";
 import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   ChevronUp,
   ChevronDown,
   Plus,
@@ -13,7 +23,9 @@ import {
   CreditCard,
   MoreHorizontal,
   Loader2,
+  GripVertical,
 } from "lucide-react";
+import { toast } from "@/lib/toast";
 import type { FunnelStep, FunnelStepType } from "@/lib/shared";
 import SplitTestBranch from "@/components/SplitTestBranch";
 import { NodeCard } from "@/components/FunnelNodeCard";
@@ -60,6 +72,40 @@ export default function FunnelMap({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Optimistic order: the drop reflows the map immediately, the server confirms behind it. Local
+  // state resyncs whenever the parent reloads (the BroadcastStepsEditor resync idiom) — comparing
+  // id sequences, so a reorder we initiated doesn't fight its own echo.
+  const [ordered, setOrdered] = useState<FunnelStep[]>(steps);
+  if (ordered.length !== steps.length || !steps.every((st) => ordered.some((o) => o.id === st.id))) {
+    setOrdered(steps);
+  }
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  async function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const from = ordered.findIndex((st) => st.id === active.id);
+    const to = ordered.findIndex((st) => st.id === over.id);
+    if (from < 0 || to < 0) return;
+    const prev = ordered;
+    const next = arrayMove(ordered, from, to);
+    setOrdered(next);
+    const res = await fetch("/api/funnel-steps/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ campaign_id: campaignId, step_ids: next.map((st) => st.id) }),
+    });
+    if (!res.ok) {
+      // Revert — the page the visitor gets is the SERVER's order, and a map showing anything else
+      // is the map lying. The RPC's own message ("list is out of date — reload") surfaces as-is.
+      setOrdered(prev);
+      const d = await res.json().catch(() => ({}));
+      toast.error(d.error ?? "Couldn't reorder the steps");
+      return;
+    }
+    onChanged();
+  }
 
   // `afterIndex` is the step_index to insert AFTER — 0 puts the new page straight after the
   // opt-in, null appends. Mirrors add_funnel_step's own p_after_index (0083).
@@ -130,15 +176,18 @@ export default function FunnelMap({
             onEditVariant={onSelectVariant}
           />
 
-          {steps.map((step, i) => {
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={ordered.map((st) => st.id)} strategy={verticalListSortingStrategy}>
+          {ordered.map((step, i) => {
             const Icon = STEP_ICONS[step.step_type];
-            const prevIndex = steps[i - 1]?.step_index ?? 0;
+            const prevIndex = ordered[i - 1]?.step_index ?? 0;
             return (
               <div key={step.id} className="contents">
                 {/* The connector BEFORE this step inserts after the previous one — you choose the
                     position by clicking where the page should go, rather than appending and then
                     walking it back with arrows. */}
                 <Connector busy={busy === `insert-${prevIndex}`} onInsert={(t) => addStep(t, prevIndex)} />
+                <SortableStepNode id={step.id}>
                 <NodeCard
                   icon={Icon}
                   badge={`Step ${i + 1}`}
@@ -157,7 +206,7 @@ export default function FunnelMap({
                       <NodeMenu
                         busy={busy === step.id}
                         canMoveUp={i > 0}
-                        canMoveDown={i < steps.length - 1}
+                        canMoveDown={i < ordered.length - 1}
                         onMoveUp={() => move(step.id, "up")}
                         onMoveDown={() => move(step.id, "down")}
                         onDelete={() => remove(step.id)}
@@ -165,15 +214,50 @@ export default function FunnelMap({
                     </>
                   }
                 />
+                </SortableStepNode>
               </div>
             );
           })}
+          </SortableContext>
+          </DndContext>
 
           <Connector busy={busy === "add"} onInsert={(t) => addStep(t, null)} />
           <AddCard busy={busy === "add"} onAdd={(t) => addStep(t, null)} />
         </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Sortable wrapper for one step node. Module scope, never defined inside FunnelMap's body — an
+ * inline component gets a fresh identity every render, which would unmount the card (and its
+ * hover state) on each reorder.
+ *
+ * The grip is a dedicated handle rather than making the whole card draggable: the card's click
+ * already means "open the editor", and stealing pointer-down for dragging would make every open a
+ * gamble on the 4px activation distance.
+ */
+function SortableStepNode({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`group/drag relative ${isDragging ? "z-30 opacity-80" : ""}`}
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label="Drag to reorder this step"
+        title="Drag to reorder"
+        className="absolute -left-8 top-1/2 z-10 -translate-y-1/2 cursor-grab rounded-lg border border-ink-600 bg-ink-900 p-1.5 text-zinc-500 opacity-0 transition-opacity hover:text-emerald-300 focus-visible:opacity-100 group-hover/drag:opacity-100 active:cursor-grabbing"
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+      {children}
+    </div>
   );
 }
 
