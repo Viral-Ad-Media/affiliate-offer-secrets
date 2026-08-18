@@ -24,13 +24,17 @@ function StatTile({
   icon,
   label,
   value,
+  href,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
+  href: string;
 }) {
+  // A link, not a display: every one of these numbers has a page that lists the things it counts,
+  // and a tile you can only read makes the reader go find that page in the sidebar themselves.
   return (
-    <div className="stat-tile">
+    <Link href={href} className="stat-tile hover:border-emerald-500/50">
       <div className="rounded-lg border border-ink-700 bg-ink-800 p-2.5 text-emerald-400">
         {icon}
       </div>
@@ -38,7 +42,7 @@ function StatTile({
         <div className="stat-tile-value">{value}</div>
         <div className="stat-tile-label">{label}</div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -124,7 +128,9 @@ export default async function Overview() {
     {
       key: "network",
       label: "Connect an affiliate network",
-      hint: "Your ClickBank nickname or Digistore24 ID goes into every hoplink the app generates. Without it, nothing you publish can pay you.",
+      // Rewritten when link construction was removed (content rule 4): the app no longer
+      // generates hoplinks, so the old "goes into every hoplink" claim had become false.
+      hint: "Record which network each offer pays you through. You'll paste each product's own affiliate link after its kit is built.",
       href: "/settings/integrations",
       cta: "Connect",
       done: (networkCount ?? 0) > 0,
@@ -178,17 +184,19 @@ export default async function Overview() {
       <NeedsAttention items={attention} />
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile icon={<Package className="h-5 w-5" />} label="Products tracked" value={productsCount ?? 0} />
+        <StatTile icon={<Package className="h-5 w-5" />} label="Products tracked" value={productsCount ?? 0} href="/products" />
         <StatTile
           icon={<CheckCircle2 className="h-5 w-5" />}
           label="Campaigns ready"
           value={campaignsReadyCount ?? 0}
+          href="/funnels"
         />
-        <StatTile icon={<Contact className="h-5 w-5" />} label="Contacts captured" value={contactsCount ?? 0} />
+        <StatTile icon={<Contact className="h-5 w-5" />} label="Contacts captured" value={contactsCount ?? 0} href="/contacts" />
         <StatTile
           icon={<Radio className="h-5 w-5" />}
           label="Active sequences"
           value={activeSequencesCount ?? 0}
+          href="/emails/sequences"
         />
       </section>
 
@@ -202,26 +210,32 @@ export default async function Overview() {
 
       <MarketplaceHighlights />
 
-      <section>
-        <h2 className="mb-3 text-sm font-semibold text-zinc-100">Get started</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {QUICK_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-xl border border-ink-700 bg-ink-900 flex items-start gap-3 p-4 transition-colors hover:border-emerald-500/50"
-            >
-              <div className="rounded-lg border border-ink-700 bg-ink-800 p-2.5 text-emerald-400">
-                <link.icon className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-zinc-100">{link.label}</div>
-                <div className="text-xs text-zinc-500">{link.description}</div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {/* Only while onboarding. These five cards restate sidebar destinations with a sentence of
+          orientation — genuinely useful in week one, pure duplication of the nav afterwards. Tied
+          to the same signal the checklist uses, so the two disappear together and the page tightens
+          for a returning operator instead of ending in a nav they already have. */}
+      {!workspace?.setup_dismissed_at && !setupSteps.every((st) => st.done) && (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-zinc-100">Get started</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {QUICK_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="rounded-xl border border-ink-700 bg-ink-900 flex items-start gap-3 p-4 transition-colors hover:border-emerald-500/50"
+              >
+                <div className="rounded-lg border border-ink-700 bg-ink-800 p-2.5 text-emerald-400">
+                  <link.icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-zinc-100">{link.label}</div>
+                  <div className="text-xs text-zinc-500">{link.description}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </main>
   );
 }

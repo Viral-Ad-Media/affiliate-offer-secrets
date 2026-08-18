@@ -8,7 +8,7 @@ import JobsQueue from "@/components/JobsQueue";
 import { useCredits } from "@/components/CreditsProvider";
 import CostBadge from "@/components/CostBadge";
 import Link from "next/link";
-import { Rocket, Search, CheckCircle2, Package, Flame, Hourglass } from "lucide-react";
+import { Rocket, Search, CheckCircle2, Package, Flame, Hourglass, Loader2 } from "lucide-react";
 import type { Job } from "@/lib/shared";
 import ProductsPanel, { type ProductStats } from "@/components/ProductsPanel";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,7 @@ export default function Marketplace() {
   const [keyword, setKeyword] = useState("");
   const [count, setCount] = useState(10);
   const [jobsOpen, setJobsOpen] = useState(false);
+  const [queueing, setQueueing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [stats, setStats] = useState<ProductStats>({
     total: 0,
@@ -75,6 +76,7 @@ export default function Marketplace() {
 
   async function discover(e: React.FormEvent) {
     e.preventDefault();
+    if (queueing) return;
     const body: Record<string, unknown> = { type: "discover_products", mode: discoverMode, count };
     if (discoverMode === "keyword") {
       if (!keyword.trim()) return;
@@ -83,16 +85,21 @@ export default function Marketplace() {
       body.category = category;
       if (subCategory) body.subCategory = subCategory;
     }
+    setQueueing(true);
     const res = await fetch("/api/jobs", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
+    setQueueing(false);
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
       toast.error(d.error ?? "Could not queue discovery");
       return;
     }
+    // The instant-seed path usually lands rows on the very next poll, but "usually within
+    // seconds" is a claim the header makes — the confirmation should say what to watch.
+    toast.success("Discovery queued — products appear in the list below as they're found");
     setKeyword("");
     setSubCategory("");
     load();
@@ -142,58 +149,72 @@ export default function Marketplace() {
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Labeled, not tooltip'd: the count field's only explanation used to be a hover
+              title, which is invisible until you already wonder what the box does. */}
+          <div className="flex flex-wrap items-end gap-2">
             {discoverMode === "category" ? (
               <>
-                <select
-                  value={category}
-                  onChange={(e) => {
-                    setCategory(e.target.value);
-                    setSubCategory("");
-                  }}
-                  className="rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none focus:border-emerald-500"
-                >
-                  {CLICKBANK_CATEGORIES.map((c) => (
-                    <option key={c.name} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={subCategory}
-                  onChange={(e) => setSubCategory(e.target.value)}
-                  className="rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none focus:border-emerald-500"
-                >
-                  <option value="">All subcategories</option>
-                  {subCategoryOptions.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-medium text-zinc-500">Category</span>
+                  <select
+                    value={category}
+                    onChange={(e) => {
+                      setCategory(e.target.value);
+                      setSubCategory("");
+                    }}
+                    className="rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none focus:border-emerald-500"
+                  >
+                    {CLICKBANK_CATEGORIES.map((c) => (
+                      <option key={c.name} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-medium text-zinc-500">Subcategory</span>
+                  <select
+                    value={subCategory}
+                    onChange={(e) => setSubCategory(e.target.value)}
+                    className="rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none focus:border-emerald-500"
+                  >
+                    <option value="">All subcategories</option>
+                    {subCategoryOptions.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </>
             ) : (
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
-                <input
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  placeholder="Keyword… e.g. weight loss"
-                  className="w-64 rounded-lg border border-ink-600 bg-ink-900 py-2 pl-8 pr-3 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-500"
-                />
-              </div>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-zinc-500">Keyword</span>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
+                  <input
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
+                    placeholder="e.g. weight loss"
+                    className="w-64 rounded-lg border border-ink-600 bg-ink-900 py-2 pl-8 pr-3 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-500"
+                  />
+                </div>
+              </label>
             )}
-            <input
-              type="number"
-              min={1}
-              max={30}
-              value={count}
-              onChange={(e) => setCount(Number(e.target.value) || 10)}
-              title="How many products to pull"
-              className="w-20 rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none focus:border-emerald-500"
-            />
-            <Button type="submit">
-              <Rocket className="h-4 w-4" /> Queue discovery
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-medium text-zinc-500">Products</span>
+              <input
+                type="number"
+                min={1}
+                max={30}
+                value={count}
+                onChange={(e) => setCount(Number(e.target.value) || 10)}
+                className="w-20 rounded-lg border border-ink-600 bg-ink-900 py-2 px-3 text-sm outline-none focus:border-emerald-500"
+              />
+            </label>
+            <Button type="submit" disabled={queueing}>
+              {queueing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+              Queue discovery
               <CostBadge jobType="discover_products" />
             </Button>
           </div>
