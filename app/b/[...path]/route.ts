@@ -95,7 +95,7 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
     if (target !== `/b/${post.id}`) {
       return new Response(null, { status: 301, headers: { Location: target } });
     }
-    return renderPost(admin, post.id as string, req.headers.get("host"));
+    return renderPost(admin, post.id as string, req.headers.get("host"), new URL(req.url).searchParams.get("commented") === "1");
   }
 
   // Everything else is keyed off the blog slug.
@@ -188,13 +188,14 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
   if (requested !== canonical) {
     return new Response(null, { status: 301, headers: { Location: canonical } });
   }
-  return renderPost(admin, post.id as string, req.headers.get("host"));
+  return renderPost(admin, post.id as string, req.headers.get("host"), new URL(req.url).searchParams.get("commented") === "1");
 }
 
 async function renderPost(
   admin: ReturnType<typeof createAdminClient>,
   postId: string,
-  host: string | null
+  host: string | null,
+  commentPosted = false
 ): Promise<Response> {
   const { data: post } = await admin
     .from("blog_posts")
@@ -208,9 +209,22 @@ async function renderPost(
 
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, toc_enabled, toc_title, toc_min_headings")
+    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, toc_enabled, toc_title, toc_min_headings, comments_enabled, ratings_enabled")
     .eq("workspace_id", post.workspace_id as string)
     .maybeSingle();
+
+  // APPROVED only, and the filter lives here — the renderer prints whatever it is handed, so this
+  // query is the moderation boundary's read half. Capped: a comment section past 200 entries is a
+  // page-weight problem before it is anything else.
+  const { data: comments } = settings?.comments_enabled
+    ? await admin
+        .from("blog_comments")
+        .select("author_name, body, rating, created_at")
+        .eq("post_id", postId)
+        .eq("status", "approved")
+        .order("created_at", { ascending: true })
+        .limit(200)
+    : { data: [] };
 
   const html = renderPublicPostHtml({
     content_width: contentWidthOf(post.page_copy),
@@ -228,6 +242,10 @@ async function renderPost(
     seo_title: post.seo_title as string | null,
     seo_description: post.seo_description as string | null,
     seo_index: post.seo_index as boolean,
+    comments: (comments ?? []) as { author_name: string; body: string; rating: number | null; created_at: string }[],
+    comments_enabled: settings?.comments_enabled === true,
+    ratings_enabled: settings?.ratings_enabled === true,
+    comment_posted: commentPosted,
   });
   return new Response(html, { status: 200, headers: HTML_HEADERS });
 }

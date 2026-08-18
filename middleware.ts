@@ -95,6 +95,10 @@ const PUBLIC_PREFIX_PATHS = [
   // from this list, the auth gate 307s it to /login and nothing is ever charged — same silent
   // class as /api/domains/reverify-all, on a route whose failure mode is "no revenue, no error".
   "/api/billing/charge-trials",
+  // The blog's comment box — an anonymous HTML-form POST from public post pages, including ones
+  // served on custom domains (the /api/public/ prefix is also exempt from the host rewrite, which
+  // is what lets the same relative action work on both hosts — the lesson the leads route taught).
+  "/api/public/comments",
   "/p/", // public bridge (lead-capture landing) pages — real ad destinations, no auth
   "/api/public/campaign-image/", // public campaign product images — needed for Instagram posting
   "/api/public/leads", // bridge-page lead capture — anonymous visitors, no auth

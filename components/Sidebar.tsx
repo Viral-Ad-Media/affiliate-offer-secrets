@@ -119,8 +119,10 @@ const NAV: NavItem[] = [
         // keeps that from also lighting up on Categories/Settings — so any NEW /blog/* sibling
         // must be added here too, or it will highlight Posts as well as itself.
         match: (p: string) =>
-          p.startsWith("/blog") && !["/blog", "/blog/home", "/blog/categories", "/blog/settings"].includes(p),
+          p.startsWith("/blog") &&
+          !["/blog", "/blog/home", "/blog/categories", "/blog/comments", "/blog/settings"].includes(p),
       },
+      { href: "/blog/comments", label: "Comments", match: (p: string) => p === "/blog/comments" },
       { href: "/blog/categories", label: "Categories", match: (p: string) => p === "/blog/categories" },
       { href: "/blog/settings", label: "Settings", match: (p: string) => p === "/blog/settings" },
     ],

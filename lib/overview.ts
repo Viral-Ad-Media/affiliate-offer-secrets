@@ -54,6 +54,7 @@ export async function getAttentionItems(
     launchesAwaitingReview,
     { data: variantRows },
     { data: linklessRows },
+    pendingComments,
   ] = await Promise.all([
     supabase
       .from("campaigns")
@@ -100,6 +101,11 @@ export async function getAttentionItems(
       .eq("workspace_id", ws)
       .not("product_id", "is", null)
       .not("bridge_html", "is", null),
+    supabase
+      .from("blog_comments")
+      .select("id", head)
+      .eq("workspace_id", ws)
+      .eq("status", "pending"),
   ]);
 
   // A test is decidable on exactly the gate VariantConfidence already uses — the THINNER arm past
@@ -135,6 +141,14 @@ export async function getAttentionItems(
       count: linklessFunnels,
       href: "/products",
       tone: "warn",
+    },
+    {
+      key: "pending-comments",
+      label: "Comments awaiting review",
+      detail: "Readers wrote on your posts — nothing shows publicly until approved.",
+      count: pendingComments.count ?? 0,
+      href: "/blog/comments",
+      tone: "todo",
     },
     {
       key: "split-tests",

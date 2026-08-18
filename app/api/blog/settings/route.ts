@@ -53,6 +53,8 @@ export async function POST(req: Request) {
   // Table of contents (0069). Clamped rather than rejected: these are a checkbox and a small
   // number picker, so an out-of-range value means a stale client, not a person to correct.
   if ("toc_enabled" in body) patch.toc_enabled = body.toc_enabled === true;
+  if ("comments_enabled" in body) patch.comments_enabled = body.comments_enabled === true;
+  if ("ratings_enabled" in body) patch.ratings_enabled = body.ratings_enabled === true;
   if ("toc_title" in body) patch.toc_title = clean(body.toc_title, 60);
   if ("toc_min_headings" in body) {
     const n = Number(body.toc_min_headings);

@@ -22,9 +22,53 @@ const xmlHeaders = (name: string) => ({
   "Cache-Control": "public, max-age=300, s-maxage=300",
 });
 
-/** The post-page render, shared by the post branch and the static-home root (0108). */
-function renderDomainPost(post: any, settings: any, siteOrigin: string): Response {
-  return renderDomainPost(post, settings, siteOrigin);
+/**
+ * The post-page render, shared by the post branch and the static-home root (0108).
+ *
+ * NOTE: the first extraction of this helper accidentally replaced its own body with a call to
+ * itself — infinite recursion on every custom-domain post view, shipped because the live check
+ * only exercised /b. The /d assertions in scratchpad verify-comments now exist because of it.
+ */
+async function renderDomainPost(
+  admin: ReturnType<typeof createAdminClient>,
+  post: any,
+  settings: any,
+  siteOrigin: string,
+  commentPosted = false
+): Promise<Response> {
+  // Approved only — the moderation boundary's read half, same as /b's renderPost.
+  const { data: comments } = settings?.comments_enabled
+    ? await admin
+        .from("blog_comments")
+        .select("author_name, body, rating, created_at")
+        .eq("post_id", post.id)
+        .eq("status", "approved")
+        .order("created_at", { ascending: true })
+        .limit(200)
+    : { data: [] };
+  const html = renderPublicPostHtml({
+    comments: (comments ?? []) as { author_name: string; body: string; rating: number | null; created_at: string }[],
+    comments_enabled: settings?.comments_enabled === true,
+    ratings_enabled: settings?.ratings_enabled === true,
+    comment_posted: commentPosted,
+    content_width: contentWidthOf(post.page_copy),
+    theme: (post.page_copy as { theme?: unknown } | null)?.theme,
+    id: post.id as string,
+    title: post.title as string,
+    slug: post.slug as string | null,
+    content_md: (post.content_md as string) ?? "",
+    html: post.html as string | null,
+    excerpt: post.excerpt as string | null,
+    featured_image_url: post.featured_image_url as string | null,
+    published_at: post.published_at as string | null,
+    category_name: (post.blog_categories as unknown as { name: string } | null)?.name ?? null,
+    settings,
+    seo_title: post.seo_title as string | null,
+    seo_description: post.seo_description as string | null,
+    seo_index: post.seo_index as boolean,
+    siteOrigin,
+  });
+  return new Response(html, { status: 200, headers: HTML_HEADERS });
 }
 
 // Serves the domain owner's blog at the domain root. Returns null (not a 404) when nothing
@@ -38,7 +82,7 @@ async function serveBlogOnDomain(
 ): Promise<Response | null> {
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html, index_layout, index_columns, index_rows, toc_enabled, toc_title, toc_min_headings, home_post_id")
+    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html, index_layout, index_columns, index_rows, toc_enabled, toc_title, toc_min_headings, home_post_id, comments_enabled, ratings_enabled")
     .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!settings) return null;
@@ -67,7 +111,7 @@ async function serveBlogOnDomain(
       // Rendered IN PLACE, never routed through the post branch: that branch 301s to the post's
       // canonical URL, which under a dated permalink style would bounce the DOMAIN ROOT away to
       // /2026/08/{slug} — a static home that redirects off the root is not a home.
-      if (home) return renderDomainPost(home, settings, siteOrigin);
+      if (home) return renderDomainPost(admin, home, settings, siteOrigin, searchParams.get("commented") === "1");
     }
     return serveIndex();
   }
@@ -123,7 +167,7 @@ async function serveBlogOnDomain(
     return new Response(null, { status: 301, headers: { Location: canonical } });
   }
 
-  return renderDomainPost(post, settings, siteOrigin);
+  return renderDomainPost(admin, post, settings, siteOrigin, searchParams.get("commented") === "1");
 }
 
 // Catch-all target for the middleware's host-mismatch rewrite (middleware.ts) — serves a

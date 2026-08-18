@@ -549,6 +549,30 @@ const PUBLIC_CSS = `
   .toc:not(.toc-numbered) .toc-list { list-style:disc; }
   .toc a { color:var(--toc-link, var(--t-link, #1a56db)); text-decoration:none; }
   .toc a:hover, .toc a:focus-visible { color:var(--toc-active, var(--t-primary, #1a56db)); text-decoration:underline; }
+  /* Comments (0109). Blog-only — funnel pages never render this section, so unlike the shared
+     block rules this lives ONLY in PUBLIC_CSS. .hp-field is the honeypot: hidden from people,
+     present for bots — display:none would let smarter bots skip it, so it is moved off-canvas. */
+  .comments { margin:40px 0 0; padding-top:24px; border-top:1px solid rgba(0,0,0,.10); }
+  .comments h2 { font-size:1.25em; margin:0 0 14px; }
+  .comment-list { list-style:none; margin:0 0 22px; padding:0; }
+  .comment { padding:12px 0; border-bottom:1px solid rgba(0,0,0,.06); }
+  .comment-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:10px; margin-bottom:4px; }
+  .comment-name { font-weight:700; }
+  .comment-head time { font-size:.8em; opacity:.55; }
+  .comment-stars { color:#e8a33d; letter-spacing:1px; font-size:.9em; }
+  .comment p { margin:0; white-space:pre-line; }
+  .comment-pending { padding:10px 14px; border-radius:8px; background:rgba(46,160,67,.09); border:1px solid rgba(46,160,67,.25); font-size:.9em; }
+  .comment-form { display:flex; flex-direction:column; gap:10px; margin-top:6px; }
+  .comment-row { display:flex; gap:10px; flex-wrap:wrap; }
+  .comment-row input { flex:1 1 200px; }
+  .comment-form input, .comment-form select, .comment-form textarea {
+    padding:10px 12px; border:1px solid rgba(0,0,0,.18); border-radius:8px; font:inherit; background:#fff; }
+  .comment-form textarea { resize:vertical; }
+  .comment-rating { display:flex; align-items:center; gap:8px; font-size:.9em; }
+  .comment-form button { align-self:flex-start; padding:10px 22px; border:0; border-radius:8px;
+    background:var(--t-primary, #1a7f4e); color:#fff; font-weight:700; cursor:pointer; }
+  .comment-note { margin:0; font-size:.8em; opacity:.55; }
+  .hp-field { position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
   .progress-block { margin:0 0 18px; }
   .progress-label { display:flex; justify-content:space-between; gap:12px; font-size:14px; font-weight:600; margin-bottom:6px; }
   .progress-track { height:10px; border-radius:999px; background:var(--t-field-border,#e5e5e5); overflow:hidden; }
@@ -716,6 +740,81 @@ export function buildTableOfContents(
   };
 }
 
+
+/**
+ * Approved comments and the zero-JS comment/review form (0109).
+ *
+ * A plain <form method="POST"> to /api/public/comments — no script, keeping the blog's zero-JS
+ * property. Everything printed here is a stranger's text on the tenant's page, so every string is
+ * escapeHtml'd, and only what the caller ALREADY filtered to approved arrives. The "website" field
+ * is the honeypot: visually hidden via CSS, tabindex=-1 and autocomplete=off so a person never
+ * touches it while a form-filling bot does.
+ *
+ * Deliberately NO review/AggregateRating structured data: anonymous, self-hosted ratings on the
+ * page selling the product are exactly the "self-serving reviews" pattern Google's structured-data
+ * policy excludes, and shipping the markup anyway risks a manual action against the whole domain.
+ * The stars are for readers.
+ */
+function commentsSection(post: {
+  id?: string;
+  comments?: { author_name: string; body: string; rating: number | null; created_at: string }[];
+  comments_enabled?: boolean;
+  ratings_enabled?: boolean;
+  comment_posted?: boolean;
+}): string {
+  if (!post.comments_enabled || !post.id) return "";
+  const list = post.comments ?? [];
+  const rated = list.filter((c) => typeof c.rating === "number");
+  const avg = rated.length
+    ? Math.round((rated.reduce((sum, c) => sum + (c.rating as number), 0) / rated.length) * 10) / 10
+    : null;
+  const stars = (n: number) => "★".repeat(Math.round(n)) + "☆".repeat(5 - Math.round(n));
+
+  const items = list
+    .map(
+      (c) => `<li class="comment">
+    <div class="comment-head"><span class="comment-name">${escapeHtml(c.author_name)}</span>${
+        typeof c.rating === "number"
+          ? `<span class="comment-stars" aria-label="${c.rating} out of 5">${stars(c.rating)}</span>`
+          : ""
+      }<time datetime="${escapeHtml(c.created_at)}">${new Date(c.created_at).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })}</time></div>
+    <p>${escapeHtml(c.body)}</p>
+  </li>`
+    )
+    .join("\n");
+
+  return `<section class="comments" id="comments">
+  <h2>${list.length ? `Comments (${list.length})` : "Leave a comment"}${
+    post.ratings_enabled && avg !== null
+      ? ` <span class="comment-stars" aria-label="average ${avg} out of 5">${stars(avg)} ${avg}</span>`
+      : ""
+  }</h2>
+  ${post.comment_posted ? `<p class="comment-pending">Thanks — your comment is awaiting review and will appear once approved.</p>` : ""}
+  ${items ? `<ul class="comment-list">${items}</ul>` : ""}
+  <form class="comment-form" method="POST" action="/api/public/comments">
+    <input type="hidden" name="post_id" value="${escapeHtml(post.id)}" />
+    <div class="hp-field" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off" /></label></div>
+    <div class="comment-row">
+      <input type="text" name="author_name" placeholder="Your name" required maxlength="80" />
+      <input type="email" name="author_email" placeholder="Email (never shown)" maxlength="200" />
+    </div>
+    ${
+      post.ratings_enabled
+        ? `<label class="comment-rating">Rating
+      <select name="rating"><option value="">No rating</option><option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option></select></label>`
+        : ""
+    }
+    <textarea name="body" rows="4" placeholder="Your comment" required minlength="2" maxlength="2000"></textarea>
+    <button type="submit">Post comment</button>
+    <p class="comment-note">Comments are reviewed before they appear.</p>
+  </form>
+</section>`;
+}
+
 export function renderPublicPostHtml(post: {
   id?: string;
   title: string;
@@ -737,6 +836,16 @@ export function renderPublicPostHtml(post: {
   previewBase?: string | null;
   /** From the post's page_copy (contentWidthOf). Absent → the shared default. */
   content_width?: number | null;
+  /**
+   * Approved comments only — the route filters; this renders whatever it is handed, so the filter
+   * must never move here. Absent/empty renders the form alone (when enabled).
+   */
+  comments?: { author_name: string; body: string; rating: number | null; created_at: string }[];
+  /** Per-blog controls (0109). Undefined = off, so callers that don't fetch them render nothing new. */
+  comments_enabled?: boolean;
+  ratings_enabled?: boolean;
+  /** True right after a submit (the 303 carries no state; the GET re-serves with this set). */
+  comment_posted?: boolean;
   /** From the post's page_copy.theme. Absent → the pre-theme look, unchanged. */
   theme?: unknown;
 }): string {
@@ -817,6 +926,7 @@ ${siteHeader(post.settings, base)}
   ${toc}
   <article>${body}</article>
   ${authorBox(post.settings)}
+  ${commentsSection(post)}
 </main>
 </body>
 </html>`;

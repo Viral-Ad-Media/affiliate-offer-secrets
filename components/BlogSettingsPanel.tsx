@@ -22,6 +22,8 @@ export type Settings = {
   toc_title: string | null;
   toc_min_headings: number | null;
   home_post_id: string | null;
+  comments_enabled: boolean | null;
+  ratings_enabled: boolean | null;
 };
 
 export type HomePageOption = { id: string; title: string };
@@ -53,6 +55,10 @@ export default function BlogSettingsPanel({
   const [tocTitle, setTocTitle] = useState(initial.toc_title ?? "");
   const [tocMin, setTocMin] = useState(initial.toc_min_headings ?? 3);
   const [homePostId, setHomePostId] = useState<string | null>(initial.home_post_id ?? null);
+  // Default ON matches the column defaults (0109) — a null from a settings row created before the
+  // migration means enabled, not off.
+  const [commentsEnabled, setCommentsEnabled] = useState(initial.comments_enabled !== false);
+  const [ratingsEnabled, setRatingsEnabled] = useState(initial.ratings_enabled !== false);
   const [creatingPage, setCreatingPage] = useState(false);
 
   // Creates a draft post and opens it in the fullscreen editor — a "page" here is an ordinary
@@ -102,6 +108,8 @@ export default function BlogSettingsPanel({
           toc_title: tocTitle,
           toc_min_headings: tocMin,
           home_post_id: homePostId,
+          comments_enabled: commentsEnabled,
+          ratings_enabled: ratingsEnabled,
         }),
       });
       const data = await res.json();
@@ -162,6 +170,44 @@ export default function BlogSettingsPanel({
           </a>
         </div>
       )}
+
+      {/* Reviews & comments (0109). Moderation-first is stated where the switch is: turning this
+          on exposes a form, never unreviewed content. Ratings are separately togglable because a
+          star average is a claim about the product a plain comment box never makes. */}
+      <Card as="section" className="space-y-3 p-4">
+        <div>
+          <div className="text-sm font-semibold text-zinc-100">Reviews &amp; comments</div>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            Readers can leave comments on published posts. Nothing appears publicly until you
+            approve it in{" "}
+            <Link href="/blog/comments" className="text-emerald-300 underline">
+              Comments
+            </Link>
+            .
+          </p>
+        </div>
+        <label className="flex items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={commentsEnabled}
+            onChange={(e) => setCommentsEnabled(e.target.checked)}
+            className="h-3.5 w-3.5 accent-emerald-500"
+          />
+          <span className="text-sm text-zinc-200">Show the comment form on published posts</span>
+        </label>
+        <label className={commentsEnabled ? "flex items-center gap-2.5" : "flex items-center gap-2.5 opacity-50"}>
+          <input
+            type="checkbox"
+            checked={ratingsEnabled}
+            disabled={!commentsEnabled}
+            onChange={(e) => setRatingsEnabled(e.target.checked)}
+            className="h-3.5 w-3.5 accent-emerald-500"
+          />
+          <span className="text-sm text-zinc-200">
+            Offer a 1-5 star rating, and show the approved average
+          </span>
+        </label>
+      </Card>
 
       {/* What the blog's ROOT serves (0108). Two modes, and the affordances the user actually
           needs beside each: the list mode links to the fullscreen list-design editor; the static
