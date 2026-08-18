@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Settings, Loader2, CheckCircle2, ExternalLink, ImagePlus, Trash2, Eye } from "lucide-react";
 import { PERMALINK_STYLES, type PermalinkStyle } from "@/lib/blog";
 import { toast } from "@/lib/toast";
@@ -20,14 +21,25 @@ export type Settings = {
   toc_enabled: boolean | null;
   toc_title: string | null;
   toc_min_headings: number | null;
+  home_post_id: string | null;
 };
+
+export type HomePageOption = { id: string; title: string };
 
 const MAX_AVATAR_CHARS = 900_000;
 
 // Blog → Settings. Everything here renders on the PUBLIC blog: the slug is the address of the
 // index (/b/{slug}) and the prefix of every post URL, title/description head the index page, and
 // the author block appears under every post and at the foot of the index.
-export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
+export default function BlogSettingsPanel({
+  initial,
+  homeOptions = [],
+}: {
+  initial: Settings;
+  /** Published posts eligible to serve as a static home. Drafts are excluded — the serving routes
+   *  degrade a draft home to the list, so offering one would save a setting that does nothing. */
+  homeOptions?: HomePageOption[];
+}) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [blogTitle, setBlogTitle] = useState(initial.blog_title ?? "");
@@ -40,6 +52,27 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
   const [tocEnabled, setTocEnabled] = useState(initial.toc_enabled === true);
   const [tocTitle, setTocTitle] = useState(initial.toc_title ?? "");
   const [tocMin, setTocMin] = useState(initial.toc_min_headings ?? 3);
+  const [homePostId, setHomePostId] = useState<string | null>(initial.home_post_id ?? null);
+  const [creatingPage, setCreatingPage] = useState(false);
+
+  // Creates a draft post and opens it in the fullscreen editor — a "page" here is an ordinary
+  // post, so this is the same create path the Posts list uses, not a second content type. It will
+  // appear in the picker above once published.
+  async function createHomePage() {
+    setCreatingPage(true);
+    const res = await fetch("/api/blog/posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json().catch(() => ({}));
+    setCreatingPage(false);
+    if (!res.ok || !data.post_id) {
+      toast.error(data.error ?? "Couldn't create the page");
+      return;
+    }
+    router.push(`/blog/${data.post_id}`);
+  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -68,6 +101,7 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
           toc_enabled: tocEnabled,
           toc_title: tocTitle,
           toc_min_headings: tocMin,
+          home_post_id: homePostId,
         }),
       });
       const data = await res.json();
@@ -128,6 +162,97 @@ export default function BlogSettingsPanel({ initial }: { initial: Settings }) {
           </a>
         </div>
       )}
+
+      {/* What the blog's ROOT serves (0108). Two modes, and the affordances the user actually
+          needs beside each: the list mode links to the fullscreen list-design editor; the static
+          mode offers picking a published page, jumping into ITS fullscreen editor, or creating a
+          fresh page. The list keeps serving either way — it just moves to /posts. */}
+      <Card as="section" className="space-y-4 p-4">
+        <div>
+          <div className="text-sm font-semibold text-zinc-100">Blog home</div>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            What visitors see at your blog&apos;s root URL.
+          </p>
+        </div>
+
+        <label className="flex items-start gap-2.5">
+          <input
+            type="radio"
+            name="home-mode"
+            checked={homePostId === null}
+            onChange={() => setHomePostId(null)}
+            className="mt-0.5 h-3.5 w-3.5 accent-emerald-500"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm text-zinc-200">Latest posts</span>
+            <span className="block text-xs text-zinc-500">
+              The post grid/list you have today.{" "}
+              <Link href="/blog/home" className="text-emerald-300 underline">
+                Edit its design
+              </Link>{" "}
+              in the fullscreen editor.
+            </span>
+          </span>
+        </label>
+
+        <label className="flex items-start gap-2.5">
+          <input
+            type="radio"
+            name="home-mode"
+            checked={homePostId !== null}
+            onChange={() => setHomePostId(homeOptions[0]?.id ?? "")}
+            disabled={homeOptions.length === 0 && homePostId === null}
+            className="mt-0.5 h-3.5 w-3.5 accent-emerald-500"
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm text-zinc-200">A static page</span>
+            <span className="block text-xs text-zinc-500">
+              One of your published pages serves at the root; the post list moves to{" "}
+              <code className="text-zinc-400">/posts</code> automatically.
+            </span>
+            {homeOptions.length === 0 && homePostId === null && (
+              <span className="mt-1 block text-xs text-amber-300">
+                No published pages yet — create one below, publish it, then pick it here.
+              </span>
+            )}
+            {homePostId !== null && (
+              <span className="mt-2 flex flex-wrap items-center gap-2">
+                <select
+                  value={homePostId}
+                  onChange={(e) => setHomePostId(e.target.value)}
+                  className="rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                >
+                  {homePostId && !homeOptions.some((o) => o.id === homePostId) && (
+                    <option value={homePostId}>Current page (unpublished?)</option>
+                  )}
+                  {homeOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.title}
+                    </option>
+                  ))}
+                </select>
+                {homePostId && (
+                  <Link
+                    href={`/blog/${homePostId}`}
+                    className={cn(buttonVariants({ variant: "outline" }), "text-xs")}
+                  >
+                    Edit design
+                  </Link>
+                )}
+              </span>
+            )}
+          </span>
+        </label>
+
+        <button
+          type="button"
+          onClick={createHomePage}
+          disabled={creatingPage}
+          className="text-xs text-emerald-300 hover:underline disabled:opacity-50"
+        >
+          {creatingPage ? "Creating…" : "+ New page (opens the fullscreen editor)"}
+        </button>
+      </Card>
 
       <Card as="section" className="space-y-4 p-4">
         <div className="text-sm font-semibold text-zinc-100">Blog</div>

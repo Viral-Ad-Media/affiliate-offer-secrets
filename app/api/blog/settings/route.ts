@@ -65,6 +65,35 @@ export async function POST(req: Request) {
   // is ignored rather than 400ing, so an older client can keep saving the rest of the form.
   if (isPermalinkStyle(body.permalink_style)) patch.permalink_style = body.permalink_style;
 
+  // Static home (0108). The id is caller-supplied and this route writes on the admin client, so
+  // it gets its own ownership check — the same discipline as every second caller-supplied
+  // reference in the bulk routes. A hard 400 rather than a silent drop: pointing the blog's root
+  // at a page is exactly the setting someone would not notice had failed to save.
+  if ("home_post_id" in body) {
+    if (body.home_post_id === null) {
+      patch.home_post_id = null;
+    } else if (typeof body.home_post_id === "string") {
+      const { data: homePost } = await admin
+        .from("blog_posts")
+        .select("id, status")
+        .eq("id", body.home_post_id)
+        .eq("workspace_id", ws)
+        .maybeSingle();
+      if (!homePost) {
+        return NextResponse.json({ error: "That page wasn't found" }, { status: 400 });
+      }
+      if (homePost.status !== "published") {
+        // The serving routes degrade a draft home to the list, so allowing one here would save a
+        // setting that visibly does nothing — worse than saying why now.
+        return NextResponse.json(
+          { error: "Publish the page first — a draft can't serve as the blog home" },
+          { status: 400 }
+        );
+      }
+      patch.home_post_id = homePost.id;
+    }
+  }
+
   // Slug is the public handle in /b/{slug} and is globally unique (0033) — validate, reserve-check
   // and collision-check before writing so the tenant gets a clear message instead of a 500.
   if ("slug" in body) {

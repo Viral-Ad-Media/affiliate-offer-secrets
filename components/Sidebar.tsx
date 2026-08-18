@@ -98,11 +98,9 @@ const NAV: NavItem[] = [
   },
   { href: "/sms", label: "SMS", icon: MessageSquare, match: (p: string) => p === "/sms" || p.startsWith("/sms/") },
   {
-    // The section's own first child, not /blog — /blog IS the Posts page, so clicking the parent
-    // used to land on the second item in its own submenu. Every other section here points at the
-    // top of its list; this one was the exception because its list grew a Home above the original
-    // page rather than beside it.
-    href: "/blog",
+    // /blog redirects to /blog/posts, so the parent lands on the section's list like every other
+    // section here.
+    href: "/blog/posts",
     sectionHref: "/blog",
     label: "Blog",
     icon: Newspaper,
@@ -110,16 +108,18 @@ const NAV: NavItem[] = [
     // Shown indented under the parent whenever any /blog route is active (expanded rail + mobile
     // drawer only — the icon-only collapsed rail keeps just the parent icon).
     children: [
-      { href: "/blog", label: "Home", match: (p: string) => p === "/blog" },
+      // No "Home" item anymore. The home-layout editor moved to /blog/home, reached from Blog
+      // settings — what serves at the blog's root is a SETTING now (0108's static-home choice),
+      // and a nav item pointing at one possible answer to that setting read as the answer.
       {
         href: "/blog/posts",
         label: "Posts",
         // Deliberately a negative match, not p === "/blog": the post editor lives at /blog/{id},
         // and Posts should stay highlighted while you're editing one. Listing the siblings is what
-        // keeps that from also lighting up on Home/Categories/Settings — so any NEW /blog/*
-        // sibling must be added here too, or it will highlight Posts as well as itself.
+        // keeps that from also lighting up on Categories/Settings — so any NEW /blog/* sibling
+        // must be added here too, or it will highlight Posts as well as itself.
         match: (p: string) =>
-          p.startsWith("/blog") && !["/blog", "/blog/categories", "/blog/settings"].includes(p),
+          p.startsWith("/blog") && !["/blog", "/blog/home", "/blog/categories", "/blog/settings"].includes(p),
       },
       { href: "/blog/categories", label: "Categories", match: (p: string) => p === "/blog/categories" },
       { href: "/blog/settings", label: "Settings", match: (p: string) => p === "/blog/settings" },

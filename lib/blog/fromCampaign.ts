@@ -22,6 +22,11 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 
 // Post slugs are unique per blog (0033). New posts often share a title, so suffix until free
 // rather than letting the partial unique index throw.
+// "posts" is where the list serves under a static home (0108); the feed names were already
+// impossible (slugify strips dots) but are listed for the reader. A post allowed to take one of
+// these would be permanently shadowed by the route that owns the path.
+export const RESERVED_POST_SLUGS = new Set(["posts"]);
+
 export async function uniquePostSlug(
   admin: AdminClient,
   workspaceId: string,
@@ -29,6 +34,7 @@ export async function uniquePostSlug(
 ): Promise<string> {
   for (let n = 1; n <= 50; n++) {
     const candidate = n === 1 ? desired : `${desired}-${n}`;
+    if (RESERVED_POST_SLUGS.has(candidate.toLowerCase())) continue;
     const { data } = await admin
       .from("blog_posts")
       .select("id")

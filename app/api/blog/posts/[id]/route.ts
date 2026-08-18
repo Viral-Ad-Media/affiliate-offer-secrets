@@ -3,6 +3,7 @@ import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MAX_POST_TITLE, MAX_POST_EXCERPT, MAX_FEATURED_IMAGE_CHARS, blogRenderCtx, renderBlockTree, slugify } from "@/lib/blog";
+import { RESERVED_POST_SLUGS } from "@/lib/blog/fromCampaign";
 import { validatePageBlockTree } from "@/lib/engine/validatePageBlockTree";
 import { seoPatchFrom } from "@/lib/seo";
 import { isValidImageRef } from "@/lib/images/validate";
@@ -17,6 +18,7 @@ async function uniquePostSlug(workspaceId: string, postId: string, desired: stri
   const admin = createAdminClient();
   for (let n = 1; n <= 50; n++) {
     const candidate = n === 1 ? desired : `${desired}-${n}`;
+    if (RESERVED_POST_SLUGS.has(candidate.toLowerCase())) continue;
     const { data } = await admin
       .from("blog_posts")
       .select("id")

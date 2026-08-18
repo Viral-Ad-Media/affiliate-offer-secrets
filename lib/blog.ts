@@ -854,6 +854,12 @@ export function renderBlogIndexHtml(
     siteOrigin?: string | null;
     /** Owner-only preview: rewrite every internal link to stay inside the preview. */
     previewBase?: string | null;
+    /**
+     * Where the LIST lives, when it isn't the blog root — "/b/{slug}/posts" or "/posts" under a
+     * static home (0108). Drives the pager, category chips and canonical only; the feed links
+     * keep the blog's own base, because rss.xml stays at the root either way.
+     */
+    listBase?: string | null;
     categories?: BlogIndexCategory[];
     activeCategory?: BlogIndexCategory | null;
     page?: number;
@@ -864,6 +870,7 @@ export function renderBlogIndexHtml(
   const origin = opts?.siteOrigin || APP_URL;
   const previewBase = opts?.previewBase || null;
   const base = previewBase ?? (onDomain ? "" : blogIndexPath(settings.slug) ?? "");
+  const listBase = previewBase ?? opts?.listBase ?? base;
   const page = Math.max(1, opts?.page ?? 1);
   const totalPages = Math.max(1, opts?.totalPages ?? 1);
   const activeCategory = opts?.activeCategory ?? null;
@@ -876,7 +883,7 @@ export function renderBlogIndexHtml(
     if (categorySlug) qs.set("category", categorySlug);
     if (p > 1) qs.set("page", String(p));
     const q = qs.toString();
-    return `${base || "/"}${q ? `?${q}` : ""}`;
+    return `${listBase || "/"}${q ? `?${q}` : ""}`;
   };
 
   const { layout, columns } = indexLayout(settings);

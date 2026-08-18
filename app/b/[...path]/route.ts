@@ -101,12 +101,17 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
   // Everything else is keyed off the blog slug.
   const { data: settings } = await admin
     .from("blog_settings")
-    .select("workspace_id, blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html, index_layout, index_columns, index_rows, toc_enabled, toc_title, toc_min_headings")
+    .select("workspace_id, blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, intro_html, index_layout, index_columns, index_rows, toc_enabled, toc_title, toc_min_headings, home_post_id")
     .ilike("slug", segments[0])
     .maybeSingle();
   if (!settings || rejects(settings.workspace_id as string)) return notFound();
 
-  if (segments.length === 1) {
+  // With a static home configured (0108), the chosen page serves at the root and the list moves
+  // to /posts. PUBLISHED only: a draft home falls back to the list rather than 404ing the whole
+  // blog the moment someone unpublishes the page to edit it — same degrade direction as the FK's
+  // on-delete-set-null.
+  const homePostId = (settings as { home_post_id?: string | null }).home_post_id ?? null;
+  const serveIndex = async (listBase?: string) => {
     const index = await loadBlogIndex(
       admin,
       settings.workspace_id as string,
@@ -115,10 +120,32 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
     );
     // Unknown category slug or a page past the end — 404 rather than silently showing everything.
     if (!index) return notFound();
-    return new Response(renderBlogIndexHtml(settings, index.posts, index), {
+    return new Response(renderBlogIndexHtml(settings, index.posts, { ...index, listBase }), {
       status: 200,
       headers: HTML_HEADERS,
     });
+  };
+
+  if (segments.length === 1) {
+    if (homePostId) {
+      const { data: home } = await admin
+        .from("blog_posts")
+        .select("id")
+        .eq("id", homePostId)
+        .eq("workspace_id", settings.workspace_id as string)
+        .eq("status", "published")
+        .maybeSingle();
+      if (home) return renderPost(admin, home.id as string, req.headers.get("host"));
+    }
+    return serveIndex();
+  }
+
+  // The list's home under a static front page. Only answered when one is configured — otherwise
+  // /posts stays an ordinary (unreachable) post slug and the root remains the single canonical
+  // list URL. Post slugs can no longer BE "posts" (reserved at every slug write), so this name
+  // can't shadow anyone's article.
+  if (segments.length === 2 && segments[1] === "posts" && homePostId) {
+    return serveIndex(`/b/${settings.slug}/posts`);
   }
 
   // Feeds live under the blog's own prefix. Safe to reserve these names: slugify() strips dots,
