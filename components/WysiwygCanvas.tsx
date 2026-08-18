@@ -545,7 +545,7 @@ function RootBlockWrapper({
     >
       {hiddenHere && <HiddenHereBadge device={hiddenHere} />}
       {/* Hover-revealed controls, at the block's side (top-right edge) — never below it. */}
-      <div className="absolute -top-3 right-1 z-10 hidden gap-0.5 group-hover:flex">
+      <div className="absolute -top-3 right-1 z-10 hidden items-center gap-0 overflow-hidden rounded-md bg-white shadow-md ring-1 ring-gray-200 group-hover:flex">
         {onSelect && (
           <button
             type="button"
@@ -554,7 +554,7 @@ function RootBlockWrapper({
               onSelect();
             }}
             title="Block settings"
-            className="flex h-6 w-6 items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-emerald-600"
+            className="flex h-6 w-6 items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-emerald-600"
           >
             <Settings2 className="h-3.5 w-3.5" />
           </button>
@@ -564,7 +564,7 @@ function RootBlockWrapper({
           {...attributes}
           {...listeners}
           title="Drag to reorder"
-          className="flex h-6 w-6 cursor-grab items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-emerald-600 active:cursor-grabbing"
+          className="flex h-6 w-6 cursor-grab items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-emerald-600 active:cursor-grabbing"
         >
           <GripVertical className="h-3.5 w-3.5" />
         </button>
@@ -576,7 +576,7 @@ function RootBlockWrapper({
               onDelete();
             }}
             title="Delete this section"
-            className="flex h-6 w-6 items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-red-600"
+            className="flex h-6 w-6 items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-red-600"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -615,7 +615,7 @@ function StaticBlockWrapper({
         isSelected ? "border-emerald-400" : "border-transparent"
       }`}
     >
-      <div className="absolute -top-3 right-1 z-10 hidden gap-0.5 group-hover:flex">
+      <div className="absolute -top-3 right-1 z-10 hidden items-center gap-0 overflow-hidden rounded-md bg-white shadow-md ring-1 ring-gray-200 group-hover:flex">
         <button
           type="button"
           onClick={(e) => {
@@ -623,7 +623,7 @@ function StaticBlockWrapper({
             onSelect();
           }}
           title="Block settings"
-          className="flex h-6 w-6 items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-emerald-600"
+          className="flex h-6 w-6 items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-emerald-600"
         >
           <Settings2 className="h-3.5 w-3.5" />
         </button>
@@ -677,13 +677,13 @@ function NestedItemWrapper({
     >
       {hiddenHere && <HiddenHereBadge device={hiddenHere} />}
       {/* Hover-revealed controls at the block's side (top-left edge) — never below it. */}
-      <div className="absolute -left-1 -top-1 z-10 flex gap-0.5 opacity-0 transition-opacity group-hover/nested:opacity-100">
+      <div className="absolute -left-1 -top-2 z-10 flex items-center gap-0 overflow-hidden rounded-md bg-white opacity-0 shadow-md ring-1 ring-gray-200 transition-opacity group-hover/nested:opacity-100">
         <button
           type="button"
           {...attributes}
           {...listeners}
           title="Drag to reposition"
-          className="flex h-5 w-5 cursor-grab items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-emerald-600 active:cursor-grabbing"
+          className="flex h-6 w-6 cursor-grab items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-emerald-600 active:cursor-grabbing"
         >
           <GripVertical className="h-3 w-3" />
         </button>
@@ -695,7 +695,7 @@ function NestedItemWrapper({
               onSelect();
             }}
             title="Block settings"
-            className="flex h-5 w-5 items-center justify-center rounded bg-white text-gray-400 shadow ring-1 ring-gray-200 hover:text-emerald-600"
+            className="flex h-6 w-6 items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-emerald-600"
           >
             <Settings2 className="h-3 w-3" />
           </button>
@@ -2692,7 +2692,11 @@ export default function WysiwygCanvas({
       <EditorPalette onPick={paletteAddElement} onPickRow={paletteAddRow} onPickSection={paletteAddSection} />
 
       <div className="min-w-0 flex-1">
-        <div className="mb-3 flex items-center justify-center gap-1">
+        {/* Sticky: the style panel and palette already are, and on a long page the device toggle
+            was the one control that scrolled away. A pill rather than loose icons — grouped
+            controls read as one instrument. z-20 sits above block hover controls, below dialogs. */}
+        <div className="sticky top-16 z-20 mb-4 flex justify-center">
+          <div className="flex items-center gap-0.5 rounded-full border border-ink-600 bg-ink-900/90 px-1.5 py-1 shadow-lg shadow-black/20 backdrop-blur">
           {(
             [
               ["desktop", Monitor, "Desktop"],
@@ -2705,13 +2709,18 @@ export default function WysiwygCanvas({
               type="button"
               onClick={() => setDevice(key)}
               title={label}
-              className={`rounded-md p-1.5 ${
+              className={`rounded-full p-2 transition-colors ${
                 device === key ? "bg-emerald-500/15 text-emerald-400" : "text-zinc-500 hover:bg-ink-800 hover:text-zinc-300"
               }`}
             >
               <Icon className="h-4 w-4" />
             </button>
           ))}
+          {/* The previewed width, so the toggle says what it means instead of leaving the number
+              to be inferred from how wide the sheet looks. */}
+          <span className="ml-1 hidden select-none pr-1 text-[10px] tabular-nums text-zinc-600 sm:inline">
+            {device === "desktop" ? `${contentWidthOf(tree)}px` : `${DEVICE_WIDTHS[device]}px`}
+          </span>
           {settings && (
             <>
               <span className="mx-1 h-4 w-px bg-ink-700" />
@@ -2719,7 +2728,7 @@ export default function WysiwygCanvas({
                 type="button"
                 onClick={() => setSelectedBlockId(settingsSelected ? null : PAGE_SETTINGS_ID)}
                 title="Page settings"
-                className={`rounded-md p-1.5 ${
+                className={`rounded-full p-2 transition-colors ${
                   settingsSelected
                     ? "bg-emerald-500/15 text-emerald-400"
                     : "text-zinc-500 hover:bg-ink-800 hover:text-zinc-300"
@@ -2729,12 +2738,13 @@ export default function WysiwygCanvas({
               </button>
             </>
           )}
+          </div>
         </div>
         <div
           // bg-white/#1a1a1a are hardcoded ON PURPOSE and never themed — this is a preview of the
           // real published page, which is always light. The shadow keeps it reading as a distinct
           // "sheet" in light mode, where the app background is itself near-white.
-          className="mx-auto rounded-lg border border-ink-700 bg-white px-6 py-10 text-[#1a1a1a] shadow-sm transition-[max-width] duration-200"
+          className="mx-auto rounded-xl border border-ink-700 bg-white px-6 py-10 text-[#1a1a1a] shadow-xl shadow-black/25 transition-[max-width] duration-200"
           style={{
             fontFamily: PAGE_FONT,
             lineHeight: 1.6,
