@@ -74,6 +74,55 @@ Non-negotiable rules:
 5. Stay strictly within the requested structure/field names for each task — the platform code parses specific fields out of your output, and extra commentary outside those fields will be discarded or break parsing.
 6. You will always be given the product's title, niche, marketplace stats, and an extracted sales-page excerpt as grounding context. Base all copy on that material, not on general knowledge of the product category.`;
 
+
+/**
+ * Failures that cannot come out differently on a retry.
+ *
+ * `worker.ts` retries a failed job up to MAX_ATTEMPTS. That is right for a timeout, a 429, or a
+ * transient 5xx — and pure waste for "Your credit balance is too low", which is exactly what an
+ * exhausted account returns. Every attempt costs a claim, a stage re-run and a slot in the queue,
+ * and none of them can succeed until a person tops up. One build here burned 73 attempts against a
+ * dead key before this existed.
+ *
+ * Deliberately NARROWER than lib/generation/video.ts's isAccountLevelFailure, which answers a
+ * different question. That one decides "should I fall back to the other provider", where a 429 is a
+ * perfectly good reason to switch. This one decides "is retrying pointless", where a 429 is the
+ * opposite — a rate limit clears on its own and the job should absolutely try again. Conflating the
+ * two would turn every rate limit into a terminal failure.
+ */
+export function isPermanentAnthropicFailure(err: unknown): boolean {
+  const anyErr = err as any;
+  const type = anyErr?.error?.error?.type ?? anyErr?.error?.type;
+  // authentication_error = bad/absent key; permission_error = key lacks access. Neither changes
+  // without a person acting. rate_limit_error, api_error and overloaded_error are all excluded.
+  if (type === "authentication_error" || type === "permission_error") return true;
+
+  const msg = (err instanceof Error ? err.message : String(err ?? "")).toLowerCase();
+  if (!msg) return false;
+  return (
+    msg.includes("credit balance is too low") ||
+    msg.includes("insufficient credit") ||
+    msg.includes("billing") ||
+    msg.includes("invalid x-api-key") ||
+    msg.includes("anthropic_api_key is not set")
+  );
+}
+
+/** Tag an error so worker.ts's failJob short-circuits the retry budget instead of burning it. */
+function markPermanent<E>(err: E): E {
+  if (isPermanentAnthropicFailure(err)) {
+    (err as any).permanent = true;
+    if (err instanceof Error && /credit balance is too low|insufficient credit/i.test(err.message)) {
+      // Restated for the person who sees it in the UI. The raw API text says "go to Plans &
+      // Billing" without saying whose, and the tenant seeing this notification cannot act on it —
+      // the key belongs to the operator of this app.
+      err.message =
+        "Anthropic API credit is exhausted — the platform owner needs to top up before kits can build.";
+    }
+  }
+  return err;
+}
+
 // Structured JSON output via a single forced tool call — the stable, well-documented way to get
 // machine-parseable output from the Messages API across SDK versions.
 export async function completeJSON<T>(opts: {
@@ -84,22 +133,31 @@ export async function completeJSON<T>(opts: {
   toolName?: string;
   usage?: UsageContext;
 }): Promise<T> {
-  const anthropic = getAnthropic();
   const toolName = opts.toolName ?? "emit_result";
-  const msg = await anthropic.messages.create({
-    model: ENGINE_MODEL,
-    max_tokens: opts.maxTokens ?? 4096,
-    system: [{ type: "text", text: opts.system, cache_control: { type: "ephemeral" } }],
-    tools: [
-      {
-        name: toolName,
-        description: "Emit the structured result for this task.",
-        input_schema: opts.schema as Anthropic.Tool["input_schema"],
-      },
-    ],
-    tool_choice: { type: "tool", name: toolName },
-    messages: [{ role: "user", content: opts.prompt }],
-  });
+  // getAnthropic() is INSIDE the try: an unset key throws, and that is the most permanent failure
+  // of all — retrying it five times is the same waste as retrying an exhausted balance.
+  let msg: Anthropic.Message;
+  try {
+    const anthropic = getAnthropic();
+    msg = await anthropic.messages.create({
+      model: ENGINE_MODEL,
+      max_tokens: opts.maxTokens ?? 4096,
+      system: [{ type: "text", text: opts.system, cache_control: { type: "ephemeral" } }],
+      tools: [
+        {
+          name: toolName,
+          description: "Emit the structured result for this task.",
+          input_schema: opts.schema as Anthropic.Tool["input_schema"],
+        },
+      ],
+      tool_choice: { type: "tool", name: toolName },
+      messages: [{ role: "user", content: opts.prompt }],
+    });
+  } catch (err) {
+    // Rethrown either way — the only thing added is the `permanent` flag worker.ts reads. A
+    // transient error is left completely untouched so it retries exactly as it always did.
+    throw markPermanent(err);
+  }
 
   // Log real cost even on a refusal/malformed response — tokens were genuinely spent.
   if (opts.usage) await recordUsage(opts.usage, msg.model, msg.usage);
