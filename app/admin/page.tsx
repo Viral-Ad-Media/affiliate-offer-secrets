@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import AdminAccountsTable from "@/components/AdminAccountsTable";
 import AdminProblemJobs from "@/components/AdminProblemJobs";
+import AdminTrialPipeline, { type TrialPipelineRow } from "@/components/AdminTrialPipeline";
 import type {
   AdminAccountRow,
   AdminWorkspaceRow,
@@ -64,19 +65,26 @@ function humanDuration(seconds: number): string {
 export default async function AdminPage() {
   const supabase = createClient();
 
-  const [statsRes, accountsRes, workspacesRes, jobsRes, actionsRes] = await Promise.all([
-    supabase.rpc("admin_platform_stats"),
-    supabase.rpc("admin_accounts"),
-    supabase.rpc("admin_account_workspaces"),
-    supabase.rpc("admin_problem_jobs"),
-    supabase.rpc("admin_recent_actions"),
-  ]);
+  const [statsRes, accountsRes, workspacesRes, jobsRes, actionsRes, revenueRes, pipelineRes] =
+    await Promise.all([
+      supabase.rpc("admin_platform_stats"),
+      supabase.rpc("admin_accounts"),
+      supabase.rpc("admin_account_workspaces"),
+      supabase.rpc("admin_problem_jobs"),
+      supabase.rpc("admin_recent_actions"),
+      supabase.rpc("admin_revenue_summary"),
+      supabase.rpc("admin_trial_pipeline"),
+    ]);
 
   const s = (statsRes.data ?? {}) as Record<string, number>;
   const accounts = (accountsRes.data ?? []) as AdminAccountRow[];
   const workspaces = (workspacesRes.data ?? []) as AdminWorkspaceRow[];
   const jobs = (jobsRes.data ?? []) as AdminProblemJob[];
   const actions = (actionsRes.data ?? []) as AdminActionRow[];
+  const rev = (revenueRes.data ?? {}) as Record<string, number | string | null>;
+  const pipeline = (pipelineRes.data ?? []) as TrialPipelineRow[];
+  const usd = (cents: unknown) => `$${((Number(cents) || 0) / 100).toFixed(2)}`;
+  const abandoned = Number(rev.conversions_abandoned ?? 0);
 
   const oldestPending = Number(s.oldest_pending_seconds ?? 0);
   // The queue's own health signal. A backlog is only alarming if it isn't moving — a big pending
@@ -127,6 +135,39 @@ export default async function AdminPage() {
 
       <section>
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Revenue
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Tile
+            label="Revenue"
+            value={usd(rev.revenue_total_cents)}
+            hint={`${usd(rev.revenue_30d_cents)} in the last 30 days`}
+            Icon={CreditCard}
+          />
+          <Tile
+            label="Payments"
+            value={Number(rev.payments_paid ?? 0)}
+            hint={`${rev.payments_access ?? 0} access · ${rev.payments_credits ?? 0} credit packs · ${rev.payments_refunded ?? 0} refunded`}
+            Icon={Coins}
+          />
+          <Tile
+            label="Charges owed"
+            value={Number(rev.conversions_pending ?? 0)}
+            hint="Trials the sweep will charge or retry"
+            Icon={Clock}
+          />
+          <Tile
+            label="Dunning given up"
+            value={abandoned}
+            hint={abandoned > 0 ? "See the trial pipeline below to retry" : "No abandoned charges"}
+            tone={abandoned > 0 ? "warn" : "normal"}
+            Icon={AlertTriangle}
+          />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
           Queue health
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -165,6 +206,8 @@ export default async function AdminPage() {
           />
         </div>
       </section>
+
+      <AdminTrialPipeline rows={pipeline} />
 
       <AdminProblemJobs jobs={jobs} />
 
