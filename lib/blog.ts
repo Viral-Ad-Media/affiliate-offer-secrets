@@ -335,6 +335,12 @@ const PUBLIC_CSS = `
   }
   .site-head { border-bottom: 1px solid var(--line); }
   .site-head-inner { max-width: 1040px; margin: 0 auto; padding: 20px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  /* Shell chrome like .site-head — blog-only, so NOT duplicated into PAGE_STYLE. */
+  .site-footer { margin-top: 56px; border-top: 1px solid var(--line); font-size: 13px; color: #777; }
+  .site-footer-inner { max-width: 1040px; margin: 0 auto; padding: 24px 20px 32px; }
+  .site-footer-links { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 0 10px; padding: 0; list-style: none; }
+  .site-footer-links a { color: inherit; text-decoration: underline; }
+  .site-footer p { margin: 0 0 6px; }
   .site-title { font-size: 1.15rem; font-weight: 700; text-decoration: none; color: var(--ink); }
   .site-desc { color: var(--muted); font-size: .9rem; margin: 0; }
   .cat-desc { color: var(--muted); font-size: .95rem; margin: 0 0 24px; max-width: 640px; }
@@ -624,6 +630,27 @@ function siteHeader(settings: BlogSettings | null | undefined, base: string): st
   <a class="site-title" href="${escapeHtml(base || "/")}">${escapeHtml(settings.blog_title)}</a>
   ${settings.description ? `<p class="site-desc">${escapeHtml(settings.description)}</p>` : ""}
 </div></header>`;
+}
+
+// Footer shown on both index and post pages — one renderer so the two can't drift, the
+// siteHeader precedent. Always rendered (unlike the header, which needs a blog title): the
+// affiliate-disclosure line belongs on every public blog page, not only named ones, and a page
+// that just stops after the content reads unfinished. The disclosure is code-owned here for the
+// same reason it is everywhere else in this codebase — a compliance string an editor can delete
+// is not a compliance string. Article bodies still carry their own per-post disclosure (content
+// rule 3); this is the site-wide layer on top, which also covers the index page, where no
+// article body exists to carry one.
+function blogFooter(settings: BlogSettings | null | undefined, base: string): string {
+  const name = settings?.blog_title || settings?.author_name || "";
+  const year = new Date().getFullYear();
+  return `<footer class="site-footer"><div class="site-footer-inner">
+  <ul class="site-footer-links">
+    <li><a href="${escapeHtml(base || "/")}">Home</a></li>
+    <li><a href="${escapeHtml(`${base}/rss.xml`)}">RSS</a></li>
+  </ul>
+  <p>Some links on this site are affiliate links — if you buy through them, we may earn a commission at no extra cost to you.</p>
+  <p>© ${year}${name ? ` ${escapeHtml(name)}` : ""}. All rights reserved.</p>
+</div></footer>`;
 }
 
 function authorBox(settings: BlogSettings | null | undefined): string {
@@ -928,6 +955,7 @@ ${siteHeader(post.settings, base)}
   ${authorBox(post.settings)}
   ${commentsSection(post)}
 </main>
+${blogFooter(post.settings, base)}
 </body>
 </html>`;
 }
@@ -1097,6 +1125,7 @@ ${siteHeader(settings, base)}
   ${pager}
   ${authorBox(settings)}
 </div>
+${blogFooter(settings, base)}
 </body>
 </html>`;
 }
