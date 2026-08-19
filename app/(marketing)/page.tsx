@@ -16,7 +16,6 @@ import {
   BarChart3,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -125,9 +124,10 @@ export default function HomePage() {
     <div>
       <section className="border-b border-ink-700 bg-gradient-to-b from-ink-900/60 to-ink-950">
         <div className="mx-auto max-w-4xl px-4 py-20 text-center sm:py-28">
-          <Badge className="border-ink-600 bg-ink-800 text-zinc-300">
+          {/* A plain kicker, not a pill — explicit request. */}
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400">
             Built for affiliate marketers
-          </Badge>
+          </p>
           <h1 className="mt-5 text-4xl font-bold text-zinc-100 sm:text-5xl">
             Find winning affiliate products.
             <br className="hidden sm:block" /> Ship the whole funnel in minutes.
