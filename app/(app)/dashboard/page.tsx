@@ -18,30 +18,38 @@ import {
   CheckCircle2,
   Contact,
   Radio,
+  Eye,
+  MousePointerClick,
 } from "lucide-react";
 
 function StatTile({
   icon,
   label,
   value,
+  hint,
   href,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
+  hint?: string;
   href: string;
 }) {
   // A link, not a display: every one of these numbers has a page that lists the things it counts,
   // and a tile you can only read makes the reader go find that page in the sidebar themselves.
   return (
-    <Link href={href} className="stat-tile hover:border-emerald-500/50">
-      <div className="rounded-lg border border-ink-700 bg-ink-800 p-2.5 text-emerald-400">
-        {icon}
+    <Link
+      href={href}
+      className="group rounded-xl border border-ink-700 bg-ink-900 p-4 transition-colors hover:border-emerald-500/50"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</span>
+        <span className="shrink-0 rounded-md bg-emerald-500/10 p-1.5 text-emerald-400">{icon}</span>
       </div>
-      <div>
-        <div className="stat-tile-value">{value}</div>
-        <div className="stat-tile-label">{label}</div>
+      <div className="mt-1.5 text-2xl font-bold tabular-nums text-zinc-100">
+        {typeof value === "number" ? value.toLocaleString() : value}
       </div>
+      {hint && <div className="mt-0.5 truncate text-xs text-zinc-500">{hint}</div>}
     </Link>
   );
 }
@@ -96,6 +104,7 @@ export default async function Overview() {
     { count: linkedProductCount },
     { count: publishedFunnelCount },
     { data: workspace },
+    { data: trafficRows },
   ] = await Promise.all([
     supabase.from("products").select("id", { count: "exact", head: true }).eq("workspace_id", ws),
     supabase
@@ -123,6 +132,9 @@ export default async function Overview() {
       .eq("workspace_id", ws)
       .eq("bridge_published", true),
     supabase.from("workspaces").select("setup_dismissed_at").eq("id", ws).maybeSingle(),
+    // Funnel traffic (0110) — bounded by construction at one row per page, so summing here costs
+    // a small read no matter how much traffic the counters have absorbed.
+    supabase.from("funnel_page_stats").select("views, clicks").eq("workspace_id", ws),
   ]);
 
   // Derived from the counts above, never stored — so a step un-ticks itself if the thing it
@@ -176,11 +188,20 @@ export default async function Overview() {
     getTopFunnels(supabase, ws!),
   ]);
 
+  const funnelViews = (trafficRows ?? []).reduce((s, r: any) => s + Number(r.views ?? 0), 0);
+  const funnelClicks = (trafficRows ?? []).reduce((s, r: any) => s + Number(r.clicks ?? 0), 0);
+  const leads30 = leadTrend.reduce((s, pt) => s + pt.count, 0);
+
   return (
     <main className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-zinc-100">Overview</h1>
-        <p className="text-sm text-zinc-400">What needs you, how you&apos;re doing, and what to promote next.</p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">Overview</h1>
+          <p className="text-sm text-zinc-400">What needs you, how you&apos;re doing, and what to promote next.</p>
+        </div>
+        <Link href="/analytics" className="text-sm text-emerald-300 hover:text-emerald-200">
+          Full analytics &rarr;
+        </Link>
       </header>
 
       {!workspace?.setup_dismissed_at && <SetupChecklist steps={setupSteps} workspaceId={ws!} />}
@@ -188,18 +209,37 @@ export default async function Overview() {
       {/* Above the tiles on purpose: the tiles say what EXISTS, this says what to do about it. */}
       <NeedsAttention items={attention} />
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile icon={<Package className="h-5 w-5" />} label="Products tracked" value={productsCount ?? 0} href="/products" />
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <StatTile icon={<Package className="h-4 w-4" />} label="Products" value={productsCount ?? 0} href="/products" />
         <StatTile
-          icon={<CheckCircle2 className="h-5 w-5" />}
-          label="Campaigns ready"
+          icon={<CheckCircle2 className="h-4 w-4" />}
+          label="Kits ready"
           value={campaignsReadyCount ?? 0}
+          hint={`${publishedFunnelCount ?? 0} published`}
           href="/funnels"
         />
-        <StatTile icon={<Contact className="h-5 w-5" />} label="Contacts captured" value={contactsCount ?? 0} href="/contacts" />
         <StatTile
-          icon={<Radio className="h-5 w-5" />}
-          label="Active sequences"
+          icon={<Eye className="h-4 w-4" />}
+          label="Funnel views"
+          value={funnelViews}
+          href="/funnels"
+        />
+        <StatTile
+          icon={<MousePointerClick className="h-4 w-4" />}
+          label="Link clicks"
+          value={funnelClicks}
+          href="/funnels"
+        />
+        <StatTile
+          icon={<Contact className="h-4 w-4" />}
+          label="Contacts"
+          value={contactsCount ?? 0}
+          hint={leads30 > 0 ? `+${leads30.toLocaleString()} in 30 days` : undefined}
+          href="/contacts"
+        />
+        <StatTile
+          icon={<Radio className="h-4 w-4" />}
+          label="Sequences live"
           value={activeSequencesCount ?? 0}
           href="/emails/sequences"
         />
