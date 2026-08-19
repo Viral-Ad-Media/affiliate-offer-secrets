@@ -9,6 +9,8 @@ import {
   X,
   Trash2,
   Monitor,
+  Undo2,
+  Redo2,
   Tablet,
   Smartphone,
   Heading1,
@@ -1155,7 +1157,7 @@ export type WysiwygCanvasProps = {
 // findBlockLocation/moveBlockToContainer for the pure data-layer half of this.
 export default function WysiwygCanvas({
   tree,
-  onChange,
+  onChange: emitChange,
   resizeImageFile,
   imageBusyBlockId,
   onImageBusyChange,
@@ -1169,6 +1171,62 @@ export default function WysiwygCanvas({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+
+  // Undo / redo. The canvas is fully controlled (the parent owns `tree`; every mutation calls the
+  // change fn), so history is just snapshots of the tree PROP before each edit. `change` wraps the
+  // real emit: it pushes the current tree onto `past`, clears `redo`, then emits. undo/redo call
+  // emitChange DIRECTLY so restoring a snapshot is never itself recorded as a new edit. Aliasing
+  // `onChange = change` below means every existing internal `onChange(...)` records for free — no
+  // call site changes. Capped at 100 steps; a snapshot is a structural-shared object, cheap to hold.
+  const pastRef = useRef<PageBlockTree[]>([]);
+  const futureRef = useRef<PageBlockTree[]>([]);
+  const [, setHistTick] = useState(0);
+  const change = useCallback(
+    (next: PageBlockTree) => {
+      pastRef.current.push(tree);
+      if (pastRef.current.length > 100) pastRef.current.shift();
+      futureRef.current = [];
+      setHistTick((t) => t + 1);
+      emitChange(next);
+    },
+    [tree, emitChange]
+  );
+  const undo = useCallback(() => {
+    const prev = pastRef.current.pop();
+    if (prev === undefined) return;
+    futureRef.current.push(tree);
+    setHistTick((t) => t + 1);
+    emitChange(prev);
+  }, [tree, emitChange]);
+  const redo = useCallback(() => {
+    const next = futureRef.current.pop();
+    if (next === undefined) return;
+    pastRef.current.push(tree);
+    setHistTick((t) => t + 1);
+    emitChange(next);
+  }, [tree, emitChange]);
+  const canUndo = pastRef.current.length > 0;
+  const canRedo = futureRef.current.length > 0;
+  // Every internal mutation routes through the wrapper — the prop was renamed to emitChange, so
+  // this shadows nothing and no existing call site changed.
+  const onChange = change;
+
+  // Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z (or Ctrl+Y). Deliberately IGNORED while focus is in a text
+  // field or contentEditable: there the browser's own text-undo should win, not a whole-block
+  // revert — pressing undo mid-sentence must undo the sentence, not delete the block.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z" && e.key.toLowerCase() !== "y") return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT")) return;
+      const isRedo = e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey);
+      e.preventDefault();
+      if (isRedo) redo();
+      else undo();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
 
   // The page theme, rendered LIVE on the canvas. themeToCssVars is the exact function the
   // published shell uses; parsing its output into custom properties on the sheet (instead of
@@ -2795,6 +2853,27 @@ export default function WysiwygCanvas({
             controls read as one instrument. z-20 sits above block hover controls, below dialogs. */}
         <div className="sticky top-16 z-20 mb-4 flex justify-center">
           <div className="flex items-center gap-0.5 rounded-full border border-ink-600 bg-ink-900/90 px-1.5 py-1 shadow-lg shadow-black/20 backdrop-blur">
+          <button
+            type="button"
+            onClick={undo}
+            disabled={!canUndo}
+            title="Undo (⌘Z)"
+            aria-label="Undo"
+            className="rounded-full p-2 text-zinc-500 transition-colors hover:bg-ink-800 hover:text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent"
+          >
+            <Undo2 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={!canRedo}
+            title="Redo (⌘⇧Z)"
+            aria-label="Redo"
+            className="rounded-full p-2 text-zinc-500 transition-colors hover:bg-ink-800 hover:text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent"
+          >
+            <Redo2 className="h-4 w-4" />
+          </button>
+          <span className="mx-1 h-4 w-px bg-ink-700" />
           {(
             [
               ["desktop", Monitor, "Desktop"],
