@@ -845,7 +845,20 @@ export type PageBlockTree = {
    * editing, not to be emitted.
    */
   keywords?: PageKeywords;
+  /**
+   * A slim CTA bar pinned to the bottom of the viewport on the published funnel page — the "sticky
+   * offer bar" pattern that lifts mobile conversion. On the TREE (not a column) for the same
+   * reason contentWidth/theme/keywords are: one slot, four page kinds, no migration.
+   *
+   * `href` empty means "use the funnel's own offer link" — resolved at render from RenderCtx so
+   * the tenant never has to paste the hoplink twice; a non-empty href goes through the same
+   * isValidRedirectUrl gate a button does. Renders on funnel pages only (the shells emit it); the
+   * blog shell ignores it. Absent (every page today) renders nothing.
+   */
+  stickyCta?: StickyCta;
 };
+
+export type StickyCta = { text: string; label: string; href: string };
 
 export type PageKeywords = {
   primary: string;
@@ -883,6 +896,24 @@ export function contentWidthOf(raw: unknown): number {
   const n = (raw as { contentWidth?: unknown } | null)?.contentWidth;
   if (typeof n !== "number" || !Number.isFinite(n)) return DEFAULT_CONTENT_WIDTH;
   return Math.min(MAX_CONTENT_WIDTH, Math.max(MIN_CONTENT_WIDTH, Math.round(n)));
+}
+
+/**
+ * The sticky CTA bar off a tree, clamped and sanitized — null when unset or when it has no label
+ * (a bar with no button is nothing to show). Text and label are length-capped; the raw href is
+ * returned as stored (empty = "use the offer link") and validated at render, not here, so this
+ * stays a pure isomorphic read with no isValidRedirectUrl dependency to drag around.
+ */
+export function stickyCtaOf(raw: unknown): StickyCta | null {
+  const s = (raw as { stickyCta?: unknown } | null)?.stickyCta as Partial<StickyCta> | undefined;
+  if (!s || typeof s !== "object") return null;
+  const label = typeof s.label === "string" ? s.label.trim().slice(0, 60) : "";
+  if (!label) return null;
+  return {
+    text: typeof s.text === "string" ? s.text.trim().slice(0, 120) : "",
+    label,
+    href: typeof s.href === "string" ? s.href.trim().slice(0, 2000) : "",
+  };
 }
 
 // ---------------------------------------------------------------------------------------------

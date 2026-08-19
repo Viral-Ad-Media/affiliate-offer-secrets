@@ -35,8 +35,27 @@ import {
 } from "./blockTree";
 import { renderTrackingHtml, type TrackingSettings } from "./tracking";
 import { themeToCssVars, themeFontLinks } from "./pageTheme";
+import { stickyCtaOf } from "./blockTree";
+import { isValidRedirectUrl } from "@/lib/validate";
 import type { NetworkId } from "@/lib/networks";
 import { isDisclosureText } from "@/lib/disclosure";
+
+/**
+ * The fixed-bottom offer bar (PageBlockTree.stickyCta), rendered on funnel pages only. `offerHref`
+ * is the page's own resolved offer link — used when the tenant left the bar's href blank ("go to
+ * the offer"). A typed href goes through isValidRedirectUrl; if neither yields a usable URL the
+ * bar is dropped rather than rendered pointing at "#". Every visible string is escaped; nothing
+ * tenant-typed reaches an attribute unescaped.
+ */
+function stickyCtaHtml(tree: unknown, offerHref: string): string {
+  const bar = stickyCtaOf(tree);
+  if (!bar) return "";
+  const href = bar.href && isValidRedirectUrl(bar.href) ? bar.href : offerHref;
+  if (!href || !isValidRedirectUrl(href)) return "";
+  return `<div class="sticky-cta"><div class="sticky-cta-inner">${
+    bar.text ? `<span class="sticky-cta-text">${escapeHtml(bar.text)}</span>` : ""
+  }<a class="sticky-cta-btn" href="${escapeHtml(href)}">${escapeHtml(bar.label)}</a></div></div>`;
+}
 
 export { escapeHtml };
 export * from "./blockTree";
@@ -593,7 +612,17 @@ const PAGE_STYLE = `
   .icon-block { display:flex; align-items:center; gap:10px; margin:0 0 16px; color:var(--t-primary,#16a34a); }
   .icon-block span { color:var(--t-text,#1a1a1a); font-size:15px; }
   /* Page footer block. DUPLICATED in the other stylesheet; change both. */
-  /* Pre-footer CTA band. DUPLICATED in the other stylesheet; change both. */
+  /* Sticky offer bar (PageBlockTree.stickyCta) — funnel pages only, NOT duplicated to blog. */
+  .sticky-cta { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: var(--t-surface, #111);
+    border-top: 1px solid var(--t-field-border, rgba(0,0,0,.12)); box-shadow: 0 -4px 16px rgba(0,0,0,.12); }
+  .sticky-cta-inner { max-width: 760px; margin: 0 auto; display: flex; align-items: center; justify-content: center;
+    gap: 14px; padding: 10px 16px; flex-wrap: wrap; }
+  .sticky-cta-text { font-weight: 600; color: var(--t-text, #1a1a1a); }
+  .sticky-cta-btn { display: inline-block; background: var(--t-primary, #16a34a); color: var(--t-on-primary, #fff);
+    padding: 10px 22px; border-radius: 10px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+  /* Keep the fixed bar from covering the last of the page. */
+  body { padding-bottom: 0; }
+    /* Pre-footer CTA band. DUPLICATED in the other stylesheet; change both. */
   .pre-footer { margin: 40px 0 0; padding: 40px 24px; text-align: center; border-radius: 12px;
     background: var(--t-surface, #f6f6f4); border: 1px solid var(--t-field-border, #e5e5e5); }
   .pre-footer-inner { max-width: 640px; margin: 0 auto; }
@@ -882,6 +911,7 @@ ${t.bodyStart}
     });
     ${body.includes('data-after="branch"') ? BRANCH_RESOLVE_JS : ""}
   </script>
+  ${stickyCtaHtml(tree, hoplink)}
   ${statsBeaconScript(campaignId, "optin")}
 </body>
 </html>`;
@@ -1057,6 +1087,7 @@ ${t.bodyStart}
       ${body}
     </div>
   </div>
+  ${stickyCtaHtml(tree, primaryHref)}
   ${stats ? statsBeaconScript(stats.campaignId, stats.pageKey) : ""}
 </body>
 </html>`;

@@ -29,6 +29,7 @@ import {
   type FunnelStepType,
   TESTIMONIAL_MEDIA_KINDS,
   contentWidthOf,
+  stickyCtaOf,
   keywordsOf,
   treeHasForm,
   type ButtonAction,
@@ -1107,6 +1108,10 @@ export function validatePageBlockTree(raw: unknown, opts: ValidatePageBlockTreeO
         blocks,
         contentWidth: contentWidthOf(body),
         theme: sanitizeTheme(body.theme),
+        // Sticky CTA bar rides on the tree — carry it through or it's dropped on every save (the
+        // contentWidth trap). stickyCtaOf clamps/sanitizes; the href is validated at RENDER, where
+        // an unusable one degrades to the offer link, so no reject here.
+        ...(stickyCtaOf(body) ? { stickyCta: stickyCtaOf(body)! } : {}),
         ...(keywords
           ? {
               keywords: {

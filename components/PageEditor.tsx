@@ -5,6 +5,7 @@ import { Loader2, CheckCircle2, Lock } from "lucide-react";
 import { DISCLOSURE, normalizePageCopy, firstImageDataUrl, renderBlockTree, type PageBlockTree , renderBridgeHtml} from "@/lib/engine/renderPages";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import ContentWidthField from "@/components/ContentWidthField";
+import StickyCtaField from "@/components/StickyCtaField";
 import KeywordsField from "@/components/KeywordsField";
 import PageThemePanel from "@/components/PageThemePanel";
 import PostSeoPanel from "@/components/PostSeoPanel";
@@ -171,6 +172,7 @@ export default function PageEditor({
               />
               <KeywordsField tree={tree} onChange={setTree} />
               <ContentWidthField tree={tree} onChange={setTree} />
+              <StickyCtaField tree={tree} onChange={setTree} />
               <PageThemePanel tree={tree} onChange={setTree} />
               {/* SEO lives behind the ⚙ with the other page-level settings, the way the blog post
                   editor already does it — it's about the page, not about a block on it, and above

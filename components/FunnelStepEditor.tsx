@@ -15,6 +15,7 @@ import EditorPreviewButton from "@/components/EditorPreview";
 import type { FunnelStepCtaAction } from "@/lib/shared";
 import WysiwygCanvas from "@/components/WysiwygCanvas";
 import ContentWidthField from "@/components/ContentWidthField";
+import StickyCtaField from "@/components/StickyCtaField";
 import KeywordsField from "@/components/KeywordsField";
 import PageThemePanel from "@/components/PageThemePanel";
 import PostSeoPanel from "@/components/PostSeoPanel";
@@ -165,6 +166,7 @@ export default function FunnelStepEditor({
               <PageChecklist items={funnelStepChecklist(stepType, tree)} subtitle={STEP_TYPE_LABELS[stepType]} />
               <KeywordsField tree={tree} onChange={setTree} />
               <ContentWidthField tree={tree} onChange={setTree} />
+              <StickyCtaField tree={tree} onChange={setTree} />
               <PageThemePanel tree={tree} onChange={setTree} />
               {/* Behind the ⚙ with the other page-level settings, matching the blog post editor
                   and the opt-in editor. */}
