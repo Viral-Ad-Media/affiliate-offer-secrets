@@ -182,6 +182,7 @@ export default function FunnelMap({
           <SplitTestBranch
             campaignId={campaignId}
             bridgeHtml={bridgeHtml}
+            steps={ordered.map((s, i) => ({ id: s.id, label: `Step ${i + 1} — ${STEP_LABELS[s.step_type]}` }))}
             entryStats={<StatLine views={pageStats["optin"]?.views ?? 0} clicks={pageStats["optin"]?.clicks ?? 0} leads={leads} />}
             onShowHeatmap={() => setHeatmap({ pageKey: "optin", title: "Opt-in page", html: bridgeHtml })}
             onEditControl={onSelectOptin}

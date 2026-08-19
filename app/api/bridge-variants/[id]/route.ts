@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { variantNextStepUrl } from "@/lib/funnelSteps";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -79,7 +80,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { data: variant, error: variantErr } = await admin
     .from("bridge_variants")
-    .select("campaign_id")
+    .select("campaign_id, next_action, next_url, next_step_id")
     .eq("id", variantId)
     .single();
   if (variantErr || !variant) {
@@ -132,7 +133,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     id: s.id as string,
     url: `/p/${variant.campaign_id}/step/${s.step_index}`,
   }));
-  const nextStepUrl = stepLinks[0]?.url ?? null;
+  // Per-variant flow (0115): this page's own destination, not blindly the funnel's first step.
+  const nextStepUrl = variantNextStepUrl(
+    variant as any,
+    (allSteps ?? []) as { id: string; step_index: number }[],
+    variant.campaign_id as string,
+    stepLinks[0]?.url ?? null
+  );
 
   const bridgeHtml = renderBridgeHtml(
     product,

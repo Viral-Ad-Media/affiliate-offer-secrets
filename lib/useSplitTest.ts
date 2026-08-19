@@ -89,6 +89,30 @@ export function useSplitTest(campaignId: string) {
     else await load();
   }
 
+  // Per-variant flow (0115) — a route, not an RPC, because the destination bakes into stored
+  // HTML and only application code can re-render it.
+  async function setFlow(
+    variantId: string,
+    next_action: BridgeVariant["next_action"],
+    next_url?: string | null,
+    next_step_id?: string | null
+  ) {
+    setBusy(variantId);
+    setError(null);
+    const res = await fetch(`/api/bridge-variants/${variantId}/flow`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ next_action, next_url, next_step_id }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setBusy(null);
+    if (!res.ok) {
+      setError(d.error ?? "Couldn't change the flow");
+      return;
+    }
+    await load();
+  }
+
   async function deleteVariant(variantId: string) {
     setBusy(variantId);
     const { error: err } = await createClient().rpc("delete_bridge_variant", { p_variant_id: variantId });
@@ -128,6 +152,7 @@ export function useSplitTest(campaignId: string) {
     startTest,
     addVariant,
     commitWeight,
+    setFlow,
     toggleStatus,
     deleteVariant,
     endTest,

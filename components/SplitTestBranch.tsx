@@ -28,6 +28,7 @@ export default function SplitTestBranch({
   campaignId,
   bridgeHtml,
   entryStats,
+  steps = [],
   onShowHeatmap,
   onEditControl,
   onEditVariant,
@@ -41,6 +42,8 @@ export default function SplitTestBranch({
    * above them would read as a third set of numbers to reconcile.
    */
   entryStats?: React.ReactNode;
+  /** The funnel's steps, for the per-variant flow picker (0115). */
+  steps?: { id: string; label: string }[];
   /** Opens the opt-in page's native heatmap (FunnelMap owns the dialog). */
   onShowHeatmap?: () => void;
   onEditControl: () => void;
@@ -56,6 +59,7 @@ export default function SplitTestBranch({
     startTest,
     addVariant,
     commitWeight,
+    setFlow,
     toggleStatus,
     deleteVariant,
     endTest,
@@ -163,6 +167,39 @@ export default function SplitTestBranch({
                       assignment rather than once per request, so a refresh doesn't count again. */}
                   <span>{v.views} visitors</span>
                   <span>{leads} leads</span>
+                  {/* Per-variant flow (0115): where THIS arm's opt-ins go. The control is locked
+                      to the funnel's own chain (DB constraint), so it shows nothing here. Custom
+                      URL uses a prompt — one rarely-used field doesn't earn a dialog. */}
+                  {!v.is_control && (
+                    <select
+                      value={v.next_action === "step" ? `step:${v.next_step_id ?? ""}` : v.next_action}
+                      disabled={busy === v.id}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "url") {
+                          const url = window.prompt("Send opt-ins to which URL?", v.next_url ?? "https://");
+                          if (url) setFlow(v.id, "url", url);
+                          return;
+                        }
+                        if (val.startsWith("step:")) {
+                          setFlow(v.id, "step", null, val.slice(5));
+                          return;
+                        }
+                        setFlow(v.id, val as "default" | "offer");
+                      }}
+                      title="Where this variant sends visitors after they opt in"
+                      className="w-full rounded border border-ink-600 bg-ink-900 px-1 py-0.5 text-[11px] text-zinc-300"
+                    >
+                      <option value="default">Then: funnel flow</option>
+                      <option value="offer">Then: straight to offer</option>
+                      {steps.map((s) => (
+                        <option key={s.id} value={`step:${s.id}`}>
+                          Then: {s.label}
+                        </option>
+                      ))}
+                      <option value="url">Then: custom URL…</option>
+                    </select>
+                  )}
                   <span className={v.status === "paused" ? "text-zinc-600" : "text-emerald-300"}>
                     {v.status === "paused" ? "paused" : rate}
                   </span>

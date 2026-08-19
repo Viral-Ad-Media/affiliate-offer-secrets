@@ -91,6 +91,11 @@ export type BridgeVariant = {
   page_copy: Campaign["page_copy"];
   embedded_image_data_url: string | null;
   views: number;
+  // Per-variant flow (0115): where this arm's opt-ins go — 'default' follows the funnel's own
+  // chain; 'offer' skips straight to the affiliate link; 'step' names a funnel_steps row by ID.
+  next_action: "default" | "offer" | "url" | "step";
+  next_url: string | null;
+  next_step_id: string | null;
   created_at: string;
   updated_at: string;
 };

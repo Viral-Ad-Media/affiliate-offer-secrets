@@ -38,6 +38,33 @@ function stepUrl(campaignId: string, stepIndex: number): string {
   return `/p/${campaignId}/step/${stepIndex}`;
 }
 
+/**
+ * Where one split-test variant's opt-in goes next (0115). `defaultUrl` is the funnel's own first
+ * step — what the control uses. 'offer' returns null on purpose: with no nextStepUrl the page's
+ * submit handler falls through to the offer link, which is exactly the "skip the steps" flow.
+ * A 'step' whose row is gone (ON DELETE SET NULL) or no longer in the chain degrades to the
+ * default flow rather than a dead link.
+ */
+export function variantNextStepUrl(
+  v: { next_action?: string | null; next_url?: string | null; next_step_id?: string | null },
+  steps: { id: string; step_index: number }[],
+  campaignId: string,
+  defaultUrl: string | null
+): string | null {
+  switch (v.next_action) {
+    case "offer":
+      return null;
+    case "url":
+      return v.next_url && /^https?:\/\//.test(v.next_url) ? v.next_url : defaultUrl;
+    case "step": {
+      const step = steps.find((s) => s.id === v.next_step_id);
+      return step ? stepUrl(campaignId, step.step_index) : defaultUrl;
+    }
+    default:
+      return defaultUrl;
+  }
+}
+
 // Re-renders campaigns.bridge_html (its post-opt-in redirect target) and every funnel_steps row's
 // html for one campaign, in sequence order. Called after any action that changes the step
 // sequence (add/move/delete) or edits a step's/the opt-in page's own copy, so stored HTML is
@@ -125,7 +152,7 @@ export async function rerenderFunnelSequence(
     // got the in-place reveal instead of step 1.
     const { data: variants } = await admin
       .from("bridge_variants")
-      .select("id, page_copy, embedded_image_data_url, is_control")
+      .select("id, page_copy, embedded_image_data_url, is_control, next_action, next_url, next_step_id")
       .eq("campaign_id", campaignId)
       .eq("is_control", false);
     for (const v of variants ?? []) {
@@ -136,7 +163,10 @@ export async function rerenderFunnelSequence(
         hoplink,
         v.embedded_image_data_url,
         campaignId,
-        nextStepUrl,
+        // Per-variant flow (0115): a variant may send its opt-ins somewhere other than the
+        // control's next step. Resolved fresh on every re-render, so a reordered or deleted step
+        // self-heals — same reason branch targets store step IDs.
+        variantNextStepUrl(v, steps, campaignId, nextStepUrl),
         tracking,
         campaign,
         stepLinks
