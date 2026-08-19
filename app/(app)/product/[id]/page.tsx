@@ -16,6 +16,8 @@ import SendEmail from "@/components/SendEmail";
 import BlogPostLink from "@/components/BlogPostLink";
 import GenerateVideo from "@/components/GenerateVideo";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
+import { downloadTextFile, filenameSlug } from "@/lib/download";
+import { composeSms } from "@/lib/sms";
 import SocialPostsPanel from "@/components/SocialPostsPanel";
 import SmsSequencePanel from "@/components/SmsSequencePanel";
 import TiktokScriptsPanel from "@/components/TiktokScriptsPanel";
@@ -108,6 +110,62 @@ export default function ProductPage({ params }: { params: { id: string } }) {
     if (key === "sms_messages") return !!campaign.sms_messages?.length;
     if (key === "tiktok_md") return !!campaign.tiktok_scripts?.length || !!campaign.tiktok_md;
     return !!(campaign as any)[key];
+  }
+
+  // One file per tab, in the format the content actually is: HTML for the funnel page, markdown
+  // for copy, plain text for SMS. Structured arrays are written out readably; legacy flat-string
+  // campaigns download the string they have. SMS goes through composeSms so the file matches what
+  // would really send — opt-out line included on the first message.
+  function downloadCurrentTab() {
+    if (!campaign) return;
+    const slug = filenameSlug(product?.product_title ?? ((campaign as any).name as string | null));
+    if (tab === "bridge_html") {
+      if (campaign.bridge_html) downloadTextFile(`${slug}-funnel-optin.html`, campaign.bridge_html, "text/html");
+      return;
+    }
+    if (tab === "fb_ads_md") {
+      const md = campaign.fb_ad_angles
+        ? campaign.fb_ad_angles
+            .map(
+              (a, i) =>
+                `## Angle ${i + 1}: ${a.headline}\n\n${a.primary_text}\n\n*${a.description}*\n\nCTA: **${a.cta}**`
+            )
+            .join("\n\n---\n\n")
+        : (campaign.fb_ads_md ?? "");
+      if (md) downloadTextFile(`${slug}-facebook-ads.md`, md, "text/markdown");
+      return;
+    }
+    if (tab === "tiktok_md") {
+      const md = campaign.tiktok_scripts?.length
+        ? campaign.tiktok_scripts
+            .map((s, i) => `## Script ${i + 1}\n\n**Hook:** ${s.hook}\n\n${s.script}`)
+            .join("\n\n---\n\n")
+        : (campaign.tiktok_md ?? "");
+      if (md) downloadTextFile(`${slug}-tiktok-scripts.md`, md, "text/markdown");
+      return;
+    }
+    if (tab === "social_md") {
+      const md = campaign.social_posts?.length
+        ? campaign.social_posts.map((s: any, i: number) => `## Post ${i + 1}\n\n${s.caption}`).join("\n\n---\n\n")
+        : (campaign.social_md ?? "");
+      if (md) downloadTextFile(`${slug}-social-posts.md`, md, "text/markdown");
+      return;
+    }
+    if (tab === "sms_messages") {
+      const msgs = campaign.sms_messages ?? [];
+      if (msgs.length) {
+        const text = msgs.map((m, i) => `Message ${i + 1}:\n${composeSms(m.body, i)}`).join("\n\n");
+        downloadTextFile(`${slug}-sms-messages.txt`, text);
+      }
+      return;
+    }
+    if (tab === "email_md" && campaign.email_md) {
+      downloadTextFile(`${slug}-emails.md`, campaign.email_md, "text/markdown");
+      return;
+    }
+    if (tab === "blog_md" && campaign.blog_md) {
+      downloadTextFile(`${slug}-blog-article.md`, campaign.blog_md, "text/markdown");
+    }
   }
 
   function copyHoplink() {
@@ -265,7 +323,8 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         ) : (
           <>
             <KitStyleStrip meta={(campaign as any).kit_meta} />
-            <div className="border-b border-ink-700 px-4 py-2">
+            <div className="flex flex-wrap items-center gap-2 border-b border-ink-700 px-4 py-2">
+              <div className="min-w-0 flex-1">
               <Tabs value={tab} onValueChange={(v) => setTab(v as (typeof TABS)[number]["key"])}>
                 <TabsList className="h-auto flex-wrap justify-start gap-1 bg-transparent p-0">
                   {TABS.map((t) => (
@@ -280,6 +339,20 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                   ))}
                 </TabsList>
               </Tabs>
+              </div>
+              <button
+                type="button"
+                onClick={downloadCurrentTab}
+                disabled={!hasTabContent(tab)}
+                title={
+                  hasTabContent(tab)
+                    ? "Download this tab's content as a file"
+                    : "Nothing generated on this tab yet"
+                }
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-ink-600 px-2.5 py-1 text-xs text-zinc-300 hover:border-emerald-500/50 hover:text-emerald-300 disabled:opacity-40"
+              >
+                <Download className="h-3.5 w-3.5" /> Download
+              </button>
             </div>
             <div className="p-4">
               {tab === "fb_ads_md" ? (
