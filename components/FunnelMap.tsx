@@ -24,10 +24,12 @@ import {
   MoreHorizontal,
   Loader2,
   GripVertical,
+  Flame,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import type { FunnelStep, FunnelStepType } from "@/lib/shared";
 import SplitTestBranch from "@/components/SplitTestBranch";
+import HeatmapDialog from "@/components/HeatmapDialog";
 import { NodeCard } from "@/components/FunnelNodeCard";
 import { Card } from "@/components/ui/card";
 import { STEP_TYPE_LABELS } from "@/lib/funnelTypes";
@@ -77,6 +79,8 @@ export default function FunnelMap({
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  // Which page's heatmap is open — 'optin' or a step id, plus the stored html to draw over.
+  const [heatmap, setHeatmap] = useState<{ pageKey: string; title: string; html: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Optimistic order: the drop reflows the map immediately, the server confirms behind it. Local
@@ -179,6 +183,7 @@ export default function FunnelMap({
             campaignId={campaignId}
             bridgeHtml={bridgeHtml}
             entryStats={<StatLine views={pageStats["optin"]?.views ?? 0} clicks={pageStats["optin"]?.clicks ?? 0} leads={leads} />}
+            onShowHeatmap={() => setHeatmap({ pageKey: "optin", title: "Opt-in page", html: bridgeHtml })}
             onEditControl={onSelectOptin}
             onEditVariant={onSelectVariant}
           />
@@ -211,6 +216,12 @@ export default function FunnelMap({
                       <ThumbAction onClick={() => onSelectStep(step.id)} title="Edit this page">
                         <Pencil className="h-3.5 w-3.5" />
                       </ThumbAction>
+                      <ThumbAction
+                        onClick={() => setHeatmap({ pageKey: step.id, title: STEP_LABELS[step.step_type], html: step.html })}
+                        title="Click heatmap and scroll depth"
+                      >
+                        <Flame className="h-3.5 w-3.5" />
+                      </ThumbAction>
                       <NodeMenu
                         busy={busy === step.id}
                         canMoveUp={i > 0}
@@ -233,6 +244,16 @@ export default function FunnelMap({
           <AddCard busy={busy === "add"} onAdd={(t) => addStep(t, null)} />
         </div>
       </div>
+
+      {heatmap && (
+        <HeatmapDialog
+          campaignId={campaignId}
+          pageKey={heatmap.pageKey}
+          title={heatmap.title}
+          html={heatmap.html}
+          onClose={() => setHeatmap(null)}
+        />
+      )}
     </Card>
   );
 }

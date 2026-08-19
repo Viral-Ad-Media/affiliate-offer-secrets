@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Beaker, Pencil, Pause, Play, Plus, Trash2, LogIn, Loader2, Eye } from "lucide-react";
+import { Beaker, Pencil, Pause, Play, Plus, Trash2, LogIn, Loader2, Eye , Flame } from "lucide-react";
 import { useSplitTest } from "@/lib/useSplitTest";
 import { NodeCard } from "@/components/FunnelNodeCard";
 import EditorPreviewButton from "@/components/EditorPreview";
@@ -28,6 +28,7 @@ export default function SplitTestBranch({
   campaignId,
   bridgeHtml,
   entryStats,
+  onShowHeatmap,
   onEditControl,
   onEditVariant,
 }: {
@@ -40,6 +41,8 @@ export default function SplitTestBranch({
    * above them would read as a third set of numbers to reconcile.
    */
   entryStats?: React.ReactNode;
+  /** Opens the opt-in page's native heatmap (FunnelMap owns the dialog). */
+  onShowHeatmap?: () => void;
   onEditControl: () => void;
   onEditVariant: (variantId: string) => void;
 }) {
@@ -90,6 +93,11 @@ export default function SplitTestBranch({
               <button type="button" onClick={onEditControl} title="Edit this page" aria-label="Edit the opt-in page" className={action}>
                 <Pencil className="h-3.5 w-3.5" />
               </button>
+              {onShowHeatmap && (
+                <button type="button" onClick={onShowHeatmap} title="Click heatmap and scroll depth" aria-label="Heatmap" className={action}>
+                  <Flame className="h-3.5 w-3.5" />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={startTest}

@@ -23,7 +23,7 @@ export async function POST(req: Request) {
 
   // sendBeacon posts text/plain — read the raw body and parse, never req.json() (which would
   // reject on the content type with some runtimes).
-  let body: { campaign_id?: unknown; page_key?: unknown } = {};
+  let body: { campaign_id?: unknown; page_key?: unknown; link_click?: unknown; cells?: unknown } = {};
   try {
     body = JSON.parse(await req.text());
   } catch {
@@ -33,9 +33,32 @@ export async function POST(req: Request) {
   const pageKey = typeof body.page_key === "string" ? body.page_key : "";
   if (!UUID_RE.test(campaignId) || !PAGE_KEY_RE.test(pageKey)) return done;
 
+  // Back-compat: pages rendered before the heatmap shipped send neither field, and their beacon
+  // only ever fired on real link clicks — so the bare shape still counts as one.
+  const linkClick = "link_click" in body || Array.isArray(body.cells) ? body.link_click === true : true;
+  // Heatmap density cells (0114). Re-validated shape-by-shape here AND inside the RPC — this is
+  // an anonymous endpoint, and a bounded grid is only bounded if every coordinate is.
+  const cells = Array.isArray(body.cells)
+    ? (body.cells as unknown[])
+        .slice(0, 4)
+        .filter(
+          (c): c is { k: string; x: number; y: number } =>
+            !!c &&
+            typeof c === "object" &&
+            ((c as any).k === "click" || (c as any).k === "scroll") &&
+            Number.isInteger((c as any).x) &&
+            Number.isInteger((c as any).y) &&
+            (c as any).x >= 0 &&
+            (c as any).x <= 39 &&
+            (c as any).y >= 0 &&
+            (c as any).y <= 99
+        )
+    : [];
+  if (!linkClick && cells.length === 0) return done;
+
   const admin = createAdminClient();
-  // Only pages that are actually live can accrue clicks — an unpublished campaign silently
-  // drops, so the endpoint can't be used to write stats onto drafts.
+  // Only pages that are actually live can accrue stats — an unpublished campaign silently
+  // drops, so the endpoint can't be used to write onto drafts.
   const { data: campaign } = await admin
     .from("campaigns")
     .select("id")
@@ -45,11 +68,20 @@ export async function POST(req: Request) {
   if (!campaign) return done;
 
   try {
-    await admin.rpc("increment_funnel_page_stat", {
-      p_campaign_id: campaignId,
-      p_page_key: pageKey,
-      p_metric: "click",
-    });
+    if (linkClick) {
+      await admin.rpc("increment_funnel_page_stat", {
+        p_campaign_id: campaignId,
+        p_page_key: pageKey,
+        p_metric: "click",
+      });
+    }
+    if (cells.length > 0) {
+      await admin.rpc("increment_funnel_heatmap_cells", {
+        p_campaign_id: campaignId,
+        p_page_key: pageKey,
+        p_cells: cells,
+      });
+    }
   } catch {
     // stats are secondary — never let a counter hiccup surface to a visitor's beacon
   }

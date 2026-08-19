@@ -892,10 +892,25 @@ ${t.bodyStart}
  */
 function statsBeaconScript(campaignId: string, pageKey: string): string {
   if (!campaignId) return "";
+  // Every click reports its heatmap cell — x bucketed over 40 columns of viewport width, y over
+  // 100 rows of DOCUMENT height, so the density grid survives reflow across devices — and
+  // link_click marks the ones that leave the page, feeding the map's clicks counter. Scroll depth
+  // is the max decile reached, sent once on pagehide (the case sendBeacon exists for). Only
+  // NUMBERS and the two server-known ids ever reach the payload.
   return `<script>(function(){var c=${JSON.stringify(campaignId)},k=${JSON.stringify(pageKey)};
-document.addEventListener('click',function(e){var t=e.target;var a=t&&t.closest?t.closest('a[href]'):null;if(!a)return;
-var h=a.getAttribute('href')||'';if(!h||h.charAt(0)==='#')return;
-try{navigator.sendBeacon('/api/public/funnel-event',JSON.stringify({campaign_id:c,page_key:k}))}catch(_){}},true);})();</script>`;
+var H=function(){return Math.max(1,document.documentElement.scrollHeight)};
+var send=function(p){try{navigator.sendBeacon('/api/public/funnel-event',JSON.stringify(p))}catch(_){}};
+document.addEventListener('click',function(e){
+var x=Math.min(39,Math.max(0,Math.floor(e.clientX/Math.max(1,window.innerWidth)*40)));
+var y=Math.min(99,Math.max(0,Math.floor((e.clientY+window.scrollY)/H()*100)));
+var t=e.target;var a=t&&t.closest?t.closest('a[href]'):null;
+var h=a?(a.getAttribute('href')||''):'';
+send({campaign_id:c,page_key:k,link_click:!!(h&&h.charAt(0)!=='#'),cells:[{k:'click',x:x,y:y}]});
+},true);
+var depth=0;var onS=function(){var d=Math.floor((window.scrollY+window.innerHeight)/H()*10);if(d>9)d=9;if(d>depth)depth=d;};
+window.addEventListener('scroll',onS,{passive:true});onS();
+window.addEventListener('pagehide',function(){send({campaign_id:c,page_key:k,link_click:false,cells:[{k:'scroll',x:0,y:depth}]})});
+})();</script>`;
 }
 
 export type SeoMeta = { seo_title?: string | null; seo_description?: string | null };
