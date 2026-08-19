@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSavedBlocks } from "@/lib/useSavedBlocks";
+import { SECTION_TEMPLATES } from "@/lib/sectionTemplates";
 import {
   GripVertical,
   ImagePlus,
@@ -11,6 +12,7 @@ import {
   Trash2,
   Monitor,
   Bookmark,
+  LayoutTemplate,
   CopyPlus,
   Undo2,
   Redo2,
@@ -974,6 +976,28 @@ function EditorPalette({
           </PaletteDraggable>
         ))}
       </div>
+
+      {/* Built-in starter sections — one-click professionally-shaped blocks. Same insert path as
+          the saved library (a fresh-id clone at the end of the page); hidden while collapsed. */}
+      {!collapsed && (
+        <>
+          <div className="mt-2 px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Templates</div>
+          <div className="grid grid-cols-2 gap-1 px-1">
+            {SECTION_TEMPLATES.map((tpl) => (
+              <button
+                key={tpl.id}
+                type="button"
+                onClick={() => onInsertSaved(tpl.section)}
+                title={`Add a "${tpl.name}" section at the end`}
+                className="flex flex-col items-center gap-1 rounded border border-ink-700 px-1 py-2 text-center text-[10px] leading-tight text-zinc-300 hover:border-emerald-500/60 hover:bg-ink-800 hover:text-emerald-300"
+              >
+                <LayoutTemplate className="h-4 w-4 shrink-0 text-zinc-500" />
+                {tpl.name}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* The workspace's saved-block library (0116). Hidden while collapsed (no room for names)
           and when empty (nothing to show). Click inserts a fresh-id copy at the end of the page. */}
