@@ -120,27 +120,6 @@ async function claimJob(): Promise<JobRow | null> {
 // new one has to be accepted by every one of them or it is refused somewhere nobody looks.
 const KNOWN_NETWORKS = NETWORKS.map((n) => n.id);
 
-// Reads the caller's self-service network_connections row (see 0015_network_generalization.sql —
-// not a secret, plain owner-scoped RLS, no Vault). Throws rather than falling back to a
-// placeholder like the old getNickname()'s "YOURNICK" did — that was tolerable when nickname was
-// rare-to-be-unset admin-only data; it isn't once it's self-service and commonly unset at first
-// login, where a silent placeholder would ship broken/misleading hoplinks to real ad traffic. The
-// API routes (app/api/jobs/route.ts, app/api/promote/route.ts) check this same condition before
-// ever inserting the job — this is the worker-side belt-and-suspenders re-check, same trust-
-// boundary split used for every other job type in this codebase.
-async function getAffiliateId(workspaceId: string, network: string): Promise<string> {
-  const { data } = await db
-    .from("network_connections")
-    .select("affiliate_id")
-    .eq("workspace_id", workspaceId)
-    .eq("network", network)
-    .maybeSingle();
-  if (!data?.affiliate_id) {
-    throw new Error(`No ${network} connection found — connect your ${network} affiliate ID first.`);
-  }
-  return data.affiliate_id;
-}
-
 async function markDone(jobId: string, result: string) {
   await db
     .from("jobs")
@@ -257,9 +236,9 @@ async function processDiscover(job: JobRow) {
   // network isn't a cross-tenant reference (unlike campaign_id/page_id/ad_account_id elsewhere in
   // this file) — it's an enum selecting behavior for the calling tenant's own job, and jobs' RLS
   // already guarantees job.user_id is the inserting user's own auth.uid(). What still needs
-  // checking: the value is one this function actually supports, and the tenant is entitled to use
-  // it (has a real network_connections row) — the practical analogue of the ownership-reverify
-  // pattern used for foreign-key-shaped payload fields elsewhere.
+  // checking: the value is one this function actually supports. (There is no entitlement check
+  // anymore — a stored affiliate ID wires nothing since link construction was removed, so gating
+  // discovery on one only blocked work it could not affect.)
   const network = ((job.payload as any)?.network as string) || "clickbank";
   if (!KNOWN_NETWORKS.includes(network as any)) {
     throw new Error(`Unknown network: ${network}`);

@@ -93,7 +93,7 @@ export default async function Overview() {
     { count: campaignsReadyCount },
     { count: contactsCount },
     { count: activeSequencesCount },
-    { count: networkCount },
+    { count: linkedProductCount },
     { count: publishedFunnelCount },
     { data: workspace },
   ] = await Promise.all([
@@ -110,10 +110,13 @@ export default async function Overview() {
       .eq("workspace_id", ws)
       .eq("status", "active"),
     // The two extra counts the checklist needs. Both are head-only, so they cost a count and no rows.
+    // Products carrying a pasted affiliate link — the modern first step, replacing the old
+    // "connect a network" (a stored affiliate ID wires nothing since link construction was removed).
     supabase
-      .from("network_connections")
+      .from("products")
       .select("id", { count: "exact", head: true })
-      .eq("workspace_id", ws),
+      .eq("workspace_id", ws)
+      .not("hoplink_override", "is", null),
     supabase
       .from("campaigns")
       .select("id", { count: "exact", head: true })
@@ -124,17 +127,11 @@ export default async function Overview() {
 
   // Derived from the counts above, never stored — so a step un-ticks itself if the thing it
   // describes goes away, and nothing has to remember to mark a step done.
+  // Ordered the way the work actually happens now that no network "connection" exists: find
+  // products, build a kit, paste the product's own affiliate link (the step that used to read
+  // "connect a network" — a stored affiliate ID wires nothing since link construction was
+  // removed), then publish.
   const setupSteps: SetupStep[] = [
-    {
-      key: "network",
-      label: "Connect an affiliate network",
-      // Rewritten when link construction was removed (content rule 4): the app no longer
-      // generates hoplinks, so the old "goes into every hoplink" claim had become false.
-      hint: "Record which network each offer pays you through. You'll paste each product's own affiliate link after its kit is built.",
-      href: "/settings/integrations",
-      cta: "Connect",
-      done: (networkCount ?? 0) > 0,
-    },
     {
       key: "products",
       label: "Find products to promote",
@@ -150,6 +147,14 @@ export default async function Overview() {
       href: "/marketplace",
       cta: "Promote one",
       done: (campaignsReadyCount ?? 0) > 0,
+    },
+    {
+      key: "link",
+      label: "Paste a product's affiliate link",
+      hint: "Grab the link from your network account (ClickBank hoplink, Digistore24 promolink) and paste it on the product — it becomes the funnel's offer destination.",
+      href: "/products",
+      cta: "Add link",
+      done: (linkedProductCount ?? 0) > 0,
     },
     {
       key: "publish",

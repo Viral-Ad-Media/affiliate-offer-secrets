@@ -12,7 +12,7 @@ const FAQS = [
   },
   {
     q: "Which affiliate networks are supported?",
-    a: "ClickBank and Digistore24. Automated marketplace discovery is ClickBank-only today — pick a category and the engine pulls live gravity and earnings data, scores it and verifies each sales page. For Digistore24 you connect your own affiliate ID and add products by hand; everything downstream (hoplinks, campaign kits, funnels, ads) then works exactly the same. Affiliate Offer Secrets never creates network accounts or touches your commissions.",
+    a: "ClickBank and Digistore24. Automated marketplace discovery is ClickBank-only today — pick a category and the engine pulls live gravity and earnings data, scores it and verifies each sales page. For Digistore24 you add products by hand; everything downstream (campaign kits, funnels, ads) then works exactly the same. You paste each product's own affiliate link from your network account, so tracking always credits you — Affiliate Offer Secrets never creates network accounts or touches your commissions.",
   },
   {
     q: "Can I edit the funnel pages, or am I stuck with what the AI wrote?",

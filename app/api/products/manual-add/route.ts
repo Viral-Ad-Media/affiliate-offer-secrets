@@ -67,21 +67,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "sales page URL must be a valid http(s) URL" }, { status: 400 });
   }
 
-  // Entitlement check mirrors app/api/jobs/route.ts and app/api/promote/route.ts — a client
-  // shouldn't be able to add a product for a network they haven't connected an affiliate ID for,
-  // since that product's hoplink would have nowhere real to point.
-  const { data: connection } = await supabase
-    .from("network_connections")
-    .select("affiliate_id")
-    .eq("workspace_id", ws)
-    .eq("network", network)
-    .maybeSingle();
-  if (!connection?.affiliate_id) {
-    return NextResponse.json(
-      { error: `Connect your ${network} affiliate ID first` },
-      { status: 400 }
-    );
-  }
+  // The network_connections gate that used to sit here is gone with the affiliate-network panel:
+  // the app no longer constructs links from an affiliate ID (content rule 4), so requiring one
+  // before a product could be added blocked work the ID cannot affect — the same reasoning that
+  // removed the identical gates from /api/jobs and /api/promote. The product's real link is
+  // pasted per-product after its kit builds.
 
   const meta = {
     network,

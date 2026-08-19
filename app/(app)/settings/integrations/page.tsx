@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 import MailProvidersPanel, { type MailProvidersStatus } from "@/components/MailProvidersPanel";
 import ConnectionsPanel from "@/components/ConnectionsPanel";
 import TikTokPanel from "@/components/TikTokPanel";
-import NetworkConnectionsPanel from "@/components/NetworkConnectionsPanel";
 import GenerationModelsPanel from "@/components/GenerationModelsPanel";
 import SmsConnectionPanel, { type SmsStatus } from "@/components/SmsConnectionPanel";
 import { getWorkspaceGenerationDefaults } from "@/lib/generationSettings";
@@ -31,7 +30,7 @@ export default async function ConnectionsPage({
   // not whichever workspace profiles.active_workspace_id happens to hold in another tab.
   const ws = await currentWorkspaceId();
 
-  const [metaStatus, tiktokStatus, mailProviders, networkRows, genDefaults, smsStatus] = await Promise.all([
+  const [metaStatus, tiktokStatus, mailProviders, genDefaults, smsStatus] = await Promise.all([
     supabase
       .rpc("get_meta_connection_status", { p_workspace_id: ws })
       .then((r) => r.data ?? { connected: false }),
@@ -41,16 +40,11 @@ export default async function ConnectionsPage({
     supabase
       .rpc("get_mail_provider_connections", { p_workspace_id: ws })
       .then((r) => (r.data ?? { active_provider: null, providers: [] }) as MailProvidersStatus),
-    supabase
-      .from("network_connections")
-      .select("network, affiliate_id")
-      .then((r) => r.data ?? []),
     getWorkspaceGenerationDefaults(supabase, ws!),
     supabase
       .rpc("get_sms_connection_status", { p_workspace_id: ws })
       .then((r) => (r.data ?? { connected: false }) as SmsStatus),
   ]);
-  const networkConnections = Object.fromEntries(networkRows.map((r) => [r.network, r.affiliate_id]));
 
   const banners = (["meta", "tiktok"] as const)
     .map((key) => ({ key, value: searchParams[key] }))
@@ -102,14 +96,11 @@ export default async function ConnectionsPage({
         ) : null
       )}
 
-      <div>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-          Affiliate networks
-        </h2>
-        <NetworkConnectionsPanel userId={user.id} workspaceId={ws!} initialConnections={networkConnections} />
-      </div>
-
-
+      {/* There is deliberately NO affiliate-network panel here anymore. The app stopped
+          constructing affiliate links (content rule 4), so a stored affiliate ID wires nothing —
+          the panel showed ClickBank/Digistore24 as "connected" while the only thing that matters
+          is the per-product link pasted on each kit. That's set where the product lives, with
+          AffiliateLinkField, and prompted the moment a kit finishes. */}
       <ConnectionsPanel status={metaStatus} workspaceId={ws!} />
 
       <div>
