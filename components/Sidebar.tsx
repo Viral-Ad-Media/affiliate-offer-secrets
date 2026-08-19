@@ -24,6 +24,14 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ShieldAlert,
+  ChevronLeft,
+  ChevronRight,
+  User,
+  ShieldCheck,
+  Link2,
+  Globe,
+  ListChecks,
+  CreditCard,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -33,7 +41,13 @@ import CreditsChip from "@/components/CreditsChip";
 import AppLogo from "@/components/AppLogo";
 import TopBarAccount from "@/components/TopBarAccount";
 
-type NavChild = { href: string; label: string; match: (p: string) => boolean };
+type NavChild = {
+  href: string;
+  label: string;
+  match: (p: string) => boolean;
+  /** Only rendered by the drill-down view; the inline submenus stay label-only. */
+  icon?: typeof LayoutDashboard;
+};
 type NavItem = {
   href: string;
   label: string;
@@ -41,6 +55,13 @@ type NavItem = {
   match: (p: string) => boolean;
   children?: NavChild[];
   soon?: boolean;
+  /**
+   * Render this section as a DRILL-DOWN: clicking it replaces the whole nav with its children
+   * plus a Back row, instead of expanding an inline submenu. Fits sections that are a mode you
+   * enter (Settings) rather than a group you glance across (Emails, Blog) — seven indented rows
+   * under one entry made the main list read as two lists spliced together.
+   */
+  drill?: boolean;
   /**
    * The section's own URL prefix, when `href` points at a child instead of it.
    *
@@ -149,14 +170,15 @@ const NAV: NavItem[] = [
     label: "Settings",
     icon: Settings,
     match: (p: string) => p.startsWith("/settings"),
+    drill: true,
     children: [
-      { href: "/settings/profile", label: "Profile", match: (p: string) => p === "/settings/profile" },
-      { href: "/settings/security", label: "Security", match: (p: string) => p === "/settings/security" },
-      { href: "/settings/team", label: "Team", match: (p: string) => p === "/settings/team" },
-      { href: "/settings/integrations", label: "Integrations", match: (p: string) => p === "/settings/integrations" },
-      { href: "/settings/domains", label: "Domains", match: (p: string) => p.startsWith("/settings/domains") },
-      { href: "/settings/jobs", label: "Jobs queue", match: (p: string) => p === "/settings/jobs" },
-      { href: "/settings/billing", label: "Billing", match: (p: string) => p === "/settings/billing" },
+      { href: "/settings/profile", label: "Profile", icon: User, match: (p: string) => p === "/settings/profile" },
+      { href: "/settings/security", label: "Security", icon: ShieldCheck, match: (p: string) => p === "/settings/security" },
+      { href: "/settings/team", label: "Team", icon: Users, match: (p: string) => p === "/settings/team" },
+      { href: "/settings/integrations", label: "Integrations", icon: Link2, match: (p: string) => p === "/settings/integrations" },
+      { href: "/settings/domains", label: "Domains", icon: Globe, match: (p: string) => p.startsWith("/settings/domains") },
+      { href: "/settings/jobs", label: "Jobs queue", icon: ListChecks, match: (p: string) => p === "/settings/jobs" },
+      { href: "/settings/billing", label: "Billing", icon: CreditCard, match: (p: string) => p === "/settings/billing" },
     ],
   },
 ];
@@ -220,6 +242,15 @@ export default function Sidebar({
   // Which collapsed-rail section is showing its children, and the viewport y to pin it to.
   const [flyout, setFlyout] = useState<{ href: string; top: number } | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Drill-down view (Settings): the nav shows that section's children instead of the main list.
+  // Seeded from the path so landing on /settings/* from anywhere opens drilled, and re-derived on
+  // every route CHANGE — but freely overridable in between, which is what lets Back show the main
+  // list while you stand on a settings page without the effect immediately re-drilling.
+  const [drilled, setDrilled] = useState(false);
+
+  useEffect(() => {
+    setDrilled(pathname.startsWith("/settings"));
+  }, [pathname]);
 
   useEffect(() => {
     setCollapsed(localStorage.getItem("sidebar_collapsed") === "1");
@@ -243,9 +274,50 @@ export default function Sidebar({
 
 
   const nav = isSuperadmin ? [...NAV, SUPERADMIN_NAV] : NAV;
+  const drillSection = nav.find((i) => i.drill);
 
-  const navLinks = (iconOnly: boolean) =>
-    nav.map((item) => {
+  // The drilled view: a Back row, the section name, then its children as full-width rows with
+  // their own icons — the nav becomes the section's menu instead of growing an indented tail.
+  // Only for the EXPANDED sidebar and the mobile drawer; the collapsed rail keeps its hover
+  // flyout, where a drill would leave a 64px column showing nothing but a back arrow.
+  const drillLinks = (section: NavItem) => (
+    <>
+      <button
+        type="button"
+        onClick={() => setDrilled(false)}
+        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-zinc-400 transition-colors hover:bg-ink-800 hover:text-zinc-100"
+      >
+        <ChevronLeft className="h-4 w-4 shrink-0" />
+        <span>Back</span>
+      </button>
+      <div className="px-2.5 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+        {section.label}
+      </div>
+      {section.children!.map((c) => {
+        const childActive = c.match(pathname);
+        const ChildIcon = c.icon ?? Settings;
+        return (
+          <Link
+            key={c.href}
+            href={c.href}
+            onClick={() => setMobileOpen(false)}
+            className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${
+              childActive ? "bg-emerald-600/15 text-emerald-300" : "text-zinc-400 hover:bg-ink-800 hover:text-zinc-100"
+            }`}
+          >
+            <ChildIcon className="h-4 w-4 shrink-0" />
+            <span>{c.label}</span>
+          </Link>
+        );
+      })}
+    </>
+  );
+
+  const navLinks = (iconOnly: boolean) => {
+    if (drilled && !iconOnly && drillSection?.children?.length) {
+      return drillLinks(drillSection);
+    }
+    return nav.map((item) => {
       const active = item.match(pathname);
       const children = item.children;
       const soon = item.soon === true;
@@ -300,13 +372,20 @@ export default function Sidebar({
             // reordering the nav can't silently break the tour — only deleting this can.
             data-tour={`nav-${item.href.replace(/^\//, "").split("/")[0]}`}
             title={iconOnly ? item.label : undefined}
-            onClick={() => setMobileOpen(false)}
+            onClick={() => {
+              setMobileOpen(false);
+              // A drill section opens its own menu as it navigates — and because this is set
+              // here, clicking it again while already on a settings page (no route change, so
+              // the pathname effect stays quiet) still re-opens the drilled view after Back.
+              if (item.drill) setDrilled(true);
+            }}
             className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${
               iconOnly ? "justify-center" : ""
             } ${active ? "bg-emerald-600/15 text-emerald-300" : "text-zinc-400 hover:bg-ink-800 hover:text-zinc-100"}`}
           >
             <item.icon className="h-4 w-4 shrink-0" />
-            {!iconOnly && <span>{item.label}</span>}
+            {!iconOnly && <span className="flex-1">{item.label}</span>}
+            {!iconOnly && item.drill && <ChevronRight className="h-3.5 w-3.5 text-zinc-600" />}
           </Link>
 
           {/* Fixed, not absolute: the rail is overflow-y-auto, which computes overflow-x to auto
@@ -343,7 +422,8 @@ export default function Sidebar({
             </div>
           )}
 
-          {!iconOnly && active && children && (
+          {/* A drill section never expands inline — its children live in the drilled view. */}
+          {!iconOnly && active && children && !item.drill && (
             <div className="ml-4 mt-0.5 space-y-0.5 border-l border-ink-700 pl-3">
               {children.map((c) => {
                 const childActive = c.match(pathname);
@@ -365,7 +445,7 @@ export default function Sidebar({
         </div>
       );
     });
-
+  };
 
   // The trial countdown used to sit here; it now lives centered in the top bar alongside the
   // credits chip (components/TrialChip.tsx) — account status, not navigation.
