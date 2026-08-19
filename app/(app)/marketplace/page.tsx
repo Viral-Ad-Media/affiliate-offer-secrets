@@ -19,35 +19,25 @@ function StatTile({
   label,
   value,
   sub,
-  href,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
   sub?: string;
-  /** Makes the whole tile a link — used by "Open jobs", whose detail now lives in Settings. */
-  href?: string;
 }) {
-  const body = (
-    <div className="stat-tile">
-      <div className="rounded-lg border border-ink-700 bg-ink-800 p-2.5 text-emerald-400">
-        {icon}
+  // Value-first card, matching the Overview's band — label + icon chip up top, big tabular
+  // number, optional sub-line. The whole tile can still be wrapped in a button (Open jobs).
+  return (
+    <div className="h-full rounded-xl border border-ink-700 bg-ink-900 p-4 transition-colors hover:border-emerald-500/50">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</span>
+        <span className="shrink-0 rounded-md bg-emerald-500/10 p-1.5 text-emerald-400">{icon}</span>
       </div>
-      <div>
-        <div className="stat-tile-value">{value}</div>
-        <div className="stat-tile-label">
-          {label}
-          {sub ? <span className="text-zinc-600"> · {sub}</span> : null}
-        </div>
+      <div className="mt-1.5 text-2xl font-bold tabular-nums text-zinc-100">
+        {typeof value === "number" ? value.toLocaleString() : value}
       </div>
+      {sub && <div className="mt-0.5 truncate text-xs text-zinc-500">{sub}</div>}
     </div>
-  );
-  return href ? (
-    <Link href={href} className="block transition-opacity hover:opacity-80">
-      {body}
-    </Link>
-  ) : (
-    body
   );
 }
 
@@ -111,12 +101,17 @@ export default function Marketplace() {
 
   return (
     <main className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-zinc-100">Marketplace</h1>
-        <p className="text-sm text-zinc-400">
-          Product discovery → campaign kits. Queue a job below and it starts processing
-          automatically — usually within seconds.
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">Marketplace</h1>
+          <p className="text-sm text-zinc-400">
+            Product discovery → campaign kits. Queue a run below and it processes automatically —
+            usually within seconds. Products you already promote live on My Products.
+          </p>
+        </div>
+        <Link href="/products" className="shrink-0 text-sm text-emerald-300 hover:text-emerald-200">
+          My Products &rarr;
+        </Link>
       </header>
 
       <Card as="section" className="p-4">
@@ -225,14 +220,14 @@ export default function Marketplace() {
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {/* These describe every product, not just the page on screen — they come from the
             product_stats view rather than the returned rows. */}
-        <StatTile icon={<Package className="h-5 w-5" />} label="Products tracked" value={stats.total} />
+        <StatTile icon={<Package className="h-4 w-4" />} label="Products tracked" value={stats.total} />
         <StatTile
-          icon={<Flame className="h-5 w-5" />}
+          icon={<Flame className="h-4 w-4" />}
           label="Avg gravity"
           value={stats.avg_gravity.toFixed(1)}
         />
         <StatTile
-          icon={<CheckCircle2 className="h-5 w-5" />}
+          icon={<CheckCircle2 className="h-4 w-4" />}
           label="Promoting"
           value={stats.promoting}
           sub={`${stats.selected} selected`}
@@ -242,7 +237,7 @@ export default function Marketplace() {
             space on the page or forcing a trip to Settings mid-flow. */}
         <button type="button" onClick={() => setJobsOpen(true)} className="text-left">
           <StatTile
-            icon={<Hourglass className="h-5 w-5" />}
+            icon={<Hourglass className="h-4 w-4" />}
             label="Open jobs"
             value={openJobs.length}
             sub={openJobs.some((j) => j.status === "running") ? "engine running" : "view queue"}
@@ -252,6 +247,7 @@ export default function Marketplace() {
 
       <ProductsPanel
         basePath="/marketplace"
+        defaultStatuses={["New", "Selected"]}
         emptyHint="Queue a discovery run above to get started."
         refreshKey={refreshKey}
         onData={(d) => {
