@@ -153,6 +153,11 @@ export async function POST(req: Request) {
   const rawPhone = extraFields[SMS_PHONE_FIELD_KEY];
   const phone = typeof rawPhone === "string" ? toE164(rawPhone) : null;
   if (SMS_PHONE_FIELD_KEY in extraFields) delete extraFields[SMS_PHONE_FIELD_KEY];
+
+  // last_name is promoted the same way (0112): the "Last name" form preset always wrote this
+  // fieldKey, and a person's name is not an "extra". Full name = first + last at display time.
+  const lastName = clampName(extraFields["last_name"]);
+  if ("last_name" in extraFields) delete extraFields["last_name"];
   const smsConsentAt = isAffirmativeConsent(extraFields[SMS_CONSENT_FIELD_KEY])
     ? new Date().toISOString()
     : null;
@@ -165,6 +170,7 @@ export async function POST(req: Request) {
         campaign_id: campaignId,
         bridge_variant_id: bridgeVariantId,
         first_name: firstName || null,
+        last_name: lastName || null,
         email,
         phone,
         // NULL unless the box was ticked. Never inferred from the presence of a number.

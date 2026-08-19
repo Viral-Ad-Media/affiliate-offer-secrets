@@ -92,7 +92,7 @@ export default async function ContactsPage({
   // with both embeds present and a filter active, `f` came back with one tag, `tag_links` with
   // both, and the exact count header was still correct.
   const tagEmbed = "tag_links:contact_tag_links(tag_id)";
-  const baseCols = "id, campaign_id, first_name, email, extra_fields, created_at, unsubscribed_at";
+  const baseCols = "id, campaign_id, first_name, last_name, email, extra_fields, created_at, unsubscribed_at";
   const rowSelect = tagFilter
     ? `${baseCols}, f:contact_tag_links!inner(tag_id), ${tagEmbed}`
     : `${baseCols}, ${tagEmbed}`;
@@ -127,6 +127,7 @@ export default async function ContactsPage({
     campaign_id: r.campaign_id,
     campaign_title: r.campaign_id ? (titleByCampaign.get(r.campaign_id) ?? null) : null,
     first_name: r.first_name,
+    last_name: r.last_name,
     email: r.email,
     extra_fields: (r.extra_fields as Record<string, string>) ?? {},
     created_at: r.created_at,

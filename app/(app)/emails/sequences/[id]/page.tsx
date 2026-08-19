@@ -60,6 +60,7 @@ export default function BroadcastSequencePage({ params }: { params: { id: string
         id: r.id,
         campaign_id: r.campaign_id,
         campaign_title: r.campaign_id ? (titleByCampaign.get(r.campaign_id) ?? null) : null,
+        last_name: r.last_name ?? null,
         first_name: r.first_name,
         email: r.email,
         extra_fields: r.extra_fields ?? {},

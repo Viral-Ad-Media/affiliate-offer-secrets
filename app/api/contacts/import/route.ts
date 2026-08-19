@@ -59,17 +59,21 @@ function parseCsv(text: string): string[][] {
 
 // Finds the email and first-name columns by header name, falling back to "first column that looks
 // like an email" so a headerless paste still works.
-function pickColumns(rows: string[][]): { emailIdx: number; nameIdx: number; skipHeader: boolean } {
+function pickColumns(rows: string[][]): { emailIdx: number; nameIdx: number; lastNameIdx: number; skipHeader: boolean } {
   const first = rows[0] ?? [];
   const lower = first.map((h) => h.trim().toLowerCase());
   const emailHeader = lower.findIndex((h) => h === "email" || h.includes("email"));
   const nameHeader = lower.findIndex(
     (h) => h === "first name" || h === "first_name" || h === "name" || h === "firstname"
   );
-  if (emailHeader !== -1) return { emailIdx: emailHeader, nameIdx: nameHeader, skipHeader: true };
+  const lastNameHeader = lower.findIndex(
+    (h) => h === "last name" || h === "last_name" || h === "lastname" || h === "surname"
+  );
+  if (emailHeader !== -1)
+    return { emailIdx: emailHeader, nameIdx: nameHeader, lastNameIdx: lastNameHeader, skipHeader: true };
 
   const guess = first.findIndex((f) => isValidEmail(f.trim()));
-  return { emailIdx: guess === -1 ? 0 : guess, nameIdx: -1, skipHeader: false };
+  return { emailIdx: guess === -1 ? 0 : guess, nameIdx: -1, lastNameIdx: -1, skipHeader: false };
 }
 
 export async function POST(req: Request) {
@@ -90,7 +94,7 @@ export async function POST(req: Request) {
 
   const rows = parseCsv(csv);
   if (rows.length === 0) return NextResponse.json({ error: "No rows found" }, { status: 400 });
-  const { emailIdx, nameIdx, skipHeader } = pickColumns(rows);
+  const { emailIdx, nameIdx, lastNameIdx, skipHeader } = pickColumns(rows);
   const dataRows = (skipHeader ? rows.slice(1) : rows).slice(0, MAX_ROWS);
 
   const admin = createAdminClient();
@@ -122,6 +126,7 @@ export async function POST(req: Request) {
     workspace_id: string;
     campaign_id: string | null;
     first_name: string | null;
+    last_name: string | null;
     email: string;
   }[] = [];
   let invalid = 0;
@@ -136,10 +141,11 @@ export async function POST(req: Request) {
     if (seen.has(email)) continue;
     seen.add(email);
     const first_name = nameIdx >= 0 ? (r[nameIdx] ?? "").trim().slice(0, MAX_NAME) || null : null;
+    const last_name = lastNameIdx >= 0 ? (r[lastNameIdx] ?? "").trim().slice(0, MAX_NAME) || null : null;
     // workspace_id explicitly: this writes on the admin client, where auth.uid() is NULL, so
     // stamp_workspace_id would fall back to the importer's OWN workspace — filing a list
     // imported while viewing workspace B into workspace A, where it would then be invisible.
-    toInsert.push({ user_id: user.id, workspace_id: ws, campaign_id: campaignId, first_name, email });
+    toInsert.push({ user_id: user.id, workspace_id: ws, campaign_id: campaignId, first_name, last_name, email });
   }
 
   if (toInsert.length === 0) {

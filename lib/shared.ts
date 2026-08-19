@@ -216,6 +216,8 @@ export type Contact = {
   campaign_id: string | null;
   campaign_title: string | null;
   first_name: string | null;
+  // Promoted out of extra_fields (0112) — the "Last name" form preset's values land here now.
+  last_name: string | null;
   email: string;
   // Values from any user-added form_input blocks (Phase O.5) in the lead-capture form at
   // submission time, keyed by the block's stable fieldKey. Empty object for every lead captured

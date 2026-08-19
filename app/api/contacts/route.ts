@@ -28,6 +28,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const firstName = typeof body.first_name === "string" ? body.first_name.trim().slice(0, MAX_NAME) : "";
+  const lastName = typeof body.last_name === "string" ? body.last_name.trim().slice(0, MAX_NAME) : "";
   const tagId = typeof body.tag_id === "string" && body.tag_id ? body.tag_id : null;
   const campaignId = typeof body.campaign_id === "string" && body.campaign_id ? body.campaign_id : null;
 
@@ -82,6 +83,7 @@ export async function POST(req: Request) {
       workspace_id: ws,
       campaign_id: campaignId,
       first_name: firstName || null,
+      last_name: lastName || null,
       email,
     })
     .select("id")

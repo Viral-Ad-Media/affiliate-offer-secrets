@@ -43,6 +43,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const patch: Record<string, unknown> = {};
 
+  if (body.last_name !== undefined) {
+    patch.last_name = clampName(body.last_name) || null;
+  }
   if (body.first_name !== undefined) {
     // clampName trims and caps; an emptied field becomes NULL rather than "", so the table's
     // "no name given" state stays a single value instead of two that render differently.
@@ -74,7 +77,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     .update(patch)
     .eq("id", params.id)
     .eq("workspace_id", ws)
-    .select("id, first_name, email, extra_fields");
+    .select("id, first_name, last_name, email, extra_fields");
 
   if (error) {
     // (campaign_id, email) is unique — changing an address to one already captured for the same

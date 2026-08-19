@@ -333,7 +333,7 @@ export default function ContactsTable({
                         minute: "2-digit",
                       })}
                     </td>
-                    <td className="px-2 py-2 text-zinc-300">{c.first_name || "—"}</td>
+                    <td className="px-2 py-2 text-zinc-300">{[c.first_name, c.last_name].filter(Boolean).join(" ") || "—"}</td>
                     <td className="px-2 py-2 text-zinc-300">
                       {c.email}
                       {c.unsubscribed_at && (
@@ -453,6 +453,7 @@ function AddContactDialog({
   onSaved: () => void;
 }) {
   const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [tagId, setTagId] = useState("");
   const [campaignId, setCampaignId] = useState("");
@@ -471,6 +472,7 @@ function AddContactDialog({
       body: JSON.stringify({
         email,
         first_name: firstName,
+        last_name: lastName,
         tag_id: tagId || null,
         campaign_id: campaignId || null,
       }),
@@ -495,14 +497,25 @@ function AddContactDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-400">First name</label>
-            <input
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              placeholder="Optional"
-              className={field}
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-zinc-400">First name</label>
+              <input
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="Optional"
+                className={field}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-zinc-400">Last name</label>
+              <input
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Optional"
+                className={field}
+              />
+            </div>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-400">Email</label>
@@ -582,6 +595,7 @@ function EditContactDialog({
   onSaved: () => void;
 }) {
   const [firstName, setFirstName] = useState(contact.first_name ?? "");
+  const [lastName, setLastName] = useState(contact.last_name ?? "");
   const [email, setEmail] = useState(contact.email);
   const [extra, setExtra] = useState<Record<string, string>>({ ...contact.extra_fields });
   const [tags, setTags] = useState<ContactTag[]>(contact.tags);
@@ -613,7 +627,7 @@ function EditContactDialog({
     const res = await fetch(`/api/contacts/${contact.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ first_name: firstName, email, extra_fields: extra }),
+      body: JSON.stringify({ first_name: firstName, last_name: lastName, email, extra_fields: extra }),
     });
     const json = await res.json().catch(() => ({}));
     setSaving(false);
@@ -633,9 +647,15 @@ function EditContactDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-400">First name</label>
-            <input value={firstName} onChange={(e) => setFirstName(e.target.value)} className={field} />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-zinc-400">First name</label>
+              <input value={firstName} onChange={(e) => setFirstName(e.target.value)} className={field} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-zinc-400">Last name</label>
+              <input value={lastName} onChange={(e) => setLastName(e.target.value)} className={field} />
+            </div>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-400">Email</label>

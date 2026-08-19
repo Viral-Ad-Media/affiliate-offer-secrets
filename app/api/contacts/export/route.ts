@@ -43,11 +43,11 @@ export async function GET() {
     if (title) titleByCampaign.set(c.id as string, title);
   }
 
-  const lines = ["First name,Email,Campaign,Extra fields,Captured at"];
+  const lines = ["First name,Last name,Email,Campaign,Extra fields,Captured at"];
   for (let from = 0; from < MAX_ROWS; from += PAGE) {
     const { data: rows } = await supabase
       .from("contacts")
-      .select("campaign_id, first_name, email, extra_fields, created_at")
+      .select("campaign_id, first_name, last_name, email, extra_fields, created_at")
       .eq("workspace_id", ws)
       .order("created_at", { ascending: false })
       .range(from, from + PAGE - 1);
@@ -56,6 +56,7 @@ export async function GET() {
       lines.push(
         [
           csvField((r.first_name as string) ?? ""),
+          csvField((r.last_name as string) ?? ""),
           csvField(r.email as string),
           csvField(r.campaign_id ? (titleByCampaign.get(r.campaign_id as string) ?? "") : ""),
           csvField(flattenExtraFields(r.extra_fields as Record<string, string> | null)),
