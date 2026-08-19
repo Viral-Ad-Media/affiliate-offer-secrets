@@ -80,6 +80,29 @@ export default function StickyCtaField({
           Blank uses this funnel&apos;s affiliate link automatically — no need to paste it twice.
         </span>
       </label>
+
+      {/* Exit intent is the other page-level conversion booster, so it shares this card rather
+          than a second one people have to find. It rides on the same tree. */}
+      <label className="flex items-start gap-2 border-t border-ink-700 pt-3">
+        <input
+          type="checkbox"
+          checked={(tree as { exitIntent?: boolean }).exitIntent === true}
+          onChange={(e) => {
+            const next = { ...tree } as PageBlockTree & { exitIntent?: boolean };
+            if (e.target.checked) next.exitIntent = true;
+            else delete next.exitIntent;
+            onChange(next);
+          }}
+          className="mt-0.5"
+        />
+        <span>
+          <span className="block text-sm font-medium text-zinc-100">Show a popup when they try to leave</span>
+          <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">
+            Reveals your popup form on desktop when the cursor leaves the page — once per visit. Add
+            a form block with <em>popup</em> turned on for it to have something to show.
+          </span>
+        </span>
+      </label>
     </Card>
   );
 }

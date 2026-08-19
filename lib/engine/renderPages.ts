@@ -57,6 +57,30 @@ function stickyCtaHtml(tree: unknown, offerHref: string): string {
   }<a class="sticky-cta-btn" href="${escapeHtml(href)}">${escapeHtml(bar.label)}</a></div></div>`;
 }
 
+/**
+ * Exit-intent trigger (PageBlockTree.exitIntent). Emits a script ONLY when the flag is on AND the
+ * rendered body actually contains a popup form (.aos-form-popup) — otherwise there is nothing to
+ * reveal, so no script. Desktop only (the pointer leaving the top of the window is the signal),
+ * once per browsing session, reusing the exact reveal the popup buttons use (hidden=false +
+ * is-open). No tenant data touches this — it is a constant, code-owned string.
+ */
+function exitIntentScript(tree: unknown, body: string): string {
+  if (!(tree as { exitIntent?: unknown } | null)?.exitIntent) return "";
+  if (!body.includes("aos-form-popup")) return "";
+  return `<script>(function(){
+var KEY="aos_exit_shown";
+try{ if(sessionStorage.getItem(KEY)) return; }catch(e){}
+document.addEventListener("mouseout",function(e){
+  if(e.clientY>0||e.relatedTarget||e.toElement) return;
+  var p=document.querySelector(".aos-form-popup");
+  if(!p) return;
+  try{ sessionStorage.setItem(KEY,"1"); }catch(err){}
+  p.hidden=false; p.classList.add("is-open");
+});
+})();</script>`;
+}
+
+
 export { escapeHtml };
 export * from "./blockTree";
 export { validateTracking, renderTrackingHtml, TRACKING_FIELDS, type TrackingSettings } from "./tracking";
@@ -912,6 +936,7 @@ ${t.bodyStart}
     ${body.includes('data-after="branch"') ? BRANCH_RESOLVE_JS : ""}
   </script>
   ${stickyCtaHtml(tree, hoplink)}
+  ${exitIntentScript(tree, body)}
   ${statsBeaconScript(campaignId, "optin")}
 </body>
 </html>`;
@@ -1088,6 +1113,7 @@ ${t.bodyStart}
     </div>
   </div>
   ${stickyCtaHtml(tree, primaryHref)}
+  ${exitIntentScript(tree, body)}
   ${stats ? statsBeaconScript(stats.campaignId, stats.pageKey) : ""}
 </body>
 </html>`;

@@ -1112,6 +1112,7 @@ export function validatePageBlockTree(raw: unknown, opts: ValidatePageBlockTreeO
         // contentWidth trap). stickyCtaOf clamps/sanitizes; the href is validated at RENDER, where
         // an unusable one degrades to the offer link, so no reject here.
         ...(stickyCtaOf(body) ? { stickyCta: stickyCtaOf(body)! } : {}),
+        ...((body as { exitIntent?: unknown }).exitIntent === true ? { exitIntent: true } : {}),
         ...(keywords
           ? {
               keywords: {

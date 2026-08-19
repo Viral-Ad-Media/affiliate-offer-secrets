@@ -856,6 +856,14 @@ export type PageBlockTree = {
    * blog shell ignores it. Absent (every page today) renders nothing.
    */
   stickyCta?: StickyCta;
+  /**
+   * Reveal a popup form when the visitor moves to leave the funnel page — the exit-intent
+   * lead-recovery pattern. Rides on the tree like the fields above; funnel shells only. It does
+   * nothing on its own: the page must also carry a popup form (a `form` block with popup on), and
+   * the trigger reveals the first one. Desktop only, once per session — mobile has no reliable
+   * exit signal, so faking one (a scroll-up or a timer) would just interrupt readers.
+   */
+  exitIntent?: boolean;
 };
 
 export type StickyCta = { text: string; label: string; href: string };
