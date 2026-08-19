@@ -33,7 +33,6 @@ const TABS = [
   { key: "social_md", label: "Social" },
   { key: "email_md", label: "Emails" },
   { key: "sms_messages", label: "SMS" },
-  { key: "hoplinks_txt", label: "Hoplinks" },
 ] as const;
 
 export default function ProductPage({ params }: { params: { id: string } }) {
@@ -265,6 +264,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
           </p>
         ) : (
           <>
+            <KitStyleStrip meta={(campaign as any).kit_meta} />
             <div className="border-b border-ink-700 px-4 py-2">
               <Tabs value={tab} onValueChange={(v) => setTab(v as (typeof TABS)[number]["key"])}>
                 <TabsList className="h-auto flex-wrap justify-start gap-1 bg-transparent p-0">
@@ -329,10 +329,6 @@ export default function ProductPage({ params }: { params: { id: string } }) {
                     className="h-[70vh] w-full rounded-lg border border-ink-700 bg-white"
                   />
                 </>
-              ) : tab === "hoplinks_txt" ? (
-                <pre className="overflow-x-auto rounded-lg bg-ink-800 p-3 text-xs text-emerald-300">
-                  {content}
-                </pre>
               ) : (
                 <>
                   <div
@@ -389,5 +385,71 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         </>
       )}
     </main>
+  );
+}
+
+type KitMeta = {
+  keywords: { primary: string; secondary: string[]; intent?: string } | null;
+  theme: {
+    primary: string | null;
+    background: string | null;
+    surface: string | null;
+    text: string | null;
+    headingFont: string | null;
+    buttonShape: string | null;
+  } | null;
+} | null;
+
+/**
+ * What the build DECIDED, not just what it wrote: the search keywords the copy targets
+ * (stagePages plans them from the sales page's own language and the article is written to rank
+ * for them) and the brand theme derived from the vendor's page. Both existed only inside
+ * page_copy before this — invisible from the kit page, so nobody could tell whether the engine
+ * had aimed at anything. Derived server-side by /api/products/[id] (kit_meta) so this page's
+ * poll never carries the whole 47 kB tree. Colors were re-checked against the anchored hex shape
+ * there before they reach these inline swatch styles.
+ */
+function KitStyleStrip({ meta }: { meta?: KitMeta }) {
+  if (!meta || (!meta.keywords && !meta.theme)) return null;
+  const swatches = meta.theme
+    ? ([
+        ["Brand", meta.theme.primary],
+        ["Background", meta.theme.background],
+        ["Card", meta.theme.surface],
+        ["Text", meta.theme.text],
+      ].filter(([, c]) => c) as [string, string][])
+    : [];
+  return (
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-ink-700 px-4 py-2.5 text-xs">
+      {meta.keywords && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-semibold uppercase tracking-wide text-zinc-500">SEO target</span>
+          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-300">
+            {meta.keywords.primary}
+          </span>
+          {meta.keywords.secondary.slice(0, 4).map((k) => (
+            <span key={k} className="rounded-full bg-ink-800 px-2 py-0.5 text-zinc-400">
+              {k}
+            </span>
+          ))}
+          {meta.keywords.intent && <span className="text-zinc-500">· {meta.keywords.intent} intent</span>}
+        </div>
+      )}
+      {(swatches.length > 0 || meta.theme?.headingFont || meta.theme?.buttonShape) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-semibold uppercase tracking-wide text-zinc-500">Page style</span>
+          {swatches.map(([label, color]) => (
+            <span
+              key={label}
+              title={`${label}: ${color}`}
+              className="inline-block h-4 w-4 rounded-full border border-ink-600"
+              style={{ backgroundColor: color }}
+            />
+          ))}
+          {meta.theme?.headingFont && <span className="text-zinc-400">{meta.theme.headingFont} headings</span>}
+          {meta.theme?.buttonShape && <span className="text-zinc-400">· {meta.theme.buttonShape} buttons</span>}
+        </div>
+      )}
+    </div>
   );
 }

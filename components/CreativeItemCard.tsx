@@ -26,10 +26,18 @@ export default function CreativeItemCard({
   campaignId,
   source,
   itemIndex,
+  onImageChange,
 }: {
   campaignId: string;
   source: CreativeSource;
   itemIndex: number;
+  /**
+   * Fires with the generated image's URL once it is ready (null until then, and again if it is
+   * regenerated away). Exists so AdAnglesPanel can put the angle's OWN creative into the feed
+   * mock — before this, AdPreview only ever showed the campaign hero, so a freshly generated
+   * image appeared in this card's thumbnail but never in the preview above it.
+   */
+  onImageChange?: (url: string | null) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [image, setImage] = useState<CreativeState>(EMPTY);
@@ -71,6 +79,13 @@ export default function CreativeItemCard({
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image.status, video.status]);
+
+  // Value-driven deps, not the callback itself: the parent hands a fresh function identity every
+  // render, and including it would refire this on every poll tick for no state change.
+  useEffect(() => {
+    onImageChange?.(image.status === "ready" ? image.image_data_url : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [image.status, image.image_data_url]);
 
   useEffect(() => {
     if (video.status !== "ready" || !videoCreativeId) {
