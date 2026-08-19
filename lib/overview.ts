@@ -296,17 +296,23 @@ export type FunnelPerformance = {
   campaignId: string;
   title: string;
   views: number;
+  clicks: number;
   leads: number;
   rate: number | null;
 };
 
 /**
- * Best-converting published funnels, from the existing funnel_stats view plus variant views.
+ * Best-converting published funnels, from the existing funnel_stats view plus the per-page
+ * traffic counters (0110).
  *
  * Rate is NULL below MIN_VIEWS rather than computed: 1 lead from 2 views is 50%, which is noise
- * presented as a result — the same trap the split-test confidence gate exists to prevent. A funnel
- * with no bridge_variants rows has no view counter at all (views are recorded per variant), so it
- * reports leads with no rate rather than a fabricated one.
+ * presented as a result — the same trap the split-test confidence gate exists to prevent.
+ *
+ * Views prefer funnel_page_stats' opt-in counter (counts every visitor since 0110 shipped,
+ * whether or not a test runs) and fall back to the legacy per-variant counters for campaigns
+ * whose traffic predates it. Never summed together: when a split test is active BOTH counters
+ * fire for the same new visitor, so adding them would double-count exactly the funnels being
+ * tested. Clicks have no legacy counterpart — they simply start at the 0110 deploy.
  */
 export const MIN_VIEWS_FOR_RATE = 30;
 
@@ -315,17 +321,32 @@ export async function getTopFunnels(
   ws: string,
   limit = 5
 ): Promise<FunnelPerformance[]> {
-  const [{ data: stats }, { data: variants }] = await Promise.all([
+  const [{ data: stats }, { data: variants }, { data: pageStats }] = await Promise.all([
     supabase.from("funnel_stats").select("campaign_id, leads").eq("workspace_id", ws),
     supabase.from("bridge_variants").select("campaign_id, views").eq("workspace_id", ws),
+    supabase.from("funnel_page_stats").select("campaign_id, page_key, views, clicks").eq("workspace_id", ws),
   ]);
   if (!stats?.length) return [];
 
-  const viewsByCampaign = new Map<string, number>();
+  const legacyViews = new Map<string, number>();
   for (const v of variants ?? []) {
     const id = v.campaign_id as string;
-    viewsByCampaign.set(id, (viewsByCampaign.get(id) ?? 0) + Number(v.views ?? 0));
+    legacyViews.set(id, (legacyViews.get(id) ?? 0) + Number(v.views ?? 0));
   }
+  const optinViews = new Map<string, number>();
+  const clicksByCampaign = new Map<string, number>();
+  for (const r of pageStats ?? []) {
+    const id = r.campaign_id as string;
+    if (r.page_key === "optin") optinViews.set(id, (optinViews.get(id) ?? 0) + Number(r.views ?? 0));
+    clicksByCampaign.set(id, (clicksByCampaign.get(id) ?? 0) + Number(r.clicks ?? 0));
+  }
+  const viewsByCampaign = new Map<string, number>();
+  const allIds = new Set<string>();
+  legacyViews.forEach((_v, id) => allIds.add(id));
+  optinViews.forEach((_v, id) => allIds.add(id));
+  allIds.forEach((id) => {
+    viewsByCampaign.set(id, optinViews.get(id) || legacyViews.get(id) || 0);
+  });
 
   const withLeads = stats.filter((s) => Number(s.leads ?? 0) > 0);
   if (!withLeads.length) return [];
@@ -352,6 +373,7 @@ export async function getTopFunnels(
         campaignId: id,
         title: titleById.get(id) ?? "Untitled",
         views,
+        clicks: clicksByCampaign.get(id) ?? 0,
         leads,
         rate: views >= MIN_VIEWS_FOR_RATE ? (leads / views) * 100 : null,
       };

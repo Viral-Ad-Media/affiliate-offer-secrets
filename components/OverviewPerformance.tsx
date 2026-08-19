@@ -14,7 +14,7 @@ import { MIN_VIEWS_FOR_RATE, type CreditRunway, type FunnelPerformance, type Lea
  * A flat line at zero is drawn honestly rather than hidden — "no leads for 30 days" is exactly the
  * thing an operator needs to see, and an empty box would let it pass unnoticed.
  */
-function Sparkline({ points }: { points: LeadPoint[] }) {
+export function Sparkline({ points }: { points: LeadPoint[] }) {
   const w = 320;
   const h = 44;
   const max = Math.max(1, ...points.map((p) => p.count));
