@@ -5,6 +5,7 @@ import { classifyHost } from "@/lib/host";
 import { IMAGE_DATA_URL_RE, isOwnCloudinaryUrl } from "@/lib/images/validate";
 import { pickWeightedVariant, readStickyVariantId, buildStickyVariantCookie } from "@/lib/bridgeVariants";
 import { recordFunnelPageView } from "@/lib/funnelPageStats";
+import { rawTrackingSnippets, type TrackingSettings } from "@/lib/engine/tracking";
 
 // Which workspace's content a PUBLIC request's host is allowed to serve. Campaign UUIDs are
 // unguessable, but they are also host-independent — without this check,
@@ -55,7 +56,13 @@ function scopeRejects(
 export async function servePublicCampaignPage(
   campaignId: string,
   req: Request,
-  requiredWorkspaceId?: string
+  requiredWorkspaceId?: string,
+  // Raw custom tracking snippets (lib/engine/tracking.ts) are spliced into the served HTML ONLY
+  // when this is true — set exclusively by the custom-domain route (app/d/[[...path]]), which
+  // resolves through custom_domain_routes joined to a status='verified' custom_domains row, so
+  // "true here" means "this is the tenant's own verified domain" by construction. The shared /p/
+  // route never sets it, so raw markup never runs on the app's own session-cookie origin.
+  opts?: { rawTracking?: boolean }
 ): Promise<Response> {
   const admin = createAdminClient();
   // PUBLISHED + has HTML is the gate. `status` is deliberately NOT part of it.
@@ -74,7 +81,7 @@ export async function servePublicCampaignPage(
   // half-written one.
   let campaignQuery = admin
     .from("campaigns")
-    .select("bridge_html, workspace_id")
+    .select("bridge_html, workspace_id, tracking")
     .eq("id", campaignId)
     .eq("bridge_published", true);
   if (requiredWorkspaceId) {
@@ -160,6 +167,13 @@ export async function servePublicCampaignPage(
   // that image to a URL would shrink the page ~20x and let the image cache on its own, which is
   // the actual fix. See content rule 9 before doing it — the "never hotlinked" rule is about
   // vendor URLs, not about serving our own bytes.
+  // Raw custom tracking snippets, spliced in only on the tenant's own verified custom domain
+  // (opts.rawTracking) — never baked into the stored bridge_html the shared origin serves. See
+  // TrackingSettings.custom_head for the full safety argument.
+  if (opts?.rawTracking) {
+    html = spliceRawTracking(html, rawTrackingSnippets(campaign.tracking as TrackingSettings | null));
+  }
+
   // Funnel-map views counter (0110) — same once-per-visitor discipline as the variant counter
   // above, deduped by its own fs_ cookie so it counts whether or not a split test is running.
   const statsCookie = await recordFunnelPageView(admin, req, campaignId, "optin");
@@ -254,4 +268,17 @@ export async function servePublicCampaignImage(campaignId: string, req?: Request
       "Cache-Control": "no-store",
     },
   });
+}
+
+
+// Splice raw custom tracking snippets into a served funnel document. Position-correct per each
+// snippet's slot; if the marker is missing (never, for our own rendered pages) it degrades to
+// prepend/append rather than dropping the snippet. String replace, once each — the markup is the
+// tenant's own, injected only on their own verified domain (see servePublicCampaignPage).
+function spliceRawTracking(html: string, s: { head: string; body: string; footer: string }): string {
+  let out = html;
+  if (s.head) out = out.includes("</head>") ? out.replace("</head>", `${s.head}</head>`) : s.head + out;
+  if (s.body) out = /<body[^>]*>/i.test(out) ? out.replace(/<body[^>]*>/i, (m) => `${m}${s.body}`) : s.body + out;
+  if (s.footer) out = out.includes("</body>") ? out.replace("</body>", `${s.footer}</body>`) : out + s.footer;
+  return out;
 }

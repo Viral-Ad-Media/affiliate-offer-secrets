@@ -32,7 +32,22 @@ export type TrackingSettings = {
   consent_decline?: string | null;
   /** Optional "read more" link, shown only if it's a real http(s) URL. */
   consent_policy_url?: string | null;
+  /**
+   * Raw <head>/<body>/<footer> snippets, stored VERBATIM and injected ONLY when the funnel serves
+   * on the tenant's own VERIFIED CUSTOM DOMAIN — never on the shared /p/ origin, where the app's
+   * own session cookie lives and a pasted script would be cross-tenant XSS by construction. That
+   * host gate is the entire safety argument, and it lives at serve time (servePublicCampaignPage's
+   * rawTracking flag): these are deliberately NOT baked into the stored bridge_html, which the
+   * shared origin also serves. On a tenant's own domain it is the ordinary "my site, my script"
+   * situation the custom-code block already documents. Not consent-gated — the app cannot parse
+   * arbitrary markup to hold it back, so the point-of-entry copy says so.
+   */
+  custom_head?: string | null;
+  custom_body?: string | null;
+  custom_footer?: string | null;
 };
+
+const MAX_RAW_SNIPPET = 20_000;
 
 export const TRACKING_FIELDS = ["ga4_id", "gtm_id", "clarity_id", "meta_pixel_id"] as const;
 export type TrackingField = (typeof TRACKING_FIELDS)[number];
@@ -121,7 +136,36 @@ export function validateTracking(
     if (no) tracking.consent_decline = no;
     any = true;
   }
+
+  // Raw custom snippets: NO pattern check — they are raw markup by design (the host gate, not
+  // sanitization, is the boundary). Length-capped and stored verbatim; whitespace preserved so a
+  // pasted <script> keeps its formatting, but a blank/whitespace-only value clears the slot.
+  for (const key of ["custom_head", "custom_body", "custom_footer"] as const) {
+    const v = typeof body[key] === "string" ? (body[key] as string).slice(0, MAX_RAW_SNIPPET) : "";
+    if (v.trim()) {
+      tracking[key] = v;
+      any = true;
+    }
+  }
   return { ok: true, tracking: any ? tracking : null };
+}
+
+/**
+ * The raw custom snippets, verbatim — returned SEPARATELY from renderTrackingHtml on purpose:
+ * these are spliced in only at serve time on a verified custom domain (servePublicCampaignPage),
+ * never baked into the stored HTML that the shared /p/ origin also serves. Empty strings when a
+ * slot is unset, so a caller can splice unconditionally.
+ */
+export function rawTrackingSnippets(tracking: TrackingSettings | null | undefined): {
+  head: string;
+  body: string;
+  footer: string;
+} {
+  return {
+    head: typeof tracking?.custom_head === "string" ? tracking.custom_head : "",
+    body: typeof tracking?.custom_body === "string" ? tracking.custom_body : "",
+    footer: typeof tracking?.custom_footer === "string" ? tracking.custom_footer : "",
+  };
 }
 
 function valid(field: TrackingField, value: string | null | undefined): value is string {

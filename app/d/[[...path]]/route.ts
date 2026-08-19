@@ -198,7 +198,7 @@ export async function GET(request: Request, { params }: { params: { path?: strin
     .eq("path", path)
     .maybeSingle();
   if (routeRow) {
-    return servePublicCampaignPage(routeRow.campaign_id, request, domainRow.workspace_id);
+    return servePublicCampaignPage(routeRow.campaign_id, request, domainRow.workspace_id, { rawTracking: true });
   }
 
   // Blog fallback (0033): explicit funnel routes above always win, so a domain can host mapped

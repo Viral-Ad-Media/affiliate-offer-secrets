@@ -25,6 +25,7 @@ export default function TrackingPanel({
   saveEndpoint,
   initialTracking,
   bare = false,
+  allowRawSnippets = false,
   onSaved,
 }: {
   campaignId: string;
@@ -42,6 +43,12 @@ export default function TrackingPanel({
    */
   bare?: boolean;
   /**
+   * Show the raw <head>/<body>/<footer> snippet boxes. Funnels pass true (they can serve on a
+   * verified custom domain, where raw injection is safe — see TrackingSettings.custom_head); the
+   * blog settings mount does not. The boxes are inert on the shared /p/ URL by construction.
+   */
+  allowRawSnippets?: boolean;
+  /**
    * Tell the parent the row changed. Load-bearing inside the settings dialog: Radix unmounts
    * dialog content on close, so this component remounts from `initialTracking` every time it
    * opens — without a refresh the second open would show the value from before the last save.
@@ -53,6 +60,11 @@ export default function TrackingPanel({
     gtm_id: initialTracking?.gtm_id ?? "",
     clarity_id: initialTracking?.clarity_id ?? "",
     meta_pixel_id: initialTracking?.meta_pixel_id ?? "",
+  });
+  const [raw, setRaw] = useState({
+    head: initialTracking?.custom_head ?? "",
+    body: initialTracking?.custom_body ?? "",
+    footer: initialTracking?.custom_footer ?? "",
   });
   const [consent, setConsent] = useState({
     enabled: initialTracking?.consent_enabled === true,
@@ -79,6 +91,9 @@ export default function TrackingPanel({
         consent_accept: consent.accept,
         consent_decline: consent.decline,
         consent_policy_url: consent.policy,
+        custom_head: allowRawSnippets ? raw.head : "",
+        custom_body: allowRawSnippets ? raw.body : "",
+        custom_footer: allowRawSnippets ? raw.footer : "",
       }),
     });
     const data = await res.json();
@@ -93,6 +108,11 @@ export default function TrackingPanel({
       gtm_id: data.tracking?.gtm_id ?? "",
       clarity_id: data.tracking?.clarity_id ?? "",
       meta_pixel_id: data.tracking?.meta_pixel_id ?? "",
+    });
+    setRaw({
+      head: data.tracking?.custom_head ?? "",
+      body: data.tracking?.custom_body ?? "",
+      footer: data.tracking?.custom_footer ?? "",
     });
     setSavedAt(Date.now());
     onSaved?.();
@@ -193,6 +213,39 @@ export default function TrackingPanel({
           )}
         </div>
 
+      </div>
+
+      {allowRawSnippets && (
+        <div className="mb-4 space-y-2 rounded-lg border border-ink-700 bg-ink-800/40 p-3">
+          <div className="text-sm font-semibold text-zinc-100">Custom code (advanced)</div>
+          <p className="text-[11px] leading-snug text-zinc-500">
+            Paste any tracking or widget code here — TikTok Pixel, Hotjar, a chat bubble, anything.
+            It runs <strong>only on your own verified custom domain</strong>, never on the default
+            {" "}<code>/p/</code> link, and it is <strong>not</strong> cookie-consent gated. Leave
+            empty for none.
+          </p>
+          {([
+            ["head", "Before </head>", "<!-- scripts / meta / verification tags -->"],
+            ["body", "After <body>", "<!-- noscript pixels, chat widgets -->"],
+            ["footer", "Before </body>", "<!-- deferred scripts -->"],
+          ] as const).map(([key, label, ph]) => (
+            <div key={key} className="space-y-1">
+              <Label htmlFor={`raw_${key}`}>{label}</Label>
+              <textarea
+                id={`raw_${key}`}
+                rows={3}
+                value={raw[key]}
+                onChange={(e) => setRaw((r) => ({ ...r, [key]: e.target.value }))}
+                placeholder={ph}
+                spellCheck={false}
+                className="flex w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-sm placeholder:font-sans placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
         <Button onClick={save} disabled={busy}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Save tracking

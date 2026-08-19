@@ -61,7 +61,7 @@ export default function FunnelSettingsDialog({
             Applies to every page in this funnel — the opt-in page, any split-test variants, and
             each step.
           </p>
-          <TrackingPanel campaignId={campaignId} initialTracking={tracking} bare onSaved={onSaved} />
+          <TrackingPanel campaignId={campaignId} initialTracking={tracking} bare allowRawSnippets onSaved={onSaved} />
         </DialogContent>
       </Dialog>
     </>
