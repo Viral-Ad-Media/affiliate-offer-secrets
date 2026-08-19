@@ -2,7 +2,7 @@ import { db } from "./core";
 import { resolveModel } from "@/lib/generationModels";
 import { uploadImageRef, CLD_FOLDER } from "@/lib/cloudinary/upload";
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
-import { createKieTask, getKieTaskStatus, downloadKieResult } from "@/lib/kieai/client";
+import { createKieTask, getKieTaskStatus, downloadKieResult, kieImageInput } from "@/lib/kieai/client";
 import { isValidImageDataUrl, MAX_AD_IMAGE_DATA_URL_CHARS } from "@/lib/images/validate";
 import type { FbAdAngle, SocialPost } from "@/lib/shared";
 
@@ -112,11 +112,10 @@ async function stageSubmit(stageData: Record<string, unknown>): Promise<Creative
   // The selected image model's own provider slug — never a literal, so adding a model to the
   // catalog is the only edit needed. Falls back to the default when unset or unrecognised.
   const model = resolveModel("image", stageData.model_id);
-  const taskId = await createKieTask(model.apiModel, {
-    prompt: stageData.image_prompt,
-    aspect_ratio: "1:1",
-    output_format: "png",
-  });
+  const taskId = await createKieTask(
+    model.apiModel,
+    kieImageInput(model.apiModel, { prompt: stageData.image_prompt, aspectRatio: "1:1", format: "png" })
+  );
   return { stageData: { ...stageData, task_id: taskId } };
 }
 

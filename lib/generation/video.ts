@@ -10,7 +10,15 @@
 // the right second choice rather than merely an available one.
 
 import { startVeoGeneration, getVeoOperation, downloadVeoVideo } from "@/lib/gemini/client";
-import { createKieVeoTask, getKieVeoStatus, downloadKieResult, getKieCredit } from "@/lib/kieai/client";
+import {
+  createKieVeoTask,
+  getKieVeoStatus,
+  createKieTask,
+  getKieTaskStatus,
+  kieJobsVideoInput,
+  downloadKieResult,
+  getKieCredit,
+} from "@/lib/kieai/client";
 import type { GenerationModel } from "@/lib/generationModels";
 
 export type VideoAspect = "16:9" | "9:16";
@@ -24,6 +32,12 @@ export async function submitVideo(
 ): Promise<VideoTaskRef> {
   if (model.provider === "gemini") {
     return startVeoGeneration({ prompt: params.prompt, aspectRatio: params.aspectRatio });
+  }
+  // kie.ai has TWO surfaces: Veo's own endpoint, and the Jobs API every marketplace model
+  // (Grok, Kling, …) rides. The catalog says which; poll must branch the same way, which is why
+  // the accepted MODEL — not just the ref — is persisted into stage_data by every caller.
+  if (model.kieSurface === "jobs") {
+    return createKieTask(model.apiModel, kieJobsVideoInput(model.apiModel, params));
   }
   return createKieVeoTask({ prompt: params.prompt, model: model.apiModel, aspectRatio: params.aspectRatio });
 }
@@ -39,6 +53,17 @@ export async function pollVideo(model: GenerationModel, ref: VideoTaskRef): Prom
     // the job's normal failure path rather than the fallback.
     if (r.filtered) return { done: true, url: null, error: "The video model refused this prompt (content filtered)" };
     return { done: true, url: r.videoUri, error: null };
+  }
+  if (model.kieSurface === "jobs") {
+    const t = await getKieTaskStatus(ref);
+    if (!t.ready) return { done: false, url: null, error: null };
+    if (!t.succeeded) return { done: true, url: null, error: t.failMsg ?? "kie.ai video task failed" };
+    const url = t.resultUrls[0] ?? null;
+    // Same defensive stance as getKieVeoStatus: success with nothing to download must be a
+    // failure, or the creative row sits "generating" forever.
+    return url
+      ? { done: true, url, error: null }
+      : { done: true, url: null, error: "kie.ai reported success but returned no video URL" };
   }
   const s = await getKieVeoStatus(ref);
   if (!s.ready) return { done: false, url: null, error: null };

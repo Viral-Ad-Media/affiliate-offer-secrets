@@ -24,6 +24,13 @@ export type GenerationModel = {
   provider: GenerationProvider;
   /** Exactly what the provider's API expects. Verified live; see the per-entry notes. */
   apiModel: string;
+  /**
+   * Which of kie.ai's TWO API surfaces a kieai VIDEO model rides. Veo is its own endpoint
+   * (/api/v1/veo/generate) and is NOT a slug on the Jobs API — measured when Veo was wired up —
+   * while every marketplace model (Grok, Kling, …) is a Jobs-API slug. lib/generation/video.ts
+   * branches on this; images always use the Jobs API so their entries omit it.
+   */
+  kieSurface?: "veo" | "jobs";
   /** Shown under the option in the picker. Say what it's for, not marketing copy. */
   blurb: string;
 };
@@ -45,6 +52,7 @@ export const GENERATION_MODELS: readonly GenerationModel[] = [
     provider: "kieai",
     // POST /api/v1/veo/generate, model: "veo3". Underscore forms only — "veo3-fast" is rejected.
     apiModel: "veo3",
+    kieSurface: "veo",
     blurb: "The same Google Veo model resold by kie.ai, billed to your kie.ai credits instead.",
   },
   {
@@ -53,7 +61,32 @@ export const GENERATION_MODELS: readonly GenerationModel[] = [
     kind: "video",
     provider: "kieai",
     apiModel: "veo3_fast",
+    kieSurface: "veo",
     blurb: "Faster and cheaper per clip than Veo 3, at some quality cost. Good for volume.",
+  },
+  // The Jobs-API marketplace models below were pinned 2026-08-19 the same way the Veo pair was:
+  // every slug fetched from kie.ai's own per-model doc page (docs.kie.ai/market/…), then probed
+  // live with an empty input — a real slug answers a field-required error while the known-bad
+  // control answers 422 "The model name you specified is not supported". Zero credits spent.
+  // Their per-model input shapes live in kieImageInput()/kieJobsVideoInput() (lib/kieai/client.ts),
+  // NOT here — this catalog stays isomorphic and field names are a server concern.
+  {
+    id: "kie-grok-video",
+    label: "Grok Imagine video — via kie.ai",
+    kind: "video",
+    provider: "kieai",
+    apiModel: "grok-imagine/text-to-video",
+    kieSurface: "jobs",
+    blurb: "xAI's video model. Cheaper per clip than Veo; good for volume testing of hooks.",
+  },
+  {
+    id: "kie-kling-2-6",
+    label: "Kling 2.6 — via kie.ai",
+    kind: "video",
+    provider: "kieai",
+    apiModel: "kling-2.6/text-to-video",
+    kieSurface: "jobs",
+    blurb: "Kuaishou's video model, strong on realistic motion. 5-second clips.",
   },
   {
     id: "nano-banana-2",
@@ -71,6 +104,38 @@ export const GENERATION_MODELS: readonly GenerationModel[] = [
     provider: "kieai",
     apiModel: "nano-banana-2-lite",
     blurb: "Faster and cheaper, capped at 1K. Fine for thumbnails and social crops.",
+  },
+  {
+    id: "kie-grok-image",
+    label: "Grok Imagine — via kie.ai",
+    kind: "image",
+    provider: "kieai",
+    apiModel: "grok-imagine/text-to-image",
+    blurb: "xAI's image model. A different look from Nano Banana — worth A/B-ing on ad creatives.",
+  },
+  {
+    id: "kie-gpt-image-2",
+    label: "GPT Image 2 — via kie.ai",
+    kind: "image",
+    provider: "kieai",
+    apiModel: "gpt-image-2-text-to-image",
+    blurb: "OpenAI's image model. Strong at text inside the image (badges, labels, offers).",
+  },
+  {
+    id: "kie-seedream-5-lite",
+    label: "Seedream 5 Lite — via kie.ai",
+    kind: "image",
+    provider: "kieai",
+    apiModel: "seedream/5-lite-text-to-image",
+    blurb: "ByteDance's image model, photorealistic style. Fast and cheap.",
+  },
+  {
+    id: "kie-flux-2-pro",
+    label: "Flux 2 Pro — via kie.ai",
+    kind: "image",
+    provider: "kieai",
+    apiModel: "flux-2/pro-text-to-image",
+    blurb: "Black Forest Labs' flagship. Clean product-shot look for ad creatives.",
   },
 ] as const;
 

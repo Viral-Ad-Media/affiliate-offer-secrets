@@ -1,7 +1,7 @@
 import { db } from "./core";
 import { uploadImageRef, CLD_FOLDER } from "@/lib/cloudinary/upload";
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
-import { createKieTask, getKieTaskStatus, downloadKieResult } from "@/lib/kieai/client";
+import { createKieTask, getKieTaskStatus, downloadKieResult, kieImageInput } from "@/lib/kieai/client";
 import { isValidImageDataUrl, MAX_AD_IMAGE_DATA_URL_CHARS } from "@/lib/images/validate";
 
 // Re-exported from the isomorphic list so a client component can read it without pulling this
@@ -68,11 +68,10 @@ async function stagePrompt(
 }
 
 async function stageSubmit(stageData: Record<string, unknown>): Promise<AdImageStageOutput> {
-  const taskId = await createKieTask("nano-banana-2", {
-    prompt: stageData.image_prompt,
-    aspect_ratio: "1:1",
-    output_format: "png",
-  });
+  const taskId = await createKieTask(
+    "nano-banana-2",
+    kieImageInput("nano-banana-2", { prompt: stageData.image_prompt, aspectRatio: "1:1", format: "png" })
+  );
   return { stageData: { ...stageData, task_id: taskId } };
 }
 

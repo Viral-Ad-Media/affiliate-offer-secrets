@@ -33,6 +33,60 @@ export async function createKieTask(model: string, input: Record<string, unknown
   return taskId as string;
 }
 
+/**
+ * Per-model input shapes for the Jobs API, read from each model's OWN doc page
+ * (docs.kie.ai/market/…) on 2026-08-19 and confirmed live by the field-required probe — the
+ * marketplace models do NOT share one schema, and the differences are exactly the kind that fail
+ * silently or reject a paid submit if guessed:
+ *
+ * - nano-banana takes `output_format`/`resolution`; Grok's image schema has NEITHER.
+ * - Seedream's format enum is `jpeg`, not the `jpg` the nano-banana path passes around.
+ * - GPT Image 2 and Flux 2 size via `resolution` (`1K`/`2K`…), not a format field. Pinned to 1K
+ *   deliberately — the blog-image path already learned that an unconstrained default returned a
+ *   3MB file that failed the size cap AFTER paying for the generation.
+ *
+ * The nano-banana branch must stay byte-identical to what the three image jobs sent before this
+ * existed — that is the "absent settings behave exactly as before" guarantee resolveModel makes.
+ */
+export function kieImageInput(
+  apiModel: string,
+  opts: { prompt: unknown; aspectRatio: "1:1" | "16:9"; format: "png" | "jpg"; resolution?: "1K" }
+): Record<string, unknown> {
+  const base = { prompt: opts.prompt, aspect_ratio: opts.aspectRatio };
+  if (apiModel.startsWith("nano-banana")) {
+    return { ...base, output_format: opts.format, ...(opts.resolution ? { resolution: opts.resolution } : {}) };
+  }
+  if (apiModel === "seedream/5-lite-text-to-image") {
+    return { ...base, output_format: opts.format === "jpg" ? "jpeg" : "png" };
+  }
+  if (apiModel === "gpt-image-2-text-to-image" || apiModel === "flux-2/pro-text-to-image") {
+    return { ...base, resolution: opts.resolution ?? "1K" };
+  }
+  // grok-imagine/text-to-image, and any future model whose extras haven't been pinned: prompt +
+  // aspect only. Every marketplace image model documents both; extras are where they diverge.
+  return base;
+}
+
+/**
+ * Same idea for the Jobs-API video models (Veo does not go through here — it has its own
+ * endpoint and its own params type below). Durations/resolutions are the cheapest documented
+ * options that still fit the app's use (a short ad clip): Grok 8s at 720p (enum 480p/720p/1080p,
+ * duration 6-30), Kling 5s (duration enum is the STRINGS '5'|'10', per its doc page).
+ */
+export function kieJobsVideoInput(
+  apiModel: string,
+  opts: { prompt: string; aspectRatio: "16:9" | "9:16" }
+): Record<string, unknown> {
+  const base = { prompt: opts.prompt, aspect_ratio: opts.aspectRatio };
+  if (apiModel === "grok-imagine/text-to-video") {
+    return { ...base, mode: "normal", duration: 8, resolution: "720p" };
+  }
+  if (apiModel === "kling-2.6/text-to-video") {
+    return { ...base, duration: "5", sound: true };
+  }
+  return base;
+}
+
 export type KieTaskStatus = {
   // kie.ai's exact `state` enum isn't fully documented publicly — matched case-insensitively
   // against "success"/"fail" substrings rather than an exact set, verify against a real

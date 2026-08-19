@@ -1,7 +1,7 @@
 import { db } from "./core";
 import { uploadImageRef, CLD_FOLDER } from "@/lib/cloudinary/upload";
 import { completeJSON, COMPLIANCE_SYSTEM, type UsageContext } from "./anthropic";
-import { createKieTask, getKieTaskStatus, downloadKieResult } from "@/lib/kieai/client";
+import { createKieTask, getKieTaskStatus, downloadKieResult, kieImageInput } from "@/lib/kieai/client";
 import { resolveModel } from "@/lib/generationModels";
 import { isValidImageDataUrl, ALLOWED_IMAGE_CONTENT_TYPES } from "@/lib/images/validate";
 import { MAX_FEATURED_IMAGE_CHARS } from "@/lib/blog";
@@ -90,12 +90,11 @@ async function stageSubmit(stageData: Record<string, unknown>): Promise<BlogImag
   // 1K is the right size, not a workaround: this image is a blog hero rendered at ~1200px at most
   // and a small card thumbnail on the index, and it ships base64-inlined in the HTML of every page
   // that shows it. 2K/4K would buy detail nobody sees and re-send it on every page load.
-  const taskId = await createKieTask(resolveModel("image", stageData.model_id).apiModel, {
-    prompt: stageData.image_prompt,
-    aspect_ratio: "16:9",
-    output_format: "jpg",
-    resolution: "1K",
-  });
+  const blogModel = resolveModel("image", stageData.model_id).apiModel;
+  const taskId = await createKieTask(
+    blogModel,
+    kieImageInput(blogModel, { prompt: stageData.image_prompt, aspectRatio: "16:9", format: "jpg", resolution: "1K" })
+  );
   return { stageData: { ...stageData, task_id: taskId } };
 }
 
