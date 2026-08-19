@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useSavedBlocks } from "@/lib/useSavedBlocks";
 import {
   GripVertical,
   ImagePlus,
@@ -9,6 +10,7 @@ import {
   X,
   Trash2,
   Monitor,
+  Bookmark,
   Undo2,
   Redo2,
   Tablet,
@@ -57,6 +59,7 @@ import {
   insertElement,
   insertRow,
   insertSection,
+  insertSavedBlock,
   insertFormInput,
   FORM_FIELD_PRESETS,
   containerKey,
@@ -507,6 +510,7 @@ function RootBlockWrapper({
   isSelected,
   onSelect,
   onDelete,
+  onSaveToLibrary,
   lockedReason,
   hiddenHere,
   children,
@@ -516,6 +520,8 @@ function RootBlockWrapper({
   onSelect?: () => void;
   /** Absent for the locked compliance blocks — see lockedReason. */
   onDelete?: () => void;
+  /** Present only for savable root blocks (sections) — adds "save to library" to the hover row. */
+  onSaveToLibrary?: () => void;
   /**
    * Why this block has no delete button. Rendered as a padlock rather than nothing: a control that
    * is simply missing reads as a bug, and "I can't delete this" was exactly the report that led
@@ -573,6 +579,19 @@ function RootBlockWrapper({
         >
           <GripVertical className="h-3.5 w-3.5" />
         </button>
+        {onSaveToLibrary && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSaveToLibrary();
+            }}
+            title="Save this section to your reusable library"
+            className="flex h-6 w-6 items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-emerald-600"
+          >
+            <Bookmark className="h-3.5 w-3.5" />
+          </button>
+        )}
         {onDelete ? (
           <button
             type="button"
@@ -822,10 +841,16 @@ function EditorPalette({
   onPick,
   onPickRow,
   onPickSection,
+  savedBlocks,
+  onInsertSaved,
+  onDeleteSaved,
 }: {
   onPick: (type: PaletteType) => void;
   onPickRow: (layout: RowBlock["layout"]) => void;
   onPickSection: () => void;
+  savedBlocks: { id: string; name: string; block: unknown }[];
+  onInsertSaved: (block: unknown) => void;
+  onDeleteSaved: (id: string) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -916,6 +941,37 @@ function EditorPalette({
           </PaletteDraggable>
         ))}
       </div>
+
+      {/* The workspace's saved-block library (0116). Hidden while collapsed (no room for names)
+          and when empty (nothing to show). Click inserts a fresh-id copy at the end of the page. */}
+      {!collapsed && savedBlocks.length > 0 && (
+        <>
+          <div className="mt-2 px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Saved blocks</div>
+          <div className="flex flex-col gap-0.5">
+            {savedBlocks.map((s) => (
+              <div key={s.id} className="group/saved flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => onInsertSaved(s.block)}
+                  title={`Insert "${s.name}" at the end of the page`}
+                  className="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-ink-700 px-2 py-1.5 text-left text-[11px] text-zinc-300 hover:border-emerald-500/60 hover:bg-ink-800 hover:text-emerald-300"
+                >
+                  <Bookmark className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                  <span className="truncate">{s.name}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDeleteSaved(s.id)}
+                  title="Remove from library"
+                  className="shrink-0 rounded p-1 text-zinc-600 opacity-0 hover:text-red-400 group-hover/saved:opacity-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </aside>
   );
 }
@@ -1459,6 +1515,22 @@ export default function WysiwygCanvas({
   function paletteAddElement(type: PaletteType) {
     const ref = paletteTargetRef();
     if (ref) addElement(ref, type);
+  }
+
+  // Reusable-block library (0116). Save a whole section under a name; insert a fresh-id copy at the
+  // end of the page. Insert goes through `change` (undo/redo-tracked), and the page save
+  // re-validates the whole tree, so a library block is never a bypass of any content rule.
+  const savedBlocks = useSavedBlocks();
+  async function saveSectionToLibrary(section: SectionBlock) {
+    const name = window.prompt("Save this section to your library as:", "");
+    if (name === null) return;
+    const err = await savedBlocks.save(name, section);
+    if (err) window.alert(err);
+  }
+  function insertFromLibrary(block: unknown) {
+    const last = [...tree.blocks].reverse().find((b) => b.type === "section");
+    const ref: ContainerRef = last ? { kind: "section", sectionId: last.id } : { kind: "root" };
+    change(insertSavedBlock(tree, block as SectionBlock, ref, Number.MAX_SAFE_INTEGER));
   }
 
   function paletteAddRow(layout: RowBlock["layout"]) {
@@ -2845,7 +2917,14 @@ export default function WysiwygCanvas({
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
     <DeviceContext.Provider value={device}>
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-      <EditorPalette onPick={paletteAddElement} onPickRow={paletteAddRow} onPickSection={paletteAddSection} />
+      <EditorPalette
+        onPick={paletteAddElement}
+        onPickRow={paletteAddRow}
+        onPickSection={paletteAddSection}
+        savedBlocks={savedBlocks.saved}
+        onInsertSaved={insertFromLibrary}
+        onDeleteSaved={savedBlocks.remove}
+      />
 
       <div className="min-w-0 flex-1">
         {/* Sticky: the style panel and palette already are, and on a long page the device toggle
@@ -2948,6 +3027,7 @@ export default function WysiwygCanvas({
                   // the four locked compliance blocks are not, and now say so instead of silently
                   // having no control.
                   onDelete={b.type === "section" ? () => deleteRootBlock(b.id) : undefined}
+                  onSaveToLibrary={b.type === "section" ? () => saveSectionToLibrary(b) : undefined}
                   lockedReason={b.type === "section" ? undefined : LOCKED_REASONS[(b as LockedBlock).locked]}
                   hiddenHere={hiddenHereLabel(b, device)}
                 >

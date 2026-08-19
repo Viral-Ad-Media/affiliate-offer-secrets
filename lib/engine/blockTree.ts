@@ -2059,6 +2059,51 @@ export function newBlockId(): string {
   return `b-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
 }
 
+/**
+ * Deep-clone any block subtree with a FRESH id on every node.
+ *
+ * The saved-block library and any future "duplicate" both need this: two copies of one block must
+ * never share an id (selection, drag, scroll/popup targets all key off id), and inserting the same
+ * saved block twice on one page would otherwise collide. Regenerates `id` everywhere it appears —
+ * on the block, its `children`, a row's `columns`, a form's inputs — and leaves everything else
+ * (content, style) untouched. Pure; structure-only, so it can't smuggle anything a validator
+ * wouldn't already accept, and the page save re-validates the whole tree regardless.
+ */
+export function cloneBlockWithFreshIds<T>(block: T): T {
+  if (Array.isArray(block)) return block.map((b) => cloneBlockWithFreshIds(b)) as unknown as T;
+  if (!block || typeof block !== "object") return block;
+  const src = block as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(src)) {
+    if (k === "id" && typeof v === "string") out[k] = newBlockId();
+    else if (k === "children" || k === "columns") out[k] = cloneBlockWithFreshIds(v);
+    else out[k] = v;
+  }
+  return out as T;
+}
+
+/**
+ * Insert a saved-library block (a whole Section, or a single element) into the tree. A Section
+ * lands at root; anything else lands in the given container. Ids are regenerated on the way in.
+ * Returns the tree unchanged if the block can't legally go where asked — the same silent-no-op
+ * discipline as moveBlockToContainer, so a bad drop never corrupts the page.
+ */
+export function insertSavedBlock(tree: PageBlockTree, block: SectionBlock | ElementBlock, ref: ContainerRef, index: number): PageBlockTree {
+  const fresh = cloneBlockWithFreshIds(block);
+  if ((fresh as { type?: string }).type === "section") {
+    const at = ref.kind === "root" ? index : tree.blocks.length;
+    const blocks = [...tree.blocks];
+    blocks.splice(Math.max(0, Math.min(at, blocks.length)), 0, fresh as SectionBlock);
+    return { ...tree, blocks };
+  }
+  if (ref.kind === "root") return tree; // an element can't sit at root
+  const items = getContainer(tree, ref);
+  if (!items) return tree;
+  const rebuilt = [...items];
+  rebuilt.splice(Math.max(0, Math.min(index, items.length)), 0, fresh as ElementBlock);
+  return withContainer(tree, ref, rebuilt);
+}
+
 function walkAndUpdate(node: any, blockId: string, fn: (b: any) => any): any {
   if (!node || typeof node !== "object") return node;
   if (node.id === blockId) return fn(node);
