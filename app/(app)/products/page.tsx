@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import ProductsPanel from "@/components/ProductsPanel";
 
 // The offers this workspace is working on, on their own page — the same table Marketplace shows
@@ -14,12 +15,17 @@ import ProductsPanel from "@/components/ProductsPanel";
 export default function MyProductsPage() {
   return (
     <main className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-zinc-100">My Products</h1>
-        <p className="text-sm text-zinc-400">
-          The offers you&apos;re promoting. Set a status, copy an affiliate link, or build a
-          campaign kit — clear the status filter to see every product you&apos;ve ever discovered.
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">My Products</h1>
+          <p className="text-sm text-zinc-400">
+            The offers you&apos;re promoting. Set a status, paste an affiliate link, or build a
+            campaign kit — clear the status filter to see every product you&apos;ve ever discovered.
+          </p>
+        </div>
+        <Link href="/marketplace" className="shrink-0 text-sm text-emerald-300 hover:text-emerald-200">
+          Find more in the Marketplace &rarr;
+        </Link>
       </header>
 
       <ProductsPanel
