@@ -16,7 +16,25 @@
  * existed, so a page with no theme renders byte-identically to how it did before.
  */
 
-export type ThemeFont = "system" | "serif" | "mono" | "rounded" | "condensed";
+export type ThemeFont =
+  | "system"
+  | "serif"
+  | "mono"
+  | "rounded"
+  | "condensed"
+  // Curated web fonts, served from Google Fonts on published pages via themeFontLinks() below.
+  // A CLOSED set on purpose, exactly like every other theme value: the font is an enum member
+  // mapped through fixed tables, never a stored string — a tenant-typed family name would flow
+  // into both a style attribute and a third-party URL, and this enum is what makes that
+  // impossible by construction rather than by sanitization.
+  | "inter"
+  | "poppins"
+  | "montserrat"
+  | "playfair"
+  | "merriweather"
+  | "lora"
+  | "oswald"
+  | "dm-sans";
 
 // Real stacks, all web-safe — no webfont fetch, because these pages must stay self-contained
 // (same reason images are inlined rather than hotlinked).
@@ -26,7 +44,55 @@ export const THEME_FONT_STACKS: Record<ThemeFont, string> = {
   mono: '"SF Mono", SFMono-Regular, Consolas, "Liberation Mono", monospace',
   rounded: '"Trebuchet MS", "Segoe UI", Verdana, sans-serif',
   condensed: '"Arial Narrow", "Helvetica Neue", Arial, sans-serif',
+  // Web fonts lead their stack and degrade to a system face of the same shape — a page renders
+  // readably before the font arrives (display=swap) and forever if it never does.
+  inter: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+  poppins: '"Poppins", "Trebuchet MS", "Segoe UI", Verdana, sans-serif',
+  montserrat: '"Montserrat", "Segoe UI", Helvetica, Arial, sans-serif',
+  playfair: '"Playfair Display", Georgia, "Times New Roman", serif',
+  merriweather: '"Merriweather", Georgia, "Times New Roman", serif',
+  lora: '"Lora", Georgia, "Times New Roman", serif',
+  oswald: '"Oswald", "Arial Narrow", "Helvetica Neue", Arial, sans-serif',
+  "dm-sans": '"DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif',
 };
+
+// css2 family params per web font, weights limited to what each family actually ships — css2
+// rejects a request naming a weight the family lacks. Keys absent here (the system stacks) load
+// nothing. Values are LITERALS keyed by the enum: nothing tenant-typed can reach the URL.
+const GOOGLE_FONT_CSS2: Partial<Record<ThemeFont, string>> = {
+  inter: "Inter:wght@400;600;700;800",
+  poppins: "Poppins:wght@400;600;700;800",
+  montserrat: "Montserrat:wght@400;600;700;800",
+  playfair: "Playfair+Display:wght@400;600;700;800",
+  merriweather: "Merriweather:wght@400;700;900",
+  lora: "Lora:wght@400;500;600;700",
+  oswald: "Oswald:wght@400;500;600;700",
+  "dm-sans": "DM+Sans:wght@400;500;700",
+};
+
+/**
+ * The <head> fragment that loads a theme's web fonts — empty for the system stacks, which is
+ * every page themed before these fonts existed, so nothing already published changes until
+ * someone picks one. Reads the fonts through the same key-in-table discipline as themeToCssVars:
+ * an unknown stored value simply isn't a key in GOOGLE_FONT_CSS2 and loads nothing.
+ */
+export function themeFontLinks(theme: PageTheme | null | undefined): string {
+  const ty = theme?.typography;
+  const families = Array.from(
+    new Set(
+      [ty?.headingFont, ty?.bodyFont]
+        .map((f) => (f ? GOOGLE_FONT_CSS2[f] : undefined))
+        .filter((f): f is string => !!f)
+    )
+  );
+  if (families.length === 0) return "";
+  const query = families.map((f) => `family=${f}`).join("&");
+  return [
+    '<link rel="preconnect" href="https://fonts.googleapis.com">',
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+    `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?${query}&display=swap">`,
+  ].join("\n");
+}
 
 export type ButtonShape = "rounded" | "pill" | "square";
 export type ButtonFill = "solid" | "outline";

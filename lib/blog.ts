@@ -1,6 +1,6 @@
 import { marked } from "marked";
 import { isDisclosureText } from "@/lib/disclosure";
-import { themeToCssVars } from "@/lib/engine/pageTheme";
+import { themeToCssVars, themeFontLinks } from "@/lib/engine/pageTheme";
 import { cloudinaryTransform, IMG_CARD, IMG_HERO, IMG_AVATAR } from "@/lib/cloudinary/url";
 import { APP_URL } from "@/lib/appUrl";
 import {
@@ -942,6 +942,7 @@ ${post.published_at ? `<meta property="article:published_time" content="${escape
 ${shareImage ? `<meta property="og:image" content="${escapeHtml(shareImage)}">` : ""}
 <meta name="twitter:card" content="${shareImage ? "summary_large_image" : "summary"}">
 ${post.seo_index === false ? '<meta name="robots" content="noindex, nofollow">' : ""}
+${themeFontLinks(post.theme as import("@/lib/engine/pageTheme").PageTheme | null)}
 <style>:root{--content-w:${contentWidthOf({ contentWidth: post.content_width ?? undefined })}px;${themeToCssVars(post.theme)}}${PUBLIC_CSS}</style>
 </head>
 <body>

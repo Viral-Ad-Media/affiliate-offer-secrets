@@ -34,7 +34,7 @@ import {
   type FunnelStepType,
 } from "./blockTree";
 import { renderTrackingHtml, type TrackingSettings } from "./tracking";
-import { themeToCssVars } from "./pageTheme";
+import { themeToCssVars, themeFontLinks } from "./pageTheme";
 import type { NetworkId } from "@/lib/networks";
 import { isDisclosureText } from "@/lib/disclosure";
 
@@ -798,6 +798,7 @@ export function renderBridgeHtml(
 <title>${escapeHtml(meta.title)}</title>
 ${meta.head}
 ${t.head}
+${themeFontLinks((tree as any).theme)}
 <style>:root{--content-w:${contentWidthOf(tree)}px;${themeToCssVars((tree as any).theme)}}${PAGE_STYLE}</style>
 </head>
 <body>
@@ -1023,6 +1024,7 @@ export function renderFunnelStepHtml(
 <title>${escapeHtml(meta.title)}</title>
 ${meta.head}
 ${t.head}
+${themeFontLinks((tree as any).theme)}
 <style>:root{--content-w:${contentWidthOf(tree)}px;${themeToCssVars((tree as any).theme)}}${PAGE_STYLE}
   .cta-wrap { max-width: 420px; margin: 40px auto 0; text-align:center; }
 </style>
