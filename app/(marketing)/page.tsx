@@ -56,17 +56,17 @@ const FEATURES = [
   {
     icon: Sparkles,
     title: "Full campaign kits",
-    body: "Three ad angles, TikTok scripts, funnel pages, a blog article, email swipes and social captions per product — with a real product image embedded, never hotlinked.",
+    body: "Ad angles, TikTok scripts, funnel pages, a blog article, email swipes, social captions and SMS copy per product — you pick which assets to build and how many. SEO keywords and meta descriptions are planned from the vendor's own sales page.",
   },
   {
     icon: Filter,
     title: "Drag-and-drop page builder",
-    body: "Sections, rows and columns, headings, images, lists, buttons and custom form fields, each with its own typography, colour and spacing controls — on a canvas that looks like the live page.",
+    body: "Sections, rows and columns, headings, images, lists, buttons, video, countdowns, surveys and custom form fields — with per-page themes, real web fonts and brand colours pulled from the product's own page. Eight funnel types, from squeeze pages to webinars and advertorials.",
   },
   {
     icon: Beaker,
     title: "Split testing built in",
-    body: "Run copy variants against the same funnel URL with weighted traffic, sticky visitor assignment, and per-variant view and lead counts. Promote the winner in one click.",
+    body: "Run copy variants against the same funnel URL with weighted traffic and sticky visitor assignment. A Bayesian 'chance to beat control' score tells you when a test has actually decided — then promote the winner in one click.",
   },
   {
     icon: Users,
@@ -76,12 +76,12 @@ const FEATURES = [
   {
     icon: Send,
     title: "Email that actually sends",
-    body: "One-off broadcasts and multi-step drip sequences through your own Resend, SendGrid, Mailgun or SMTP account, with unsubscribe handling built in.",
+    body: "One-off broadcasts and multi-step drips through your own Resend, SendGrid, Mailgun or SMTP account — plus SMS sequences via Twilio with consent and STOP handling. Unsubscribe links and your business details are appended to every send automatically.",
   },
   {
     icon: Video,
     title: "AI images and video",
-    body: "Generate an ad image or a short-form video per angle and per social post, then post it straight to Instagram Reels or TikTok.",
+    body: "Generate an image or short-form video per ad angle and social post — pick from Veo, Grok Imagine, Kling, GPT Image, Flux and more — or upload your own creative. Post straight to Instagram Reels or TikTok.",
   },
   {
     icon: Facebook,
@@ -101,12 +101,12 @@ const FEATURES = [
   {
     icon: Newspaper,
     title: "A real blog, not just posts",
-    body: "Public index, SEO slugs, categories, featured images, RSS and sitemap — hosted on your domain, indexable, and importable straight from a campaign.",
+    body: "Public index or a static home page, SEO slugs, categories, featured images, RSS, sitemap — plus reader comments and star ratings with a moderation queue. Every kit's article arrives as a draft automatically.",
   },
   {
     icon: BarChart3,
     title: "Tracking and analytics",
-    body: "Drop GA4, GTM, Clarity or the Meta Pixel into any funnel, and see leads, live funnels, emails sent and posts published in one place.",
+    body: "Per-page views, link clicks and opt-in rates on the funnel map, native click heatmaps with scroll depth, a 30-day lead trend — plus GA4, Tag Manager, Clarity and the Meta Pixel on any funnel or your blog, with an optional cookie-consent gate.",
   },
   {
     icon: ShieldCheck,
@@ -116,7 +116,7 @@ const FEATURES = [
   {
     icon: Rocket,
     title: "You keep control",
-    body: "Your own affiliate ID, your own ad account, your own domains and mailbox. The platform never holds your ad spend or your commissions.",
+    body: "Your own affiliate links, your own ad account, your own domains and mailbox — with team workspaces when you're not working alone. The platform never holds your ad spend or your commissions.",
   },
 ];
 
