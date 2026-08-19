@@ -38,7 +38,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
   const { data: settings } = await supabase
     .from("blog_settings")
-    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, toc_enabled, toc_title, toc_min_headings")
+    .select("blog_title, slug, description, author_name, author_bio, author_avatar_url, permalink_style, toc_enabled, toc_title, toc_min_headings, tracking")
     .maybeSingle();
 
   const html = renderPublicPostHtml({

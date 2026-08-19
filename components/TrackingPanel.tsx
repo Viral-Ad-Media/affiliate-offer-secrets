@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card";
 const FIELDS: { key: keyof TrackingSettings; label: string; placeholder: string }[] = [
   { key: "ga4_id", label: "Google Analytics (GA4)", placeholder: "G-XXXXXXXXXX — or paste the full gtag.js snippet" },
   { key: "gtm_id", label: "Google Tag Manager", placeholder: "GTM-XXXXXXX — or paste the full container snippet" },
-  { key: "clarity_id", label: "Microsoft Clarity", placeholder: "Project ID — or paste the full Clarity snippet" },
+  { key: "clarity_id", label: "Microsoft Clarity (heatmaps + recordings)", placeholder: "Project ID — or paste the full Clarity snippet" },
   { key: "meta_pixel_id", label: "Meta Pixel", placeholder: "Pixel ID — or paste the full base code" },
 ];
 
@@ -22,11 +22,18 @@ const FIELDS: { key: keyof TrackingSettings; label: string; placeholder: string 
 // variants, steps). The Meta Pixel additionally fires a Lead event on opt-in form submit.
 export default function TrackingPanel({
   campaignId,
+  saveEndpoint,
   initialTracking,
   bare = false,
   onSaved,
 }: {
   campaignId: string;
+  /**
+   * Where Save posts. Defaults to the campaign tracking route; the blog settings page points it
+   * at /api/blog/tracking so the SAME panel (same extraction, same validation messages) installs
+   * site-wide blog analytics — including Clarity, which is what gives funnels AND posts heatmaps.
+   */
+  saveEndpoint?: string;
   initialTracking: TrackingSettings | null;
   /**
    * Drop the Card chrome. Set when this renders inside the funnel settings dialog, which already
@@ -62,7 +69,7 @@ export default function TrackingPanel({
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/campaigns/${campaignId}/tracking`, {
+    const res = await fetch(saveEndpoint ?? `/api/campaigns/${campaignId}/tracking`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

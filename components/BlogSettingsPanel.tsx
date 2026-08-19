@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import TrackingPanel from "@/components/TrackingPanel";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Settings, Loader2, CheckCircle2, ExternalLink, ImagePlus, Trash2, Eye } from "lucide-react";
@@ -23,6 +24,7 @@ export type Settings = {
   toc_min_headings: number | null;
   home_post_id: string | null;
   comments_enabled: boolean | null;
+  tracking?: Record<string, string> | null;
   ratings_enabled: boolean | null;
 };
 
@@ -475,6 +477,22 @@ export default function BlogSettingsPanel({
             e.target.value = "";
           }}
         />
+      </Card>
+
+      {/* Site-wide analytics for the public blog (0113) — the SAME panel funnels use, pointed at
+          the blog route, so extraction and validation can't drift between the two. Clarity here is
+          what gives blog posts heatmaps and session recordings; each funnel's own Clarity project
+          lives in its map ⚙, keeping funnel heatmaps per-funnel. */}
+      <Card as="section" className="space-y-3 p-4">
+        <div>
+          <div className="text-sm font-semibold text-zinc-100">Analytics &amp; heatmaps</div>
+          <p className="mt-1 text-xs text-zinc-500">
+            Installed on every public blog page. Add a free Microsoft Clarity project ID to get
+            heatmaps and session recordings for your posts; GA4, Tag Manager and the Meta Pixel work
+            the same way.
+          </p>
+        </div>
+        <TrackingPanel campaignId="" saveEndpoint="/api/blog/tracking" bare initialTracking={(initial.tracking ?? null) as any} />
       </Card>
 
       {error && <p className="text-sm text-red-300">{error}</p>}

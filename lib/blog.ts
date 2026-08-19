@@ -1,6 +1,7 @@
 import { marked } from "marked";
 import { isDisclosureText } from "@/lib/disclosure";
 import { themeToCssVars, themeFontLinks } from "@/lib/engine/pageTheme";
+import { renderTrackingHtml, type TrackingSettings } from "@/lib/engine/tracking";
 import { cloudinaryTransform, IMG_CARD, IMG_HERO, IMG_AVATAR } from "@/lib/cloudinary/url";
 import { APP_URL } from "@/lib/appUrl";
 import {
@@ -157,6 +158,8 @@ export function renderPostContentHtml(contentMd: string): string {
 
 export type BlogSettings = {
   blog_title?: string | null;
+  // Site-wide analytics (0113): the funnel tracking shape, rendered into every public page.
+  tracking?: TrackingSettings | null;
   author_name?: string | null;
   slug?: string | null;
   description?: string | null;
@@ -943,9 +946,11 @@ ${shareImage ? `<meta property="og:image" content="${escapeHtml(shareImage)}">` 
 <meta name="twitter:card" content="${shareImage ? "summary_large_image" : "summary"}">
 ${post.seo_index === false ? '<meta name="robots" content="noindex, nofollow">' : ""}
 ${themeFontLinks(post.theme as import("@/lib/engine/pageTheme").PageTheme | null)}
+${renderTrackingHtml(post.settings?.tracking ?? null).head}
 <style>:root{--content-w:${contentWidthOf({ contentWidth: post.content_width ?? undefined })}px;${themeToCssVars(post.theme)}}${PUBLIC_CSS}</style>
 </head>
 <body>
+${renderTrackingHtml(post.settings?.tracking ?? null).bodyStart}
 ${siteHeader(post.settings, base)}
 <main>
   <h1 class="post-title">${escapeHtml(post.title)}</h1>
@@ -1104,9 +1109,11 @@ ${page < totalPages ? `<link rel="next" href="${escapeHtml(origin + urlFor(activ
 ${description ? `<meta property="og:description" content="${escapeHtml(description)}">` : ""}
 <meta property="og:url" content="${escapeHtml(origin + urlFor(activeCategory?.slug ?? null, page))}">
 <meta name="twitter:card" content="summary">
+${renderTrackingHtml(settings.tracking ?? null).head}
 <style>${PUBLIC_CSS}</style>
 </head>
 <body>
+${renderTrackingHtml(settings.tracking ?? null).bodyStart}
 ${siteHeader(settings, base)}
 <div class="index-wrap">
   ${settings.intro_html ? `<div class="home-intro">${settings.intro_html}</div>` : ""}
