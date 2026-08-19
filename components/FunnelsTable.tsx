@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import FunnelSettingsDialog from "@/components/FunnelSettingsDialog";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -9,7 +10,6 @@ import {
   Beaker,
   Pencil,
   Eye,
-  Settings2,
   Archive,
   ArchiveRestore,
   Trash2,
@@ -34,6 +34,8 @@ export type FunnelRow = {
   url: string;
   variantCount: number;
   stepCount: number;
+  /** The funnel's tracking/consent settings, so the row's ⚙ opens the real dialog in place. */
+  tracking: Record<string, string> | null;
 };
 
 type Action = "publish" | "unpublish" | "restyle" | "archive" | "unarchive" | "delete";
@@ -281,7 +283,12 @@ export default function FunnelsTable({ funnels, showingArchived }: { funnels: Fu
                       icon={Eye}
                       newTab
                     />
-                    <IconLink href={`/funnels/${f.id}?settings=1`} label="Settings" icon={Settings2} />
+                    <FunnelSettingsDialog
+                      campaignId={f.id}
+                      tracking={(f.tracking ?? null) as any}
+                      onSaved={() => router.refresh()}
+                      triggerClassName="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-ink-600 text-zinc-400 hover:border-emerald-500/50 hover:text-emerald-300"
+                    />
                   </div>
                 </td>
               </TableRow>

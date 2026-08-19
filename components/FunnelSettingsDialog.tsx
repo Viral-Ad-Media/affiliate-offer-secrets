@@ -27,11 +27,14 @@ export default function FunnelSettingsDialog({
   campaignId,
   tracking,
   onSaved,
+  triggerClassName,
 }: {
   campaignId: string;
   tracking: TrackingSettings | null;
   /** Refresh the campaign row — see the note on TrackingPanel's own `onSaved`. */
   onSaved: () => void;
+  /** Overrides the trigger's look — the funnels LIST hosts this in its icon-action row. */
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -42,7 +45,7 @@ export default function FunnelSettingsDialog({
         onClick={() => setOpen(true)}
         title="Funnel settings"
         aria-label="Funnel settings"
-        className={cn(buttonVariants({ variant: "outline" }), "!px-2 !py-1.5")}
+        className={triggerClassName ?? cn(buttonVariants({ variant: "outline" }), "!px-2 !py-1.5")}
       >
         <Settings2 className="h-4 w-4" />
       </button>

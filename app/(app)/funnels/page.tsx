@@ -36,7 +36,7 @@ export default async function FunnelsPage({ searchParams }: { searchParams?: { a
   const [{ data: campaigns, error: campaignsError }, { data: routes }, { data: statRows }] = await Promise.all([
       supabase
         .from("campaigns")
-        .select("id, product_id, name, bridge_published, archived_at, updated_at, products(product_title)")
+        .select("id, product_id, name, bridge_published, archived_at, updated_at, tracking, products(product_title)")
         .eq("workspace_id", ws)
         .not("bridge_html", "is", null)
         // Archived funnels are hidden by default rather than deleted — the whole point of the
@@ -92,6 +92,7 @@ export default async function FunnelsPage({ searchParams }: { searchParams?: { a
     variantCount: variantCounts.get(c.id) ?? 0,
     stepCount: stepCounts.get(c.id) ?? 0,
     archived: !!c.archived_at,
+    tracking: (c.tracking ?? null) as Record<string, string> | null,
   }));
 
   return (
