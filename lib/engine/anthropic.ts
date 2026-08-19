@@ -7,7 +7,15 @@ export function getAnthropic(): Anthropic {
   if (!_client) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-    _client = new Anthropic({ apiKey });
+    // timeout: the engine runs inside a 60s serverless function. The SDK's default (10 minutes)
+    // means a long generation outlives the function — the platform kills the process mid-call,
+    // Anthropic bills the full generation, recordUsage never runs, and the job retries the same
+    // billed-but-invisible call (the Aug 18-19 incident). 45s makes the call fail INSIDE the
+    // function: caught, recorded as a failed attempt, counted against MAX_ATTEMPTS.
+    // maxRetries 0: the SDK's own silent retries (default 2) would each bill again within a
+    // single job attempt and blow the invocation budget anyway — the worker's attempts loop is
+    // the one retry mechanism, because it is the one that is counted and capped.
+    _client = new Anthropic({ apiKey, timeout: 45_000, maxRetries: 0 });
   }
   return _client;
 }

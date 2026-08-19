@@ -30,7 +30,11 @@ import {
 } from "./broadcast";
 
 const INVOCATION_BUDGET_MS = 50_000; // stay safely under maxDuration=60 on any Vercel plan
-const MAX_ATTEMPTS = 5;
+// 3, down from 5, by explicit decision after the Aug 18-19 billing incident: a genuinely
+// transient failure (WAF flake, 529) deserves one retry, maybe two — while every attempt of a
+// build stage is a real Anthropic charge, so each unit of this number multiplies the cost of a
+// failure mode nobody has noticed yet. Five attempts never rescued a job that three wouldn't have.
+const MAX_ATTEMPTS = 3;
 
 type JobRow = {
   id: string;
@@ -886,6 +890,23 @@ export async function runWorkerLoop(): Promise<{ processed: number }> {
   while (Date.now() - start < INVOCATION_BUDGET_MS) {
     const job = await claimJob();
     if (!job) break;
+
+    // THE CLAIM-SIDE ATTEMPTS CEILING — the fix for the Aug 18-19 billing incident, and the only
+    // one that actually bounds it. failJob's own attempts check runs only when an error is CAUGHT;
+    // a function the platform kills at maxDuration throws nothing, so the job stays 'running',
+    // goes stale, is reclaimed (attempts +1) and re-runs — forever. Each re-run of an Anthropic
+    // stage was a real billed generation that recordUsage never saw (the process died mid-call),
+    // which is how two top-ups vanished with $0.50 in the ledger: one stage-4 job reached 109
+    // attempts. This guard makes the cap hold no matter HOW an attempt died: a job claimed with
+    // its budget already spent is buried before any stage — and any API call — runs.
+    if (job.attempts > MAX_ATTEMPTS) {
+      await failJob(
+        job,
+        `Gave up after ${MAX_ATTEMPTS} attempts: the job died repeatedly without reporting an error (likely killed by the function time limit mid-stage).`,
+        true
+      );
+      continue;
+    }
 
     try {
       if (job.type === "discover_products") {
