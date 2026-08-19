@@ -33,16 +33,6 @@ export type AttributeFields = {
   description: string | null;
 };
 
-/** Turns a label into a usable key ("Budget range" -> "budget_range"), for the create form. */
-export function keyFromLabel(label: string): string {
-  return label
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 60);
-}
-
 export function normalizeAttributeFields(body: unknown): { ok: true; fields: AttributeFields } | { ok: false; error: string } {
   const b = (body ?? {}) as Record<string, unknown>;
 

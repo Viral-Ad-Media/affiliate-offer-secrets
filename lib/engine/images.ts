@@ -58,15 +58,6 @@ export async function pickProductImages(
     .slice(0, max);
 }
 
-/** Back-compat wrapper — one image, the model's first choice. */
-export async function pickProductImage(
-  candidates: ImageCandidate[],
-  productTitle: string,
-  usage?: UsageContext
-): Promise<ImageCandidate | null> {
-  return (await pickProductImages(candidates, productTitle, 1, usage))[0] ?? null;
-}
-
 /**
  * Fetches several images, stopping at a TOTAL byte budget.
  *

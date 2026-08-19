@@ -88,7 +88,7 @@ export type AdAngleLike = {
  * Checks one ad angle. `context` describes things the copy itself can't know.
  *
  * Ordered block → warn → info so the panel can render straight through, and a caller can gate a
- * launch button on `hasBlockers` without re-sorting.
+ * launch button on `severity === "block"` without re-sorting.
  */
 export function checkAdAngle(
   angle: AdAngleLike,
@@ -187,10 +187,6 @@ export function measureAdAngle(angle: AdAngleLike): {
     headlineOver: headline > META_HEADLINE_RECOMMENDED,
     primaryOver: primaryText > META_PRIMARY_TEXT_RECOMMENDED,
   };
-}
-
-export function hasBlockers(findings: Finding[]): boolean {
-  return findings.some((f) => f.severity === "block");
 }
 
 /**

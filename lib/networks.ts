@@ -99,8 +99,3 @@ export function networkInfo(id: string): NetworkInfo | null {
 export function networkLabel(id: string): string {
   return networkInfo(id)?.label ?? id;
 }
-
-/** Networks whose link must be pasted rather than derived — the UI says so at the point of entry. */
-export function needsPastedLink(id: string): boolean {
-  return networkInfo(id)?.constructsLink === false;
-}

@@ -366,8 +366,6 @@ export type ButtonAction =
   /** Submit the form this button sits inside. */
   | { kind: "submit" };
 
-export const BUTTON_ACTION_KINDS = ["link", "scroll", "popup", "submit"] as const;
-
 // What happens once a form has saved. Same closed-union discipline as ButtonAction, for the same
 // reason: only `url` yields a navigable destination and it goes through isValidRedirectUrl, while
 // the rest are data attributes a code-owned script reads. `offer` is resolved at RENDER time from
@@ -407,9 +405,6 @@ export type BranchTarget =
   | { kind: "url"; href: string }
   | { kind: "step"; stepId: string }
   | { kind: "message" };
-
-export const FORM_SUBMIT_ACTION_KINDS = ["offer", "url", "popup", "message", "branch"] as const;
-export const BRANCH_TARGET_KINDS = ["offer", "url", "step", "message"] as const;
 
 export type ButtonBlock = Base & {
   type: "button";
@@ -492,7 +487,6 @@ export type CarouselBlock = Base & {
 // regulators actually act on, and content rule 2 already forbids inventing urgency. It does not
 // loop, and when it hits zero it says so.
 export type CountdownMode = "date" | "evergreen";
-export const COUNTDOWN_MODES = ["date", "evergreen"] as const;
 
 export type CountdownBlock = Base & {
   type: "countdown";

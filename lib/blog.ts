@@ -945,11 +945,6 @@ export type BlogIndexPost = {
   category_slug?: string | null;
 };
 
-// Fallback page size only — the real one is postsPerPage(settings), derived from the tenant's
-// chosen columns x rows. Kept for callers that have no settings row to read (feeds use their
-// own MAX_FEED_POSTS cap instead).
-export const POSTS_PER_PAGE = 12;
-
 export type BlogIndexCategory = { name: string; slug: string | null; description?: string | null };
 
 // The blog index — published posts, newest first, paginated and optionally filtered to one

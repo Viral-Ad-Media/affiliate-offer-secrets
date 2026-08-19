@@ -110,9 +110,3 @@ export function sourceToDisplayUrl(source: VideoSource | null): string {
       return source.url;
   }
 }
-
-export const VIDEO_PROVIDER_LABELS: Record<VideoProvider, string> = {
-  youtube: "YouTube",
-  vimeo: "Vimeo",
-  file: "Direct file",
-};
