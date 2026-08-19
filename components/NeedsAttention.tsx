@@ -35,47 +35,31 @@ export default function NeedsAttention({ items }: { items: AttentionItem[] }) {
   const problems = items.filter((i) => i.tone === "warn").length;
 
   return (
-    <Card as="section" className="overflow-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-700 px-4 py-3">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
-          <Clock className="h-4 w-4 text-emerald-400" /> Needs attention
-        </h2>
-        {problems > 0 && (
-          <span className="text-xs text-amber-300">
-            {problems} {problems === 1 ? "problem" : "problems"}
-          </span>
-        )}
-      </header>
-
-      <ul className="divide-y divide-ink-700">
-        {items.map((it) => (
-          <li key={it.key}>
-            <Link
-              href={it.href}
-              className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-ink-800/60"
-            >
-              <span
-                className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold",
-                  it.tone === "warn"
-                    ? "bg-amber-500/15 text-amber-300"
-                    : "bg-emerald-500/10 text-emerald-300"
-                )}
-              >
-                {it.tone === "warn" ? <AlertTriangle className="h-4 w-4" /> : it.count}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-zinc-100">
-                  {it.tone === "warn" ? `${it.count} ` : ""}
-                  {it.label}
-                </p>
-                <p className="truncate text-xs text-zinc-500">{it.detail}</p>
-              </div>
-              <ArrowRight className="h-4 w-4 shrink-0 text-zinc-600" aria-hidden />
-            </Link>
-          </li>
-        ))}
-      </ul>
+    <Card as="section" className="flex flex-wrap items-center gap-2 p-3">
+      {/* A chip strip, not a row list — explicit request: the row version cost ~64px per item and
+          regularly pushed the stats below the fold. Each chip is still a real link; the longer
+          detail line lives in the title tooltip instead of a second row of text. */}
+      <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+        <Clock className="h-3.5 w-3.5 text-emerald-400" /> Needs attention
+      </span>
+      {items.map((it) => (
+        <Link
+          key={it.key}
+          href={it.href}
+          title={it.detail}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
+            it.tone === "warn"
+              ? "border-amber-500/30 bg-amber-500/10 text-amber-300 hover:border-amber-400"
+              : "border-ink-600 text-zinc-300 hover:border-emerald-500/50 hover:text-emerald-300"
+          )}
+        >
+          {it.tone === "warn" && <AlertTriangle className="h-3 w-3" />}
+          <span className="font-semibold tabular-nums">{it.count}</span>
+          {it.label}
+          <ArrowRight className="h-3 w-3 opacity-50" aria-hidden />
+        </Link>
+      ))}
     </Card>
   );
 }

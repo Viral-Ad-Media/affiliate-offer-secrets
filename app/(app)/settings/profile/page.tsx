@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Palette } from "lucide-react";
 import ProfileSettings from "@/components/ProfileSettings";
-import ThemeToggle from "@/components/ThemeToggle";
 import { Card } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
@@ -36,17 +35,6 @@ export default async function ProfilePage() {
         memberSince={(profile?.created_at as string) ?? user.created_at}
       />
 
-      <Card as="section" className="space-y-3 p-5">
-        <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
-          <Palette className="h-4 w-4 text-emerald-400" /> Appearance
-        </div>
-        <p className="text-xs text-zinc-500">
-          The same control as the one at the bottom of the sidebar, not a second setting.
-        </p>
-        <div className="max-w-xs">
-          <ThemeToggle />
-        </div>
-      </Card>
     </main>
   );
 }

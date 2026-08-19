@@ -40,12 +40,12 @@ export const TOUR_STEPS: TourStep[] = [
   {
     target: "nav-products",
     title: "The offers you're tracking",
-    body: "Everything you've promoted lives here. Open one to see its generated kit: ad angles, creatives, and the pages that go with them.",
+    body: "Everything you've promoted lives here. Open one to see its kit — ad angles, creatives, emails, SMS — and paste the product's affiliate link, which becomes the funnel's offer destination.",
   },
   {
     target: "nav-funnels",
     title: "Where leads actually come from",
-    body: "Each kit builds an opt-in page. Publish it and it starts collecting email addresses — you can edit the copy, add upsell steps, and split-test two versions against the same URL.",
+    body: "Each kit builds an opt-in page. Publish it and the map shows live views, clicks and opt-in rates per page — with click heatmaps, drag-to-reorder steps, and split tests that can each route to a different flow.",
   },
   {
     target: "nav-ads",

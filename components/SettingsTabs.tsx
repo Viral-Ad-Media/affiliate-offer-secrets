@@ -10,6 +10,7 @@ import { usePathname } from "next/navigation";
 // plain link out; it simply doesn't render this bar when you arrive.
 const TABS = [
   { href: "/settings/profile", label: "Profile" },
+  { href: "/settings/preferences", label: "Preferences" },
   { href: "/settings/security", label: "Security" },
   { href: "/settings/team", label: "Team" },
   { href: "/settings/integrations", label: "Integrations" },

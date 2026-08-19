@@ -173,6 +173,7 @@ const NAV: NavItem[] = [
     drill: true,
     children: [
       { href: "/settings/profile", label: "Profile", icon: User, match: (p: string) => p === "/settings/profile" },
+      { href: "/settings/preferences", label: "Preferences", icon: Settings, match: (p: string) => p === "/settings/preferences" },
       { href: "/settings/security", label: "Security", icon: ShieldCheck, match: (p: string) => p === "/settings/security" },
       { href: "/settings/team", label: "Team", icon: Users, match: (p: string) => p === "/settings/team" },
       { href: "/settings/integrations", label: "Integrations", icon: Link2, match: (p: string) => p === "/settings/integrations" },
