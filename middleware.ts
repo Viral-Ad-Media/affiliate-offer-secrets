@@ -99,6 +99,9 @@ const PUBLIC_PREFIX_PATHS = [
   // served on custom domains (the /api/public/ prefix is also exempt from the host rewrite, which
   // is what lets the same relative action work on both hosts — the lesson the leads route taught).
   "/api/public/comments",
+  // Funnel-page click beacon (funnel_page_stats). Anonymous by definition — sendBeacon fires as
+  // the visitor navigates away — and self-limiting (bounded counter writes, always 204).
+  "/api/public/funnel-event",
   "/p/", // public bridge (lead-capture landing) pages — real ad destinations, no auth
   "/api/public/campaign-image/", // public campaign product images — needed for Instagram posting
   "/api/public/leads", // bridge-page lead capture — anonymous visitors, no auth

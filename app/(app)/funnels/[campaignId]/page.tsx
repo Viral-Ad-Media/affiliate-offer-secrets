@@ -36,6 +36,8 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
   const [productTitle, setProductTitle] = useState("");
   const [steps, setSteps] = useState<FunnelStep[]>([]);
   const [crossSellOptions, setCrossSellOptions] = useState<{ id: string; title: string }[]>([]);
+  const [pageStats, setPageStats] = useState<Record<string, { views: number; clicks: number }>>({});
+  const [leads, setLeads] = useState(0);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [view, setView] = useState<View>({ kind: "map" });
@@ -95,7 +97,7 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
     // A hand-built funnel has no product to borrow a title from, so it carries its own name.
     setProductTitle((c as any).products?.product_title ?? (c as any).name ?? "Untitled");
 
-    const [{ data: stepRows }, { data: products }] = await Promise.all([
+    const [{ data: stepRows }, { data: products }, { data: statRows }, { count: leadCount }] = await Promise.all([
       supabase
         .from("funnel_steps")
         .select("*")
@@ -111,10 +113,26 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
         .neq("id", (c as any).product_id)
         .order("updated_at", { ascending: false })
         .limit(200),
+      // Per-page traffic counters for the map (0110). Bounded by construction: one row per page.
+      supabase
+        .from("funnel_page_stats")
+        .select("page_key, views, clicks")
+        .eq("campaign_id", params.campaignId),
+      // Opt-ins are the contacts rows themselves, never a second tally that could drift from them.
+      supabase
+        .from("contacts")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", params.campaignId),
     ]);
 
     setSteps((stepRows ?? []) as FunnelStep[]);
     setCrossSellOptions((products ?? []).map((p: any) => ({ id: p.id, title: p.product_title })));
+    setPageStats(
+      Object.fromEntries(
+        (statRows ?? []).map((r: any) => [r.page_key as string, { views: Number(r.views), clicks: Number(r.clicks) }])
+      )
+    );
+    setLeads(leadCount ?? 0);
     setLoading(false);
   }, [params.campaignId]);
 
@@ -429,6 +447,8 @@ export default function FunnelPage({ params }: { params: { campaignId: string } 
             campaignId={campaign.id}
             bridgeHtml={campaign.bridge_html}
             steps={steps}
+            pageStats={pageStats}
+            leads={leads}
             onSelectOptin={() => setView({ kind: "optin" })}
             onSelectVariant={(variantId) => setView({ kind: "variant", variantId })}
             onSelectStep={(stepId) => setView({ kind: "step", stepId })}

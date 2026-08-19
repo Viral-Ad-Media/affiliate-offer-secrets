@@ -57,6 +57,8 @@ export default function FunnelMap({
   campaignId,
   bridgeHtml,
   steps,
+  pageStats = {},
+  leads = 0,
   onSelectOptin,
   onSelectVariant,
   onSelectStep,
@@ -65,6 +67,10 @@ export default function FunnelMap({
   campaignId: string;
   bridgeHtml: string | null;
   steps: FunnelStep[];
+  /** Per-page counters from funnel_page_stats, keyed 'optin' or the step's id (0110). */
+  pageStats?: Record<string, { views: number; clicks: number }>;
+  /** Captured leads — the contacts count, which is the exact record, never a second tally. */
+  leads?: number;
   onSelectOptin: () => void;
   onSelectVariant: (variantId: string) => void;
   onSelectStep: (stepId: string) => void;
@@ -172,6 +178,7 @@ export default function FunnelMap({
           <SplitTestBranch
             campaignId={campaignId}
             bridgeHtml={bridgeHtml}
+            entryStats={<StatLine views={pageStats["optin"]?.views ?? 0} clicks={pageStats["optin"]?.clicks ?? 0} leads={leads} />}
             onEditControl={onSelectOptin}
             onEditVariant={onSelectVariant}
           />
@@ -194,6 +201,7 @@ export default function FunnelMap({
                   title={STEP_LABELS[step.step_type]}
                   subtitle={step.step_type === "upsell" ? "Accept / decline cross-sell" : "Shown after the previous page"}
                   html={step.html}
+                  stats={<StatLine views={pageStats[step.id]?.views ?? 0} clicks={pageStats[step.id]?.clicks ?? 0} />}
                   onOpen={() => onSelectStep(step.id)}
                   actions={
                     <>
@@ -230,6 +238,32 @@ export default function FunnelMap({
 }
 
 /**
+ * One page's traffic, in the card footer. Views are visitors (deduped per browser by the fs_
+ * cookie, same discipline as the split test's counter), clicks are outbound link clicks from the
+ * page's beacon, and opt-ins — entry page only — are the real contacts count with the rate that
+ * follows. Rendered even at zero so the map says what is being measured, rather than numbers
+ * appearing unannounced with the first visitor.
+ */
+function StatLine({ views, clicks, leads }: { views: number; clicks: number; leads?: number }) {
+  const rate = leads !== undefined && views > 0 ? ` (${((leads / views) * 100).toFixed(1)}%)` : "";
+  return (
+    <span className="text-[11px] tabular-nums text-zinc-500">
+      {views.toLocaleString()} views
+      {leads !== undefined && (
+        <>
+          {" · "}
+          <span className="text-emerald-400">
+            {leads.toLocaleString()} opt-ins{rate}
+          </span>
+        </>
+      )}
+      {" · "}
+      {clicks.toLocaleString()} clicks
+    </span>
+  );
+}
+
+/**
  * Sortable wrapper for one step node. Module scope, never defined inside FunnelMap's body — an
  * inline component gets a fresh identity every render, which would unmount the card (and its
  * hover state) on each reorder.
@@ -252,7 +286,7 @@ function SortableStepNode({ id, children }: { id: string; children: React.ReactN
         {...listeners}
         aria-label="Drag to reorder this step"
         title="Drag to reorder"
-        className="absolute -left-8 top-1/2 z-10 -translate-y-1/2 cursor-grab rounded-lg border border-ink-600 bg-ink-900 p-1.5 text-zinc-500 opacity-0 transition-opacity hover:text-emerald-300 focus-visible:opacity-100 group-hover/drag:opacity-100 active:cursor-grabbing"
+        className="absolute -left-8 top-1/2 z-10 -translate-y-1/2 cursor-grab rounded-lg border border-ink-600 bg-ink-900 p-1.5 text-zinc-500 opacity-60 transition-opacity hover:text-emerald-300 focus-visible:opacity-100 group-hover/drag:opacity-100 active:cursor-grabbing"
       >
         <GripVertical className="h-3.5 w-3.5" />
       </button>

@@ -875,8 +875,26 @@ ${t.bodyStart}
     });
     ${body.includes('data-after="branch"') ? BRANCH_RESOLVE_JS : ""}
   </script>
+  ${statsBeaconScript(campaignId, "optin")}
 </body>
 </html>`;
+}
+
+/**
+ * Click counter for the funnel map (0110_funnel_page_stats.sql): a delegated listener that fires
+ * a sendBeacon at /api/public/funnel-event when the visitor follows any real link. A BEACON, not
+ * a redirect wrapper, deliberately — wrapping hrefs would put this app back in the business of
+ * constructing the links visitors follow, which content rule 4 exists to keep it out of; the
+ * beacon never touches the destination, never delays navigation, and degrades to nothing when
+ * blocked. Both interpolated values are server-controlled ([a-z0-9-] uuids or 'optin') and still
+ * JSON-encoded, so nothing tenant-typed can reach this script.
+ */
+function statsBeaconScript(campaignId: string, pageKey: string): string {
+  if (!campaignId) return "";
+  return `<script>(function(){var c=${JSON.stringify(campaignId)},k=${JSON.stringify(pageKey)};
+document.addEventListener('click',function(e){var t=e.target;var a=t&&t.closest?t.closest('a[href]'):null;if(!a)return;
+var h=a.getAttribute('href')||'';if(!h||h.charAt(0)==='#')return;
+try{navigator.sendBeacon('/api/public/funnel-event',JSON.stringify({campaign_id:c,page_key:k}))}catch(_){}},true);})();</script>`;
 }
 
 export type SeoMeta = { seo_title?: string | null; seo_description?: string | null };
@@ -973,7 +991,13 @@ export function renderFunnelStepHtml(
   tracking?: TrackingSettings | null,
   seo?: SeoMeta | null,
   /** See renderBridgeHtml — a step page can carry a branching form too. */
-  steps?: { id: string; url: string }[]
+  steps?: { id: string; url: string }[],
+  /**
+   * Identifies this page to the funnel-map stats beacon: the campaign and this step's own row id
+   * (never its index — reorders swap indexes between rows). Optional because the editors' local
+   * preview renders without one; absent simply means the page ships no beacon.
+   */
+  stats?: { campaignId: string; pageKey: string } | null
 ): string {
   const tree = normalizePageCopy(copy, imageDataUrl, { stepType, siteName: product.product_title });
   const ctx: RenderCtx = {
@@ -1010,6 +1034,7 @@ ${t.bodyStart}
       ${body}
     </div>
   </div>
+  ${stats ? statsBeaconScript(stats.campaignId, stats.pageKey) : ""}
 </body>
 </html>`;
 }

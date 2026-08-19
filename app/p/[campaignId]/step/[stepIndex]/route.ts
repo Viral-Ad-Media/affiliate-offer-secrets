@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publicNotFound } from "@/lib/notFoundPage";
 import { publicWorkspaceScope } from "@/lib/publicPage";
+import { recordFunnelPageView } from "@/lib/funnelPageStats";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ export async function GET(
 
   const { data: step } = await admin
     .from("funnel_steps")
-    .select("html")
+    .select("id, html")
     .eq("campaign_id", params.campaignId)
     .eq("step_index", stepIndex)
     .maybeSingle();
@@ -52,12 +53,18 @@ export async function GET(
     return publicNotFound(req.headers.get("host"));
   }
 
-  return new Response(step.html, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Referrer-Policy": "strict-origin-when-cross-origin",
-      "X-Robots-Tag": "noindex",
-    },
+  // Funnel-map views counter (0110), keyed by the step's ID — never its index, which
+  // move_funnel_step swaps between rows, so an index-keyed stat would start describing a
+  // different page after any reorder. Once per visitor per page, same dedupe cookie as the
+  // opt-in page's counter in lib/publicPage.ts.
+  const statsCookie = await recordFunnelPageView(admin, req, params.campaignId, step.id as string);
+
+  const headers = new Headers({
+    "Content-Type": "text/html; charset=utf-8",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Robots-Tag": "noindex",
   });
+  if (statsCookie) headers.append("Set-Cookie", statsCookie);
+
+  return new Response(step.html, { status: 200, headers });
 }

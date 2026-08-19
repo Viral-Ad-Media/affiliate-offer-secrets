@@ -195,7 +195,8 @@ export async function rerenderFunnelSequence(
         declineHref,
         tracking,
         step,
-        stepLinks
+        stepLinks,
+        { campaignId, pageKey: step.id }
       );
       await admin.from("funnel_steps").update({ html }).eq("id", step.id);
     } else {
@@ -216,7 +217,8 @@ export async function rerenderFunnelSequence(
         null,
         tracking,
         step,
-        stepLinks
+        stepLinks,
+        { campaignId, pageKey: step.id }
       );
       await admin.from("funnel_steps").update({ html }).eq("id", step.id);
     }

@@ -27,11 +27,19 @@ import VariantConfidence, { MultipleVariantsNote } from "@/components/VariantCon
 export default function SplitTestBranch({
   campaignId,
   bridgeHtml,
+  entryStats,
   onEditControl,
   onEditVariant,
 }: {
   campaignId: string;
   bridgeHtml: string | null;
+  /**
+   * The entry page's traffic line (views/opt-ins/clicks from funnel_page_stats + contacts),
+   * rendered on the single opt-in node. Shown only while NO test runs — once variants exist,
+   * each card carries its own per-variant visitors/leads, and stacking a campaign-total line
+   * above them would read as a third set of numbers to reconcile.
+   */
+  entryStats?: React.ReactNode;
   onEditControl: () => void;
   onEditVariant: (variantId: string) => void;
 }) {
@@ -65,6 +73,7 @@ export default function SplitTestBranch({
           title="Opt-in page"
           subtitle="Where the funnel captures a lead"
           html={bridgeHtml}
+          stats={entryStats}
           onOpen={onEditControl}
           actions={
             <>

@@ -4,6 +4,7 @@ import { publicNotFound } from "@/lib/notFoundPage";
 import { classifyHost } from "@/lib/host";
 import { IMAGE_DATA_URL_RE, isOwnCloudinaryUrl } from "@/lib/images/validate";
 import { pickWeightedVariant, readStickyVariantId, buildStickyVariantCookie } from "@/lib/bridgeVariants";
+import { recordFunnelPageView } from "@/lib/funnelPageStats";
 
 // Which workspace's content a PUBLIC request's host is allowed to serve. Campaign UUIDs are
 // unguessable, but they are also host-independent — without this check,
@@ -159,17 +160,23 @@ export async function servePublicCampaignPage(
   // that image to a URL would shrink the page ~20x and let the image cache on its own, which is
   // the actual fix. See content rule 9 before doing it — the "never hotlinked" rule is about
   // vendor URLs, not about serving our own bytes.
-  return new Response(html, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      // The page's hoplink CTA sends a Referer to ClickBank/the vendor on click — don't leak
-      // the full internal URL path.
-      "Referrer-Policy": "strict-origin-when-cross-origin",
-      "X-Robots-Tag": "noindex",
-      ...(setCookie ? { "Set-Cookie": setCookie } : {}),
-    },
+  // Funnel-map views counter (0110) — same once-per-visitor discipline as the variant counter
+  // above, deduped by its own fs_ cookie so it counts whether or not a split test is running.
+  const statsCookie = await recordFunnelPageView(admin, req, campaignId, "optin");
+
+  // A Headers object, not a literal: this response can now carry TWO Set-Cookie headers (the
+  // sticky variant assignment and the views dedupe), and an object key can only hold one.
+  const headers = new Headers({
+    "Content-Type": "text/html; charset=utf-8",
+    // The page's hoplink CTA sends a Referer to ClickBank/the vendor on click — don't leak
+    // the full internal URL path.
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Robots-Tag": "noindex",
   });
+  if (setCookie) headers.append("Set-Cookie", setCookie);
+  if (statsCookie) headers.append("Set-Cookie", statsCookie);
+
+  return new Response(html, { status: 200, headers });
 }
 
 // Serves a campaign's embedded product image as a real, standalone, publicly-fetchable URL —
