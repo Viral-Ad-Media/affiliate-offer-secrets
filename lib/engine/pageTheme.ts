@@ -77,6 +77,21 @@ const GOOGLE_FONT_CSS2: Partial<Record<ThemeFont, string>> = {
  * an unknown stored value simply isn't a key in GOOGLE_FONT_CSS2 and loads nothing.
  */
 export function themeFontLinks(theme: PageTheme | null | undefined): string {
+  const href = themeFontStylesheetHref(theme);
+  if (!href) return "";
+  return [
+    '<link rel="preconnect" href="https://fonts.googleapis.com">',
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+    `<link rel="stylesheet" href="${href}">`,
+  ].join("\n");
+}
+
+/**
+ * Just the stylesheet URL, for callers that attach it themselves — the editor canvas loads it
+ * with a client-side <link> so the fonts you pick render while you edit, not only after publish.
+ * Null when the theme uses only system stacks.
+ */
+export function themeFontStylesheetHref(theme: PageTheme | null | undefined): string | null {
   const ty = theme?.typography;
   const families = Array.from(
     new Set(
@@ -85,13 +100,9 @@ export function themeFontLinks(theme: PageTheme | null | undefined): string {
         .filter((f): f is string => !!f)
     )
   );
-  if (families.length === 0) return "";
+  if (families.length === 0) return null;
   const query = families.map((f) => `family=${f}`).join("&");
-  return [
-    '<link rel="preconnect" href="https://fonts.googleapis.com">',
-    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
-    `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?${query}&display=swap">`,
-  ].join("\n");
+  return `https://fonts.googleapis.com/css2?${query}&display=swap`;
 }
 
 export type ButtonShape = "rounded" | "pill" | "square";

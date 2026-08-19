@@ -85,6 +85,7 @@ import {
   type ButtonAction,
   headingLevel,
 } from "@/lib/engine/renderPages";
+import { themeToCssVars, themeFontStylesheetHref, type PageTheme } from "@/lib/engine/pageTheme";
 import { parseVideoUrl, sourceToDisplayUrl, embedUrl } from "@/lib/engine/videoEmbed";
 import BlockStylePanel from "@/components/BlockStylePanel";
 import BlockSettingsPanel, { hasContentSettings } from "@/components/BlockSettingsPanel";
@@ -1166,6 +1167,32 @@ export default function WysiwygCanvas({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+
+  // The page theme, rendered LIVE on the canvas. themeToCssVars is the exact function the
+  // published shell uses; parsing its output into custom properties on the sheet (instead of
+  // restating values here) is what keeps the two from drifting. Only typography and the two
+  // reading-surface colors are CONSUMED below — buttons/cards keep the canvas's own chrome.
+  const pageTheme = ((tree as { theme?: unknown }).theme ?? null) as PageTheme | null;
+  const themeVars: Record<string, string> = {};
+  for (const pair of themeToCssVars(pageTheme).split(";")) {
+    const i = pair.indexOf(":");
+    if (i > 0) themeVars[pair.slice(0, i).trim()] = pair.slice(i + 1).trim();
+  }
+
+  // Load the theme's web fonts into the EDITOR document, so picking Playfair shows Playfair while
+  // you edit instead of only after publish. Appended once per stylesheet URL and never removed —
+  // a font loaded for a previous choice is harmless, and removing it would flash the fallback on
+  // every toggle through the picker.
+  const themeFontHref = themeFontStylesheetHref(pageTheme);
+  useEffect(() => {
+    if (!themeFontHref) return;
+    if (document.querySelector(`link[data-aos-theme-fonts="${themeFontHref}"]`)) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = themeFontHref;
+    link.setAttribute("data-aos-theme-fonts", themeFontHref);
+    document.head.appendChild(link);
+  }, [themeFontHref]);
   // Phase O.4: which block the style panel is showing. Not persisted, not sent to the server —
   // purely a client-side "what am I editing right now" pointer, resolved back to the live block
   // object via findBlockLocation on every render (never stored stale) so it survives edits to
@@ -1413,6 +1440,8 @@ export default function WysiwygCanvas({
         // node, which is fine: the level changes via the settings panel, never mid-typing.
         const lvl = headingLevel(el.content.level, 1);
         const SIZE = ["text-[40px]", "text-[32px]", "text-[26px]", "text-[22px]", "text-[18px]", "text-[16px]"][lvl - 1];
+        // Theme typography first, the block's own style last — same precedence as the published
+        // page, where an explicit per-block style beats the stylesheet's theme variables.
         return (
           <EditableText
             as={`h${lvl}` as keyof JSX.IntrinsicElements}
@@ -1420,7 +1449,16 @@ export default function WysiwygCanvas({
             onCommit={(v) => commit(el.id, { text: v })}
             maxLength={200}
             className={`mb-4 block ${SIZE} font-bold leading-tight`}
-            style={blockInlineStyle(el)}
+            style={{
+              fontFamily: "var(--t-heading-font, inherit)",
+              fontWeight: "var(--t-heading-weight, 700)",
+              ...(lvl === 1
+                ? { fontSize: "var(--t-h1-size, 40px)" }
+                : lvl === 2
+                  ? { fontSize: "var(--t-h2-size, 32px)" }
+                  : {}),
+              ...blockInlineStyle(el),
+            }}
           />
         );
       }
@@ -1434,7 +1472,16 @@ export default function WysiwygCanvas({
             onCommit={(v) => commit(el.id, { text: v })}
             maxLength={200}
             className={`mb-2 mt-8 block ${SIZE} font-semibold`}
-            style={blockInlineStyle(el)}
+            style={{
+              fontFamily: "var(--t-heading-font, inherit)",
+              fontWeight: "var(--t-heading-weight, 600)",
+              ...(lvl === 1
+                ? { fontSize: "var(--t-h1-size, 40px)" }
+                : lvl === 2
+                  ? { fontSize: "var(--t-h2-size, 22px)" }
+                  : {}),
+              ...blockInlineStyle(el),
+            }}
           />
         );
       }
@@ -2741,13 +2788,19 @@ export default function WysiwygCanvas({
           </div>
         </div>
         <div
-          // bg-white/#1a1a1a are hardcoded ON PURPOSE and never themed — this is a preview of the
-          // real published page, which is always light. The shadow keeps it reading as a distinct
-          // "sheet" in light mode, where the app background is itself near-white.
+          // bg-white/#1a1a1a stay as the FALLBACKS and never follow the app's dark theme — this is
+          // a preview of the real published page, which is always light. What the sheet now does
+          // follow is the PAGE's own theme: the same CSS variables the published shell emits,
+          // consumed for typography and the two reading-surface colors, so the fonts and sizes you
+          // pick render while you edit instead of only after publish.
           className="mx-auto rounded-xl border border-ink-700 bg-white px-6 py-10 text-[#1a1a1a] shadow-xl shadow-black/25 transition-[max-width] duration-200"
           style={{
-            fontFamily: PAGE_FONT,
-            lineHeight: 1.6,
+            ...(themeVars as React.CSSProperties),
+            fontFamily: `var(--t-body-font, ${PAGE_FONT})`,
+            lineHeight: "var(--t-line-height, 1.6)",
+            fontSize: "var(--t-base-size, 16px)",
+            color: "var(--t-text, #1a1a1a)",
+            backgroundColor: "var(--t-bg, #ffffff)",
             // Desktop reflects the page's OWN content width (capped by the column it sits in), so
             // the ⚙ width control has a visible effect here rather than only after publishing.
             // Tablet/mobile stay pinned to real device widths — that's what the toggle is for.
