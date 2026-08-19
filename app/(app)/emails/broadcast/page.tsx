@@ -22,7 +22,7 @@ export default async function BroadcastPage() {
     supabase.from("campaigns").select("id, products(product_title)"),
     supabase
       .from("broadcast_sequences")
-      .select("id, name, status, audience_type, created_at")
+      .select("id, name, status, audience_type, campaign_id, created_at")
       .eq("workspace_id", ws)
       .eq("kind", "broadcast")
       .eq("channel", "email")
@@ -51,6 +51,24 @@ export default async function BroadcastPage() {
     if (r.sequence_id) sentCount.set(r.sequence_id, (sentCount.get(r.sequence_id) ?? 0) + 1);
   }
 
+  // The single step behind each past broadcast — what Preview shows and Send-again refills the
+  // composer with. A broadcast is one step by construction (send-now creates it), so this is
+  // bounded by the 25-row history above.
+  const sequenceIds = (sent ?? []).map((s) => s.id as string);
+  const { data: stepRows } = sequenceIds.length
+    ? await supabase
+        .from("broadcast_steps")
+        .select("sequence_id, subject, body_md")
+        .in("sequence_id", sequenceIds)
+        .order("step_index", { ascending: true })
+    : { data: [] as { sequence_id: string; subject: string; body_md: string }[] };
+  const stepBySequence = new Map<string, { subject: string; body_md: string }>();
+  for (const r of stepRows ?? []) {
+    if (!stepBySequence.has(r.sequence_id as string)) {
+      stepBySequence.set(r.sequence_id as string, { subject: r.subject as string, body_md: r.body_md as string });
+    }
+  }
+
   return (
     <BroadcastComposer
       campaigns={campaignOptions}
@@ -59,8 +77,11 @@ export default async function BroadcastPage() {
         name: s.name as string,
         status: s.status as string,
         audience_type: s.audience_type as string,
+        campaign_id: (s.campaign_id as string) ?? null,
         created_at: s.created_at as string,
         sent_count: sentCount.get(s.id as string) ?? 0,
+        subject: stepBySequence.get(s.id as string)?.subject ?? null,
+        body_md: stepBySequence.get(s.id as string)?.body_md ?? null,
       }))}
       activeProvider={(provider?.active_mail_provider as string) ?? null}
       contacts={(contactRows ?? []).map((c) => ({

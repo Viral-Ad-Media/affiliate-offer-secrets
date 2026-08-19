@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { marked } from "marked";
 import ManualSendPanel, { type ManualContact } from "@/components/ManualSendPanel";
-import { Send, Loader2, CheckCircle2, AlertTriangle, Users, Plus, Sparkles } from "lucide-react";
+import { Send, Loader2, CheckCircle2, AlertTriangle, Users, Plus, Sparkles, Eye, RotateCcw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
@@ -14,8 +15,12 @@ type HistoryRow = {
   name: string;
   status: string;
   audience_type: string;
+  campaign_id: string | null;
   created_at: string;
   sent_count: number;
+  /** The broadcast's single step, threaded by the page — what Preview shows and Send-again reuses. */
+  subject: string | null;
+  body_md: string | null;
 };
 
 // Emails → Broadcast. Compose one email, pick an audience, send now. Everything below the "Send"
@@ -44,6 +49,28 @@ export default function BroadcastComposer({
   const [error, setError] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState<number | null>(null);
   const [composing, setComposing] = useState(false);
+  // Past broadcast being previewed. Rendered from its stored markdown with the same parser the
+  // dashboard uses everywhere else; the code-owned unsubscribe footer and sender identity are
+  // appended at send time, so the dialog says so instead of mocking them up.
+  const [previewing, setPreviewing] = useState<HistoryRow | null>(null);
+
+  // "Send again" deliberately REFILLS the composer instead of re-sending in one click: the send
+  // is a whole audience's inbox, and the one confirmation step this flow has is the composer's
+  // own Send button. Same subject/body/audience, reviewed before it goes.
+  function reuse(h: HistoryRow) {
+    setName(h.name ?? "");
+    setSubject(h.subject ?? "");
+    setBody(h.body_md ?? "");
+    if (h.audience_type === "campaign" && h.campaign_id) {
+      setAudience("campaign");
+      setCampaignId(h.campaign_id);
+    } else {
+      setAudience("all");
+      setCampaignId("");
+    }
+    setPreviewing(null);
+    setComposing(true);
+  }
   const [angle, setAngle] = useState("");
   const [drafting, setDrafting] = useState(false);
 
@@ -307,11 +334,60 @@ export default function BroadcastComposer({
                 >
                   {h.status === "active" ? "Sending" : h.status}
                 </span>
+                <div className="flex shrink-0 gap-1.5">
+                  <Button
+                    variant="outline"
+                    className="px-2 py-1 text-xs"
+                    onClick={() => setPreviewing(h)}
+                    disabled={!h.subject}
+                    title={h.subject ? "See what this broadcast said" : "This broadcast's content is no longer stored"}
+                  >
+                    <Eye className="h-3.5 w-3.5" /> Preview
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="px-2 py-1 text-xs"
+                    onClick={() => reuse(h)}
+                    disabled={!h.subject}
+                    title="Refill the composer with this broadcast — review, then send"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Send again
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </Card>
+
+      <Dialog open={previewing !== null} onOpenChange={(open) => !open && setPreviewing(null)}>
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{previewing?.name ?? "Broadcast"}</DialogTitle>
+          </DialogHeader>
+          {previewing && (
+            <div className="space-y-3 text-sm">
+              <div className="rounded-lg bg-ink-800 px-3 py-2">
+                <span className="text-xs uppercase tracking-wide text-zinc-500">Subject</span>
+                <div className="text-zinc-100">{previewing.subject}</div>
+              </div>
+              <div
+                className="prose-dark rounded-lg border border-ink-700 p-4"
+                dangerouslySetInnerHTML={{ __html: marked.parse(previewing.body_md ?? "") as string }}
+              />
+              <p className="text-xs text-zinc-500">
+                The unsubscribe link and your business details from Emails → Settings are appended
+                automatically to every delivered copy.
+              </p>
+              <div className="flex justify-end">
+                <Button variant="outline" className="text-xs" onClick={() => reuse(previewing)}>
+                  <RotateCcw className="h-3.5 w-3.5" /> Send again
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
