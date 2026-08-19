@@ -32,6 +32,7 @@ import {
   Columns2,
   Rows3,
   PanelBottom,
+  Megaphone,
   ListOrdered,
   PanelTop,
   BarChart3,
@@ -219,6 +220,7 @@ const ELEMENT_PALETTE: { type: PaletteType; label: string; icon: any }[] = [
   { type: "navigation", label: "Nav bar", icon: PanelTop },
   { type: "progress", label: "Progress bar", icon: BarChart3 },
   { type: "icon", label: "Icon", icon: Sparkle },
+  { type: "pre_footer", label: "CTA band", icon: Megaphone },
   { type: "footer", label: "Footer", icon: PanelBottom },
   { type: "table_of_contents", label: "Contents", icon: ListOrdered },
 ];
@@ -2052,6 +2054,55 @@ export default function WysiwygCanvas({
               Stick to the top while scrolling
             </label>
           </nav>
+        );
+      }
+      case "pre_footer": {
+        // Light styling because the canvas is the published-page preview (always light), the same
+        // reason the footer case below uses grays. The button's destination is a plain URL input
+        // here — the common CTA-band case; scroll/popup targeting can move to the settings panel
+        // later without a migration, since the schema already supports every ButtonAction kind.
+        const action = el.content.action ?? { kind: "link" as const, href: "#" };
+        const href = action.kind === "link" ? action.href : "";
+        return (
+          <section
+            className="my-4 rounded-xl border border-gray-200 bg-gray-50 px-6 py-8 text-center"
+            style={blockInlineStyle(el)}
+          >
+            <EditableText
+              as="h2"
+              value={el.content.heading}
+              onCommit={(v) => commit(el.id, { heading: v })}
+              maxLength={200}
+              placeholder="Ready to get started?"
+              className="mb-2 block text-2xl font-bold text-[#1a1a1a]"
+            />
+            <EditableText
+              as="p"
+              value={el.content.subtext}
+              onCommit={(v) => commit(el.id, { subtext: v })}
+              maxLength={500}
+              placeholder="A line of supporting text"
+              className="mb-4 block text-gray-600"
+            />
+            <div className="inline-flex flex-col items-center gap-2">
+              <EditableText
+                as="span"
+                value={el.content.buttonLabel}
+                onCommit={(v) => commit(el.id, { buttonLabel: v })}
+                maxLength={60}
+                placeholder="Button label"
+                className="inline-block rounded-lg bg-emerald-600 px-6 py-2.5 font-semibold text-white"
+              />
+              <input
+                value={href}
+                onChange={(e) => commit(el.id, { action: { kind: "link", href: e.target.value } })}
+                placeholder="https://… where the button goes"
+                className={`w-64 rounded border px-1.5 py-0.5 text-[11px] ${
+                  href && href !== "#" ? "border-gray-200 text-gray-500" : "border-amber-300 text-amber-700"
+                }`}
+              />
+            </div>
+          </section>
         );
       }
       case "footer": {

@@ -352,6 +352,23 @@ function validateElementInner(raw: unknown, count: { n: number }): ElementBlock 
         },
       };
     }
+    case "pre_footer": {
+      // The CTA button reuses softButtonAction — the same resolver the nav links use — so its
+      // destination faces the one isValidRedirectUrl path. A null (unusable) action degrades to a
+      // dead in-page anchor rather than blocking the save, the button block's own habit.
+      const action = softButtonAction(content.action) ?? { kind: "link" as const, href: "#" };
+      return {
+        id,
+        type: "pre_footer",
+        style,
+        content: {
+          heading: clampStr(content.heading, MAX_TEXT_SHORT),
+          subtext: clampStr(content.subtext, MAX_TEXT_MEDIUM),
+          buttonLabel: clampStr(content.buttonLabel, MAX_CTA),
+          action,
+        },
+      };
+    }
     case "divider":
       return { id, type: "divider", style, content: {} };
     case "image_list": {

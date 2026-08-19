@@ -599,7 +599,13 @@ const PUBLIC_CSS = `
   .icon-block { display:flex; align-items:center; gap:10px; margin:0 0 16px; color:var(--t-primary,#16a34a); }
   .icon-block span { color:var(--t-text,#1a1a1a); font-size:15px; }
   /* Page footer block. DUPLICATED in the other stylesheet; change both. */
-  .page-footer { margin-top:32px; padding-top:16px; border-top:1px solid var(--t-field-border,#e5e5e5);
+  /* Pre-footer CTA band. DUPLICATED in the other stylesheet; change both. */
+  .pre-footer { margin: 40px 0 0; padding: 40px 24px; text-align: center; border-radius: 12px;
+    background: var(--t-surface, #f6f6f4); border: 1px solid var(--t-field-border, #e5e5e5); }
+  .pre-footer-inner { max-width: 640px; margin: 0 auto; }
+  .pre-footer h2 { margin: 0 0 8px; }
+  .pre-footer p { margin: 0 0 20px; color: var(--t-muted, #666); }
+    .page-footer { margin-top:32px; padding-top:16px; border-top:1px solid var(--t-field-border,#e5e5e5);
     font-size:13px; color:#666; text-align:center; }
   .page-footer p { margin:0 0 6px; }
   .page-footer-links { display:flex; flex-wrap:wrap; gap:14px; justify-content:center; }

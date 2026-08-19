@@ -542,6 +542,7 @@ export type ElementBlock =
   | CustomHtmlBlock
   | FormBlock
   | FooterBlock
+  | PreFooterBlock
   | ProgressBlock
   | NavigationBlock
   | IconBlock
@@ -602,6 +603,7 @@ export const ELEMENT_BLOCK_TYPES = [
   "custom_html",
   "form",
   "footer",
+  "pre_footer",
   "progress",
   "navigation",
   "icon",
@@ -684,6 +686,20 @@ export type FieldCondition = {
 export type FooterBlock = Base & {
   type: "footer";
   content: { text: string; links: { label: string; href: string }[] };
+};
+
+/**
+ * The final call-to-action band, above the footer — a heading, a line of support text, and one
+ * button, on a tinted strip that separates it from the content above.
+ *
+ * The button carries a full `ButtonAction`, not a bare href, for the same reason the nav and
+ * button blocks do: `scroll` (back to the opt-in form) and `popup` are the common destinations on
+ * a landing page, and `link` still goes through the one isValidRedirectUrl path. There is no
+ * second, looser route from typed text to a navigable URL.
+ */
+export type PreFooterBlock = Base & {
+  type: "pre_footer";
+  content: { heading: string; subtext: string; buttonLabel: string; action?: ButtonAction };
 };
 
 /** A nav bar can hold at most this many links. Past ~6 it wraps and stops being a nav. */
@@ -1084,6 +1100,7 @@ export const STYLE_KEYS_BY_TYPE: Record<Exclude<BlockType, "form_input">, readon
   custom_html: BOX_STYLE_KEYS,
   form: FORM_STYLE_KEYS,
   footer: TEXT_STYLE_KEYS,
+  pre_footer: BOX_STYLE_KEYS,
   progress: TEXT_STYLE_KEYS,
   table_of_contents: TOC_STYLE_KEYS,
   navigation: TEXT_STYLE_KEYS,
@@ -1293,6 +1310,37 @@ function renderElement(block: ElementBlock, ctx: RenderCtx): string {
       return `<footer class="page-footer"${styleAttr(block.style, TEXT_STYLE_KEYS)}>${
         text.trim() ? `<p>${escapeHtml(text)}</p>` : ""
       }${linkHtml ? `<nav class="page-footer-links">${linkHtml}</nav>` : ""}</footer>`;
+    }
+    case "pre_footer": {
+      const { heading, subtext, buttonLabel } = block.content;
+      // Same action switch as the button block — resolved to a link/scroll/popup control, never a
+      // typed URL past isValidRedirectUrl. An empty href defaults to "#" (a dead in-page anchor),
+      // exactly as the button case does for legacy rows.
+      const action: ButtonAction = block.content.action ?? { kind: "link", href: "#" };
+      const label = escapeHtml(buttonLabel);
+      const btn = buttonLabel.trim()
+        ? (() => {
+            switch (action.kind) {
+              case "link":
+                return `<a class="block-btn" href="${escapeHtml(action.href)}">${label}</a>`;
+              case "scroll":
+                return `<button type="button" class="block-btn" data-scroll-to="${escapeHtml(action.targetId)}">${label}</button>`;
+              case "popup":
+                return `<button type="button" class="block-btn" data-open-form="${escapeHtml(action.formId)}">${label}</button>`;
+              case "submit":
+                return `<button type="submit" class="block-btn">${label}</button>`;
+            }
+          })()
+        : "";
+      // Nothing to say and nothing to click renders nothing — an empty tinted band is worse than
+      // no band, the footer/testimonial rule.
+      if (!heading.trim() && !subtext.trim() && !btn) return "";
+      const script = action.kind === "scroll" || action.kind === "popup" ? FORM_ACTION_SCRIPT : "";
+      return (
+        `<section class="pre-footer"${styleAttr(block.style, BOX_STYLE_KEYS)}><div class="pre-footer-inner">${
+          heading.trim() ? `<h2>${escapeHtml(heading)}</h2>` : ""
+        }${subtext.trim() ? `<p>${escapeHtml(subtext)}</p>` : ""}${btn}</div></section>` + script
+      );
     }
     case "faq_item":
       // An accordion via native <details>/<summary> — NO script. That is what lets an FAQ sit on a
@@ -2246,6 +2294,10 @@ function defaultElementContent(type: (typeof ELEMENT_BLOCK_TYPES)[number]): Elem
           { label: "Terms", href: "" },
         ],
       };
+    case "pre_footer":
+      // A ready CTA band with a scroll-to-form button left UNSET (no target yet) — the same call
+      // as the nav seed: a button pointing at an id that isn't on the page would render dead.
+      return { heading: "Ready to get started?", subtext: "Join thousands who already have.", buttonLabel: "Get started", action: { kind: "link", href: "#" } };
     case "heading":
       return { text: "New heading" };
     case "subheading":
