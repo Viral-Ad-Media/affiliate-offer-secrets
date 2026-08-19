@@ -11,6 +11,7 @@ import {
   Trash2,
   Monitor,
   Bookmark,
+  CopyPlus,
   Undo2,
   Redo2,
   Tablet,
@@ -60,6 +61,7 @@ import {
   insertRow,
   insertSection,
   insertSavedBlock,
+  duplicateBlock,
   insertFormInput,
   FORM_FIELD_PRESETS,
   containerKey,
@@ -510,6 +512,7 @@ function RootBlockWrapper({
   isSelected,
   onSelect,
   onDelete,
+  onDuplicate,
   onSaveToLibrary,
   lockedReason,
   hiddenHere,
@@ -520,6 +523,8 @@ function RootBlockWrapper({
   onSelect?: () => void;
   /** Absent for the locked compliance blocks — see lockedReason. */
   onDelete?: () => void;
+  /** Present only for duplicable root blocks (sections). */
+  onDuplicate?: () => void;
   /** Present only for savable root blocks (sections) — adds "save to library" to the hover row. */
   onSaveToLibrary?: () => void;
   /**
@@ -579,6 +584,19 @@ function RootBlockWrapper({
         >
           <GripVertical className="h-3.5 w-3.5" />
         </button>
+        {onDuplicate && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDuplicate();
+            }}
+            title="Duplicate this section"
+            className="flex h-6 w-6 items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-emerald-600"
+          >
+            <CopyPlus className="h-3.5 w-3.5" />
+          </button>
+        )}
         {onSaveToLibrary && (
           <button
             type="button"
@@ -666,6 +684,7 @@ function StaticBlockWrapper({
 function NestedItemWrapper({
   id,
   onDelete,
+  onDuplicate,
   deleteTitle,
   isSelected,
   onSelect,
@@ -674,6 +693,7 @@ function NestedItemWrapper({
 }: {
   id: string;
   onDelete?: () => void;
+  onDuplicate?: () => void;
   deleteTitle?: string;
   isSelected?: boolean;
   onSelect?: () => void;
@@ -722,6 +742,19 @@ function NestedItemWrapper({
             className="flex h-6 w-6 items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-emerald-600"
           >
             <Settings2 className="h-3 w-3" />
+          </button>
+        )}
+        {onDuplicate && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDuplicate();
+            }}
+            title="Duplicate"
+            className="flex h-6 w-6 items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-emerald-600"
+          >
+            <CopyPlus className="h-3 w-3" />
           </button>
         )}
         {onDelete && (
@@ -987,6 +1020,7 @@ function ColumnEditor({
   colIndex,
   renderElement,
   onDeleteElement,
+  onDuplicate,
   onAddElement,
   selectedBlockId,
   onSelectBlock,
@@ -996,6 +1030,7 @@ function ColumnEditor({
   colIndex: number;
   renderElement: RenderElementFn;
   onDeleteElement: (containerId: string, elementId: string) => void;
+  onDuplicate: (id: string) => void;
   onAddElement: (ref: ContainerRef, type: PaletteType) => void;
   selectedBlockId: string | null;
   onSelectBlock: (id: string) => void;
@@ -1015,6 +1050,7 @@ function ColumnEditor({
             id={el.id}
             block={el}
             onDelete={() => onDeleteElement(col.id, el.id)}
+            onDuplicate={() => onDuplicate(el.id)}
             isSelected={selectedBlockId === el.id}
             onSelect={() => onSelectBlock(el.id)}
           >
@@ -1033,6 +1069,7 @@ function RowEditor({
   row,
   renderElement,
   onDeleteElement,
+  onDuplicate,
   onAddElement,
   selectedBlockId,
   onSelectBlock,
@@ -1040,6 +1077,7 @@ function RowEditor({
   row: RowBlock;
   renderElement: RenderElementFn;
   onDeleteElement: (containerId: string, elementId: string) => void;
+  onDuplicate: (id: string) => void;
   onAddElement: (ref: ContainerRef, type: PaletteType) => void;
   selectedBlockId: string | null;
   onSelectBlock: (id: string) => void;
@@ -1054,6 +1092,7 @@ function RowEditor({
           colIndex={colIndex}
           renderElement={renderElement}
           onDeleteElement={onDeleteElement}
+          onDuplicate={onDuplicate}
           onAddElement={onAddElement}
           selectedBlockId={selectedBlockId}
           onSelectBlock={onSelectBlock}
@@ -1069,6 +1108,7 @@ function SectionBody({
   section,
   renderElement,
   onDeleteChild,
+  onDuplicate,
   onAddElement,
   onAddRow,
   selectedBlockId,
@@ -1077,6 +1117,7 @@ function SectionBody({
   section: SectionBlock;
   renderElement: RenderElementFn;
   onDeleteChild: (containerId: string, childId: string) => void;
+  onDuplicate: (id: string) => void;
   onAddElement: (ref: ContainerRef, type: PaletteType) => void;
   onAddRow: (sectionId: string, layout: RowBlock["layout"]) => void;
   selectedBlockId: string | null;
@@ -1094,6 +1135,7 @@ function SectionBody({
               id={child.id}
               block={child}
               onDelete={() => onDeleteChild(section.id, child.id)}
+              onDuplicate={() => onDuplicate(child.id)}
               deleteTitle="Delete row"
               isSelected={selectedBlockId === child.id}
               onSelect={() => onSelectBlock(child.id)}
@@ -1102,6 +1144,7 @@ function SectionBody({
                 row={child}
                 renderElement={renderElement}
                 onDeleteElement={onDeleteChild}
+                onDuplicate={onDuplicate}
                 onAddElement={onAddElement}
                 selectedBlockId={selectedBlockId}
                 onSelectBlock={onSelectBlock}
@@ -1113,6 +1156,7 @@ function SectionBody({
               id={child.id}
               block={child}
               onDelete={() => onDeleteChild(section.id, child.id)}
+              onDuplicate={() => onDuplicate(child.id)}
               isSelected={selectedBlockId === child.id}
               onSelect={() => onSelectBlock(child.id)}
             >
@@ -1527,6 +1571,10 @@ export default function WysiwygCanvas({
     const err = await savedBlocks.save(name, section);
     if (err) window.alert(err);
   }
+  function duplicate(id: string) {
+    change(duplicateBlock(tree, id));
+  }
+
   function insertFromLibrary(block: unknown) {
     const last = [...tree.blocks].reverse().find((b) => b.type === "section");
     const ref: ContainerRef = last ? { kind: "section", sectionId: last.id } : { kind: "root" };
@@ -3027,6 +3075,7 @@ export default function WysiwygCanvas({
                   // the four locked compliance blocks are not, and now say so instead of silently
                   // having no control.
                   onDelete={b.type === "section" ? () => deleteRootBlock(b.id) : undefined}
+                  onDuplicate={b.type === "section" ? () => duplicate(b.id) : undefined}
                   onSaveToLibrary={b.type === "section" ? () => saveSectionToLibrary(b) : undefined}
                   lockedReason={b.type === "section" ? undefined : LOCKED_REASONS[(b as LockedBlock).locked]}
                   hiddenHere={hiddenHereLabel(b, device)}
@@ -3036,6 +3085,7 @@ export default function WysiwygCanvas({
                       section={b}
                       renderElement={renderElement}
                       onDeleteChild={deleteChild}
+                      onDuplicate={duplicate}
                       onAddElement={addElement}
                       onAddRow={addRow}
                       selectedBlockId={selectedBlockId}

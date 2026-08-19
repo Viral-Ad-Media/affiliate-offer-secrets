@@ -2088,6 +2088,32 @@ export function cloneBlockWithFreshIds<T>(block: T): T {
  * Returns the tree unchanged if the block can't legally go where asked — the same silent-no-op
  * discipline as moveBlockToContainer, so a bad drop never corrupts the page.
  */
+/**
+ * Duplicate any block in place — a fresh-id copy inserted right after the original in its own
+ * container (a section after itself at root, a row after itself in its section, an element after
+ * itself in its column). Locked compliance blocks are refused: two disclosures or two CTAs is
+ * exactly what the validator would strip anyway, and there is no legitimate reason to clone them.
+ * Silent no-op if the id isn't found, the moveBlockToContainer discipline.
+ */
+export function duplicateBlock(tree: PageBlockTree, blockId: string): PageBlockTree {
+  const loc = findBlockLocation(tree, blockId);
+  if (!loc) return tree;
+  if (loc.block.type === "disclosure" || loc.block.type === "lead_capture_form" || loc.block.type === "primary_cta" || loc.block.type === "decline_link") {
+    return tree;
+  }
+  const clone = cloneBlockWithFreshIds(loc.block);
+  if (loc.ref.kind === "root") {
+    const blocks = [...tree.blocks];
+    blocks.splice(loc.index + 1, 0, clone as SectionBlock);
+    return { ...tree, blocks };
+  }
+  const items = getContainer(tree, loc.ref);
+  if (!items) return tree;
+  const next = [...items];
+  next.splice(loc.index + 1, 0, clone);
+  return withContainer(tree, loc.ref, next);
+}
+
 export function insertSavedBlock(tree: PageBlockTree, block: SectionBlock | ElementBlock, ref: ContainerRef, index: number): PageBlockTree {
   const fresh = cloneBlockWithFreshIds(block);
   if ((fresh as { type?: string }).type === "section") {
