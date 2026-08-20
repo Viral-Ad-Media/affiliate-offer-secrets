@@ -1151,9 +1151,15 @@ ${blogFooter(settings, base)}
 // its own ]]> escaping); escaped text is the safer choice.
 // ---------------------------------------------------------------------------------------------
 
-// Cap well under the 50k sitemap limit — a blog this size wants a paginated sitemap index, which
-// is deferred. Both feeds share the cap so they can't disagree about what exists.
+// RSS caps its item count here — a feed reader wants recent posts, not the whole archive. The
+// SITEMAP no longer shares this cap: past SITEMAP_PAGE_SIZE it splits into a paginated sitemap
+// index (see renderSitemapIndexXml + buildBlogSitemap) so every post stays crawlable at any scale.
 export const MAX_FEED_POSTS = 1000;
+
+// URLs per child sitemap. The protocol allows 50,000 per file; 1,000 is a conservative chunk that
+// keeps each file small and fast to regenerate. A single page of posts (<= this) is served as a
+// plain <urlset>; more than one page turns sitemap.xml into a <sitemapindex> of sitemap-N.xml.
+export const SITEMAP_PAGE_SIZE = 1000;
 
 function rfc822(date: string | null): string {
   return date ? new Date(date).toUTCString() : new Date(0).toUTCString();
@@ -1202,11 +1208,16 @@ export function renderSitemapXml(
   posts: BlogIndexPost[],
   origin: string,
   base: string,
-  style?: PermalinkStyle | null
+  style?: PermalinkStyle | null,
+  // The blog INDEX url belongs in exactly one place — the first page. On a paginated blog, deeper
+  // sitemap pages (sitemap-2.xml…) are posts only, or the index url would be listed N times.
+  includeIndexUrl = true
 ): string {
   const indexUrl = `${origin}${base || "/"}`;
   const urls = [
-    `  <url><loc>${escapeHtml(indexUrl)}</loc><changefreq>daily</changefreq></url>`,
+    ...(includeIndexUrl
+      ? [`  <url><loc>${escapeHtml(indexUrl)}</loc><changefreq>daily</changefreq></url>`]
+      : []),
     ...posts.map((p) => {
       const url = `${origin}${base}/${postPathSuffix(style, p)}`;
       const lastmod = p.published_at ? new Date(p.published_at).toISOString().slice(0, 10) : null;
@@ -1220,6 +1231,18 @@ export function renderSitemapXml(
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls}
 </urlset>`;
+}
+
+// The parent sitemap when a blog has more posts than one file should hold: a <sitemapindex>
+// pointing at sitemap-1.xml … sitemap-{pageCount}.xml, each served by buildBlogSitemap.
+export function renderSitemapIndexXml(origin: string, base: string, pageCount: number): string {
+  const sitemaps = Array.from({ length: pageCount }, (_, i) =>
+    `  <sitemap><loc>${escapeHtml(`${origin}${base}/sitemap-${i + 1}.xml`)}</loc></sitemap>`
+  ).join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${sitemaps}
+</sitemapindex>`;
 }
 
 export { renderBlockTree };

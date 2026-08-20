@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { queueChargedJob } from "@/lib/credits";
+import { queueChargedJob, creditCostFor } from "@/lib/credits";
+import { checkGenerationBudget, budgetExceededMessage } from "@/lib/generationBudget";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -40,6 +41,12 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       { error: `Daily image generation limit reached (${MAX_CREATIVE_IMAGE_GENERATIONS_PER_DAY}/day)` },
       { status: 429 }
     );
+  }
+
+  // Operator-set daily credit budget (0119) — the real rate ceiling on top of the count backstop.
+  const budget = await checkGenerationBudget(admin, ws, creditCostFor("generate_ad_image"));
+  if (!budget.allowed) {
+    return NextResponse.json({ error: budgetExceededMessage(budget) }, { status: 429 });
   }
 
   // The queue RPC verifies this campaign belongs to the explicit workspace and atomically charges

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { marked } from "marked";
 import type { SocialPost } from "@/lib/shared";
 import CreativeItemCard from "./CreativeItemCard";
@@ -24,7 +25,10 @@ export default function SocialPostsPanel({
   sourceImageUrl: string | null;
   hasEmbeddedImage: boolean;
 }) {
-  const defaultContent = posts?.[0]?.caption ?? legacyMarkdown ?? "";
+  // Which post to publish, driving both its caption AND its own generated creative (the route
+  // reads campaign_creatives for this index; falls back to the campaign hero if none is ready).
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const defaultContent = posts?.[selectedIndex]?.caption ?? posts?.[0]?.caption ?? legacyMarkdown ?? "";
 
   return (
     <div className="space-y-4">
@@ -52,8 +56,42 @@ export default function SocialPostsPanel({
 
       {(posts || legacyMarkdown) && (
         <div className="space-y-3">
-          <PostToFacebook campaignId={campaignId} defaultMessage={defaultContent} imageUrl={sourceImageUrl} />
-          <PostToInstagram campaignId={campaignId} defaultCaption={defaultContent} hasImage={hasEmbeddedImage} />
+          {posts && posts.length > 1 && (
+            <label className="block">
+              <span className="mb-1 block text-xs text-zinc-500">
+                Publish which post — with its own generated image
+              </span>
+              <select
+                value={selectedIndex}
+                onChange={(e) => setSelectedIndex(Number(e.target.value))}
+                className="w-full rounded-lg border border-ink-600 bg-ink-900 px-2.5 py-1.5 text-sm text-zinc-100"
+              >
+                {posts.map((p, i) => (
+                  <option key={i} value={i}>
+                    Post {i + 1}
+                    {p.caption ? ` — ${p.caption.slice(0, 40)}${p.caption.length > 40 ? "…" : ""}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {/* key remounts on selection so the editable caption resets to the chosen post's. */}
+          <PostToFacebook
+            key={`fb-${selectedIndex}`}
+            campaignId={campaignId}
+            defaultMessage={defaultContent}
+            imageUrl={sourceImageUrl}
+            creativeSource={posts ? "social_post" : undefined}
+            creativeIndex={posts ? selectedIndex : undefined}
+          />
+          <PostToInstagram
+            key={`ig-${selectedIndex}`}
+            campaignId={campaignId}
+            defaultCaption={defaultContent}
+            hasImage={hasEmbeddedImage}
+            creativeSource={posts ? "social_post" : undefined}
+            creativeIndex={posts ? selectedIndex : undefined}
+          />
         </div>
       )}
     </div>

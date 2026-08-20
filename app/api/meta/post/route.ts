@@ -3,7 +3,10 @@ import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isTokenError, publishPhotoBytes, publishToFeed } from "@/lib/meta/client";
-import { fetchImageAsDataUrl } from "@/lib/engine/images";
+import { fetchImageAsDataUrl, imageRefToDataUrl } from "@/lib/engine/images";
+
+// Ad creatives run large (full-res AI images); the vendor-photo cap (200KB) is far too small here.
+const MAX_CREATIVE_BYTES = 10_000_000;
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +26,11 @@ export async function POST(req: Request) {
   const imageUrl = body.image_url as string | undefined;
   const campaignId = body.campaign_id as string | undefined;
   const idempotencyKey = body.idempotency_key as string | undefined;
+  // Optional per-item creative selector: post THIS ad angle's / social post's own generated image
+  // instead of the campaign-level vendor photo. Read through the RLS client below, so a forged
+  // campaign_id resolves nothing rather than exposing another tenant's creative.
+  const creativeSource = body.creative_source as string | undefined;
+  const creativeIndex = body.creative_index;
 
   if (!pageId || !message || !idempotencyKey) {
     return NextResponse.json(
@@ -69,12 +77,37 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "could not retrieve page token" }, { status: 500 });
   }
 
+  // A specific post's own generated creative wins over the campaign-level image, resolved through
+  // the RLS-scoped client so it can only ever be one the caller owns.
+  let creativeRef: string | null = null;
+  if (
+    campaignId &&
+    (creativeSource === "social_post" || creativeSource === "fb_ad_angle") &&
+    Number.isInteger(creativeIndex)
+  ) {
+    const { data: creative } = await supabase
+      .from("campaign_creatives")
+      .select("image_data_url")
+      .eq("campaign_id", campaignId)
+      .eq("source", creativeSource)
+      .eq("item_index", creativeIndex as number)
+      .eq("kind", "image")
+      .eq("status", "ready")
+      .maybeSingle();
+    creativeRef = (creative?.image_data_url as string | null) ?? null;
+  }
+
   try {
     let fbPostId: string;
-    // Never hotlink the vendor's raw image URL into a live post — fetch real bytes server-side
-    // first (same helper the bridge page embed already uses), same reasoning as CLAUDE.md
-    // content rule 9. Falls back to a text-only post if the fetch fails rather than erroring out.
-    const imageDataUrl = imageUrl ? await fetchImageAsDataUrl(imageUrl) : null;
+    // Never hotlink a raw image URL into a live post — fetch real bytes server-side first (same
+    // reasoning as CLAUDE.md content rule 9). Prefer the per-item creative (imageRefToDataUrl
+    // handles both a data URI and one of our Cloudinary URLs); else the passed vendor image.
+    // Falls back to a text-only post if neither resolves rather than erroring out.
+    const imageDataUrl = creativeRef
+      ? await imageRefToDataUrl(creativeRef, MAX_CREATIVE_BYTES)
+      : imageUrl
+        ? await fetchImageAsDataUrl(imageUrl)
+        : null;
     if (imageDataUrl) {
       const result = await publishPhotoBytes(pageId, pageToken, imageDataUrl, message);
       fbPostId = result.post_id ?? result.id;

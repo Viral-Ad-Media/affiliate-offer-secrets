@@ -11,10 +11,15 @@ export default function PostToInstagram({
   campaignId,
   defaultCaption,
   hasImage,
+  creativeSource,
+  creativeIndex,
 }: {
   campaignId: string;
   defaultCaption: string;
   hasImage: boolean;
+  // When set, the route posts this item's own generated creative instead of the campaign hero.
+  creativeSource?: "social_post" | "fb_ad_angle";
+  creativeIndex?: number;
 }) {
   const [loading, setLoading] = useState(true);
   const [activeIg, setActiveIg] = useState<ActiveIg>(null);
@@ -72,6 +77,8 @@ export default function PostToInstagram({
         ig_user_id: activeIg!.ig_user_id,
         caption,
         campaign_id: campaignId,
+        creative_source: creativeSource,
+        creative_index: creativeIndex,
         idempotency_key: idempotencyKey,
       }),
     });

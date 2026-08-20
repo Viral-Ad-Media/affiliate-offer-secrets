@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 // is — but an unbounded id array is an unbounded IN clause, and the UI only ever selects one page.
 const MAX_BATCH = 500;
 
-const ACTIONS = ["tag", "untag", "delete", "unsubscribe", "resubscribe"] as const;
+const ACTIONS = ["tag", "untag", "delete", "unsubscribe", "resubscribe", "approve"] as const;
 type Action = (typeof ACTIONS)[number];
 
 /**
@@ -101,6 +101,18 @@ export async function POST(req: Request) {
     const { error } = await admin
       .from("contacts")
       .delete()
+      .eq("workspace_id", ws)
+      .in("id", owned);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, affected: owned.length });
+  }
+
+  // Clear a lead out of the moderation queue (0120) — it flows normally from here on, including
+  // into future enrollments. Rejecting a flagged lead is just `delete`, above.
+  if (action === "approve") {
+    const { error } = await admin
+      .from("contacts")
+      .update({ review_status: "approved", review_reason: null })
       .eq("workspace_id", ws)
       .in("id", owned);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -57,6 +57,8 @@ export type Campaign = {
   hoplinks_txt: string | null;
   fb_ads_md: string | null;
   fb_ad_angles: FbAdAngle[] | null;
+  // Warm-audience retargeting angles (0121), same shape. NULL until generated.
+  retargeting_angles: FbAdAngle[] | null;
   tiktok_md: string | null;
   bridge_html: string | null;
   bridge_published: boolean;
@@ -232,6 +234,10 @@ export type Contact = {
   // Global per-contact unsubscribe (0021), surfaced here so the leads table can mark a lead that
   // no longer receives email rather than leaving the operator to discover it at send time.
   unsubscribed_at: string | null;
+  // Moderation queue (0120). 'pending' = flagged by deliverability assessment at capture (disposable
+  // domain, role mailbox) and held out of sending until an operator approves. Default 'approved'.
+  review_status: "approved" | "pending";
+  review_reason: string | null;
   tags: ContactTag[];
 };
 

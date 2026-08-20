@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidEmail, clampName } from "@/lib/validate";
+import { assessEmail } from "@/lib/email/deliverability";
 import { readStickyVariantId } from "@/lib/bridgeVariants";
 import { normalizePageCopy, type PageBlockTree } from "@/lib/engine/renderPages";
 import { extractLeadFormFields } from "@/lib/engine/validatePageBlockTree";
@@ -9,15 +10,21 @@ import { toE164 } from "@/lib/twilio/client";
 
 export const dynamic = "force-dynamic";
 
-// Two independent, cheap count-query caps, same idiom as generate-video's MAX_VIDEO_GENERATIONS_
-// PER_DAY guard — a valid, status='ready' campaign UUID is already this app's entire access-
-// control model for every public route, so per-campaign scoping is consistent defense-in-depth
-// with that existing model, not a weaker substitute for something broader. Deliberately NOT doing
-// IP-based limiting or a CAPTCHA here — no rate-limiting infrastructure exists anywhere in this
-// codebase to build on, and that's a stated, documented v1 gap (see CLAUDE.md), not an oversight.
+// Cheap count-query caps, same idiom as generate-video's MAX_VIDEO_GENERATIONS_PER_DAY guard —
+// a valid, status='ready' campaign UUID is already this app's entire access-control model for
+// every public route, so per-campaign scoping is consistent defense-in-depth with that model.
 const BURST_WINDOW_MS = 10 * 60 * 1000;
 const MAX_LEADS_PER_CAMPAIGN_BURST = 20;
 const MAX_LEADS_PER_CAMPAIGN_PER_DAY = 300;
+
+// Per-IP caps ACROSS all campaigns — the per-campaign caps miss one source spraying many funnels.
+// Counts the same successful-insert rows (contacts already stores ip_address), so no new table or
+// state: just two more indexed COUNT queries. Deliberately GENEROUS — a capped submission is a
+// SILENT DROP and a shared/NAT/mobile-carrier IP can carry several real visitors, so these exist to
+// stop a flood, not to police normal traffic. A CAPTCHA remains the documented next step if a
+// determined bot rotates IPs; this raises the cost of the common single-source case with no new deps.
+const MAX_LEADS_PER_IP_BURST = 15; // per BURST_WINDOW_MS
+const MAX_LEADS_PER_IP_PER_DAY = 60; // per 24h
 
 // Phase O.5: caps for a lead-capture form's user-added fields — mirrors validatePageBlockTree.ts's
 // own MAX_FORM_CHILDREN=10 (a form can never legitimately have more than 10 extra fields to begin
@@ -88,29 +95,39 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  const [{ count: burstCount }, { count: dailyCount }] = await Promise.all([
-    admin
-      .from("contacts")
-      .select("id", { count: "exact", head: true })
-      .eq("campaign_id", campaignId)
-      .gte("created_at", new Date(Date.now() - BURST_WINDOW_MS).toISOString()),
-    admin
-      .from("contacts")
-      .select("id", { count: "exact", head: true })
-      .eq("campaign_id", campaignId)
-      .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
+  const ipAddress = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || null;
+  const userAgent = req.headers.get("user-agent");
+
+  const burstSince = new Date(Date.now() - BURST_WINDOW_MS).toISOString();
+  const daySince = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const countContacts = (build: (q: any) => any) =>
+    build(admin.from("contacts").select("id", { count: "exact", head: true }));
+
+  const [{ count: burstCount }, { count: dailyCount }, ipBurst, ipDaily] = await Promise.all([
+    countContacts((q) => q.eq("campaign_id", campaignId).gte("created_at", burstSince)),
+    countContacts((q) => q.eq("campaign_id", campaignId).gte("created_at", daySince)),
+    // Per-IP counts, skipped entirely when the IP is unknown — a null ip_address filter would match
+    // every historical null row and drop legitimate submissions from clients behind a stripped header.
+    ipAddress
+      ? countContacts((q) => q.eq("ip_address", ipAddress).gte("created_at", burstSince))
+      : Promise.resolve({ count: 0 }),
+    ipAddress
+      ? countContacts((q) => q.eq("ip_address", ipAddress).gte("created_at", daySince))
+      : Promise.resolve({ count: 0 }),
   ]);
 
   // Silently drop over-cap submissions — still 200, no row written. The bridge page's client JS
   // always advances to step 2 regardless of this response (see renderBridgeHtml's submit handler),
   // so a capped submission has zero user-facing effect on a real visitor; it only blocks what's
   // very likely spam, without needing a visibly different response to do so.
-  if ((burstCount ?? 0) >= MAX_LEADS_PER_CAMPAIGN_BURST || (dailyCount ?? 0) >= MAX_LEADS_PER_CAMPAIGN_PER_DAY) {
+  if (
+    (burstCount ?? 0) >= MAX_LEADS_PER_CAMPAIGN_BURST ||
+    (dailyCount ?? 0) >= MAX_LEADS_PER_CAMPAIGN_PER_DAY ||
+    (ipBurst.count ?? 0) >= MAX_LEADS_PER_IP_BURST ||
+    (ipDaily.count ?? 0) >= MAX_LEADS_PER_IP_PER_DAY
+  ) {
     return NextResponse.json({ ok: true });
   }
-
-  const ipAddress = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || null;
-  const userAgent = req.headers.get("user-agent");
 
   // No client-supplied variant id is ever accepted — the same sticky cookie the page-serving
   // route (lib/publicPage.ts) set is read independently here (the browser sends it automatically
@@ -162,6 +179,11 @@ export async function POST(req: Request) {
     ? new Date().toISOString()
     : null;
 
+  // Deliverability assessment (0120) — synchronous, no MX lookup (this is the anonymous hot path).
+  // A disposable/role address is still CAPTURED, just parked in the moderation queue for review
+  // rather than flowing into a send. Never rejects — a false positive would drop a real conversion.
+  const assessment = assessEmail(email);
+
   await admin
     .from("contacts")
     .upsert(
@@ -178,6 +200,8 @@ export async function POST(req: Request) {
         extra_fields: extraFields,
         ip_address: ipAddress,
         user_agent: userAgent,
+        review_status: assessment.reviewStatus,
+        review_reason: assessment.reason,
       },
       { onConflict: "campaign_id,email", ignoreDuplicates: true }
     );

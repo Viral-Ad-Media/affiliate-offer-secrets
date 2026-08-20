@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import AdminAccountsTable from "@/components/AdminAccountsTable";
 import AdminProblemJobs from "@/components/AdminProblemJobs";
+import AdminErrors, { type AdminErrorGroup } from "@/components/AdminErrors";
 import AdminTrialPipeline, { type TrialPipelineRow } from "@/components/AdminTrialPipeline";
 import type {
   AdminAccountRow,
@@ -65,7 +66,7 @@ function humanDuration(seconds: number): string {
 export default async function AdminPage() {
   const supabase = createClient();
 
-  const [statsRes, accountsRes, workspacesRes, jobsRes, actionsRes, revenueRes, pipelineRes] =
+  const [statsRes, accountsRes, workspacesRes, jobsRes, actionsRes, revenueRes, pipelineRes, errorsRes] =
     await Promise.all([
       supabase.rpc("admin_platform_stats"),
       supabase.rpc("admin_accounts"),
@@ -74,6 +75,7 @@ export default async function AdminPage() {
       supabase.rpc("admin_recent_actions"),
       supabase.rpc("admin_revenue_summary"),
       supabase.rpc("admin_trial_pipeline"),
+      supabase.rpc("admin_error_groups", { p_limit: 100 }),
     ]);
 
   const s = (statsRes.data ?? {}) as Record<string, number>;
@@ -83,6 +85,7 @@ export default async function AdminPage() {
   const actions = (actionsRes.data ?? []) as AdminActionRow[];
   const rev = (revenueRes.data ?? {}) as Record<string, number | string | null>;
   const pipeline = (pipelineRes.data ?? []) as TrialPipelineRow[];
+  const errorGroups = (errorsRes.data ?? []) as AdminErrorGroup[];
   const usd = (cents: unknown) => `$${((Number(cents) || 0) / 100).toFixed(2)}`;
   const abandoned = Number(rev.conversions_abandoned ?? 0);
 
@@ -210,6 +213,13 @@ export default async function AdminPage() {
       <AdminTrialPipeline rows={pipeline} />
 
       <AdminProblemJobs jobs={jobs} />
+
+      <section>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Error monitor
+        </h2>
+        <AdminErrors groups={errorGroups} />
+      </section>
 
       <AdminAccountsTable accounts={accounts} workspaces={workspaces} />
 

@@ -22,6 +22,9 @@ export async function POST(req: Request) {
   const caption = (body.caption as string | undefined)?.trim();
   const campaignId = body.campaign_id as string | undefined;
   const idempotencyKey = body.idempotency_key as string | undefined;
+  // Optional per-item creative selector — post this social post's / ad angle's own generated image.
+  const creativeSource = body.creative_source as string | undefined;
+  const creativeIndex = body.creative_index;
 
   if (!igUserId || !caption || !campaignId || !idempotencyKey) {
     return NextResponse.json(
@@ -77,28 +80,52 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "could not retrieve page token" }, { status: 500 });
   }
 
-  const { data: campaign } = await admin
-    .from("campaigns")
-    .select("embedded_image_data_url")
-    .eq("id", campaignId)
-    .eq("workspace_id", ws)
-    .single();
-  if (!campaign?.embedded_image_data_url) {
-    return NextResponse.json({ error: "no image available for this campaign" }, { status: 400 });
+  // Prefer THIS post's own generated creative when one is a hosted URL Instagram can fetch —
+  // resolved via the RLS client, so only a creative the caller owns can be used. Every per-item
+  // image creative is a Cloudinary URL today; a (legacy) data-URI creative simply falls through to
+  // the campaign hero below, since Instagram's media endpoint needs a fetchable URL, not bytes.
+  let imageUrl: string | null = null;
+  if (
+    (creativeSource === "social_post" || creativeSource === "fb_ad_angle") &&
+    Number.isInteger(creativeIndex)
+  ) {
+    const { data: creative } = await supabase
+      .from("campaign_creatives")
+      .select("image_data_url")
+      .eq("campaign_id", campaignId)
+      .eq("source", creativeSource)
+      .eq("item_index", creativeIndex as number)
+      .eq("kind", "image")
+      .eq("status", "ready")
+      .maybeSingle();
+    const ref = creative?.image_data_url as string | null | undefined;
+    if (isOwnCloudinaryUrl(ref)) imageUrl = ref;
   }
 
-  // A migrated campaign already has a public, fetchable image URL — hand Instagram that directly
-  // rather than proxying our own origin through to a redirect. The /api/public/campaign-image
-  // route still exists and still works (it redirects for Cloudinary values), but going straight to
-  // the CDN removes a hop and, more importantly, removes any dependence on Instagram's fetcher
-  // following a 302 — behaviour this codebase has not verified and should not assume.
-  //
-  // Legacy campaigns whose hero is still inline bytes keep using the proxy route, which is the
-  // only thing that can turn a data: URI into something Instagram can fetch.
-  const stored = campaign.embedded_image_data_url as string;
-  const imageUrl = isOwnCloudinaryUrl(stored)
-    ? stored
-    : `${process.env.NEXT_PUBLIC_APP_URL}/api/public/campaign-image/${campaignId}`;
+  if (!imageUrl) {
+    const { data: campaign } = await admin
+      .from("campaigns")
+      .select("embedded_image_data_url")
+      .eq("id", campaignId)
+      .eq("workspace_id", ws)
+      .single();
+    if (!campaign?.embedded_image_data_url) {
+      return NextResponse.json({ error: "no image available for this campaign" }, { status: 400 });
+    }
+
+    // A migrated campaign already has a public, fetchable image URL — hand Instagram that directly
+    // rather than proxying our own origin through to a redirect. The /api/public/campaign-image
+    // route still exists and still works (it redirects for Cloudinary values), but going straight
+    // to the CDN removes a hop and, more importantly, removes any dependence on Instagram's fetcher
+    // following a 302 — behaviour this codebase has not verified and should not assume.
+    //
+    // Legacy campaigns whose hero is still inline bytes keep using the proxy route, which is the
+    // only thing that can turn a data: URI into something Instagram can fetch.
+    const stored = campaign.embedded_image_data_url as string;
+    imageUrl = isOwnCloudinaryUrl(stored)
+      ? stored
+      : `${process.env.NEXT_PUBLIC_APP_URL}/api/public/campaign-image/${campaignId}`;
+  }
 
   try {
     const container = await createIgMediaContainer(igUserId, pageToken, imageUrl, caption);

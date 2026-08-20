@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { publicNotFound } from "@/lib/notFoundPage";
 import { publicWorkspaceScope } from "@/lib/publicPage";
 import { recordFunnelPageView } from "@/lib/funnelPageStats";
+import { PUBLIC_CONTENT_CSP } from "@/lib/csp";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,7 @@ export async function GET(
     "Content-Type": "text/html; charset=utf-8",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "X-Robots-Tag": "noindex",
+    "Content-Security-Policy": PUBLIC_CONTENT_CSP,
   });
   if (statsCookie) headers.append("Set-Cookie", statsCookie);
 

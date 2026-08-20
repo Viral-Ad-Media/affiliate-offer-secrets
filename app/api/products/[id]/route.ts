@@ -43,7 +43,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       [
         "id", "product_id", "status", "created_at", "updated_at",
         "bridge_published", "bridge_html", "page_copy_edited_at", "page_copy",
-        "fb_ads_md", "fb_ad_angles", "tiktok_md", "tiktok_scripts", "blog_md",
+        "fb_ads_md", "fb_ad_angles", "retargeting_angles", "tiktok_md", "tiktok_scripts", "blog_md",
         "social_md", "social_posts", "email_md", "sms_messages",
         "embedded_image_data_url", "ad_creative_image_data_url", "images_json",
         "video_path", "video_status", "cta_url", "name",

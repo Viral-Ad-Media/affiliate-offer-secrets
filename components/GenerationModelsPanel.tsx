@@ -20,23 +20,30 @@ import { modelsForKind, DEFAULT_MODEL_BY_KIND, type MediaKind } from "@/lib/gene
 export default function GenerationModelsPanel({
   initialImage,
   initialVideo,
+  initialBudget,
 }: {
   initialImage: string | null;
   initialVideo: string | null;
+  initialBudget?: number | null;
 }) {
   const supabase = createClient();
   const [image, setImage] = useState(initialImage ?? DEFAULT_MODEL_BY_KIND.image);
   const [video, setVideo] = useState(initialVideo ?? DEFAULT_MODEL_BY_KIND.video);
+  // "" means no cap (unlimited). Kept as a string so the field can be cleared to unset.
+  const [budget, setBudget] = useState(initialBudget != null ? String(initialBudget) : "");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   async function save() {
     setSaving(true);
     setMsg(null);
-    const { error } = await supabase.rpc("set_workspace_generation_models", {
-      p_image_model: image,
-      p_video_model: video,
-    });
+    const trimmed = budget.trim();
+    const cap = trimmed === "" ? null : Math.max(0, Math.floor(Number(trimmed)));
+    const [models, budgetRes] = await Promise.all([
+      supabase.rpc("set_workspace_generation_models", { p_image_model: image, p_video_model: video }),
+      supabase.rpc("set_workspace_generation_budget", { p_cap: cap }),
+    ]);
+    const error = models.error ?? budgetRes.error;
     setSaving(false);
     setMsg(
       error
@@ -80,6 +87,30 @@ export default function GenerationModelsPanel({
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {field("image", image, setImage)}
         {field("video", video, setVideo)}
+      </div>
+
+      {/* Real budget control (0119): a daily ceiling on generation SPEND, denominated in credits.
+          The credit balance is the absolute limit; this caps how fast it can be spent — an image
+          costs 2 credits, a video 10. Blank = no cap. */}
+      <div className="mt-4 border-t border-ink-700 pt-4">
+        <label className="block text-sm font-medium text-zinc-300">Daily generation budget</label>
+        <div className="mt-1 flex items-center gap-2">
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={budget}
+            onChange={(e) => setBudget(e.target.value)}
+            placeholder="No limit"
+            className="w-32 rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-zinc-100"
+          />
+          <span className="text-sm text-zinc-500">credits / day</span>
+        </div>
+        <p className="mt-1 text-xs text-zinc-500">
+          Caps how many credits AI generation can spend per rolling 24 hours (images 2, videos 10).
+          Leave blank for no limit. Your credit balance is still the hard ceiling — this just limits
+          the daily burn rate.
+        </p>
       </div>
 
       {/* Stated here rather than discovered from a failed job: video falls over to the other

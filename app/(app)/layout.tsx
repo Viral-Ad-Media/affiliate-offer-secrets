@@ -12,6 +12,7 @@ import CreditsProvider from "@/components/CreditsProvider";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import TrialChip from "@/components/TrialChip";
 import TopBarAccount from "@/components/TopBarAccount";
+import ThemeToggle from "@/components/ThemeToggle";
 import ProductTour from "@/components/ProductTour";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -100,6 +101,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           )}
           <CreditsChip creditBalance={creditBalance} />
+          <ThemeToggle iconOnly />
           <NotificationsBell />
           <TopBarAccount
             email={user.email ?? ""}

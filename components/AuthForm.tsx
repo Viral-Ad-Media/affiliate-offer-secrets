@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, sendPasswordReset } from "@/lib/supabase/client";
 import SignupCardStep from "@/components/SignupCardStep";
 import TestCardBanner from "@/components/TestCardBanner";
 import { REMEMBER_COOKIE } from "@/lib/supabase/cookieOptions";
@@ -77,9 +77,10 @@ export default function AuthForm({
 
     if (forgot) {
       setBusy(true);
-      await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
+      // Implicit-flow request (see sendPasswordReset): the emailed link carries the recovery token
+      // in the URL fragment, so it works even when opened in a different browser or an in-app
+      // browser — not a PKCE `?code=` that only the requesting browser can exchange.
+      await sendPasswordReset(email, `${window.location.origin}/reset-password`);
       setBusy(false);
       // Deliberately the same message whether or not that address has an account. Supabase's own
       // response doesn't distinguish either, and saying "no such account" would turn this form

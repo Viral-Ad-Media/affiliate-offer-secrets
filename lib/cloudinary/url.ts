@@ -52,3 +52,9 @@ export const IMG_CARD = "c_fill,g_auto,h_300,w_400/f_auto/q_auto";
 export const IMG_AVATAR = "c_fill,g_face,h_96,w_96/f_auto/q_auto";
 /** Block-tree images have no fixed display size — format and quality only. */
 export const IMG_BLOCK = "f_auto/q_auto";
+/**
+ * Section background — wider than a hero, since a section spans the full content column (up to
+ * 1600px) rather than sitting inside it. `c_limit` never upscales, so a smaller upload is served
+ * at its own size.
+ */
+export const IMG_BG = "c_limit,w_1600/f_auto/q_auto";

@@ -6,6 +6,7 @@ import { IMAGE_DATA_URL_RE, isOwnCloudinaryUrl } from "@/lib/images/validate";
 import { pickWeightedVariant, readStickyVariantId, buildStickyVariantCookie } from "@/lib/bridgeVariants";
 import { recordFunnelPageView } from "@/lib/funnelPageStats";
 import { rawTrackingSnippets, type TrackingSettings } from "@/lib/engine/tracking";
+import { PUBLIC_CONTENT_CSP } from "@/lib/csp";
 
 // Which workspace's content a PUBLIC request's host is allowed to serve. Campaign UUIDs are
 // unguessable, but they are also host-independent — without this check,
@@ -186,6 +187,8 @@ export async function servePublicCampaignPage(
     // the full internal URL path.
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "X-Robots-Tag": "noindex",
+    // Defense-in-depth around the custom_html escape hatch (see lib/csp.ts).
+    "Content-Security-Policy": PUBLIC_CONTENT_CSP,
   });
   if (setCookie) headers.append("Set-Cookie", setCookie);
   if (statsCookie) headers.append("Set-Cookie", statsCookie);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { queueChargedJob } from "@/lib/credits";
+import { queueChargedJob, creditCostFor } from "@/lib/credits";
+import { checkGenerationBudget, budgetExceededMessage } from "@/lib/generationBudget";
 import { resolveGenerationModel } from "@/lib/generationSettings";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
@@ -89,6 +90,13 @@ export async function POST(req: Request) {
       { error: `Daily ${kind} generation limit reached (${dailyCap}/day)` },
       { status: 429 }
     );
+  }
+
+  // Operator-set daily credit budget (0119) — the real rate ceiling on top of the count backstop.
+  // Checked BEFORE the claim so a rejected request never leaves a creative stuck "generating".
+  const budget = await checkGenerationBudget(admin, ws, creditCostFor(jobType));
+  if (!budget.allowed) {
+    return NextResponse.json({ error: budgetExceededMessage(budget) }, { status: 429 });
   }
 
   const { data: creativeId, error: claimErr } = await supabase.rpc("claim_campaign_creative", {

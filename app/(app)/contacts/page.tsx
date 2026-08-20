@@ -19,7 +19,7 @@ import Pager, { PAGE_SIZE, pageFromParam, pageRange } from "@/components/Pager";
 export default async function ContactsPage({
   searchParams,
 }: {
-  searchParams: { page?: string; tag?: string };
+  searchParams: { page?: string; tag?: string; review?: string };
 }) {
   const supabase = createClient();
 
@@ -35,6 +35,10 @@ export default async function ContactsPage({
   if (!ws) redirect("/login");
 
   const tagFilter = searchParams.tag || null;
+  // Moderation queue view (0120): only the leads the deliverability assessor parked for review.
+  const reviewMode = searchParams.review === "pending";
+  const withReviewFilter = <T,>(q: T): T =>
+    reviewMode ? ((q as any).eq("review_status", "pending") as T) : q;
 
   // Filtering by tag uses an inner join on the link table rather than fetching ids and passing
   // them to .in() — that shape would silently cap the filter at whatever the id query returned,
@@ -51,9 +55,12 @@ export default async function ContactsPage({
   // The campaign titles and the tag list don't depend on which page you're on, so they no longer
   // wait behind the count — only the row query genuinely does (the page number is clamped against
   // the total, and an out-of-range .range() is a 416 from PostgREST, not an empty list).
-  const [{ count }, { data: campaigns }, { data: allTags }, { data: attributes }] = await Promise.all([
-    withTagFilter(
-      supabase.from("contacts").select(countSelect, { count: "exact", head: true }).eq("workspace_id", ws)
+  const [{ count }, { data: campaigns }, { data: allTags }, { data: attributes }, { count: pendingCount }] =
+    await Promise.all([
+    withReviewFilter(
+      withTagFilter(
+        supabase.from("contacts").select(countSelect, { count: "exact", head: true }).eq("workspace_id", ws)
+      )
     ),
     // Scoped and bounded. It was neither: no workspace filter meant a member of two workspaces got
     // both workspaces' campaigns merged into the title map and the edit dialog's picker, and no
@@ -73,6 +80,13 @@ export default async function ContactsPage({
     // "Budget range" where the row stores "budget_range". Joins this Promise.all rather than
     // adding a fifth round trip, same reason the tag embeds were folded into the row query.
     supabase.from("contact_attributes").select("key, label").eq("workspace_id", ws),
+    // Always the full pending count (independent of the current filter) — drives the "Needs
+    // review" chip so the operator sees the queue even while looking at all leads.
+    supabase
+      .from("contacts")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", ws)
+      .eq("review_status", "pending"),
   ]);
 
   // fieldKey -> label. A key with no definition keeps showing its raw key downstream: that is the
@@ -92,20 +106,23 @@ export default async function ContactsPage({
   // with both embeds present and a filter active, `f` came back with one tag, `tag_links` with
   // both, and the exact count header was still correct.
   const tagEmbed = "tag_links:contact_tag_links(tag_id)";
-  const baseCols = "id, campaign_id, first_name, last_name, email, extra_fields, created_at, unsubscribed_at";
+  const baseCols =
+    "id, campaign_id, first_name, last_name, email, extra_fields, created_at, unsubscribed_at, review_status, review_reason";
   const rowSelect = tagFilter
     ? `${baseCols}, f:contact_tag_links!inner(tag_id), ${tagEmbed}`
     : `${baseCols}, ${tagEmbed}`;
 
   // Error captured, not discarded — a failed query must render as a failure, never as the "no
   // leads yet" empty state (see components/LoadFailed.tsx for the Domains-page incident).
-  const { data: rows, error: rowsError } = await withTagFilter(
-    supabase
-      .from("contacts")
-      .select(rowSelect)
-      .eq("workspace_id", ws)
-      .order("created_at", { ascending: false })
-      .range(from, to)
+  const { data: rows, error: rowsError } = await withReviewFilter(
+    withTagFilter(
+      supabase
+        .from("contacts")
+        .select(rowSelect)
+        .eq("workspace_id", ws)
+        .order("created_at", { ascending: false })
+        .range(from, to)
+    )
   );
 
   const titleByCampaign = new Map<string, string>();
@@ -132,6 +149,8 @@ export default async function ContactsPage({
     extra_fields: (r.extra_fields as Record<string, string>) ?? {},
     created_at: r.created_at,
     unsubscribed_at: r.unsubscribed_at ?? null,
+    review_status: (r.review_status as "approved" | "pending") ?? "approved",
+    review_reason: r.review_reason ?? null,
     tags: ((r.tag_links ?? []) as { tag_id: string }[])
       .map((l) => tagById.get(l.tag_id))
       .filter((t): t is ContactTag => !!t),
@@ -156,13 +175,15 @@ export default async function ContactsPage({
             total={total}
             campaigns={campaignOptions}
             attributeLabels={attributeLabels}
+            reviewMode={reviewMode}
+            pendingCount={pendingCount ?? 0}
           />
           <Pager
             page={page}
             total={total}
             basePath="/contacts"
             label="contacts"
-            preserve={{ tag: tagFilter ?? undefined }}
+            preserve={{ tag: tagFilter ?? undefined, review: reviewMode ? "pending" : undefined }}
           />
         </>
       )}

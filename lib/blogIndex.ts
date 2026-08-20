@@ -2,9 +2,13 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import {
   postsPerPage,
   MAX_FEED_POSTS,
+  SITEMAP_PAGE_SIZE,
+  renderSitemapXml,
+  renderSitemapIndexXml,
   type BlogIndexPost,
   type BlogIndexCategory,
   type BlogSettings,
+  type PermalinkStyle,
 } from "@/lib/blog";
 
 const POST_COLUMNS =
@@ -40,6 +44,82 @@ export async function loadAllPublishedPosts(
     .order("published_at", { ascending: false, nullsFirst: false })
     .limit(MAX_FEED_POSTS);
   return (data ?? []).map(toIndexPost);
+}
+
+// --- Sitemap pagination (unlike RSS, the sitemap must cover EVERY post at any scale) ---
+
+async function countPublishedPosts(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceId: string
+): Promise<number> {
+  const { count } = await admin
+    .from("blog_posts")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId)
+    .eq("status", "published");
+  return count ?? 0;
+}
+
+async function loadPublishedPostsPage(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceId: string,
+  offset: number,
+  limit: number
+): Promise<BlogIndexPost[]> {
+  const { data } = await admin
+    .from("blog_posts")
+    .select(POST_COLUMNS)
+    .eq("workspace_id", workspaceId)
+    .eq("status", "published")
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .range(offset, offset + limit - 1);
+  return (data ?? []).map(toIndexPost);
+}
+
+/**
+ * Builds the XML for any sitemap path a blog serves, shared by the app-domain and custom-domain
+ * routes so the two can't drift (the standing rule for everything these routes both render).
+ *
+ * - `sitemap.xml` with <= one page of posts → a plain <urlset> (unchanged from before this existed)
+ * - `sitemap.xml` with more → a <sitemapindex> pointing at sitemap-1.xml … sitemap-N.xml
+ * - `sitemap-{n}.xml` → the <urlset> for page n (posts only; the blog index url rides on page 1)
+ *
+ * Returns null for an out-of-range page or a non-sitemap path, which the caller turns into a 404 —
+ * so sitemap-999.xml on a small blog is a clean not-found, never an empty file that looks valid.
+ */
+export async function buildBlogSitemap(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceId: string,
+  origin: string,
+  base: string,
+  sitemapPath: string,
+  style: PermalinkStyle | null
+): Promise<string | null> {
+  const total = await countPublishedPosts(admin, workspaceId);
+  const pages = Math.max(1, Math.ceil(total / SITEMAP_PAGE_SIZE));
+
+  if (sitemapPath === "sitemap.xml") {
+    if (pages <= 1) {
+      const posts = await loadPublishedPostsPage(admin, workspaceId, 0, SITEMAP_PAGE_SIZE);
+      return renderSitemapXml(posts, origin, base, style, true);
+    }
+    return renderSitemapIndexXml(origin, base, pages);
+  }
+
+  const m = /^sitemap-(\d+)\.xml$/.exec(sitemapPath);
+  if (m) {
+    const n = Number(m[1]);
+    if (!Number.isInteger(n) || n < 1 || n > pages) return null;
+    const posts = await loadPublishedPostsPage(admin, workspaceId, (n - 1) * SITEMAP_PAGE_SIZE, SITEMAP_PAGE_SIZE);
+    return renderSitemapXml(posts, origin, base, style, n === 1);
+  }
+
+  return null;
+}
+
+/** Does this path look like a sitemap (index or a numbered page)? Cheap pre-check for the routes. */
+export function isSitemapPath(path: string): boolean {
+  return path === "sitemap.xml" || /^sitemap-\d+\.xml$/.test(path);
 }
 
 export type BlogIndexData = {

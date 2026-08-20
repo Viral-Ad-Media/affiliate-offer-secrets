@@ -18,7 +18,8 @@ import type { PageTheme } from "./pageTheme";
 // the Cloudinary integration. Never import lib/cloudinary/client.ts here: this module is
 // bundled into five client editors, and node:crypto reaching one of them fails `next build`
 // while `tsc` stays clean.
-import { cloudinaryTransform, IMG_BLOCK } from "@/lib/cloudinary/url";
+import { cloudinaryTransform, IMG_BLOCK, IMG_BG } from "@/lib/cloudinary/url";
+import { isValidImageRef } from "@/lib/images/validate";
 
 export function escapeHtml(s: string): string {
   return String(s ?? "")
@@ -56,6 +57,14 @@ export type BlockStyle = {
   color?: HexColor;
   lineHeight?: number; // 1.0-2.5
   backgroundColor?: HexColor;
+  /**
+   * Section (box) background image — a data: URI or one of OUR Cloudinary URLs, the same two shapes
+   * every other image column holds (isValidImageRef). Interpolated into `background-image:url(...)`
+   * on a page served raw to ad traffic, so it is validated at BOTH ends: styleToInlineCss emits
+   * nothing unless isValidImageRef passes, and sanitizeStyle drops it on save unless it does. Never
+   * store a raw string here.
+   */
+  backgroundImage?: string;
   paddingTop?: number; // px, 0-200
   paddingRight?: number;
   paddingBottom?: number;
@@ -185,6 +194,20 @@ export function styleToInlineCss(style: BlockStyle | undefined, allowed: readonl
   if (has("backgroundColor")) {
     const v = hex(style.backgroundColor);
     if (v) parts.push(`background-color:${v}`);
+  }
+  if (has("backgroundImage") && isValidImageRef(style.backgroundImage)) {
+    // isValidImageRef guarantees a data: image URI or one of OUR Cloudinary URLs — both charsets
+    // exclude quotes, parens and semicolons, so the value can break out of neither url('…') nor
+    // the surrounding style="…" attribute. No other string ever reaches this line. Single quotes
+    // inside the double-quoted attribute keep the HTML valid; a background-position:center under a
+    // cover fit is the standard section-hero treatment.
+    const bg = cloudinaryTransform(style.backgroundImage, IMG_BG);
+    parts.push(
+      `background-image:url('${bg}')`,
+      "background-size:cover",
+      "background-position:center",
+      "background-repeat:no-repeat",
+    );
   }
   for (const [key, prop] of [
     ["paddingTop", "padding-top"],
@@ -1051,6 +1074,7 @@ export function renderInline(text: string): string {
 export const TEXT_STYLE_KEYS = ["fontFamily", "fontSize", "fontWeight", "textAlign", "color", "lineHeight", "marginTop", "marginBottom"] as const;
 export const BOX_STYLE_KEYS = [
   "backgroundColor",
+  "backgroundImage",
   "paddingTop",
   "paddingRight",
   "paddingBottom",

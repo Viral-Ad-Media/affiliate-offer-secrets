@@ -6,15 +6,16 @@ import {
   renderPublicPostHtml,
   renderBlogIndexHtml,
   renderRssXml,
-  renderSitemapXml,
   blogPostPathOnDomain,
   type PermalinkStyle,
 } from "@/lib/blog";
-import { loadBlogIndex, loadAllPublishedPosts } from "@/lib/blogIndex";
+import { loadBlogIndex, loadAllPublishedPosts, buildBlogSitemap, isSitemapPath } from "@/lib/blogIndex";
+import { PUBLIC_CONTENT_CSP } from "@/lib/csp";
 
 const HTML_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
   "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Content-Security-Policy": PUBLIC_CONTENT_CSP,
 };
 
 const xmlHeaders = (name: string) => ({
@@ -122,20 +123,23 @@ async function serveBlogOnDomain(
 
   // On a custom domain the blog is the site root, so its feeds sit at the root too. Reserving
   // these names is safe: slugify() strips dots, so no post slug can collide with them.
-  if (path === "rss.xml" || path === "sitemap.xml" || path === "robots.txt") {
-    if (path === "robots.txt") {
-      // The app-wide app/robots.ts only answers for the app's own host — a connected domain needs
-      // its own, pointing crawlers at this blog's sitemap.
-      return new Response(`User-agent: *\nAllow: /\n\nSitemap: ${siteOrigin}/sitemap.xml\n`, {
-        status: 200,
-        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" },
-      });
-    }
+  if (path === "robots.txt") {
+    // The app-wide app/robots.ts only answers for the app's own host — a connected domain needs
+    // its own, pointing crawlers at this blog's sitemap.
+    return new Response(`User-agent: *\nAllow: /\n\nSitemap: ${siteOrigin}/sitemap.xml\n`, {
+      status: 200,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" },
+    });
+  }
+  if (path === "rss.xml") {
     const posts = await loadAllPublishedPosts(admin, workspaceId);
-    const body =
-      path === "rss.xml"
-        ? renderRssXml(settings, posts, siteOrigin, "")
-        : renderSitemapXml(posts, siteOrigin, "", settings.permalink_style as PermalinkStyle | null);
+    return new Response(renderRssXml(settings, posts, siteOrigin, ""), { status: 200, headers: xmlHeaders("rss.xml") });
+  }
+  if (isSitemapPath(path)) {
+    const body = await buildBlogSitemap(
+      admin, workspaceId, siteOrigin, "", path, settings.permalink_style as PermalinkStyle | null
+    );
+    if (body === null) return publicNotFound(new URL(siteOrigin).host); // sitemap-N.xml past the last page
     return new Response(body, { status: 200, headers: xmlHeaders(path) });
   }
 

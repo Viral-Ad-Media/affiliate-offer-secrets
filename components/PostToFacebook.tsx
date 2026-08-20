@@ -11,10 +11,15 @@ export default function PostToFacebook({
   campaignId,
   defaultMessage,
   imageUrl,
+  creativeSource,
+  creativeIndex,
 }: {
   campaignId: string;
   defaultMessage: string;
   imageUrl: string | null;
+  // When set, the route posts this item's own generated creative instead of imageUrl.
+  creativeSource?: "social_post" | "fb_ad_angle";
+  creativeIndex?: number;
 }) {
   const [loading, setLoading] = useState(true);
   const [activePage, setActivePage] = useState<ActivePage>(null);
@@ -66,6 +71,8 @@ export default function PostToFacebook({
         message,
         image_url: imageUrl ?? undefined,
         campaign_id: campaignId,
+        creative_source: creativeSource,
+        creative_index: creativeIndex,
         idempotency_key: idempotencyKey,
       }),
     });

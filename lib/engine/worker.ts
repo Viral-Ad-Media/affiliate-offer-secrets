@@ -1,6 +1,7 @@
 import { db } from "./core";
 import { NETWORKS } from "@/lib/networks";
 import { notify, jobLabel } from "@/lib/notifications";
+import { captureError } from "@/lib/errorMonitor";
 import { createPostFromCampaign } from "@/lib/blog/fromCampaign";
 import { createSequenceFromCampaign, createSmsSequenceFromCampaign } from "@/lib/broadcast/fromCampaign";
 import { runBuildCampaignStage, BUILD_CAMPAIGN_STAGES } from "./build";
@@ -149,6 +150,16 @@ async function failJob(job: JobRow, message: string, permanent = false) {
       .from("jobs")
       .update({ status: "error", result: safeMessage, updated_at: new Date().toISOString() })
       .eq("id", job.id);
+
+    // Terminal job failure is EXACTLY the silent-failure class this engine keeps getting bitten by
+    // (a job dying with nothing visible to the operator). Record it for the superadmin monitor —
+    // best-effort, reuses the worker's admin client, and safeMessage is already PII-stripped.
+    await captureError("engine.worker", safeMessage, {
+      context: { job_id: job.id, type: job.type, stage: job.stage, attempts: job.attempts },
+      userId: job.user_id,
+      workspaceId: (job as { workspace_id?: string | null }).workspace_id ?? null,
+      admin: db,
+    });
 
     // Credits were debited when this job was queued (see lib/credits.ts). A job that will never
     // produce anything must give them back — the client paid for work, not for an attempt.

@@ -6,7 +6,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveModel, type MediaKind, type GenerationModel } from "@/lib/generationModels";
 
-export type WorkspaceGenerationDefaults = { image: string | null; video: string | null };
+export type WorkspaceGenerationDefaults = {
+  image: string | null;
+  video: string | null;
+  // Daily generation credit cap (0119). null = no cap (unlimited).
+  dailyBudget: number | null;
+};
 
 export async function getWorkspaceGenerationDefaults(
   client: SupabaseClient,
@@ -14,12 +19,13 @@ export async function getWorkspaceGenerationDefaults(
 ): Promise<WorkspaceGenerationDefaults> {
   const { data } = await client
     .from("workspaces")
-    .select("default_image_model, default_video_model")
+    .select("default_image_model, default_video_model, daily_generation_credit_cap")
     .eq("id", workspaceId)
     .maybeSingle();
   return {
     image: (data?.default_image_model as string | null) ?? null,
     video: (data?.default_video_model as string | null) ?? null,
+    dailyBudget: (data?.daily_generation_credit_cap as number | null) ?? null,
   };
 }
 

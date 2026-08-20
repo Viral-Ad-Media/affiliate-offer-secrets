@@ -66,6 +66,8 @@ export default function BroadcastSequencePage({ params }: { params: { id: string
         extra_fields: r.extra_fields ?? {},
         created_at: r.created_at,
         unsubscribed_at: r.unsubscribed_at ?? null,
+        review_status: (r.review_status as "approved" | "pending") ?? "approved",
+        review_reason: r.review_reason ?? null,
         // The manual-audience picker only needs identity to choose rows; it never renders tags, so
         // they're deliberately not fetched here rather than paying for a join this screen ignores.
         tags: [],

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { queueChargedJob } from "@/lib/credits";
+import { queueChargedJob, creditCostFor } from "@/lib/credits";
+import { checkGenerationBudget, budgetExceededMessage } from "@/lib/generationBudget";
 import { resolveGenerationModel } from "@/lib/generationSettings";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
@@ -44,6 +45,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .gte("created_at", since);
   if ((count ?? 0) >= MAX_BLOG_IMAGES_PER_DAY) {
     return NextResponse.json({ error: "daily image-generation limit reached — try again tomorrow" }, { status: 429 });
+  }
+
+  // Operator-set daily credit budget (0119) — the real rate ceiling on top of the count backstop.
+  const budget = await checkGenerationBudget(admin, ws, creditCostFor("generate_blog_image"));
+  if (!budget.allowed) {
+    return NextResponse.json({ error: budgetExceededMessage(budget) }, { status: 429 });
   }
 
   // Claim first so a double-click can't queue two jobs; roll back if the insert then fails.

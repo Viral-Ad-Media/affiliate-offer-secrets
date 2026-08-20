@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { queueChargedJob } from "@/lib/credits";
+import { queueChargedJob, creditCostFor } from "@/lib/credits";
+import { checkGenerationBudget, budgetExceededMessage } from "@/lib/generationBudget";
 import { resolveGenerationModel } from "@/lib/generationSettings";
 import { currentWorkspaceId, workspaceRequiredResponse } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
@@ -44,6 +45,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       { error: `Daily video generation limit reached (${MAX_VIDEO_GENERATIONS_PER_DAY}/day)` },
       { status: 429 }
     );
+  }
+
+  // Operator-set daily credit budget (0119) — the real rate ceiling on top of the count backstop.
+  const budget = await checkGenerationBudget(admin, ws, creditCostFor("generate_video"));
+  if (!budget.allowed) {
+    return NextResponse.json({ error: budgetExceededMessage(budget) }, { status: 429 });
   }
 
   // Fix #4a: atomic concurrency claim — a single UPDATE...WHERE...RETURNING (same

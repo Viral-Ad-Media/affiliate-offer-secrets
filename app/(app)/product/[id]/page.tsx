@@ -16,6 +16,7 @@ import SendEmail from "@/components/SendEmail";
 import BlogPostLink from "@/components/BlogPostLink";
 import GenerateVideo from "@/components/GenerateVideo";
 import AdAnglesPanel from "@/components/AdAnglesPanel";
+import RetargetingAnglesPanel from "@/components/RetargetingAnglesPanel";
 import { downloadTextFile, filenameSlug } from "@/lib/download";
 import { composeSms } from "@/lib/sms";
 import SocialPostsPanel from "@/components/SocialPostsPanel";
@@ -356,13 +357,22 @@ export default function ProductPage({ params }: { params: { id: string } }) {
             </div>
             <div className="p-4">
               {tab === "fb_ads_md" ? (
-                <AdAnglesPanel
-                  campaignId={campaign.id}
-                  angles={campaign.fb_ad_angles}
-                  legacyMarkdown={campaign.fb_ads_md}
-                  previewImageUrl={campaign.embedded_image_data_url}
-                  bridgePublished={campaign.bridge_published}
-                />
+                <div className="space-y-6">
+                  <AdAnglesPanel
+                    campaignId={campaign.id}
+                    angles={campaign.fb_ad_angles}
+                    legacyMarkdown={campaign.fb_ads_md}
+                    previewImageUrl={campaign.embedded_image_data_url}
+                    bridgePublished={campaign.bridge_published}
+                  />
+                  <div className="border-t border-ink-700 pt-6">
+                    <RetargetingAnglesPanel
+                      campaignId={campaign.id}
+                      initialAngles={campaign.retargeting_angles}
+                      hasColdAngles={!!campaign.fb_ad_angles && campaign.fb_ad_angles.length > 0}
+                    />
+                  </div>
+                </div>
               ) : tab === "social_md" ? (
                 <SocialPostsPanel
                   campaignId={campaign.id}

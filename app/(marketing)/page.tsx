@@ -18,6 +18,8 @@ import {
 import { Card } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import FunnelBuilderMockup from "@/components/marketing/FunnelBuilderMockup";
+import AnalyticsMockup from "@/components/marketing/AnalyticsMockup";
 
 // Everything claimed on this page has actually shipped. Two things deliberately NOT claimed,
 // because they haven't: automated marketplace discovery for anything but ClickBank (Digistore24 is
@@ -149,6 +151,11 @@ export default function HomePage() {
             30-day free trial, no credit card required to start.
           </p>
         </div>
+
+        {/* Product mockup — a data-free illustration of the funnel builder, not a screenshot. */}
+        <div className="mx-auto max-w-5xl px-4 pb-16 sm:pb-20">
+          <FunnelBuilderMockup />
+        </div>
       </section>
 
       <section className="mx-auto max-w-6xl px-4 py-16 sm:py-20">
@@ -178,7 +185,36 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Analytics band — visual break between the two text-heavy sections. */}
       <section className="border-t border-ink-700 bg-ink-900/40">
+        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 sm:py-20 lg:grid-cols-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400">
+              See what's working
+            </p>
+            <h2 className="mt-4 text-2xl font-bold text-zinc-100 sm:text-3xl">
+              Every view, click and opt-in — on the funnel itself
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+              Page views, link clicks and opt-in rates sit right on the funnel map, with native
+              click heatmaps and scroll depth, a 30-day lead trend, and a Bayesian split-test score
+              that tells you when a variant has actually won. Wire up GA4, Tag Manager, Clarity or
+              the Meta Pixel on any funnel or your blog — with an optional cookie-consent gate.
+            </p>
+            <div className="mt-6">
+              <Link
+                href="/login"
+                className={cn(buttonVariants({ variant: "outline" }), "px-4 py-2 text-sm")}
+              >
+                Start your free trial
+              </Link>
+            </div>
+          </div>
+          <AnalyticsMockup />
+        </div>
+      </section>
+
+      <section className="border-t border-ink-700 bg-ink-950">
         <div className="mx-auto max-w-6xl px-4 py-16 sm:py-20">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-2xl font-bold text-zinc-100 sm:text-3xl">Everything you need</h2>

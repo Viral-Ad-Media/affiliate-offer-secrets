@@ -6,9 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import MailProvidersPanel, { type MailProvidersStatus } from "@/components/MailProvidersPanel";
 import ConnectionsPanel from "@/components/ConnectionsPanel";
 import TikTokPanel from "@/components/TikTokPanel";
-import GenerationModelsPanel from "@/components/GenerationModelsPanel";
 import SmsConnectionPanel, { type SmsStatus } from "@/components/SmsConnectionPanel";
-import { getWorkspaceGenerationDefaults } from "@/lib/generationSettings";
 
 const PROVIDER_LABELS: Record<string, string> = {
   meta: "Facebook",
@@ -30,7 +28,7 @@ export default async function ConnectionsPage({
   // not whichever workspace profiles.active_workspace_id happens to hold in another tab.
   const ws = await currentWorkspaceId();
 
-  const [metaStatus, tiktokStatus, mailProviders, genDefaults, smsStatus] = await Promise.all([
+  const [metaStatus, tiktokStatus, mailProviders, smsStatus] = await Promise.all([
     supabase
       .rpc("get_meta_connection_status", { p_workspace_id: ws })
       .then((r) => r.data ?? { connected: false }),
@@ -40,7 +38,6 @@ export default async function ConnectionsPage({
     supabase
       .rpc("get_mail_provider_connections", { p_workspace_id: ws })
       .then((r) => (r.data ?? { active_provider: null, providers: [] }) as MailProvidersStatus),
-    getWorkspaceGenerationDefaults(supabase, ws!),
     supabase
       .rpc("get_sms_connection_status", { p_workspace_id: ws })
       .then((r) => (r.data ?? { connected: false }) as SmsStatus),
@@ -111,17 +108,8 @@ export default async function ConnectionsPage({
       {/* Transport lives here with the other connections — an API key or an SMTP host is the same
           kind of thing as a Facebook token. Sender IDENTITY (reply-to, business name, the postal
           address the footer needs) is a marketing decision that outlives any one provider, so it
-          lives on Emails → Settings instead. */}
-      {/* AI generation providers sit with the other connections: choosing which model spends your
-          kie.ai / Google credit is the same class of decision as which mail provider sends. */}
-      <div>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">AI generation</h2>
-        <GenerationModelsPanel
-          initialImage={genDefaults.image}
-          initialVideo={genDefaults.video}
-        />
-      </div>
-
+          lives on Emails → Settings instead. The AI-generation model default is NOT here — it's a
+          behaviour setting, not a connection, so it moved to Settings → Preferences. */}
       {/* SMS sits beside Email: both are outbound messaging with per-tenant credentials, and both
           carry a consent obligation the app has to respect. */}
       <div>

@@ -120,6 +120,12 @@ export async function uploadTreeImages(
       const b = raw as any;
       if (!b || typeof b !== "object") continue;
 
+      // Section/row/column background images live on `style`, a different axis from the content
+      // slots below — so they need their own swap, or a base64 hero would keep inlining silently.
+      if (b.style && typeof b.style === "object") {
+        await swap(() => b.style.backgroundImage, (v) => (b.style.backgroundImage = v));
+      }
+
       for (const slot of SLOTS[b.type as string] ?? []) {
         await swap(() => slot.get(b), (v) => slot.set(b, v));
       }

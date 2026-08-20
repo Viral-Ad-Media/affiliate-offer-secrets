@@ -130,6 +130,71 @@ function NumberField({
   );
 }
 
+function BackgroundImageField({
+  value,
+  resizeImageFile,
+  onChange,
+}: {
+  value: string | undefined;
+  resizeImageFile: (file: File) => Promise<string>;
+  onChange: (v: string | undefined) => void;
+}) {
+  // Same client-side downscale + data-URI flow the image block uses; the value is validated as an
+  // image ref both on save (sanitizeStyle) and at render (styleToInlineCss). A quote can't appear
+  // in a resized data URI, but the preview strips one defensively before it reaches an inline style.
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    onChange(await resizeImageFile(file));
+  };
+  const accept = "image/png,image/jpeg,image/webp,image/gif";
+  return (
+    <div>
+      <span className={fieldLabelClass()}>Background image</span>
+      {value ? (
+        <div className="space-y-1.5">
+          <div
+            className="h-16 w-full rounded border border-ink-600 bg-cover bg-center"
+            style={{ backgroundImage: `url('${value.replace(/'/g, "")}')` }}
+          />
+          <div className="flex items-center gap-2">
+            <label className="cursor-pointer rounded border border-ink-600 px-2 py-1 text-[12px] text-zinc-300 hover:border-ink-500">
+              Replace
+              <input
+                type="file"
+                accept={accept}
+                className="hidden"
+                onChange={(e) => {
+                  void pick(e.target.files?.[0]);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </label>
+            <button type="button" onClick={() => onChange(undefined)} className="text-[12px] text-zinc-500 hover:text-red-300">
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <label className="flex cursor-pointer items-center justify-center rounded border border-dashed border-ink-600 px-2 py-3 text-[12px] text-zinc-500 hover:border-ink-500">
+          Upload image
+          <input
+            type="file"
+            accept={accept}
+            className="hidden"
+            onChange={(e) => {
+              void pick(e.target.files?.[0]);
+              e.currentTarget.value = "";
+            }}
+          />
+        </label>
+      )}
+      <p className="mt-1 text-[11px] leading-snug text-zinc-600">
+        Sits behind this section. Give it padding and a text colour so the copy stays readable.
+      </p>
+    </div>
+  );
+}
+
 function ColorField({ label, value, onChange }: { label: string; value: string | undefined; onChange: (v: string | undefined) => void }) {
   return (
     <label className="block">
@@ -158,13 +223,15 @@ export type BlockStylePanelProps = {
   onChange: (blockId: string, patch: BlockStyle) => void;
   /** Responsive visibility is not a style key — it becomes a CLASS, so it has its own setter. */
   onVisibilityChange: (blockId: string, hidden: Viewport[]) => void;
+  /** Client-side downscale for the section background-image upload — the canvas's own helper. */
+  resizeImageFile: (file: File) => Promise<string>;
   onClose: () => void;
 };
 
 // Selected via WysiwygCanvas.tsx (Phase O.4) — clicking any Section/Row/Element/locked block
 // selects it here (columns are not independently selectable in this pass, a deliberate v1 scope
 // cut; a column's own Row already covers the common "give this area a background" need).
-export default function BlockStylePanel({ block, onChange, onVisibilityChange, onClose }: BlockStylePanelProps) {
+export default function BlockStylePanel({ block, onChange, onVisibilityChange, resizeImageFile, onClose }: BlockStylePanelProps) {
   if (!block) return null;
 
   const allowedKeys = (STYLE_KEYS_BY_TYPE as Record<string, readonly (keyof BlockStyle)[]>)[block.type] ?? [];
@@ -177,7 +244,7 @@ export default function BlockStylePanel({ block, onChange, onVisibilityChange, o
   }
 
   const showTypography = has("fontFamily") || has("fontSize") || has("fontWeight") || has("textAlign") || has("color") || has("lineHeight");
-  const showBackground = has("backgroundColor");
+  const showBackground = has("backgroundColor") || has("backgroundImage");
   const showSpacing =
     has("paddingTop") || has("paddingRight") || has("paddingBottom") || has("paddingLeft") || has("marginTop") || has("marginBottom");
   const showBorder = has("borderWidth") || has("borderColor") || has("borderRadius");
@@ -328,7 +395,16 @@ export default function BlockStylePanel({ block, onChange, onVisibilityChange, o
         {showBackground && (
           <div className="space-y-2">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Background</div>
-            <ColorField label="Background color" value={style.backgroundColor} onChange={(v) => set({ backgroundColor: v })} />
+            {has("backgroundColor") && (
+              <ColorField label="Background color" value={style.backgroundColor} onChange={(v) => set({ backgroundColor: v })} />
+            )}
+            {has("backgroundImage") && (
+              <BackgroundImageField
+                value={style.backgroundImage}
+                resizeImageFile={resizeImageFile}
+                onChange={(v) => set({ backgroundImage: v })}
+              />
+            )}
           </div>
         )}
 

@@ -5,12 +5,12 @@ import {
   renderPublicPostHtml,
   renderBlogIndexHtml,
   renderRssXml,
-  renderSitemapXml,
   blogPostPath,
   type PermalinkStyle,
 } from "@/lib/blog";
-import { loadBlogIndex, loadAllPublishedPosts } from "@/lib/blogIndex";
+import { loadBlogIndex, loadAllPublishedPosts, buildBlogSitemap, isSitemapPath } from "@/lib/blogIndex";
 import { publicWorkspaceScope } from "@/lib/publicPage";
+import { PUBLIC_CONTENT_CSP } from "@/lib/csp";
 
 // Feeds are cheap to regenerate but change only on publish — a short shared cache keeps crawler
 // and reader-app polling off the database without making a new post wait long to appear.
@@ -40,6 +40,7 @@ const HTML_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Cache-Control": "public, max-age=0, s-maxage=60, stale-while-revalidate=60",
+  "Content-Security-Policy": PUBLIC_CONTENT_CSP,
 };
 
 // Bound per request inside the handler below, because the page it serves depends on the host:
@@ -150,14 +151,17 @@ export async function GET(req: Request, { params }: { params: { path?: string[] 
 
   // Feeds live under the blog's own prefix. Safe to reserve these names: slugify() strips dots,
   // so no post slug can ever be "rss.xml" or "sitemap.xml".
-  if (segments[1] === "rss.xml" || segments[1] === "sitemap.xml") {
-    const posts = await loadAllPublishedPosts(admin, settings.workspace_id as string);
+  if (segments.length === 2 && (segments[1] === "rss.xml" || isSitemapPath(segments[1]))) {
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
     const base = `/b/${settings.slug}`;
-    const body =
-      segments[1] === "rss.xml"
-        ? renderRssXml(settings, posts, origin, base)
-        : renderSitemapXml(posts, origin, base, settings.permalink_style as PermalinkStyle | null);
+    const ws = settings.workspace_id as string;
+    const style = settings.permalink_style as PermalinkStyle | null;
+    if (segments[1] === "rss.xml") {
+      const posts = await loadAllPublishedPosts(admin, ws);
+      return new Response(renderRssXml(settings, posts, origin, base), { status: 200, headers: xmlHeaders("rss.xml") });
+    }
+    const body = await buildBlogSitemap(admin, ws, origin, base, segments[1], style);
+    if (body === null) return notFound(); // sitemap-N.xml past the last page
     return new Response(body, { status: 200, headers: xmlHeaders(segments[1]) });
   }
 

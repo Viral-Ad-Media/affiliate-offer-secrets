@@ -15,6 +15,7 @@ import {
   MailX,
   Plus,
   X,
+  Check,
 } from "lucide-react";
 import type { Contact, ContactTag } from "@/lib/shared";
 import { readableTextOn } from "@/lib/contactTags";
@@ -80,6 +81,8 @@ export default function ContactsTable({
   total,
   campaigns,
   attributeLabels = {},
+  reviewMode = false,
+  pendingCount = 0,
 }: {
   contacts: Contact[];
   allTags: ContactTag[];
@@ -88,6 +91,10 @@ export default function ContactsTable({
   campaigns: { id: string; title: string }[];
   /** fieldKey -> human label, from the workspace's contact_attributes library (0082). */
   attributeLabels?: Record<string, string>;
+  /** Viewing the moderation queue (0120) — flagged leads awaiting approval. */
+  reviewMode?: boolean;
+  /** Total pending-review leads across the workspace, for the "Needs review" chip. */
+  pendingCount?: number;
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
@@ -146,7 +153,9 @@ export default function ContactsTable({
     setBusy(false);
 
     if (!res.ok) return toast.error(json.error ?? "Something went wrong");
-    toast.success(`${action === "untag" ? "Untagged" : action === "tag" ? "Tagged" : action === "delete" ? "Deleted" : "Updated"} ${json.affected} lead(s)`);
+    const verb =
+      action === "untag" ? "Untagged" : action === "tag" ? "Tagged" : action === "delete" ? "Deleted" : action === "approve" ? "Approved" : "Updated";
+    toast.success(`${verb} ${json.affected} lead(s)`);
     setSelected(new Set());
     router.refresh();
   }
@@ -176,6 +185,30 @@ export default function ContactsTable({
             )}
           </div>
         </div>
+
+        {/* Moderation queue (0120). Shown whenever there is anything to review, or while viewing
+            the queue — a link, so it is shareable and survives a refresh like the tag filter. */}
+        {(pendingCount > 0 || reviewMode) && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-ink-800 px-4 py-2 text-xs">
+            {reviewMode ? (
+              <>
+                <span className="font-medium text-amber-300">
+                  Needs review — {total} flagged {total === 1 ? "lead" : "leads"}
+                </span>
+                <Link href="/contacts" className="text-zinc-500 hover:text-zinc-300">
+                  ← Back to all leads
+                </Link>
+              </>
+            ) : (
+              <Link
+                href="/contacts?review=pending"
+                className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 font-medium text-amber-300"
+              >
+                {pendingCount} lead{pendingCount === 1 ? "" : "s"} need review
+              </Link>
+            )}
+          </div>
+        )}
 
         {/* Tag filter. Plain links, so the filter is shareable and survives a refresh — and the
             pager carries it across pages via its `preserve` prop. */}
@@ -256,6 +289,16 @@ export default function ContactsTable({
               ))}
             </select>
 
+            {reviewMode && (
+              <Button
+                onClick={() => bulk("approve")}
+                disabled={busy}
+                variant="outline"
+                className="text-xs text-emerald-300 hover:text-emerald-200"
+              >
+                <Check className="h-3.5 w-3.5" /> Approve
+              </Button>
+            )}
             <Button onClick={() => bulk("unsubscribe")} disabled={busy} variant="outline" className="text-xs">
               <MailX className="h-3.5 w-3.5" /> Unsubscribe
             </Button>
@@ -342,6 +385,14 @@ export default function ContactsTable({
                           title={`Unsubscribed ${new Date(c.unsubscribed_at).toLocaleDateString()}`}
                         >
                           unsubscribed
+                        </span>
+                      )}
+                      {c.review_status === "pending" && (
+                        <span
+                          className="ml-1.5 rounded bg-red-500/15 px-1 py-0.5 text-[11px] text-red-300"
+                          title={c.review_reason ?? "Awaiting review"}
+                        >
+                          {c.review_reason ?? "review"}
                         </span>
                       )}
                     </td>

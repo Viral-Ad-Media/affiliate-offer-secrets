@@ -114,6 +114,10 @@ function sanitizeStyle(raw: unknown): BlockStyle {
   if (typeof s.lineHeight === "number" && s.lineHeight >= 1 && s.lineHeight <= 2.5) style.lineHeight = s.lineHeight;
   const bg = hex(s.backgroundColor);
   if (bg) style.backgroundColor = bg;
+  // Section background image — a data: URI or one of our Cloudinary URLs, nothing else. This
+  // rebuild is the boundary: a key not copied here is dropped on every save (the contentWidth
+  // trap), and the same isValidImageRef gates its render in styleToInlineCss.
+  if (typeof s.backgroundImage === "string" && isValidImageRef(s.backgroundImage)) style.backgroundImage = s.backgroundImage;
   for (const k of ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "marginTop", "marginBottom"] as const) {
     const v = num(s[k], 0, 200);
     if (v !== undefined) style[k] = v;

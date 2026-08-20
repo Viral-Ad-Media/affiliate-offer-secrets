@@ -7,6 +7,7 @@ import { Menu, X } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
 import ExitIntentAuth from "@/components/ExitIntentAuth";
 import TopBarAccount from "@/components/TopBarAccount";
+import ThemeToggle from "@/components/ThemeToggle";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +53,9 @@ export default function MarketingNav({ user }: { user: NavUser | null }) {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
+          {/* Available to signed-out visitors too — the marketing site honours the same
+              light/dark choice as the app, so let people set it here. */}
+          <ThemeToggle iconOnly />
           {user ? (
             // Same account menu as the dashboard's top bar, so a signed-in visitor gets the
             // identity and shortcuts they already know rather than a sign-in button they don't need.
@@ -99,6 +103,7 @@ export default function MarketingNav({ user }: { user: NavUser | null }) {
             ))}
           </nav>
           <div className="mt-3 flex items-center gap-2">
+            <ThemeToggle iconOnly />
             {user ? (
               <TopBarAccount
                 email={user.email}

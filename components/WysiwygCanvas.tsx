@@ -97,6 +97,7 @@ import {
 } from "@/lib/engine/renderPages";
 import { themeToCssVars, themeFontStylesheetHref, type PageTheme } from "@/lib/engine/pageTheme";
 import { parseVideoUrl, sourceToDisplayUrl, embedUrl } from "@/lib/engine/videoEmbed";
+import { isValidImageRef } from "@/lib/images/validate";
 import BlockStylePanel from "@/components/BlockStylePanel";
 import BlockSettingsPanel, { hasContentSettings } from "@/components/BlockSettingsPanel";
 import EditorSidePanel from "@/components/EditorSidePanel";
@@ -176,7 +177,20 @@ function imageAlignStyle(align: BlockStyle["align"]): React.CSSProperties {
 
 function blockInlineStyle(block: { type: string; style: BlockStyle }): React.CSSProperties {
   const allowed = (STYLE_KEYS_BY_TYPE as Record<string, readonly (keyof BlockStyle)[]>)[block.type] ?? [];
-  return cssStringToReactStyle(styleToInlineCss(block.style, allowed));
+  const out = cssStringToReactStyle(styleToInlineCss(block.style, allowed));
+  // A background image round-trips badly through the CSS-string parser above: a data: URI contains
+  // ';' (…/png;base64,…) which cssStringToReactStyle splits on, leaving a truncated value. Set it
+  // as a real React style property instead — same allowed-key + isValidImageRef gate the renderer
+  // uses. The published page is unaffected (a real CSS parser handles the quoted url); this is only
+  // the editor preview, where a freshly-uploaded data URI must show before it's saved to a URL.
+  const bg = block.style?.backgroundImage;
+  if (allowed.includes("backgroundImage") && isValidImageRef(bg)) {
+    out.backgroundImage = `url('${bg}')`;
+    out.backgroundSize = "cover";
+    out.backgroundPosition = "center";
+    out.backgroundRepeat = "no-repeat";
+  }
+  return out;
 }
 
 type ElementBlockTypeLocal = (typeof ELEMENT_BLOCK_TYPES)[number];
@@ -3190,6 +3204,7 @@ export default function WysiwygCanvas({
                     block={selectedBlock}
                     onChange={updateStyle}
                     onVisibilityChange={updateHidden}
+                    resizeImageFile={resizeImageFile}
                     onClose={() => setSelectedBlockId(null)}
                   />
                 )}

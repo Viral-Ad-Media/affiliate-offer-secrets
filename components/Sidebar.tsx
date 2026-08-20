@@ -449,11 +449,13 @@ export default function Sidebar({
   };
 
   // The trial countdown used to sit here; it now lives centered in the top bar alongside the
-  // credits chip (components/TrialChip.tsx) — account status, not navigation.
+  // credits chip (components/TrialChip.tsx) — account status, not navigation. The theme toggle
+  // moved out too: it's account status, not navigation, so it lives in the top bars now (the
+  // desktop one in app/(app)/layout.tsx, the mobile one below) — matching where the marketing nav
+  // carries it for signed-out visitors.
   const accountChips = (iconOnly: boolean) => (
     <>
       <WorkspaceSwitcher collapsed={iconOnly} />
-      <ThemeToggle iconOnly={iconOnly} />
     </>
   );
 
@@ -502,6 +504,7 @@ export default function Sidebar({
         </Link>
         <div className="flex items-center gap-2">
           <CreditsChip creditBalance={creditBalance} />
+          <ThemeToggle iconOnly />
           <NotificationsBell />
           <TopBarAccount
             email={email}
