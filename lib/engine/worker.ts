@@ -2,6 +2,7 @@ import { db } from "./core";
 import { NETWORKS } from "@/lib/networks";
 import { notify, jobLabel } from "@/lib/notifications";
 import { captureError } from "@/lib/errorMonitor";
+import { recordGenerationCost } from "@/lib/generation/cost";
 import { createPostFromCampaign } from "@/lib/blog/fromCampaign";
 import { createSequenceFromCampaign, createSmsSequenceFromCampaign } from "@/lib/broadcast/fromCampaign";
 import { runBuildCampaignStage, BUILD_CAMPAIGN_STAGES } from "./build";
@@ -635,6 +636,7 @@ async function processGenerateAdImageStage(job: JobRow): Promise<StageResult> {
   if (!advanced) return { done: false, raced: true };
 
   if (nextStage >= GENERATE_AD_IMAGE_STAGES.length) {
+    await recordGenerationCost(job, (job.stage_data as any)?.model_id, "image");
     await markDone(job.id, "ad creative ready");
     return { done: true };
   }
@@ -680,6 +682,7 @@ async function processGenerateVideoStage(job: JobRow): Promise<StageResult> {
   if (!advanced) return { done: false, raced: true };
 
   if (nextStage >= GENERATE_VIDEO_STAGES.length) {
+    await recordGenerationCost(job, (job.stage_data as any)?.model_id, "video");
     await markDone(job.id, "video ready");
     return { done: true };
   }
@@ -726,6 +729,7 @@ async function processGenerateCreativeImageStage(job: JobRow): Promise<StageResu
   if (!advanced) return { done: false, raced: true };
 
   if (nextStage >= GENERATE_CREATIVE_IMAGE_STAGES.length) {
+    await recordGenerationCost(job, (job.stage_data as any)?.model_id, "image");
     await markDone(job.id, "creative image ready");
     return { done: true };
   }
@@ -768,6 +772,7 @@ async function processGenerateBlogImageStage(job: JobRow): Promise<StageResult> 
   if (!advanced) return { done: false, raced: true };
 
   if (nextStage >= GENERATE_BLOG_IMAGE_STAGES.length) {
+    await recordGenerationCost(job, (job.stage_data as any)?.model_id, "image");
     await markDone(job.id, "blog featured image ready");
     return { done: true };
   }
@@ -815,6 +820,7 @@ async function processGenerateCreativeVideoStage(job: JobRow): Promise<StageResu
   if (!advanced) return { done: false, raced: true };
 
   if (nextStage >= GENERATE_CREATIVE_VIDEO_STAGES.length) {
+    await recordGenerationCost(job, (job.stage_data as any)?.model_id, "video");
     await markDone(job.id, "creative video ready");
     return { done: true };
   }

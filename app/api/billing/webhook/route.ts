@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { REFERRAL_REWARD_POINTS } from "@/lib/referrals";
 import { ACCESS_FEE_CENTS, CREDIT_PACKS } from "@/lib/pricing";
 import { notify } from "@/lib/notifications";
+import { captureError } from "@/lib/errorMonitor";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,33 @@ export async function POST(req: Request) {
     event = stripe.webhooks.constructEvent(rawBody, signature, secret);
   } catch (err) {
     return NextResponse.json({ error: `invalid signature: ${err}` }, { status: 400 });
+  }
+
+  // Refund (operator-issued) and dispute (chargeback) both REVERSE an entitlement — the counterpart
+  // to the grant paths below. reverse_stripe_payment (0123) revokes access or claws back the pack's
+  // credits, idempotently. Recorded to the superadmin error monitor as a warning: a dispute in
+  // particular needs the operator to respond in Stripe within days, so it must be visible.
+  if (event.type === "charge.refunded" || event.type === "charge.dispute.created") {
+    const obj = event.data.object as { payment_intent?: string | { id: string } | null; reason?: string | null };
+    const pi = typeof obj.payment_intent === "string" ? obj.payment_intent : obj.payment_intent?.id ?? null;
+    if (!pi) return NextResponse.json({ ok: true, ignored: "no payment_intent on event" });
+
+    const reason = event.type === "charge.dispute.created" ? `dispute: ${obj.reason ?? "chargeback"}` : "refund";
+    const admin = createAdminClient();
+    const { data: result, error } = await admin.rpc("reverse_stripe_payment", {
+      p_payment_intent_id: pi,
+      p_reason: reason,
+    });
+    if (error) {
+      // Non-2xx so Stripe retries — a failed reversal must not be silently dropped.
+      await captureError("billing.reversal", error.message, { level: "error", context: { payment_intent: pi, reason } });
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    await captureError("billing.reversal", `${event.type} → ${(result as { status?: string })?.status}`, {
+      level: "warning",
+      context: { payment_intent: pi, reason, result },
+    });
+    return NextResponse.json({ ok: true, reversal: result });
   }
 
   // Off-session trial conversion (lib/billing/trialConversion.ts). The sweep creates a

@@ -1,0 +1,100 @@
+# Render Blueprint — DEVELOPMENT / staging deploy of Affiliate Offer Secrets.
+#
+# PRODUCTION stays on Netlify (main branch, apex https://affiliateoffersecrets.com). This deploys
+# the `development` branch to a Render Web Service so work can be previewed before it's promoted to
+# main. Keep the two straight: merge development -> main to ship to prod.
+#
+# SECRETS ARE NOT IN THIS FILE. The repo is public — every value below is `sync: false`, so Render
+# prompts for it (set them in the Render dashboard). Never commit real keys here.
+#
+# Two things that WILL break the deploy if wrong (both documented in CLAUDE.md):
+#   1. NEXT_PUBLIC_APP_URL must equal THIS service's own Render URL. middleware.ts rewrites any
+#      request whose Host doesn't match it to /d and 404s the whole app. It is inlined at BUILD
+#      time, so it must be set before the first successful build.
+#   2. The Supabase you point at is a choice: the SAME project as prod (this dev deploy then reads
+#      and writes LIVE production data) or a SEPARATE dev project (clean isolation, needs the
+#      migrations applied there). Decide before entering NEXT_PUBLIC_SUPABASE_URL.
+
+services:
+  - type: web
+    name: affiliate-offer-secrets-dev
+    runtime: node
+    plan: starter
+    branch: development
+    buildCommand: npm ci && npm run build
+    startCommand: npx next start -p $PORT
+    healthCheckPath: /login
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # Set to this service's Render URL, e.g. https://affiliate-offer-secrets-dev.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+
+      # --- Supabase (see note above: same-as-prod vs a separate dev project) ---
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # --- Stripe (billing). Webhooks are registered at the prod apex; a dev deploy won't receive
+      #     them unless you register a separate endpoint for this host. ---
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        sync: false
+
+      # --- Anthropic + generation providers ---
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: KIE_AI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+      # --- Cloudinary (images) ---
+      - key: NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+      # --- Engine webhook auth ---
+      - key: ENGINE_WEBHOOK_SECRET
+        sync: false
+
+      # --- Meta / Google / TikTok OAuth. These callbacks are whitelisted for the prod apex only;
+      #     OAuth connect flows will be rejected from the Render host until its URL is added to each
+      #     provider's redirect-URI / App-Domains allowlist (that is the "App Domains" error). ---
+      - key: FB_CLIENT_ID
+        sync: false
+      - key: FB_CLIENT_SECRET
+        sync: false
+      - key: FB_LOGIN_CONFIG_ID
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: TIKTOK_CLIENT_KEY
+        sync: false
+      - key: TIKTOK_CLIENT_SECRET
+        sync: false
+
+      # --- Mail (SendGrid) ---
+      - key: SENDGRID_API_KEY
+        sync: false
+
+      # --- Netlify domain integration (custom domains). Optional on dev; leave unset to disable. ---
+      - key: NETLIFY_AUTH_TOKEN
+        sync: false
+      - key: NETLIFY_SITE_ID
+        sync: false
+      - key: NEXT_PUBLIC_NETLIFY_SITE_HOSTNAME
+        sync: false
